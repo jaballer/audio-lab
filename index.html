@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pad Sampler</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Pad Sampler</h1>
+        <p class="sub">Click the pads or use your keyboard. Sounds are synthesized in the browser.</p>
+      </header>
+
+      <section id="pads" aria-label="Drum pads"></section>
+
+      <section class="transport" aria-label="Sequencer controls">
+        <button id="play" type="button" aria-pressed="false">▶ Play</button>
+        <label>BPM <input id="bpm" type="range" min="60" max="180" value="100" /> <output id="bpm-out">100</output></label>
+        <label>Volume <input id="vol" type="range" min="0" max="100" value="80" /></label>
+        <button id="clear" type="button">Clear</button>
+      </section>
+
+      <section id="grid" aria-label="Step sequencer"></section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
