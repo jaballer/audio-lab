@@ -25,7 +25,6 @@ import { DEFAULT_PARAMS, createSynth } from "./synth.js";
 const $ = (id) => document.getElementById(id);
 
 const COMPUTER_KEYS = "awsedftgyhuj" + "k"; // C .. C one octave up
-const MIDI_SOURCE = "midi";
 const KEYBOARD_SOURCE = "keyboard";
 
 // ---------- State ----------
@@ -154,8 +153,8 @@ const midiStatus = $("midi-status");
 
 // What to do for each event a device profile (devices.js) can produce.
 const handlers = {
-  noteOn: (e) => noteOn(e.note, e.velocity, MIDI_SOURCE),
-  noteOff: (e) => noteOff(e.note, MIDI_SOURCE),
+  noteOn: (e, source) => noteOn(e.note, e.velocity, source),
+  noteOff: (e, source) => noteOff(e.note, source),
   bend: (e) => setBend(e.value),
   sustain: (e) => setSustain(e.on),
   mod: (e) => {
@@ -181,7 +180,10 @@ const handlers = {
 
 function handleMidi(input, data) {
   const profile = selectProfile(PROFILES, input.name);
-  for (const event of profile.translate(parseMidi(data))) handlers[event.type](event);
+  // Each connected device is its own note holder: with two keyboards holding the
+  // same note, the first one's Note Off must not stop it.
+  const source = `midi-${input.id ?? input.name}`;
+  for (const event of profile.translate(parseMidi(data))) handlers[event.type](event, source);
 }
 
 wireMidiButton(
