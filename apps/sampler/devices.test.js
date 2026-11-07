@@ -8,8 +8,51 @@ const cc = (controller, value = 127) => parseMidi([0xb0, controller, value]);
 
 describe("profile selection", () => {
   it("picks the Launchpad by name, ignoring case", () => {
+    expect(selectProfile(PROFILES, "Launchpad")).toBe(launchpad);
     expect(selectProfile(PROFILES, "Launchpad Mini")).toBe(launchpad);
     expect(selectProfile(PROFILES, "my LAUNCHPAD s")).toBe(launchpad);
+    expect(selectProfile(PROFILES, "Launchpad Mini MK1")).toBe(launchpad);
+    expect(selectProfile(PROFILES, "Launchpad Mini MK2 MIDI 1")).toBe(launchpad);
+    expect(selectProfile(PROFILES, "Launchpad S MIDI 1")).toBe(launchpad);
+  });
+
+  // The connected controller: ALSA names it "Launchpad Mini 9", and Firefox on Linux
+  // reports the "client:port nn:n" form, so the match cannot be anchored to the end.
+  it("picks the Launchpad Mini 9 however the browser spells its port", () => {
+    for (const name of [
+      "Launchpad Mini 9",
+      "Launchpad Mini 9 MIDI 1",
+      "Launchpad Mini 9:Launchpad Mini 9 MIDI 1 28:0",
+      "Launchpad Mini 10",
+      "Launchpad Mini 12:Launchpad Mini 12 MIDI 1 32:0",
+      "2- Launchpad Mini",
+      "MIDIIN2 (Launchpad Mini)",
+      "Launchpad Mini:Launchpad Mini MIDI 1 24:0",
+      "Launchpad S:Launchpad S MIDI 1 20:0",
+    ]) {
+      expect(selectProfile(PROFILES, name)).toBe(launchpad);
+    }
+  });
+
+  it("falls back for newer and unrecognized Launchpads, including their MIDI ports", () => {
+    for (const name of [
+      "Launchpad Mk2",
+      "Launchpad Pro",
+      "Launchpad Pro MK3",
+      "Launchpad X",
+      "Launchpad Mini MK3",
+      "Launchpad Mini MK3 MIDI 1",
+      "Launchpad S MK3",
+      "Launchpad 99",
+      "Launchpad MKII",
+      "Launchpad RGB",
+      "Launchpad Mini RGB",
+      "Launchpad Mini 9 RGB",
+      "Launchpad Open",
+    ]) {
+      expect(selectProfile(PROFILES, name)).toBe(generic);
+      expect(launchpad.match(name)).toBe(false);
+    }
   });
 
   it("gives any other controller the generic profile", () => {

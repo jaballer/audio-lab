@@ -15,13 +15,13 @@ A single-page drum sampler styled like a classic hardware pad sampler, built wit
 
 Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost` or HTTPS.
 
-**Novation Launchpad (original layout)** — pads are lit to mirror the app:
+**Novation Launchpad, Launchpad S, and Launchpad Mini mk1/mk2** — pads are lit to mirror the app when the MIDI port name identifies a supported model:
 
 - Bottom-left 4×4 block: the 16 pads (pad 1 in the bottom-left corner)
 - Top two rows: the 16 step keys for the selected pad
 - Top round buttons, left to right: Play, Stop, Rec, Clear Pad, Clear All, Tap Tempo, Tempo −, Tempo +
 
-**Any other controller:** MIDI notes 36–51 play pads 1–16, with velocity.
+**Any other controller**, including newer or unrecognized Launchpads: MIDI notes 36–51 play pads 1–16, with velocity. Their layout may not correspond to these notes, and Launchpad LEDs are not controlled.
 
 ## Run it
 
