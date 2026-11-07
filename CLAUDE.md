@@ -24,9 +24,15 @@ failing check blocks the deploy.
 
 ## Architecture rules
 
-- **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `scales.js`,
-  `midi-messages.js` and `audio.js` only export functions/factories. All DOM lookups, event listeners and
-  rendering live in an app's `main.js`. This is what makes them testable.
+- **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
+  `notes.js`, `pad-learner.js`, `scales.js`, `midi-messages.js`, `storage.js` and `audio.js` only export
+  functions/factories. This is what makes them testable.
+- **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js` and
+  `lcd.js` export a `create…(element, options)` factory: no `getElementById`, nothing at import time. They
+  show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
+  LCD text in `formatLcd`) is a pure function next to the DOM code.
+- **`main.js` only wires.** It finds the elements, builds the synth and views, and connects inputs (MIDI,
+  computer keyboard) to them. Page state that several views read lives there.
 - **All audio goes through `shared/audio.js`.** Use `audio.ensure()` to get the context and `audio.master` as
   the output. Never construct an `AudioContext` or a master gain elsewhere. Nothing may assume the context
   exists before the first user interaction.
@@ -35,8 +41,8 @@ failing check blocks the deploy.
   code that uses them.
 - **Slider-to-value mappings use `shared/scales.js`**, not hand-written formulas.
 - **One place changes each value.** A parameter that can be set from a slider, a MIDI knob or a default goes
-  through a single setter (see `setEnvSlider` / `synth.set`), so the UI, the audio graph and the display
-  cannot disagree.
+  through a single setter (see `setSlider` / `setChoice` in `keys/main.js` and `synth.set`), so the UI, the
+  audio graph and the display cannot disagree. Parameters are listed once, in `apps/keys/params.js`.
 - Schedule sounds at `AudioContext` times (a lookahead scheduler, `AudioParam` events), never by starting them
   directly from `setTimeout`/`setInterval` callbacks. Timers drift and stall; the audio clock does not.
 
@@ -48,8 +54,9 @@ Beyond what they enforce:
 - Comments explain **why** (a browser quirk, a hardware detail, a non-obvious choice), not what the code does.
 - Prefer small functions over deep nesting; early `return` for guard cases.
 - Unused function arguments are prefixed `_`.
-- Wrap `localStorage` access in try/catch: it can throw or be empty (private windows, blocked storage), and the
-  page must work without it.
+- Save anything between visits with `shared/storage.js` (`loadJson` / `saveJson`), never `localStorage`
+  directly: storage can throw or be empty (private windows, blocked site data), and the page must work
+  without it.
 - Magic numbers get a named constant or a comment (`BEND_RANGE`, `STICK_TRAVEL`, `LOOKAHEAD_MS`).
 
 ## Tests

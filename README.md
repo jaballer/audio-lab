@@ -49,14 +49,19 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `midi.js` — Launchpad mapping and LED feedback
   - `sampler.css` — sampler-only styles
 - `keyboard.html` + `apps/keys/` — MIDI keyboard test page (notes, velocity, pitch bend, mod, sustain, CCs, pads)
-  - `main.js` — wires the page: piano, LCD, pads, knobs, sliders, MIDI and computer keyboard
+  - `main.js` — wires the page: connects MIDI and the computer keyboard to the synth and the views
   - `synth.js` — the polyphonic synth (voices, sustain pedal, pitch bend, parameters); no DOM
   - `envelope.js` — ADSR scheduling on a Web Audio `AudioParam`
+  - `params.js` — every synth parameter in one table (scale, display, knob order); adding one is one entry
+  - `notes.js` — note names and black/white keys
+  - `pad-learner.js` — learns which MIDI notes are pads 1-8 and remembers them
+  - `piano.js`, `pad-grid.js`, `knob-dials.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
   - `keys.css` — keys-page-only styles
 - `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by both apps
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` objects
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
+- `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/base.css` — chassis, LCD and button styles used by both apps
 
 Tests sit next to the code as `*.test.js`. Conventions and architecture rules are in [CLAUDE.md](CLAUDE.md).
