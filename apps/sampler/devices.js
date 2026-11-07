@@ -50,15 +50,18 @@ const padNote = (index) => (7 - (index >> 2)) * 16 + (index & 3);
 const stepNote = (index) => (index >> 3) * 16 + (index & 7);
 
 // The profile is for the original-layout Launchpads: plain, S and Mini (optionally
-// MK1/MK2), and the Mini that ALSA names "Launchpad Mini 9" (a single digit after the
-// model). Newer models (Pro, X, MK3) use other mappings, so they fall back to the generic
-// profile. Not anchored to the end of the name: Firefox on Linux reports ports as
-// "client:port MIDI 1 28:0", and Windows adds a "2- " prefix.
-const LAUNCHPAD_MODEL = String.raw`\blaunchpad(?:\s+(?:s|mini(?:\s+mk\s*[12])?))?(?:\s+\d)?(?=$|[\s:)\]])`;
-// `s` and `mini` are listed too so the regex cannot backtrack to a bare "Launchpad" and
-// ignore a longer model name after it.
-const NEWER_LAUNCHPAD = String.raw`(?!\s+(?:s|mini|mk\s*\d|pro|x|\d{2,})\b)`;
-const LAUNCHPAD_NAME = new RegExp(LAUNCHPAD_MODEL + NEWER_LAUNCHPAD, "i");
+// MK1/MK2). ALSA also appends an instance number to the name ("Launchpad Mini 9", and
+// "Launchpad Mini 10" once the number passes one digit). Newer models (Pro, X, MK3, ...) use
+// other mappings, so they fall back to the generic profile.
+//
+// This is a whitelist: after the model only a known port decoration may follow, so a model
+// name this list does not know ("Launchpad MKII", "Launchpad RGB", a future model) falls
+// back instead of being taken for the bare "Launchpad". Not anchored to the end of the name:
+// Firefox on Linux reports ports as "client:port MIDI 1 28:0", and Windows adds a "2- "
+// prefix.
+const LAUNCHPAD_MODEL = String.raw`\blaunchpad(?:\s+(?:s|mini(?:\s+mk\s*[12])?)(?:\s+\d+)?|(?:\s+\d)?)`;
+const PORT_DECORATION = String.raw`(?=\s*$|[:)\]]|\s+(?:midi\b|\d+:\d+\b|[(\[]))`;
+const LAUNCHPAD_NAME = new RegExp(LAUNCHPAD_MODEL + PORT_DECORATION, "i");
 
 export const launchpad = {
   id: "launchpad",

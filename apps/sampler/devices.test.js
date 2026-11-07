@@ -23,6 +23,10 @@ describe("profile selection", () => {
       "Launchpad Mini 9",
       "Launchpad Mini 9 MIDI 1",
       "Launchpad Mini 9:Launchpad Mini 9 MIDI 1 28:0",
+      "Launchpad Mini 10",
+      "Launchpad Mini 12:Launchpad Mini 12 MIDI 1 32:0",
+      "2- Launchpad Mini",
+      "MIDIIN2 (Launchpad Mini)",
       "Launchpad Mini:Launchpad Mini MIDI 1 24:0",
       "Launchpad S:Launchpad S MIDI 1 20:0",
     ]) {
@@ -40,6 +44,11 @@ describe("profile selection", () => {
       "Launchpad Mini MK3 MIDI 1",
       "Launchpad S MK3",
       "Launchpad 99",
+      "Launchpad MKII",
+      "Launchpad RGB",
+      "Launchpad Mini RGB",
+      "Launchpad Mini 9 RGB",
+      "Launchpad Open",
     ]) {
       expect(selectProfile(PROFILES, name)).toBe(generic);
       expect(launchpad.match(name)).toBe(false);
