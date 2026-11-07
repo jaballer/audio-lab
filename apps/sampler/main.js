@@ -7,6 +7,7 @@ import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
+import { createAudioNotice } from "./audio-notice.js";
 import { createLcd, pad2 } from "./lcd.js";
 import { createMidi } from "./midi.js";
 import { STARTER_BEAT, createPattern } from "./pattern.js";
@@ -46,7 +47,13 @@ const saver = createSongSaver({
 window.addEventListener("pagehide", () => saver.flush());
 
 // ---------- Audio and sequencer ----------
-const audio = createAudioEngine({ volume: Number(volInput.value) / 100 });
+// The notice comes first: the engine reports its state as soon as it is told to
+// listen, and that first report is what shows the notice on a fresh load.
+const audioNotice = createAudioNotice($("audio-notice"));
+const audio = createAudioEngine({
+  volume: Number(volInput.value) / 100,
+  onStateChange: (state) => audioNotice.update(state),
+});
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
 
 const pattern = createPattern(PAD_COUNT, STEPS, saved ? saved.pattern : STARTER_BEAT, {
@@ -242,7 +249,12 @@ const midiStatus = $("midi-status");
 const midi = createMidi({
   padCount: PAD_COUNT,
   steps: STEPS,
-  triggerPad,
+  triggerPad(idx, velocity) {
+    // Only MIDI comes through here: a click or key press has already unlocked
+    // audio (unlockOnInteraction), so this is the hit that would be silent.
+    if (!audio.running) audioNotice.nudge();
+    triggerPad(idx, velocity);
+  },
   toggleStep,
   start,
   stop,
