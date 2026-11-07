@@ -25,8 +25,8 @@ failing check blocks the deploy.
 ## Architecture rules
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
-  `notes.js`, `pad-learner.js`, `pattern.js`, `transport.js`, `tempo.js`, `scales.js`, `midi-messages.js`,
-  `storage.js` and `audio.js` only export functions/factories. This is what makes them testable.
+  `notes.js`, `pad-learner.js`, `pattern.js`, `song.js`, `transport.js`, `tempo.js`, `scales.js`,
+  `midi-messages.js`, `storage.js` and `audio.js` only export functions/factories. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
   `pads.js`, `steps.js`, `tempo-knob.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They

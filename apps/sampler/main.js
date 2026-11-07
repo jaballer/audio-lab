@@ -6,10 +6,12 @@ import "../../shared/base.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
+import { loadJson, saveJson } from "../../shared/storage.js";
 import { createLcd, pad2 } from "./lcd.js";
 import { createMidi } from "./midi.js";
 import { STARTER_BEAT, createPattern } from "./pattern.js";
 import { createPadGrid, padForKey } from "./pads.js";
+import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { SOUNDS } from "./sounds.js";
 import { createStepKeys } from "./steps.js";
 import { createTempoKnob } from "./tempo-knob.js";
@@ -29,15 +31,32 @@ const volInput = $("vol");
 const playBtn = $("play");
 const recBtn = $("rec");
 
+// ---------- Saved song ----------
+// The pattern, tempo and volume come back on the next visit. This is read first
+// because the audio engine takes its starting level from the volume slider.
+// With nothing usable saved (first visit, blocked storage), the page starts
+// from the starter beat as it always did.
+const saved = parseSong(loadJson(SONG_KEY), { rows: PAD_COUNT, steps: STEPS });
+if (saved) volInput.value = String(saved.volume);
+
+const saver = createSongSaver({
+  read: () => ({ bpm: transport.bpm, volume: Number(volInput.value), pattern: pattern.snapshot() }),
+  save: (song) => saveJson(SONG_KEY, song),
+});
+window.addEventListener("pagehide", () => saver.flush());
+
 // ---------- Audio and sequencer ----------
 const audio = createAudioEngine({ volume: Number(volInput.value) / 100 });
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
 
-const pattern = createPattern(PAD_COUNT, STEPS, STARTER_BEAT);
+const pattern = createPattern(PAD_COUNT, STEPS, saved ? saved.pattern : STARTER_BEAT, {
+  onChange: () => saver.schedule(),
+});
 
 const transport = createTransport({
   audio,
   steps: STEPS,
+  bpm: saved?.bpm,
   onStep(step, time) {
     const { ctx, master } = audio;
     SOUNDS.forEach((sound, row) => {
@@ -177,6 +196,7 @@ $("clear-all").addEventListener("click", clearAll);
 function setBpm(value) {
   knob.render(transport.setBpm(value));
   renderLcd();
+  saver.schedule();
 }
 
 const taps = createTapTempo();
@@ -195,6 +215,7 @@ function tapTempo() {
 volInput.addEventListener("input", () => {
   audio.setVolume(Number(volInput.value) / 100);
   lcd.showMessage(`VOLUME ${volInput.value}`);
+  saver.schedule();
 });
 
 // ---------- Keyboard ----------
@@ -241,5 +262,6 @@ const midi = createMidi({
 wireMidiButton(midiBtn, midi);
 
 // ---------- Init ----------
-setBpm(transport.bpm);
+// Not setBpm: showing the starting tempo is not a change, so it shouldn't save.
+knob.render(transport.bpm);
 selectPad(0);
