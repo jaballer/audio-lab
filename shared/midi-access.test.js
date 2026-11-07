@@ -1,0 +1,207 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createMidiAccess, wireMidiButton } from "./midi-access.js";
+
+const port = (name, state = "connected") => ({ name, state, onmidimessage: null });
+
+// What navigator.requestMIDIAccess() resolves to: ports keyed by id, and a hook
+// the browser calls when a device is plugged in or removed.
+function fakeAccess({ inputs = [], outputs = [] } = {}) {
+  return {
+    inputs: new Map(inputs.map((p, i) => [`in${i}`, p])),
+    outputs: new Map(outputs.map((p, i) => [`out${i}`, p])),
+    onstatechange: null,
+  };
+}
+
+function stubNavigator(navigator) {
+  vi.stubGlobal("navigator", navigator);
+}
+
+function setup({ access = fakeAccess() } = {}) {
+  stubNavigator({ requestMIDIAccess: vi.fn(async () => access) });
+  const handlers = { onMessage: vi.fn(), onStatus: vi.fn(), onChange: vi.fn() };
+  return { access, handlers, midi: createMidiAccess(handlers) };
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("createMidiAccess.connect", () => {
+  it("says so, and reports failure, when the browser has no Web MIDI", async () => {
+    stubNavigator({});
+    const onStatus = vi.fn();
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus });
+    expect(await midi.connect()).toBe(false);
+    expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/use Chrome or Edge/));
+  });
+
+  it("reports a refused permission prompt", async () => {
+    stubNavigator({
+      requestMIDIAccess: vi.fn(async () => {
+        throw new Error("denied");
+      }),
+    });
+    const onStatus = vi.fn();
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus });
+    expect(await midi.connect()).toBe(false);
+    expect(onStatus).toHaveBeenCalledWith("MIDI: permission denied");
+  });
+
+  it("lists the connected inputs by name", async () => {
+    const { midi, handlers } = setup({ access: fakeAccess({ inputs: [port("MPK mini"), port("Launchpad")] }) });
+    expect(await midi.connect()).toBe(true);
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini, Launchpad");
+  });
+
+  it('says "no device" when there are no inputs', async () => {
+    const { midi, handlers } = setup();
+    await midi.connect();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: no device");
+  });
+
+  it("ignores disconnected ports and the system's MIDI Through port", async () => {
+    const access = fakeAccess({
+      inputs: [port("Midi Through Port-0"), port("Old Keyboard", "disconnected"), port("MPK mini")],
+    });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini");
+    expect(access.inputs.get("in0").onmidimessage).toBeNull();
+    expect(access.inputs.get("in1").onmidimessage).toBeNull();
+  });
+
+  it("hands each input's messages to onMessage along with the input they came from", async () => {
+    const keys = port("MPK mini");
+    const pads = port("Launchpad");
+    const { midi, handlers } = setup({ access: fakeAccess({ inputs: [keys, pads] }) });
+    await midi.connect();
+
+    keys.onmidimessage({ data: [0x90, 60, 100] });
+    pads.onmidimessage({ data: [0xb0, 104, 127] });
+    expect(handlers.onMessage).toHaveBeenNthCalledWith(1, keys, [0x90, 60, 100]);
+    expect(handlers.onMessage).toHaveBeenNthCalledWith(2, pads, [0xb0, 104, 127]);
+  });
+
+  it("tells onChange about the access and the inputs it kept, so an app can find its outputs", async () => {
+    const keys = port("MPK mini");
+    const access = fakeAccess({ inputs: [keys, port("Midi Through Port-0")], outputs: [port("Launchpad")] });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+    expect(handlers.onChange).toHaveBeenCalledWith(access, [keys]);
+  });
+
+  it("works without an onChange", async () => {
+    stubNavigator({ requestMIDIAccess: async () => fakeAccess() });
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn() });
+    expect(await midi.connect()).toBe(true);
+  });
+
+  it("scans again when a device is plugged in", async () => {
+    const access = fakeAccess({ inputs: [port("MPK mini")] });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+
+    const launchpad = port("Launchpad");
+    access.inputs.set("in1", launchpad);
+    access.onstatechange();
+
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini, Launchpad");
+    expect(launchpad.onmidimessage).toEqual(expect.any(Function));
+    expect(handlers.onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("scans again when a device is removed or switched off", async () => {
+    const keys = port("MPK mini");
+    const access = fakeAccess({ inputs: [keys, port("Launchpad")] });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+
+    access.inputs.delete("in1"); // unplugged
+    access.onstatechange();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini");
+    expect(handlers.onChange).toHaveBeenLastCalledWith(access, [keys]);
+
+    keys.state = "disconnected"; // still listed by the browser, but gone
+    access.onstatechange();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: no device");
+    expect(handlers.onChange).toHaveBeenLastCalledWith(access, []);
+  });
+});
+
+describe("createMidiAccess.autoConnect", () => {
+  it("connects without a click when permission was already granted", async () => {
+    const access = fakeAccess({ inputs: [port("MPK mini")] });
+    const requestMIDIAccess = vi.fn(async () => access);
+    stubNavigator({ requestMIDIAccess, permissions: { query: vi.fn(async () => ({ state: "granted" })) } });
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn() });
+    expect(await midi.autoConnect()).toBe(true);
+    expect(requestMIDIAccess).toHaveBeenCalled();
+  });
+
+  it("does not ask for permission on its own", async () => {
+    const requestMIDIAccess = vi.fn();
+    stubNavigator({ requestMIDIAccess, permissions: { query: vi.fn(async () => ({ state: "prompt" })) } });
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn() });
+    expect(await midi.autoConnect()).toBe(false);
+    expect(requestMIDIAccess).not.toHaveBeenCalled();
+  });
+
+  it("gives up quietly where the Permissions API does not know about MIDI", async () => {
+    const requestMIDIAccess = vi.fn();
+    stubNavigator({
+      requestMIDIAccess,
+      permissions: {
+        query: vi.fn(async () => {
+          throw new TypeError("not a valid permission name");
+        }),
+      },
+    });
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn() });
+    expect(await midi.autoConnect()).toBe(false);
+    expect(requestMIDIAccess).not.toHaveBeenCalled();
+  });
+
+  it("gives up quietly where there is no Permissions API at all", async () => {
+    stubNavigator({ requestMIDIAccess: vi.fn() });
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn() });
+    expect(await midi.autoConnect()).toBe(false);
+  });
+});
+
+describe("wireMidiButton", () => {
+  // A button that remembers its click handler so the test can press it.
+  function fakeButton() {
+    const button = { hidden: false, click: null };
+    button.addEventListener = (_type, handler) => {
+      button.click = handler;
+    };
+    return button;
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("connects on click and hides the button once connected", async () => {
+    const button = fakeButton();
+    const midi = { connect: vi.fn(async () => true), autoConnect: vi.fn(async () => false) };
+    wireMidiButton(button, midi);
+    await settle();
+    expect(button.hidden).toBe(false);
+
+    await button.click();
+    expect(midi.connect).toHaveBeenCalled();
+    expect(button.hidden).toBe(true);
+  });
+
+  it("leaves the button for another try when connecting fails", async () => {
+    const button = fakeButton();
+    const midi = { connect: vi.fn(async () => false), autoConnect: vi.fn(async () => false) };
+    wireMidiButton(button, midi);
+    await button.click();
+    expect(button.hidden).toBe(false);
+  });
+
+  it("hides the button when it reconnected on its own", async () => {
+    const button = fakeButton();
+    wireMidiButton(button, { connect: vi.fn(), autoConnect: vi.fn(async () => true) });
+    await settle();
+    expect(button.hidden).toBe(true);
+  });
+});
