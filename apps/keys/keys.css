@@ -152,6 +152,13 @@
 }
 .knob-name { font: 800 0.62rem var(--mono); color: #cfccc3; }
 .knob-cc { font: 700 0.56rem var(--mono); color: var(--label); }
+.knob-fn {
+  min-height: 1em; /* keeps K5-K8 aligned with the labelled K1-K4 */
+  font: 800 0.56rem system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e2531f;
+}
 
 /* ---------- Keys ---------- */
 .piano {
@@ -214,6 +221,8 @@
 .monitor .lcd { box-shadow: 0 1px 0 #4b4b53, inset 0 2px 6px #000; }
 .kb-screen { min-height: 100%; }
 
+.synth { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
 .env {
   padding: 12px 14px 14px;
   border-radius: 10px;
@@ -227,9 +236,20 @@
 .env-ctl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .env-ctl input { width: 100%; accent-color: #e2531f; cursor: pointer; }
 .env-ctl output { font: 700 0.78rem var(--mono); color: #e2dfd6; }
+.env-ctl select {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid #08080a;
+  border-radius: 5px;
+  background: #2b2b30;
+  color: #e2dfd6;
+  font: 700 0.78rem var(--mono);
+  cursor: pointer;
+}
 
 /* ---------- Focus ---------- */
-.mpk input:focus-visible {
+.mpk input:focus-visible,
+.mpk select:focus-visible {
   outline: 3px solid #6aa8ff;
   outline-offset: 2px;
 }

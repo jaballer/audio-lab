@@ -29,8 +29,11 @@ let lastCc = null;
 let lastPad = null; // { note, velocity, channel }
 const held = new Set(); // notes physically down
 const sustained = new Set(); // released but kept alive by the pedal
-const voices = new Map(); // note -> { osc, gain }
+const voices = new Map(); // note -> { osc, filter, gain }
 const env = { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.25 }; // seconds, sustain 0-1
+// Tone: waveform, low-pass cutoff (Hz), resonance (dB) and master volume (0-1 gain).
+const tone = { wave: "triangle", cutoff: 16000, resonance: 0, volume: 0.5 };
+const WAVES = ["sine", "triangle", "square", "sawtooth"];
 
 // ---------- Elements ----------
 const pianoEl = $("piano");
@@ -42,15 +45,29 @@ const lcdPad = $("lcd-pad");
 const keyEls = new Map();
 
 // ---------- Audio ----------
+const audioStatus = $("audio-status");
+
+function renderAudioStatus() {
+  audioStatus.textContent = ctx?.state === "running" ? "Audio: on" : "Audio: click the page to enable";
+}
+
 function ensureAudio() {
   if (!ctx) {
     ctx = new AudioContext();
+    ctx.onstatechange = renderAudioStatus;
     master = ctx.createGain();
-    master.gain.value = 0.5;
+    master.gain.value = tone.volume;
     master.connect(ctx.destination);
   }
   if (ctx.state === "suspended") ctx.resume();
+  renderAudioStatus();
 }
+
+// Browsers only start audio after a click or key press on the page, and a MIDI
+// message doesn't count. So unlock it on the first real interaction, ahead of
+// the first note: otherwise a MIDI keyboard can play silently.
+for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, ensureAudio, { capture: true });
+renderAudioStatus();
 
 const freq = (note) => 440 * 2 ** ((note - 69) / 12);
 
@@ -59,15 +76,23 @@ function startVoice(note, velocity) {
   stopVoice(note, 0.02);
   const t = ctx.currentTime;
   const osc = ctx.createOscillator();
-  osc.type = "triangle";
+  osc.type = tone.wave; // like the envelope, the waveform is read as the note starts
   osc.frequency.value = freq(note);
   osc.detune.value = bend * BEND_RANGE * 100;
+
+  // Each voice has its own low-pass filter between the oscillator and its
+  // envelope. Cutoff and resonance are changed live on all sounding voices.
+  const filter = ctx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = tone.cutoff;
+  filter.Q.value = tone.resonance; // for a low-pass filter Q is in dB, not a plain ratio
+
   const gain = ctx.createGain();
   const peak = 0.15 + 0.5 * velocity;
   startEnvelope(gain.gain, t, env, peak); // each voice reads the sliders as it starts
-  osc.connect(gain).connect(master);
+  osc.connect(filter).connect(gain).connect(master);
   osc.start(t);
-  voices.set(note, { osc, gain });
+  voices.set(note, { osc, filter, gain });
 }
 
 function stopVoice(note, release = env.release) {
@@ -95,17 +120,95 @@ const ENV_CONTROLS = {
   release: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
 };
 
+const ENV_NAMES = Object.keys(ENV_CONTROLS); // attack, decay, sustain, release = knobs K1-K4
+
+// The one place an envelope value changes, whether it came from a slider, a
+// knob or the defaults. `position` is the slider position, 0-100.
 // Changes apply to notes played after the change; notes already sounding
 // keep the envelope they started with.
-for (const [name, control] of Object.entries(ENV_CONTROLS)) {
-  const input = $(`env-${name}`);
-  const output = $(`out-${name}`);
-  input.value = control.toSlider(env[name]);
-  output.textContent = control.format(env[name]);
-  input.addEventListener("input", () => {
-    env[name] = control.toValue(Number(input.value));
-    output.textContent = control.format(env[name]);
-  });
+function setEnvSlider(name, position) {
+  const control = ENV_CONTROLS[name];
+  env[name] = control.toValue(position);
+  $(`env-${name}`).value = position;
+  $(`out-${name}`).textContent = control.format(env[name]);
+}
+
+for (const name of ENV_NAMES) {
+  setEnvSlider(name, ENV_CONTROLS[name].toSlider(env[name]));
+  $(`env-${name}`).addEventListener("input", (e) => setEnvSlider(name, Number(e.target.value)));
+}
+
+// ---------- Tone controls ----------
+// Same idea as the envelope: each control converts a 0-100 slider position to a
+// real value (and back), and says how to display it.
+const CUTOFF_MIN = 60; // Hz
+const CUTOFF_MAX = 16000; // Hz
+const RESONANCE_MAX = 24; // dB
+
+const TONE_CONTROLS = {
+  // Exponential, because pitch is: equal slider steps should be equal musical steps.
+  cutoff: {
+    toValue: (p) => CUTOFF_MIN * (CUTOFF_MAX / CUTOFF_MIN) ** (p / 100),
+    toSlider: (hz) => (100 * Math.log(hz / CUTOFF_MIN)) / Math.log(CUTOFF_MAX / CUTOFF_MIN),
+    format: (hz) => (hz < 1000 ? `${Math.round(hz)} Hz` : `${(hz / 1000).toFixed(1)} kHz`),
+  },
+  resonance: {
+    toValue: (p) => (p / 100) * RESONANCE_MAX,
+    toSlider: (db) => (db / RESONANCE_MAX) * 100,
+    format: (db) => `${db.toFixed(1)} dB`,
+  },
+  // Squared so the lower half of the slider has finer control, like a real fader.
+  volume: {
+    toValue: (p) => (p / 100) ** 2,
+    toSlider: (gain) => Math.sqrt(gain) * 100,
+    format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%`,
+  },
+};
+
+const TONE_NAMES = Object.keys(TONE_CONTROLS); // cutoff, resonance, volume
+
+// Push a changed tone value to the audio graph. Cutoff and resonance move
+// smoothly (setTargetAtTime) instead of jumping, which would click.
+function applyTone(name) {
+  if (!ctx) return; // nothing is playing yet; new notes and ensureAudio read `tone`
+  const t = ctx.currentTime;
+  if (name === "volume") master.gain.setTargetAtTime(tone.volume, t, 0.01);
+  if (name === "cutoff") voices.forEach((v) => v.filter.frequency.setTargetAtTime(tone.cutoff, t, 0.01));
+  if (name === "resonance") voices.forEach((v) => v.filter.Q.setTargetAtTime(tone.resonance, t, 0.01));
+}
+
+function setToneSlider(name, position) {
+  const control = TONE_CONTROLS[name];
+  tone[name] = control.toValue(position);
+  $(`tone-${name}`).value = position;
+  $(`out-${name}`).textContent = control.format(tone[name]);
+  applyTone(name);
+}
+
+// Waveform is a choice, not a range, so it is a <select>. A knob picks one of
+// the four by splitting its 0-127 travel into quarters.
+const waveSelect = $("tone-wave");
+function setWave(index) {
+  tone.wave = WAVES[index];
+  waveSelect.value = tone.wave;
+}
+waveSelect.addEventListener("change", () => setWave(WAVES.indexOf(waveSelect.value)));
+setWave(WAVES.indexOf(tone.wave));
+
+for (const name of TONE_NAMES) {
+  setToneSlider(name, TONE_CONTROLS[name].toSlider(tone[name]));
+  $(`tone-${name}`).addEventListener("input", (e) => setToneSlider(name, Number(e.target.value)));
+}
+
+// What each knob does, K1 first.
+const KNOB_FUNCTIONS = [...ENV_NAMES, "wave", ...TONE_NAMES];
+
+function applyKnob(index, value) {
+  const name = KNOB_FUNCTIONS[index];
+  const position = (value / 127) * 100;
+  if (ENV_NAMES.includes(name)) setEnvSlider(name, position);
+  else if (name === "wave") setWave(Math.min(WAVES.length - 1, Math.floor(value / (128 / WAVES.length))));
+  else setToneSlider(name, position);
 }
 
 // ---------- Piano ----------
@@ -217,11 +320,16 @@ function renderStick() {
   stickBall.style.transform = `translate(${bend * STICK_TRAVEL}px, ${-(mod / 127) * STICK_TRAVEL}px)`;
 }
 
-// Controllers differ in which notes/CCs their pads and knobs send, so this page
-// learns them: the first 8 pad notes you hit fill pads 1-8 in order, and the
-// first 8 CCs you turn fill K1-K8. What it learned is remembered in this browser.
+// Knob CC numbers, captured from the hardware (K1 first). The controller's
+// Program 1 sends CC 1-8, but K1 = CC 1 is also what the joystick's up axis
+// sends, and MIDI can't tell them apart. Program 2 (hold Prog Select and press
+// Pad 6) sends these instead, which keeps CC 1 free for the joystick.
+const KNOB_CCS = [20, 21, 22, 23, 16, 17, 18, 19];
+
+// Pad notes are not known yet, so the page learns them: the first 8 pad notes
+// you hit fill pads 1-8 in order, and are remembered in this browser.
 const STORE_KEY = "keys.learned";
-const learned = { pads: [], knobs: [] }; // note / CC numbers, indexed by slot
+const learned = { pads: [] }; // pad note numbers, indexed by pad slot
 
 try {
   const saved = JSON.parse(localStorage.getItem(STORE_KEY));
@@ -275,24 +383,22 @@ function hitPad(slot, note, velocity) {
   padTimers[slot] = setTimeout(() => el.classList.remove("hit"), 140);
 }
 
-// Knobs: 4 x 2. The pointer sweeps 270 degrees as the CC value goes 0-127.
+// Knobs: 4 x 2. The pointer sweeps 270 degrees as the value goes 0-127.
 const dialEls = [];
-const ccEls = [];
-for (let i = 0; i < 8; i++) {
+for (let i = 0; i < KNOB_CCS.length; i++) {
   const cell = document.createElement("div");
   cell.className = "knob-cell";
   cell.innerHTML =
     `<div class="dial"></div>` +
     `<span class="knob-name">K${i + 1}</span>` +
-    `<span class="knob-cc">${learned.knobs[i] !== undefined ? `CC ${learned.knobs[i]}` : "CC --"}</span>`;
+    `<span class="knob-cc">CC ${KNOB_CCS[i]}</span>` +
+    `<span class="knob-fn">${KNOB_FUNCTIONS[i] ?? ""}</span>`;
   $("knobs").appendChild(cell);
   dialEls.push(cell.querySelector(".dial"));
-  ccEls.push(cell.querySelector(".knob-cc"));
 }
 
-function turnKnob(slot, cc, value) {
-  ccEls[slot].textContent = `CC ${cc}`;
-  dialEls[slot].style.setProperty("--a", `${-135 + (value / 127) * 270}deg`);
+function turnKnob(index, value) {
+  dialEls[index].style.setProperty("--a", `${-135 + (value / 127) * 270}deg`);
 }
 
 // ---------- MIDI ----------
@@ -306,12 +412,14 @@ function handleMidi([status, d1, d2]) {
   if (type === 0xb0) {
     if (d1 === 64) return setSustain(d2 >= 64);
     if (d1 === 1) {
-      mod = d2;
+      mod = d2; // joystick up
       renderStick();
-    } else if (d1 < 120) {
-      // 120+ are channel-mode messages (all notes off, etc.), not knobs.
-      const slot = learnSlot(learned.knobs, d1);
-      if (slot >= 0) turnKnob(slot, d1, d2);
+    }
+    const knob = KNOB_CCS.indexOf(d1);
+    if (knob >= 0) {
+      turnKnob(knob, d2);
+      // The on-screen controls jump to the knob's position as soon as it is turned.
+      applyKnob(knob, d2);
     }
     lastCc = { cc: d1, value: d2 };
     return renderLcd();

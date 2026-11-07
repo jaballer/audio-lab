@@ -16,6 +16,7 @@
           <a class="btn btn-small nav-link" href="./">&larr; Sampler</a>
           <button id="midi-btn" class="btn btn-small" type="button">Connect MIDI</button>
           <span id="midi-status" class="small-label" role="status">MIDI: off</span>
+          <span id="audio-status" class="small-label" role="status"></span>
         </div>
       </header>
 
@@ -34,7 +35,7 @@
 
         <div class="deck-block">
           <div id="knobs" class="knobs" aria-label="Knobs"></div>
-          <span class="small-label">Knobs &middot; turn K1&ndash;K8 once, in order, to label them</span>
+          <span class="small-label">Knobs &middot; K1&ndash;K4 envelope, K5&ndash;K8 tone &middot; controller on Program 2 (Prog Select + Pad 6)</span>
         </div>
       </section>
 
@@ -51,6 +52,7 @@
           </div>
         </div>
 
+        <div class="synth">
         <section class="env" aria-label="Envelope">
           <div class="small-label env-title">Envelope &middot; ADSR</div>
           <div class="env-grid">
@@ -76,6 +78,37 @@
             </label>
           </div>
         </section>
+
+        <section class="env" aria-label="Tone">
+          <div class="small-label env-title">Tone &middot; K5&ndash;K8</div>
+          <div class="env-grid">
+            <label class="env-ctl">
+              <span class="small-label">Wave</span>
+              <select id="tone-wave">
+                <option value="sine">Sine</option>
+                <option value="triangle">Triangle</option>
+                <option value="square">Square</option>
+                <option value="sawtooth">Saw</option>
+              </select>
+            </label>
+            <label class="env-ctl">
+              <span class="small-label">Cutoff</span>
+              <input id="tone-cutoff" type="range" min="0" max="100" step="any" />
+              <output id="out-cutoff"></output>
+            </label>
+            <label class="env-ctl">
+              <span class="small-label">Resonance</span>
+              <input id="tone-resonance" type="range" min="0" max="100" step="any" />
+              <output id="out-resonance"></output>
+            </label>
+            <label class="env-ctl">
+              <span class="small-label">Volume</span>
+              <input id="tone-volume" type="range" min="0" max="100" step="any" />
+              <output id="out-volume"></output>
+            </label>
+          </div>
+        </section>
+        </div>
       </section>
 
       <footer class="footnote">
