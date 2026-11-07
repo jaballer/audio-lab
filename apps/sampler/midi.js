@@ -5,6 +5,9 @@
 //   the top run the transport. The pads are lit to mirror what is on screen.
 // - Any other controller: notes 36-51 play pads 1-16 (velocity-sensitive).
 
+import { createMidiAccess } from "../../shared/midi-access.js";
+import { parseMidi } from "../../shared/midi-messages.js";
+
 // Launchpad LED colour = velocity of a Note On: 16 * green + red + 12 (green/red 0-3).
 const color = (green, red) => 16 * green + red + 12;
 const OFF = color(0, 0);
@@ -15,8 +18,6 @@ const GREEN_MED = color(2, 0);
 const GREEN = color(3, 0);
 const AMBER_LOW = color(1, 1);
 const AMBER = color(3, 3);
-
-import { createMidiAccess } from "../../shared/midi-access.js";
 
 const isLaunchpad = (name = "") => /launchpad/i.test(name);
 
@@ -69,24 +70,23 @@ export function createMidi(api) {
     TOP.forEach((t) => led(0xb0, t.cc, t.color(s)));
   }
 
-  function handle(input, [status, data1, data2]) {
-    const type = status & 0xf0;
-    const press = type === 0x90 && data2 > 0;
+  function handle(input, data) {
+    const msg = parseMidi(data);
 
     if (isLaunchpad(input.name)) {
-      if (press) {
-        const row = data1 >> 4;
-        const col = data1 & 15;
-        if (row >= 4 && row <= 7 && col <= 3) api.triggerPad((7 - row) * 4 + col, data2 / 127);
+      if (msg.type === "noteOn") {
+        const row = msg.note >> 4;
+        const col = msg.note & 15;
+        if (row >= 4 && row <= 7 && col <= 3) api.triggerPad((7 - row) * 4 + col, msg.velocity / 127);
         else if (row <= 1 && col <= 7) api.toggleStep(row * 8 + col);
-      } else if (type === 0xb0 && data2 > 0) {
-        TOP.find((t) => t.cc === data1)?.run();
+      } else if (msg.type === "cc" && msg.value > 0) {
+        TOP.find((t) => t.cc === msg.controller)?.run();
       }
       return;
     }
 
-    if (press && data1 >= 36 && data1 < 36 + api.padCount) {
-      api.triggerPad(data1 - 36, data2 / 127);
+    if (msg.type === "noteOn" && msg.note >= 36 && msg.note < 36 + api.padCount) {
+      api.triggerPad(msg.note - 36, msg.velocity / 127);
     }
   }
 

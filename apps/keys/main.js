@@ -4,7 +4,9 @@
 
 import "../../shared/base.css";
 import "./keys.css";
+import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
+import { parseMidi } from "../../shared/midi-messages.js";
 import { startEnvelope, releaseEnvelope } from "./envelope.js";
 
 const $ = (id) => document.getElementById(id);
@@ -19,8 +21,6 @@ const COMPUTER_KEYS = "awsedftgyhuj" + "k"; // C .. C one octave up
 
 // ---------- State ----------
 let base = 48; // lowest note shown (a C)
-let ctx = null;
-let master = null;
 let bend = 0; // -1 .. 1
 let mod = 0;
 let sustain = false;
@@ -47,32 +47,18 @@ const keyEls = new Map();
 // ---------- Audio ----------
 const audioStatus = $("audio-status");
 
-function renderAudioStatus() {
-  audioStatus.textContent = ctx?.state === "running" ? "Audio: on" : "Audio: click the page to enable";
-}
-
-function ensureAudio() {
-  if (!ctx) {
-    ctx = new AudioContext();
-    ctx.onstatechange = renderAudioStatus;
-    master = ctx.createGain();
-    master.gain.value = tone.volume;
-    master.connect(ctx.destination);
-  }
-  if (ctx.state === "suspended") ctx.resume();
-  renderAudioStatus();
-}
-
-// Browsers only start audio after a click or key press on the page, and a MIDI
-// message doesn't count. So unlock it on the first real interaction, ahead of
-// the first note: otherwise a MIDI keyboard can play silently.
-for (const type of ["pointerdown", "keydown"]) window.addEventListener(type, ensureAudio, { capture: true });
-renderAudioStatus();
+const audio = createAudioEngine({
+  volume: tone.volume,
+  onStateChange: (state) => {
+    audioStatus.textContent = state === "running" ? "Audio: on" : "Audio: click the page to enable";
+  },
+});
+audio.unlockOnInteraction(); // a MIDI message alone can't start audio
 
 const freq = (note) => 440 * 2 ** ((note - 69) / 12);
 
 function startVoice(note, velocity) {
-  ensureAudio();
+  const ctx = audio.ensure();
   stopVoice(note, 0.02);
   const t = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -90,7 +76,7 @@ function startVoice(note, velocity) {
   const gain = ctx.createGain();
   const peak = 0.15 + 0.5 * velocity;
   startEnvelope(gain.gain, t, env, peak); // each voice reads the sliders as it starts
-  osc.connect(filter).connect(gain).connect(master);
+  osc.connect(filter).connect(gain).connect(audio.master);
   osc.start(t);
   voices.set(note, { osc, filter, gain });
 }
@@ -99,7 +85,7 @@ function stopVoice(note, release = env.release) {
   const v = voices.get(note);
   if (!v) return;
   voices.delete(note);
-  const t = ctx.currentTime;
+  const t = audio.ctx.currentTime;
   releaseEnvelope(v.gain.gain, t, release);
   v.osc.stop(t + release + 0.02);
 }
@@ -170,9 +156,9 @@ const TONE_NAMES = Object.keys(TONE_CONTROLS); // cutoff, resonance, volume
 // Push a changed tone value to the audio graph. Cutoff and resonance move
 // smoothly (setTargetAtTime) instead of jumping, which would click.
 function applyTone(name) {
-  if (!ctx) return; // nothing is playing yet; new notes and ensureAudio read `tone`
-  const t = ctx.currentTime;
-  if (name === "volume") master.gain.setTargetAtTime(tone.volume, t, 0.01);
+  if (name === "volume") audio.setVolume(tone.volume);
+  if (!audio.ctx) return; // nothing is playing yet; new notes read `tone`
+  const t = audio.ctx.currentTime;
   if (name === "cutoff") voices.forEach((v) => v.filter.frequency.setTargetAtTime(tone.cutoff, t, 0.01));
   if (name === "resonance") voices.forEach((v) => v.filter.Q.setTargetAtTime(tone.resonance, t, 0.01));
 }
@@ -289,7 +275,9 @@ function setSustain(on) {
 
 function setBend(value) {
   bend = value;
-  if (ctx) voices.forEach((v) => v.osc.detune.setTargetAtTime(bend * BEND_RANGE * 100, ctx.currentTime, 0.01));
+  if (audio.ctx) {
+    voices.forEach((v) => v.osc.detune.setTargetAtTime(bend * BEND_RANGE * 100, audio.ctx.currentTime, 0.01));
+  }
   renderStick();
   renderLcd();
 }
@@ -405,37 +393,37 @@ function turnKnob(index, value) {
 const midiBtn = $("midi-btn");
 const midiStatus = $("midi-status");
 
-function handleMidi([status, d1, d2]) {
-  const type = status & 0xf0;
-  const channel = status & 0x0f;
-  if (type === 0xe0) return setBend(((d2 << 7) | d1) / 8192 - 1);
-  if (type === 0xb0) {
-    if (d1 === 64) return setSustain(d2 >= 64);
-    if (d1 === 1) {
-      mod = d2; // joystick up
+function handleMidi(data) {
+  const msg = parseMidi(data);
+  if (msg.type === "pitchBend") return setBend(msg.value);
+  if (msg.type === "cc") {
+    const { controller, value } = msg;
+    if (controller === 64) return setSustain(value >= 64);
+    if (controller === 1) {
+      mod = value; // joystick up
       renderStick();
     }
-    const knob = KNOB_CCS.indexOf(d1);
+    const knob = KNOB_CCS.indexOf(controller);
     if (knob >= 0) {
-      turnKnob(knob, d2);
+      turnKnob(knob, value);
       // The on-screen controls jump to the knob's position as soon as it is turned.
-      applyKnob(knob, d2);
+      applyKnob(knob, value);
     }
-    lastCc = { cc: d1, value: d2 };
+    lastCc = { cc: controller, value };
     return renderLcd();
   }
   // The MPK mini's pads use channel 10: show them, but don't play the synth.
-  if (channel === 9) {
-    if (type === 0x90 && d2 > 0) {
-      const slot = padSlot(d1);
-      if (slot >= 0) hitPad(slot, d1, d2);
-      lastPad = { note: d1, velocity: d2, channel: channel + 1 };
+  if (msg.channel === 9) {
+    if (msg.type === "noteOn") {
+      const slot = padSlot(msg.note);
+      if (slot >= 0) hitPad(slot, msg.note, msg.velocity);
+      lastPad = { note: msg.note, velocity: msg.velocity, channel: msg.channel + 1 };
       renderLcd();
     }
     return;
   }
-  if (type === 0x90 && d2 > 0) noteOn(d1, d2);
-  else if (type === 0x80 || type === 0x90) noteOff(d1);
+  if (msg.type === "noteOn") noteOn(msg.note, msg.velocity);
+  else if (msg.type === "noteOff") noteOff(msg.note);
 }
 
 wireMidiButton(

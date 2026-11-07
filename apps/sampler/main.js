@@ -1,5 +1,6 @@
 import "../../shared/base.css";
 import "./sampler.css";
+import { createAudioEngine } from "../../shared/audio.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { SOUNDS } from "./sounds.js";
 import { createMidi } from "./midi.js";
@@ -17,8 +18,6 @@ const KEY_ROWS = ["1234", "qwer", "asdf", "zxcv"];
 const $ = (id) => document.getElementById(id);
 
 // ---------- State ----------
-let ctx = null;
-let master = null;
 let selected = 0;
 let bpm = 100;
 let playing = false;
@@ -52,15 +51,8 @@ const recBtn = $("rec");
 const pad2 = (n) => String(n).padStart(2, "0");
 
 // ---------- Audio ----------
-function ensureAudio() {
-  if (!ctx) {
-    ctx = new AudioContext();
-    master = ctx.createGain();
-    master.gain.value = Number(volInput.value) / 100;
-    master.connect(ctx.destination);
-  }
-  if (ctx.state === "suspended") ctx.resume();
-}
+const audio = createAudioEngine({ volume: Number(volInput.value) / 100 });
+audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
 
 // ---------- LCD ----------
 const rulerCells = [];
@@ -133,12 +125,12 @@ function selectPad(idx) {
 
 // velocity is 0-1; a quieter hit plays through its own gain stage.
 function triggerPad(idx, velocity = 1) {
-  ensureAudio();
-  let out = master;
+  const ctx = audio.ensure();
+  let out = audio.master;
   if (velocity < 1) {
     out = ctx.createGain();
     out.gain.value = Math.max(velocity, 0.05);
-    out.connect(master);
+    out.connect(audio.master);
   }
   SOUNDS[idx].play(ctx, out, ctx.currentTime);
   flash(idx);
@@ -150,7 +142,7 @@ function triggerPad(idx, velocity = 1) {
 // Live recording: quantize the hit to the nearest 16th step.
 function recordHit(idx) {
   const stepDur = 60 / bpm / 4;
-  const sincePlayhead = ctx.currentTime - playheadTime;
+  const sincePlayhead = audio.ctx.currentTime - playheadTime;
   const step = sincePlayhead > stepDur / 2 ? (playheadStep + 1) % STEPS : playheadStep;
   if (step >= 0) pattern[idx][step] = true;
 }
@@ -201,6 +193,7 @@ function paintPlayheadCells() {
 
 // ---------- Transport ----------
 function scheduler() {
+  const { ctx, master } = audio;
   while (nextTime < ctx.currentTime + SCHEDULE_AHEAD_S) {
     SOUNDS.forEach((s, row) => {
       if (pattern[row][nextStep]) s.play(ctx, master, nextTime);
@@ -214,7 +207,7 @@ function scheduler() {
 function paintLoop() {
   if (!playing) return;
   let moved = false;
-  while (visualQueue.length && visualQueue[0].time <= ctx.currentTime) {
+  while (visualQueue.length && visualQueue[0].time <= audio.ctx.currentTime) {
     const { step, time } = visualQueue.shift();
     playheadStep = step;
     playheadTime = time;
@@ -229,7 +222,7 @@ function paintLoop() {
 
 function start() {
   if (playing) return;
-  ensureAudio();
+  const ctx = audio.ensure();
   playing = true;
   nextStep = 0;
   nextTime = ctx.currentTime + 0.05;
@@ -341,7 +334,7 @@ function tapTempo() {
 
 // ---------- Volume ----------
 volInput.addEventListener("input", () => {
-  if (master) master.gain.value = Number(volInput.value) / 100;
+  audio.setVolume(Number(volInput.value) / 100);
   setMessage(`VOLUME ${volInput.value}`);
 });
 
