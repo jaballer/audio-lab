@@ -77,6 +77,18 @@ Beyond what they enforce:
 - When a behaviour can only be judged by ear or by eye (envelope feel, layout), say so in the commit/PR rather
   than claiming it was verified.
 
+### Testing with MIDI hardware
+
+- **Use a real Chrome, not an embedded browser.** The in-app browser pane of the Claude desktop app blocks Web
+  MIDI: `navigator.requestMIDIAccess()` throws `NotAllowedError` and the page shows "MIDI: PERMISSION DENIED".
+  Check anything that needs a connected controller (pad input, Launchpad LEDs, port names) in Chrome at
+  `http://127.0.0.1:5173` (`npm run dev`), or with Claude in Chrome. The built-in pane is fine for checks that
+  do not touch MIDI.
+- **Match against the exact port name.** Read it from the MIDI monitor page (`monitor.html`). Without a
+  browser, `aconnect -l` and `/proc/asound/cards` show the ALSA names on Linux. Test a profile's `match` with
+  that string, not a guess.
+- Device profiles cover the controllers actually in use here, not every model of a brand.
+
 ## Workflow: branch and pull request
 
 `main` is protected: changes land through a pull request, and the `check` job must pass first. Pushing to
