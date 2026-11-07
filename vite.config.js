@@ -13,4 +13,14 @@ export default defineConfig({
       },
     },
   },
+  // Only read by `npm run coverage`. The entry points (main.js) and view code are
+  // DOM wiring that the tests do not cover, so they show as gaps on purpose.
+  test: {
+    coverage: {
+      provider: "v8",
+      include: ["apps/**/*.js", "shared/**/*.js"],
+      exclude: ["**/*.test.js"],
+      reporter: ["text"],
+    },
+  },
 });

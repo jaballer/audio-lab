@@ -5,12 +5,15 @@ is synthesized in the browser.
 
 ## Commands
 
+Node 22.13 or newer, skipping the odd-numbered 23 and 25 (`.nvmrc` says 22, `engines` in `package.json` has the exact range).
+
 ```bash
 npm run dev           # dev server on http://127.0.0.1:5173
 npm run check         # lint + format check + tests + build: run before every commit
 npm run lint          # eslint
 npm run format        # prettier --write (format:check to verify only)
 npm test              # vitest run
+npm run coverage      # vitest with a coverage table (files at 100% are left out): shows what the tests do not reach
 ```
 
 CI runs `npm run check` on pull requests, and the deploy to GitHub Pages runs it before building, so a
