@@ -46,6 +46,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `index.html` + `apps/sampler/` — the pad sampler
   - `main.js` — wires the page: connects the pads, step keys, tempo knob, computer keyboard and MIDI to the sequencer and the views
   - `pattern.js` — the step grid (which pad plays on which step) and the starter beat; no DOM
+  - `song.js` — what is kept between visits (pattern, tempo, volume): the saved format, checking it on load, and the debounced saver; no DOM
   - `transport.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from; no DOM
   - `tempo.js` — BPM limits, step length, tap tempo and snapping a live hit to the nearest step; no DOM
   - `sounds.js` — drum synthesis
