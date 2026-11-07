@@ -61,6 +61,22 @@ Beyond what they enforce:
 - When a behaviour can only be judged by ear or by eye (envelope feel, layout), say so in the commit/PR rather
   than claiming it was verified.
 
+## Workflow: branch and pull request
+
+`main` is protected: changes land through a pull request, and the `check` job must pass first. Pushing to
+`main` deploys to GitHub Pages, so merging is shipping.
+
+1. Start from an up-to-date `main`: `git switch main && git pull`.
+2. Branch as `type/short-name`: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/` (for example
+   `refactor/params-registry`).
+3. Commit in small steps, and run `npm run check` before pushing.
+4. Push the branch and open a PR. The template asks for a summary, a test plan and anything not verified.
+5. Wait for `check` to go green, then merge. Squash for one commit per PR; rebase to keep a deliberate commit
+   series (for example a format-only commit next to a behaviour change). Merge commits are disabled.
+6. The branch is deleted on merge. Locally: `git switch main && git pull && git branch -d <branch>`.
+
+One PR is one change that could be reverted on its own. Keep unrelated cleanups out of it.
+
 ## Commits and changes
 
 - Small, single-purpose commits; format-only changes go in their own commit, separate from behaviour changes.
