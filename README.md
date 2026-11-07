@@ -49,5 +49,22 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `midi.js` — Launchpad mapping and LED feedback
   - `sampler.css` — sampler-only styles
 - `keyboard.html` + `apps/keys/` — MIDI keyboard test page (notes, velocity, pitch bend, mod, sustain, CCs, pads)
+  - `main.js` — wires the page: piano, LCD, pads, knobs, sliders, MIDI and computer keyboard
+  - `synth.js` — the polyphonic synth (voices, sustain pedal, pitch bend, parameters); no DOM
+  - `envelope.js` — ADSR scheduling on a Web Audio `AudioParam`
+  - `keys.css` — keys-page-only styles
+- `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by both apps
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
+- `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` objects
+- `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
 - `shared/base.css` — chassis, LCD and button styles used by both apps
+
+Tests sit next to the code as `*.test.js`. Conventions and architecture rules are in [CLAUDE.md](CLAUDE.md).
+
+## Develop
+
+```bash
+npm run check    # lint + format check + tests + build; CI and the deploy run this too
+npm test         # tests only
+npm run format   # apply Prettier
+```
