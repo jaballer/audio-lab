@@ -16,6 +16,20 @@ describe("profile selection", () => {
     expect(selectProfile(PROFILES, "Launchpad S MIDI 1")).toBe(launchpad);
   });
 
+  // The connected controller: ALSA names it "Launchpad Mini 9", and Firefox on Linux
+  // reports the "client:port nn:n" form, so the match cannot be anchored to the end.
+  it("picks the Launchpad Mini 9 however the browser spells its port", () => {
+    for (const name of [
+      "Launchpad Mini 9",
+      "Launchpad Mini 9 MIDI 1",
+      "Launchpad Mini 9:Launchpad Mini 9 MIDI 1 28:0",
+      "Launchpad Mini:Launchpad Mini MIDI 1 24:0",
+      "Launchpad S:Launchpad S MIDI 1 20:0",
+    ]) {
+      expect(selectProfile(PROFILES, name)).toBe(launchpad);
+    }
+  });
+
   it("falls back for newer and unrecognized Launchpads, including their MIDI ports", () => {
     for (const name of [
       "Launchpad Mk2",
