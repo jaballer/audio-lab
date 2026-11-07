@@ -1,0 +1,58 @@
+/* Extra styles for keyboard.html (builds on style.css). */
+
+.nav-link { text-decoration: none; display: inline-block; }
+
+.kb-screen { min-height: 0; }
+
+.piano {
+  position: relative;
+  display: flex;
+  height: 190px;
+  margin: 18px 0 6px;
+  padding: 0 0 4px;
+  border-radius: 4px;
+  background: #26241f;
+  touch-action: none;
+  user-select: none;
+}
+
+.key-white {
+  flex: 1;
+  position: relative;
+  border: 1px solid #5b5850;
+  border-top: 0;
+  border-radius: 0 0 5px 5px;
+  background: linear-gradient(180deg, #f7f5ee, #dedacc);
+  cursor: pointer;
+}
+
+.key-white .label {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: 0.62rem var(--mono);
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+.key-black {
+  position: absolute;
+  top: 0;
+  height: 62%;
+  z-index: 1;
+  border: 1px solid #000;
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(180deg, #3b3934, #111);
+  cursor: pointer;
+}
+
+.key-white.down { background: linear-gradient(180deg, #ffd9c2, #f0a272); }
+.key-black.down { background: linear-gradient(180deg, #e2531f, #a8360d); }
+
+@media (max-width: 480px) {
+  .piano { height: 150px; }
+  .key-white .label { font-size: 0.5rem; }
+}

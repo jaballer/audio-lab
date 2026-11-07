@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PAD16 Keys</title>
+  </head>
+  <body>
+    <main class="device">
+      <header class="top">
+        <div class="brand">
+          <span class="brand-name">KEYS</span>
+          <span class="brand-sub">MIDI keyboard test</span>
+        </div>
+        <div class="power">
+          <a class="btn btn-small nav-link" href="./">&larr; Sampler</a>
+          <button id="midi-btn" class="btn btn-small" type="button">Connect MIDI</button>
+          <span id="midi-status" class="small-label" role="status">MIDI: off</span>
+        </div>
+      </header>
+
+      <div class="lcd" role="status" aria-label="Display">
+        <div class="lcd-screen kb-screen">
+          <div class="lcd-line" id="lcd-note"></div>
+          <div class="lcd-line" id="lcd-vel"></div>
+          <div class="lcd-line" id="lcd-wheels"></div>
+          <div class="lcd-line" id="lcd-cc"></div>
+        </div>
+      </div>
+
+      <div id="piano" class="piano" aria-label="Piano keys"></div>
+
+      <footer class="footnote">
+        Computer keys: <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd>
+        <kbd>G</kbd> <kbd>Y</kbd> <kbd>H</kbd> <kbd>U</kbd> <kbd>J</kbd> <kbd>K</kbd> play one octave
+        &middot; the view follows your keyboard's octave
+      </footer>
+    </main>
+    <script type="module" src="/src/keyboard.js"></script>
+  </body>
+</html>
