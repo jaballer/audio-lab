@@ -87,7 +87,10 @@ Beyond what they enforce:
 - **Match against the exact port name.** Read it from the MIDI monitor page (`monitor.html`). Without a
   browser, `aconnect -l` or `/proc/asound/seq/clients` list the ALSA sequencer port names on Linux
   (`/proc/asound/cards` does not: it has card descriptions, which differ from the port name). Test a
-  profile's `match` with the real string, not a guess.
+  profile's `match` with the real string, not a guess. The monitor shows input names only; a profile with
+  lights (`lights`/`reset`) is matched against the output port's name too (`apps/sampler/midi.js`), and a
+  browser can name the two differently, so test both. In the browser console, list them with
+  `[...(await navigator.requestMIDIAccess()).outputs.values()].map((p) => p.name)`.
 - **Keep the model boundary, but allow for the browser's decoration.** Firefox on Linux reports ports as
   `client:port MIDI 1 28:0` and Windows can prefix `2- `, so a `match` that insists on the string ending
   right after the model name silently drops the profile. Accept those known prefixes and suffixes, and
