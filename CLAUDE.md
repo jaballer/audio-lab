@@ -42,8 +42,9 @@ failing check blocks the deploy.
 - **Controller-specific numbers live in a device profile, not in a handler.** A profile (see
   `shared/midi-devices.js`) has `match(inputName)` and `translate(msg)`, which returns the app's own events
   (`knob`, `pad`, `sustain`…); `main.js` reacts to those and never sees a CC number or channel. Supporting
-  another controller means adding a profile. The keys page does this (`apps/keys/devices.js`); the sampler's
-  `midi.js` still holds its Launchpad mapping inline, so move it to profiles when you next change it.
+  another controller means adding a profile. Both pages do this (`apps/keys/devices.js`,
+  `apps/sampler/devices.js`). A profile can also describe a controller's lights (the Launchpad's LEDs); the
+  LED colours and note numbers stay in the profile too.
 - **Slider-to-value mappings use `shared/scales.js`**, not hand-written formulas.
 - **One place changes each value.** A parameter that can be set from a slider, a MIDI knob or a default goes
   through a single setter (see `setSlider` / `setChoice` in `keys/main.js` and `synth.set`), so the UI, the
