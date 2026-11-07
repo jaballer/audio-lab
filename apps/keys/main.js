@@ -2,8 +2,9 @@
 // computer keyboard) and shows notes, velocity, pitch bend, mod wheel,
 // sustain pedal and knob/CC activity.
 
-import "./style.css";
-import "./keyboard.css";
+import "../../shared/base.css";
+import "./keys.css";
+import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,6 +25,7 @@ let mod = 0;
 let sustain = false;
 let last = null; // { note, velocity }
 let lastCc = null;
+let lastPad = null; // { note, velocity, channel }
 const held = new Set(); // notes physically down
 const sustained = new Set(); // released but kept alive by the pedal
 const voices = new Map(); // note -> { osc, gain }
@@ -34,6 +36,7 @@ const lcdNote = $("lcd-note");
 const lcdVel = $("lcd-vel");
 const lcdWheels = $("lcd-wheels");
 const lcdCc = $("lcd-cc");
+const lcdPad = $("lcd-pad");
 const keyEls = new Map();
 
 // ---------- Audio ----------
@@ -172,12 +175,14 @@ function renderLcd() {
   const b = (bend * BEND_RANGE).toFixed(2);
   lcdWheels.textContent = `BEND ${bend >= 0 ? "+" : ""}${b}  MOD ${mod}  SUS ${sustain ? "ON" : "OFF"}`;
   lcdCc.textContent = lastCc ? `CC${String(lastCc.cc).padStart(3, "0")} ${bar(lastCc.value)} ${lastCc.value}` : "CC   --";
+  lcdPad.textContent = lastPad
+    ? `PAD  NOTE ${lastPad.note}  CH ${lastPad.channel}  VEL ${lastPad.velocity}`
+    : "PAD  --";
 }
 
 // ---------- MIDI ----------
 const midiBtn = $("midi-btn");
 const midiStatus = $("midi-status");
-let access = null;
 
 function handleMidi([status, d1, d2]) {
   const type = status & 0xf0;
@@ -189,41 +194,25 @@ function handleMidi([status, d1, d2]) {
     lastCc = { cc: d1, value: d2 };
     return renderLcd();
   }
-  // The MPK mini's pads use channel 10; this page is for the keys.
-  if (channel === 9) return;
+  // The MPK mini's pads use channel 10: show them, but don't play the synth.
+  if (channel === 9) {
+    if (type === 0x90 && d2 > 0) {
+      lastPad = { note: d1, velocity: d2, channel: channel + 1 };
+      renderLcd();
+    }
+    return;
+  }
   if (type === 0x90 && d2 > 0) noteOn(d1, d2);
   else if (type === 0x80 || type === 0x90) noteOff(d1);
 }
 
-function rescan() {
-  const inputs = [...access.inputs.values()].filter((i) => i.state !== "disconnected" && !/through/i.test(i.name));
-  inputs.forEach((input) => (input.onmidimessage = (e) => handleMidi(e.data)));
-  midiStatus.textContent = inputs.length ? `MIDI: ${inputs.map((i) => i.name).join(", ")}` : "MIDI: no device";
-}
-
-async function connect() {
-  if (!navigator.requestMIDIAccess) {
-    midiStatus.textContent = "MIDI: use Chrome or Edge";
-    return;
-  }
-  try {
-    access = await navigator.requestMIDIAccess();
-  } catch {
-    midiStatus.textContent = "MIDI: permission denied";
-    return;
-  }
-  access.onstatechange = rescan;
-  rescan();
-  midiBtn.hidden = true;
-}
-
-midiBtn.addEventListener("click", connect);
-
-// Reconnect silently on later visits if permission was already granted.
-navigator.permissions
-  ?.query({ name: "midi" })
-  .then((p) => p.state === "granted" && connect())
-  .catch(() => {});
+wireMidiButton(
+  midiBtn,
+  createMidiAccess({
+    onMessage: (_input, data) => handleMidi(data),
+    onStatus: (text) => (midiStatus.textContent = text),
+  }),
+);
 
 // ---------- Computer keyboard ----------
 const keyDown = new Map(); // event.code -> note

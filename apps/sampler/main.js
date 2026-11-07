@@ -1,4 +1,6 @@
-import "./style.css";
+import "../../shared/base.css";
+import "./sampler.css";
+import { wireMidiButton } from "../../shared/midi-access.js";
 import { SOUNDS } from "./sounds.js";
 import { createMidi } from "./midi.js";
 
@@ -390,12 +392,7 @@ const midi = createMidi({
   onStatus: (text) => (midiStatus.textContent = text),
 });
 
-midiBtn.addEventListener("click", async () => {
-  if (await midi.connect()) midiBtn.hidden = true;
-});
-midi.autoConnect().then((connected) => {
-  if (connected) midiBtn.hidden = true;
-});
+wireMidiButton(midiBtn, midi);
 
 // ---------- Init ----------
 setBpm(bpm);

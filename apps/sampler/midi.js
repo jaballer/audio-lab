@@ -16,10 +16,11 @@ const GREEN = color(3, 0);
 const AMBER_LOW = color(1, 1);
 const AMBER = color(3, 3);
 
+import { createMidiAccess } from "../../shared/midi-access.js";
+
 const isLaunchpad = (name = "") => /launchpad/i.test(name);
 
 export function createMidi(api) {
-  let access = null;
   let output = null; // the Launchpad's output port, when one is connected
   const lastSent = new Map();
   const flashing = new Set();
@@ -89,52 +90,22 @@ export function createMidi(api) {
     }
   }
 
-  function rescan() {
-    const inputs = [...access.inputs.values()].filter(
-      (i) => i.state !== "disconnected" && !/through/i.test(i.name),
-    );
-    inputs.forEach((input) => {
-      input.onmidimessage = (e) => handle(input, e.data);
-    });
-
-    const lp =
-      [...access.outputs.values()].find((o) => isLaunchpad(o.name) && o.state !== "disconnected") ?? null;
-    if (lp !== output) {
-      output = lp;
-      lastSent.clear();
-      if (output) output.send([0xb0, 0, 0]); // reset all LEDs
-    }
-
-    api.onStatus(inputs.length ? `MIDI: ${inputs.map((i) => i.name).join(", ")}` : "MIDI: no device");
-    refresh();
-  }
-
-  async function connect() {
-    if (!navigator.requestMIDIAccess) {
-      api.onStatus("MIDI: use Chrome or Edge");
-      return false;
-    }
-    try {
-      access = await navigator.requestMIDIAccess();
-    } catch {
-      api.onStatus("MIDI: permission denied");
-      return false;
-    }
-    access.onstatechange = rescan;
-    rescan();
-    return true;
-  }
-
-  // Reconnect silently on later visits if permission was already granted.
-  async function autoConnect() {
-    try {
-      const p = await navigator.permissions.query({ name: "midi" });
-      if (p.state === "granted") return await connect();
-    } catch {
-      /* permissions API may not know about "midi" */
-    }
-    return false;
-  }
+  // Device scanning and permission live in shared/midi-access.js; here we only
+  // pick out the Launchpad's output port so its LEDs can mirror the app.
+  const { connect, autoConnect } = createMidiAccess({
+    onMessage: handle,
+    onStatus: api.onStatus,
+    onChange(access) {
+      const lp =
+        [...access.outputs.values()].find((o) => isLaunchpad(o.name) && o.state !== "disconnected") ?? null;
+      if (lp !== output) {
+        output = lp;
+        lastSent.clear();
+        if (output) output.send([0xb0, 0, 0]); // reset all LEDs
+      }
+      refresh();
+    },
+  });
 
   function padHit(idx) {
     if (!output) return;

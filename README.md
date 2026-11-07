@@ -41,6 +41,13 @@ docker run --rm -p 8080:80 pad-sampler   # http://localhost:8080
 
 ## Layout
 
-- `src/sounds.js` — drum synthesis
-- `src/main.js` — pads, sequencer, transport
-- `src/style.css` — styles
+Each app is its own page with its own code; shared code lives in `shared/`.
+
+- `index.html` + `apps/sampler/` — the pad sampler
+  - `main.js` — pads, sequencer, transport
+  - `sounds.js` — drum synthesis
+  - `midi.js` — Launchpad mapping and LED feedback
+  - `sampler.css` — sampler-only styles
+- `keyboard.html` + `apps/keys/` — MIDI keyboard test page (notes, velocity, pitch bend, mod, sustain, CCs, pads)
+- `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
+- `shared/base.css` — chassis, LCD and button styles used by both apps

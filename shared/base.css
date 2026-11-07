@@ -1,0 +1,161 @@
+:root {
+  --desk: #1d1b19;
+  --chassis-top: #ddd9cc;
+  --chassis-bottom: #c6c2b5;
+  --chassis-edge: #8d8979;
+  --ink: #34322c;
+  --ink-soft: #5b5850;
+  --lcd-bg: #b4c496;
+  --lcd-ink: #1c2916;
+  --led-red: #ff3b2f;
+  --led-green: #58e04a;
+  --focus: #0a58ca;
+  --mono: ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 12px;
+  background:
+    radial-gradient(ellipse at 50% 0%, #34302b 0%, var(--desk) 70%);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+kbd {
+  font: 0.72rem var(--mono);
+  padding: 1px 5px;
+  border: 1px solid var(--chassis-edge);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #ece9df;
+}
+
+.small-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* ---------- Chassis ---------- */
+.device {
+  width: min(980px, 100%);
+  padding: 18px 22px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--chassis-top), var(--chassis-bottom));
+  border: 1px solid #f3f0e6;
+  box-shadow:
+    0 2px 0 #f6f3ea inset,
+    0 -6px 0 rgba(0, 0, 0, 0.12) inset,
+    0 10px 0 var(--chassis-edge),
+    0 28px 50px rgba(0, 0, 0, 0.55);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 2px groove #b9b5a7;
+}
+
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.brand-name {
+  font-size: 1.7rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: #26241f;
+}
+.brand-name b { color: #e2531f; font-weight: 900; margin-left: 2px; }
+.brand-sub {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.power { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.btn-small { padding: 6px 10px; font-size: 0.62rem; border-bottom-width: 3px; }
+.power-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--led-red);
+  box-shadow: 0 0 8px 2px rgba(255, 59, 47, 0.6), 0 0 0 2px #7a1f19;
+}
+
+/* ---------- LCD ---------- */
+.lcd {
+  padding: 12px;
+  border-radius: 8px;
+  background: #2b2a26;
+  box-shadow: 0 2px 0 #f3f0e6, inset 0 2px 6px #000;
+}
+
+.lcd-screen {
+  padding: 12px 14px;
+  min-height: 150px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px),
+    var(--lcd-bg);
+  box-shadow: inset 0 0 14px rgba(40, 60, 20, 0.45);
+  color: var(--lcd-ink);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lcd-line { line-height: 1.55; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.lcd-msg { min-height: 1.55em; opacity: 0.85; }
+
+.btn {
+  position: relative;
+  padding: 11px 6px 9px;
+  border: 1px solid #77736a;
+  border-bottom-width: 4px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #f2efe6, #cfcbbe);
+  color: var(--ink);
+  font: 800 0.7rem/1.1 system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.btn:hover { background: linear-gradient(180deg, #faf8f1, #d8d4c7); }
+.btn:active { transform: translateY(2px); border-bottom-width: 2px; }
+
+.footnote {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- Focus ---------- */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 480px) {
+  .device { padding: 14px 12px; }
+  .lcd-screen { font-size: 0.8rem; }
+  .brand-name { font-size: 1.4rem; }
+}
