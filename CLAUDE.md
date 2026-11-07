@@ -84,10 +84,15 @@ Beyond what they enforce:
   Check anything that needs a connected controller (pad input, Launchpad LEDs, port names) in Firefox or
   Chrome at `http://127.0.0.1:5173` (`npm run dev`); Claude in Chrome can drive Chrome when its extension is
   connected. The built-in pane is fine for checks that do not touch MIDI.
-- **Match against the exact port name, and do not anchor it to the end.** Read it from the MIDI monitor page
-  (`monitor.html`). Without a browser, `aconnect -l` and `/proc/asound/cards` show the ALSA names on Linux.
-  Firefox on Linux reports ports as `client:port MIDI 1 28:0` and Windows can prefix `2- `, so a `$` in a
-  `match` regex silently drops the profile. Test a profile's `match` with the real string, not a guess.
+- **Match against the exact port name.** Read it from the MIDI monitor page (`monitor.html`). Without a
+  browser, `aconnect -l` or `/proc/asound/seq/clients` list the ALSA sequencer port names on Linux
+  (`/proc/asound/cards` does not: it has card descriptions, which differ from the port name). Test a
+  profile's `match` with the real string, not a guess.
+- **Keep the model boundary, but allow for the browser's decoration.** Firefox on Linux reports ports as
+  `client:port MIDI 1 28:0` and Windows can prefix `2- `, so a `match` that insists on the string ending
+  right after the model name silently drops the profile. Accept those known prefixes and suffixes, and
+  exclude sibling models by name, so one profile does not also claim a different model with the same
+  leading name.
 - Device profiles cover the controllers actually in use here, not every model of a brand.
 
 ## Workflow: branch and pull request
