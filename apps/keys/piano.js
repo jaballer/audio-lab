@@ -3,13 +3,20 @@
 //
 //   const piano = createPiano(element, { onNoteOn, onNoteOff });
 //   piano.press(60);    // light the key, scrolling the view if it is off screen
-//   piano.release(60);  // un-light it; returns false if it was not down
+//   piano.release(60);  // un-light it
+//   piano.releasePointers();  // end every note a pointer holds (see below)
 //   piano.base          // lowest note currently shown
 //
 // It only shows and reports: sound is the caller's job, from onNoteOn/onNoteOff
-// (called for pointer presses with velocity 100).
+// (called for pointer presses with velocity 100). Each finger or mouse button is
+// its own `source` ("pointer-<id>"), passed as the last argument, so the caller
+// can tell two fingers on one key apart:
+//
+//   onNoteOn(note, velocity, source)
+//   onNoteOff(note, source)
 
 import { isBlack, noteName } from "./notes.js";
+import { createPointerNotes } from "./pointer-notes.js";
 
 const SPAN = 24; // 25 keys: two octaves plus the top C
 const MAX_BASE = 96; // the highest C the view will scroll to
@@ -61,31 +68,44 @@ export function createPiano(element, { onNoteOn, onNoteOff, base: initialBase = 
   }
 
   function release(note) {
-    if (!down.delete(note)) return false;
+    down.delete(note);
     keyEls.get(note)?.classList.remove("down");
-    return true;
   }
 
-  // Mouse / touch on the keys. The release listens on the window so letting go
-  // anywhere ends the note.
-  let pointerNote = null;
+  // Mouse / touch on the keys, one note per pointer. The end listens on the window
+  // so letting go anywhere ends the note. A pointer can also be cancelled (the
+  // browser takes a touch for a scroll or a system gesture) and then no pointerup
+  // follows, so that ends the note too, or it would sound forever. The caller ends
+  // them when the page loses focus, through releasePointers().
+  const pointers = createPointerNotes();
+  const sourceOf = (pointerId) => `pointer-${pointerId}`;
+
   element.addEventListener("pointerdown", (e) => {
     const el = e.target.closest("[data-note]");
     if (!el) return;
     e.preventDefault();
-    pointerNote = Number(el.dataset.note);
-    onNoteOn(pointerNote, POINTER_VELOCITY);
+    const note = Number(el.dataset.note);
+    const stale = pointers.press(e.pointerId, note);
+    if (stale !== undefined) onNoteOff(stale, sourceOf(e.pointerId));
+    onNoteOn(note, POINTER_VELOCITY, sourceOf(e.pointerId));
   });
-  window.addEventListener("pointerup", () => {
-    if (pointerNote !== null) onNoteOff(pointerNote);
-    pointerNote = null;
-  });
+
+  function endPointer(pointerId) {
+    const note = pointers.release(pointerId);
+    if (note !== undefined) onNoteOff(note, sourceOf(pointerId));
+  }
+
+  window.addEventListener("pointerup", (e) => endPointer(e.pointerId));
+  window.addEventListener("pointercancel", (e) => endPointer(e.pointerId));
 
   render();
 
   return {
     press,
     release,
+    releasePointers() {
+      for (const [pointerId, note] of pointers.releaseAll()) onNoteOff(note, sourceOf(pointerId));
+    },
     get base() {
       return base;
     },

@@ -63,6 +63,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `params.js` — every synth parameter in one table (scale, display, knob order); adding one is one entry
   - `notes.js` — note names and black/white keys
   - `devices.js` — device profiles: the generic keyboard and the AKAI MPK mini (knob CCs, channel-10 pads)
+  - `pointer-notes.js` — which note each mouse button or finger is holding on the piano; no DOM
+  - `holds.js` — who is holding each note (MIDI, computer keyboard, each finger), so a note stops only when the last holder lets go; no DOM
   - `pad-learner.js` — learns which MIDI notes are pads 1-8 and remembers them
   - `piano.js`, `pad-grid.js`, `knob-dials.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
   - `keys.css` — keys-page-only styles
