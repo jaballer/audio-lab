@@ -95,7 +95,7 @@ describe("createMidiAccess.connect", () => {
     expect(await midi.connect()).toBe(true);
   });
 
-  it("scans again when a device is plugged in or removed", async () => {
+  it("scans again when a device is plugged in", async () => {
     const access = fakeAccess({ inputs: [port("MPK mini")] });
     const { midi, handlers } = setup({ access });
     await midi.connect();
@@ -107,6 +107,23 @@ describe("createMidiAccess.connect", () => {
     expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini, Launchpad");
     expect(launchpad.onmidimessage).toEqual(expect.any(Function));
     expect(handlers.onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("scans again when a device is removed or switched off", async () => {
+    const keys = port("MPK mini");
+    const access = fakeAccess({ inputs: [keys, port("Launchpad")] });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+
+    access.inputs.delete("in1"); // unplugged
+    access.onstatechange();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini");
+    expect(handlers.onChange).toHaveBeenLastCalledWith(access, [keys]);
+
+    keys.state = "disconnected"; // still listed by the browser, but gone
+    access.onstatechange();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: no device");
+    expect(handlers.onChange).toHaveBeenLastCalledWith(access, []);
   });
 });
 

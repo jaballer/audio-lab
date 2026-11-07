@@ -84,7 +84,13 @@ describe("createAudioEngine", () => {
     const audio = createAudioEngine();
     const ctx = audio.ensure();
     audio.setVolume(0.7);
-    expect(audio.master.gain.setTargetAtTime).toHaveBeenCalledWith(0.7, ctx.currentTime, expect.any(Number));
+    expect(audio.master.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
+    const [target, when, timeConstant] = audio.master.gain.setTargetAtTime.mock.calls[0];
+    expect(target).toBe(0.7);
+    expect(when).toBe(ctx.currentTime);
+    // A time constant of zero would jump straight to the new level, which is the click.
+    expect(Number.isFinite(timeConstant)).toBe(true);
+    expect(timeConstant).toBeGreaterThan(0);
   });
 
   describe("onStateChange", () => {

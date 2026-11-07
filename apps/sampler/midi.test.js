@@ -241,7 +241,11 @@ describe("lighting a controller", () => {
     const flash = padLed(out, pad3)[0][2];
     expect(flash).not.toBe(resting);
 
-    vi.advanceTimersByTime(FLASH_MS);
+    // Still lit just before the flash is over, so a flash too short to see is caught.
+    vi.advanceTimersByTime(FLASH_MS - 1);
+    expect(padLed(out, pad3)).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
     expect(padLed(out, pad3)).toHaveLength(2);
     expect(padLed(out, pad3)[1][2]).toBe(resting);
   });

@@ -3,25 +3,30 @@ import { SOUNDS } from "./sounds.js";
 
 // How a sound sounds can only be judged by ear. What can be checked here is that
 // each one schedules cleanly: starts nothing before its time, stops everything
-// it starts, and reaches the output. A fake context records the calls.
+// it starts, and reaches the output. A fake context records the calls, and the
+// graph: which node is connected to which.
 function fakeContext(sampleRate = 8000) {
   const out = { name: "out" };
   const sources = []; // every oscillator and noise source, with its start and stop mocks
-  let reachedOut = 0;
+  const edges = []; // [from, to] for every connect()
+  const ramps = []; // the target of every exponential ramp, on any parameter
 
   const param = () => ({
     value: 0,
     setValueAtTime: vi.fn(),
     linearRampToValueAtTime: vi.fn(),
-    exponentialRampToValueAtTime: vi.fn(),
+    exponentialRampToValueAtTime: vi.fn((target) => ramps.push(target)),
   });
-  const node = (extra = {}) => ({
-    connect(next) {
-      if (next === out) reachedOut++;
-      return next;
-    },
-    ...extra,
-  });
+  const node = (extra = {}) => {
+    const self = {
+      connect(next) {
+        edges.push([self, next]);
+        return next;
+      },
+      ...extra,
+    };
+    return self;
+  };
   const source = (extra) => {
     const s = node({ start: vi.fn(), stop: vi.fn(), ...extra });
     sources.push(s);
@@ -40,7 +45,21 @@ function fakeContext(sampleRate = 8000) {
     createGain: () => node({ gain: param() }),
     createBiquadFilter: () => node({ type: "lowpass", frequency: param(), Q: param() }),
   };
-  return { ctx, out, sources, reachedOut: () => reachedOut };
+  // Whether a sound made at `from` can get to the output, through however many
+  // gains and filters.
+  const reachesOut = (from) => {
+    const seen = new Set();
+    const queue = [from];
+    while (queue.length) {
+      const node = queue.shift();
+      if (node === out) return true;
+      if (seen.has(node)) continue;
+      seen.add(node);
+      for (const [a, b] of edges) if (a === node) queue.push(b);
+    }
+    return false;
+  };
+  return { ctx, out, sources, ramps, reachesOut };
 }
 
 const WHEN = 2.5; // seconds on the audio clock
@@ -76,11 +95,11 @@ describe("SOUNDS", () => {
   });
 
   describe.each(SOUNDS.map((s) => [s.id, s]))("%s", (_id, sound) => {
-    it("makes sound that reaches the output", () => {
-      const { ctx, out, sources, reachedOut } = fakeContext();
+    it("connects every source through to the output, so none is silent", () => {
+      const { ctx, out, sources, reachesOut } = fakeContext();
       sound.play(ctx, out, WHEN);
       expect(sources.length).toBeGreaterThan(0);
-      expect(reachedOut()).toBeGreaterThan(0);
+      for (const s of sources) expect(reachesOut(s)).toBe(true);
     });
 
     it("starts each source once, no earlier than asked", () => {
@@ -101,17 +120,13 @@ describe("SOUNDS", () => {
       }
     });
 
-    it("keeps its ramps to positive levels, which exponential ramps require", () => {
-      const { ctx, out } = fakeContext();
-      const ramps = [];
-      const createGain = ctx.createGain;
-      ctx.createGain = () => {
-        const g = createGain();
-        g.gain.exponentialRampToValueAtTime = vi.fn((value) => ramps.push(value));
-        return g;
-      };
+    // Web Audio rejects an exponential ramp to zero (or below), on any parameter:
+    // gain, frequency or filter.
+    it("keeps every exponential ramp to a positive level", () => {
+      const { ctx, out, ramps } = fakeContext();
       sound.play(ctx, out, WHEN);
-      for (const value of ramps) expect(value).toBeGreaterThan(0);
+      expect(ramps.length).toBeGreaterThan(0);
+      for (const target of ramps) expect(target).toBeGreaterThan(0);
     });
   });
 
