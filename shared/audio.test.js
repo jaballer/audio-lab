@@ -1,0 +1,128 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAudioEngine } from "./audio.js";
+
+// An AudioContext that starts suspended, as browsers make it until a user
+// gesture, and remembers every instance so a test can tell whether one was built.
+function installAudioContext() {
+  const instances = [];
+  class FakeAudioContext {
+    constructor() {
+      this.state = "suspended";
+      this.currentTime = 4;
+      this.destination = { name: "destination" };
+      this.resume = vi.fn(() => {
+        this.state = "running";
+      });
+      instances.push(this);
+    }
+
+    createGain() {
+      return { gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn() };
+    }
+  }
+  vi.stubGlobal("AudioContext", FakeAudioContext);
+  return instances;
+}
+
+// A window that records the listeners added to it.
+function fakeTarget() {
+  const listeners = [];
+  return {
+    listeners,
+    addEventListener: vi.fn((type, handler, options) => listeners.push({ type, handler, options })),
+  };
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("createAudioEngine", () => {
+  it("builds nothing until the context is asked for", () => {
+    const instances = installAudioContext();
+    const audio = createAudioEngine();
+    expect(instances).toHaveLength(0);
+    expect(audio.ctx).toBeNull();
+    expect(audio.master).toBeNull();
+    expect(audio.running).toBe(false);
+  });
+
+  it("creates the context and master gain on first use, wired to the speakers", () => {
+    const instances = installAudioContext();
+    const audio = createAudioEngine({ volume: 0.4 });
+    const ctx = audio.ensure();
+    expect(instances).toEqual([ctx]);
+    expect(audio.master.gain.value).toBe(0.4);
+    expect(audio.master.connect).toHaveBeenCalledWith(ctx.destination);
+  });
+
+  it("returns the same context every time", () => {
+    const instances = installAudioContext();
+    const audio = createAudioEngine();
+    expect(audio.ensure()).toBe(audio.ensure());
+    expect(instances).toHaveLength(1);
+  });
+
+  it("resumes a suspended context, once it is running leaves it alone", () => {
+    installAudioContext();
+    const audio = createAudioEngine();
+    const ctx = audio.ensure();
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+    expect(audio.running).toBe(true);
+    audio.ensure();
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes a volume set before the context exists", () => {
+    installAudioContext();
+    const audio = createAudioEngine({ volume: 1 });
+    audio.setVolume(0.25);
+    audio.ensure();
+    expect(audio.master.gain.value).toBe(0.25);
+  });
+
+  it("smooths a volume change once the context exists, so the change does not click", () => {
+    installAudioContext();
+    const audio = createAudioEngine();
+    const ctx = audio.ensure();
+    audio.setVolume(0.7);
+    expect(audio.master.gain.setTargetAtTime).toHaveBeenCalledWith(0.7, ctx.currentTime, expect.any(Number));
+  });
+
+  describe("onStateChange", () => {
+    it('reports "closed" before there is a context, then the context\'s state as it changes', () => {
+      installAudioContext();
+      const onStateChange = vi.fn();
+      const audio = createAudioEngine({ onStateChange });
+      audio.unlockOnInteraction(fakeTarget());
+      expect(onStateChange).toHaveBeenLastCalledWith("closed");
+
+      const ctx = audio.ensure();
+      expect(onStateChange).toHaveBeenLastCalledWith("running");
+
+      ctx.state = "suspended";
+      ctx.onstatechange();
+      expect(onStateChange).toHaveBeenLastCalledWith("suspended");
+    });
+  });
+
+  describe("unlockOnInteraction", () => {
+    it("listens for a press or key in the capture phase, so no handler can stop it", () => {
+      installAudioContext();
+      const target = fakeTarget();
+      createAudioEngine().unlockOnInteraction(target);
+      expect(target.listeners.map((l) => l.type).sort()).toEqual(["keydown", "pointerdown"]);
+      for (const { options } of target.listeners) expect(options).toEqual({ capture: true });
+    });
+
+    it("starts audio when the first interaction happens, not before", () => {
+      const instances = installAudioContext();
+      const audio = createAudioEngine();
+      const target = fakeTarget();
+      audio.unlockOnInteraction(target);
+      expect(instances).toHaveLength(0);
+
+      target.listeners.find((l) => l.type === "pointerdown").handler();
+      expect(instances).toHaveLength(1);
+      expect(audio.running).toBe(true);
+    });
+  });
+});
