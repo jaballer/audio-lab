@@ -79,14 +79,15 @@ Beyond what they enforce:
 
 ### Testing with MIDI hardware
 
-- **Use a real Chrome, not an embedded browser.** The in-app browser pane of the Claude desktop app blocks Web
+- **Use a real browser, not an embedded one.** The in-app browser pane of the Claude desktop app blocks Web
   MIDI: `navigator.requestMIDIAccess()` throws `NotAllowedError` and the page shows "MIDI: PERMISSION DENIED".
-  Check anything that needs a connected controller (pad input, Launchpad LEDs, port names) in Chrome at
-  `http://127.0.0.1:5173` (`npm run dev`), or with Claude in Chrome. The built-in pane is fine for checks that
-  do not touch MIDI.
-- **Match against the exact port name.** Read it from the MIDI monitor page (`monitor.html`). Without a
-  browser, `aconnect -l` and `/proc/asound/cards` show the ALSA names on Linux. Test a profile's `match` with
-  that string, not a guess.
+  Check anything that needs a connected controller (pad input, Launchpad LEDs, port names) in Firefox or
+  Chrome at `http://127.0.0.1:5173` (`npm run dev`); Claude in Chrome can drive Chrome when its extension is
+  connected. The built-in pane is fine for checks that do not touch MIDI.
+- **Match against the exact port name, and do not anchor it to the end.** Read it from the MIDI monitor page
+  (`monitor.html`). Without a browser, `aconnect -l` and `/proc/asound/cards` show the ALSA names on Linux.
+  Firefox on Linux reports ports as `client:port MIDI 1 28:0` and Windows can prefix `2- `, so a `$` in a
+  `match` regex silently drops the profile. Test a profile's `match` with the real string, not a guess.
 - Device profiles cover the controllers actually in use here, not every model of a brand.
 
 ## Workflow: branch and pull request
