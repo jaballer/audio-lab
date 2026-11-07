@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # One weekly PR per group keeps the review load small. The check job runs on each.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # @vitest/coverage-v8 needs the exact vitest version, so they move together.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+      eslint:
+        patterns: ["eslint", "@eslint/*", "globals"]
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
