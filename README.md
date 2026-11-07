@@ -2,6 +2,8 @@
 
 A single-page drum sampler styled like a classic hardware pad sampler, built with Vite and the Web Audio API. Every sound is synthesized in the browser, so there are no sample files.
 
+**Live demo: https://jaballer.github.io/pad-sampler/**
+
 - 4×4 grid of 16 pads (Kick, Snare, hats, Clap, Rim, toms, Cowbell, Conga, Shaker, Bass, Crash, Ride, Zap, Blip)
 - Play pads by clicking or with the keyboard; the keys mirror the pad grid: `1 2 3 4` / `Q W E R` / `A S D F` / `Z X C V`
 - LCD display, 16 step keys for the selected pad, and a looping sequencer (Space toggles play/stop)
