@@ -133,10 +133,9 @@ describe("createTransport", () => {
   });
 
   it("stop ends the scheduler, clears the queue and resets the playhead", () => {
-    const { transport, played, advance, run, audio } = setup();
+    const { transport, played, advance, run } = setup();
     transport.start();
     run(0.3);
-    audio.ctx.currentTime = 0.2;
     transport.poll();
     expect(transport.playheadStep).toBeGreaterThanOrEqual(0);
 
@@ -158,6 +157,42 @@ describe("createTransport", () => {
     transport.start();
     advance(0);
     expect(played[0][0]).toBe(0);
+  });
+});
+
+describe("playhead queue", () => {
+  // requestAnimationFrame stops in a hidden tab while the scheduler keeps running,
+  // so nothing calls poll() for as long as the tab stays in the background.
+  it("stays small when poll is never called", () => {
+    const { transport, run } = setup({ bpm: 120 });
+    transport.start();
+    run(60); // a minute, 480 steps
+    // The step the playhead will land on, plus those still ahead of the clock.
+    expect(transport.pendingSteps).toBeLessThanOrEqual(3);
+  });
+
+  it("still lands the playhead on the latest step that has arrived", () => {
+    const { transport, run, audio } = setup({ bpm: 120 });
+    transport.start();
+    run(60);
+    expect(transport.poll()).toBe(true);
+    const latest = Math.floor((audio.ctx.currentTime - 0.05) / 0.125); // steps fall at 0.05 + n * 0.125 s
+    expect(transport.playheadStep).toBe(latest % 16);
+    expect(transport.playheadTime).toBeCloseTo(0.05 + latest * 0.125);
+  });
+
+  it("keeps the steps that are still ahead of the clock", () => {
+    const { transport, advance, audio } = setup({ bpm: 120 });
+    transport.start();
+    advance(0.2); // steps 0, 1, 2 scheduled at 0.05, 0.175, 0.3
+    advance(0.025); // clock 0.225: step 1 has arrived, step 2 is still ahead
+    expect(transport.pendingSteps).toBe(2); // step 0 is behind step 1, so only it is dropped
+    transport.poll();
+    expect(transport.playheadStep).toBe(1);
+
+    audio.ctx.currentTime = 0.31;
+    expect(transport.poll()).toBe(true);
+    expect(transport.playheadStep).toBe(2);
   });
 });
 
