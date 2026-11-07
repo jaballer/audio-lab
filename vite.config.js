@@ -10,6 +10,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         keyboard: resolve(import.meta.dirname, "keyboard.html"),
+        monitor: resolve(import.meta.dirname, "monitor.html"),
       },
     },
   },

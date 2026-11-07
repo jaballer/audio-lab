@@ -1,0 +1,120 @@
+/* MIDI monitor page (builds on shared/base.css). */
+
+.monitor-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nav-link {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+}
+.filters legend {
+  float: left;
+  padding: 0;
+  margin-right: 8px;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.filter {
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+/* The message list is the LCD: one row per message, newest on top. */
+.log-screen {
+  height: 420px;
+  padding: 8px 10px;
+  overflow-y: auto;
+  text-transform: none;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+}
+.log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.msg {
+  display: grid;
+  grid-template-columns: 5.5em 3.5em 9.5em minmax(0, 1fr) auto;
+  gap: 0 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.msg span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msg-hex {
+  opacity: 0.7;
+}
+/* Pressure and clock arrive in floods; dim them so note hits stand out. */
+.msg-pressure,
+.msg-system {
+  opacity: 0.55;
+}
+
+.notes-title {
+  margin-bottom: 6px;
+}
+.notes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 0.78rem var(--mono);
+}
+.notes-table th,
+.notes-table td {
+  padding: 3px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--chassis-edge);
+}
+.notes-table th {
+  font:
+    700 0.62rem system-ui,
+    sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 720px) {
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .filters {
+    margin-left: 0;
+  }
+  .log-screen {
+    height: 320px;
+  }
+}
