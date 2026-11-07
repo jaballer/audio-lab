@@ -9,7 +9,7 @@
 //     lastCc:  { cc, value } or null
 //     lastPad: { note, velocity, channel } or null
 
-import { noteName } from "./notes.js";
+import { noteName } from "../../shared/notes.js";
 import { BEND_RANGE } from "./synth.js";
 
 // A fixed-width level meter: "#####...........".
