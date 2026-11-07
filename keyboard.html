@@ -6,7 +6,7 @@
     <title>PAD16 Keys</title>
   </head>
   <body>
-    <main class="device">
+    <main class="mpk">
       <header class="top">
         <div class="brand">
           <span class="brand-name">KEYS</span>
@@ -19,42 +19,63 @@
         </div>
       </header>
 
-      <div class="lcd" role="status" aria-label="Display">
-        <div class="lcd-screen kb-screen">
-          <div class="lcd-line" id="lcd-note"></div>
-          <div class="lcd-line" id="lcd-vel"></div>
-          <div class="lcd-line" id="lcd-wheels"></div>
-          <div class="lcd-line" id="lcd-cc"></div>
-          <div class="lcd-line" id="lcd-pad"></div>
+      <section class="deck" aria-label="Controller">
+        <div class="deck-block stick-block">
+          <div class="stick-well" aria-hidden="true">
+            <div id="stick-ball" class="stick-ball"></div>
+          </div>
+          <span class="small-label">Pitch / Mod</span>
         </div>
-      </div>
+
+        <div class="deck-block">
+          <div id="pads" class="pads" aria-label="Pads"></div>
+          <span class="small-label">Pads &middot; hit each once to label them</span>
+        </div>
+
+        <div class="deck-block">
+          <div id="knobs" class="knobs" aria-label="Knobs"></div>
+          <span class="small-label">Knobs &middot; turn K1&ndash;K8 once, in order, to label them</span>
+        </div>
+      </section>
 
       <div id="piano" class="piano" aria-label="Piano keys"></div>
 
-      <section class="env" aria-label="Envelope">
-        <div class="small-label env-title">Envelope &middot; ADSR</div>
-        <div class="env-grid">
-          <label class="env-ctl">
-            <span class="small-label">Attack</span>
-            <input id="env-attack" type="range" min="0" max="100" step="any" />
-            <output id="out-attack"></output>
-          </label>
-          <label class="env-ctl">
-            <span class="small-label">Decay</span>
-            <input id="env-decay" type="range" min="0" max="100" step="any" />
-            <output id="out-decay"></output>
-          </label>
-          <label class="env-ctl">
-            <span class="small-label">Sustain</span>
-            <input id="env-sustain" type="range" min="0" max="100" step="any" />
-            <output id="out-sustain"></output>
-          </label>
-          <label class="env-ctl">
-            <span class="small-label">Release</span>
-            <input id="env-release" type="range" min="0" max="100" step="any" />
-            <output id="out-release"></output>
-          </label>
+      <section class="monitor" aria-label="Monitor and envelope">
+        <div class="lcd" role="status" aria-label="Display">
+          <div class="lcd-screen kb-screen">
+            <div class="lcd-line" id="lcd-note"></div>
+            <div class="lcd-line" id="lcd-vel"></div>
+            <div class="lcd-line" id="lcd-wheels"></div>
+            <div class="lcd-line" id="lcd-cc"></div>
+            <div class="lcd-line" id="lcd-pad"></div>
+          </div>
         </div>
+
+        <section class="env" aria-label="Envelope">
+          <div class="small-label env-title">Envelope &middot; ADSR</div>
+          <div class="env-grid">
+            <label class="env-ctl">
+              <span class="small-label">Attack</span>
+              <input id="env-attack" type="range" min="0" max="100" step="any" />
+              <output id="out-attack"></output>
+            </label>
+            <label class="env-ctl">
+              <span class="small-label">Decay</span>
+              <input id="env-decay" type="range" min="0" max="100" step="any" />
+              <output id="out-decay"></output>
+            </label>
+            <label class="env-ctl">
+              <span class="small-label">Sustain</span>
+              <input id="env-sustain" type="range" min="0" max="100" step="any" />
+              <output id="out-sustain"></output>
+            </label>
+            <label class="env-ctl">
+              <span class="small-label">Release</span>
+              <input id="env-release" type="range" min="0" max="100" step="any" />
+              <output id="out-release"></output>
+            </label>
+          </div>
+        </section>
       </section>
 
       <footer class="footnote">
