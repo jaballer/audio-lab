@@ -162,8 +162,8 @@ const midiStatus = $("midi-status");
 
 // What to do for each event a device profile (devices.js) can produce.
 const handlers = {
-  noteOn: (e, source) => noteOn(e.note, e.velocity, source),
-  noteOff: (e, source) => noteOff(e.note, source),
+  noteOn: (e, input) => noteOn(e.note, e.velocity, midiSource(input)),
+  noteOff: (e, input) => noteOff(e.note, midiSource(input)),
   bend: (e) => setBend(e.value),
   sustain: (e) => setSustain(e.on),
   mod: (e) => {
@@ -203,8 +203,7 @@ function handleMidiChange(_access, inputs) {
 
 function handleMidi(input, data) {
   const profile = selectProfile(PROFILES, input.name);
-  const source = midiSource(input);
-  for (const event of profile.translate(parseMidi(data))) handlers[event.type](event, source);
+  for (const event of profile.translate(parseMidi(data))) handlers[event.type](event, input);
 }
 
 wireMidiButton(
@@ -235,16 +234,18 @@ window.addEventListener("keyup", (e) => {
   noteOff(note, KEYBOARD_SOURCE);
 });
 
-// A key let go while the page is in the background never sends its keyup (Alt-Tab,
-// a notification, switching tabs), so its note would sound until the key was
-// pressed again. Let them all go when the page loses focus.
-function releaseKeyboard() {
+// Keys and fingers let go while the page is in the background never send their
+// keyup / pointerup (Alt-Tab, a notification, switching tabs), so their notes
+// would sound until the same key was pressed again. When the page loses focus or
+// is hidden, let go of everything held from the computer keyboard or the piano.
+function releaseHeld() {
   releaseSource(KEYBOARD_SOURCE);
   keyDown.clear();
+  piano.releasePointers();
 }
-window.addEventListener("blur", releaseKeyboard);
+window.addEventListener("blur", releaseHeld);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") releaseKeyboard();
+  if (document.visibilityState === "hidden") releaseHeld();
 });
 
 renderLcd();

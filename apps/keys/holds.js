@@ -6,7 +6,6 @@
 //   holds.release(60, "midi");      // false: the keyboard still holds it
 //   holds.release(60, "keyboard");  // true: nobody does now, so stop the sound
 //   holds.releaseAll("keyboard");   // every note that source held; [60, ...] left with no holder
-//   holds.isDown(60)
 //
 // A note can be held from the MIDI keyboard, the computer keyboard and each
 // finger on the on-screen piano at once. It should sound until the last of them
@@ -43,10 +42,6 @@ export function createHolds() {
         freed.push(note);
       }
       return freed;
-    },
-
-    isDown(note) {
-      return holders.has(note);
     },
   };
 }
