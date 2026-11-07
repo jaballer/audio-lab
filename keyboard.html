@@ -31,6 +31,32 @@
 
       <div id="piano" class="piano" aria-label="Piano keys"></div>
 
+      <section class="env" aria-label="Envelope">
+        <div class="small-label env-title">Envelope &middot; ADSR</div>
+        <div class="env-grid">
+          <label class="env-ctl">
+            <span class="small-label">Attack</span>
+            <input id="env-attack" type="range" min="0" max="100" step="any" />
+            <output id="out-attack"></output>
+          </label>
+          <label class="env-ctl">
+            <span class="small-label">Decay</span>
+            <input id="env-decay" type="range" min="0" max="100" step="any" />
+            <output id="out-decay"></output>
+          </label>
+          <label class="env-ctl">
+            <span class="small-label">Sustain</span>
+            <input id="env-sustain" type="range" min="0" max="100" step="any" />
+            <output id="out-sustain"></output>
+          </label>
+          <label class="env-ctl">
+            <span class="small-label">Release</span>
+            <input id="env-release" type="range" min="0" max="100" step="any" />
+            <output id="out-release"></output>
+          </label>
+        </div>
+      </section>
+
       <footer class="footnote">
         Computer keys: <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd>
         <kbd>G</kbd> <kbd>Y</kbd> <kbd>H</kbd> <kbd>U</kbd> <kbd>J</kbd> <kbd>K</kbd> play one octave

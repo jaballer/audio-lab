@@ -5,6 +5,7 @@
 import "../../shared/base.css";
 import "./keys.css";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
+import { startEnvelope, releaseEnvelope } from "./envelope.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,6 +30,7 @@ let lastPad = null; // { note, velocity, channel }
 const held = new Set(); // notes physically down
 const sustained = new Set(); // released but kept alive by the pedal
 const voices = new Map(); // note -> { osc, gain }
+const env = { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.25 }; // seconds, sustain 0-1
 
 // ---------- Elements ----------
 const pianoEl = $("piano");
@@ -62,23 +64,48 @@ function startVoice(note, velocity) {
   osc.detune.value = bend * BEND_RANGE * 100;
   const gain = ctx.createGain();
   const peak = 0.15 + 0.5 * velocity;
-  gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.linearRampToValueAtTime(peak, t + 0.01);
-  gain.gain.exponentialRampToValueAtTime(peak * 0.6, t + 0.3);
+  startEnvelope(gain.gain, t, env, peak); // each voice reads the sliders as it starts
   osc.connect(gain).connect(master);
   osc.start(t);
   voices.set(note, { osc, gain });
 }
 
-function stopVoice(note, release = 0.25) {
+function stopVoice(note, release = env.release) {
   const v = voices.get(note);
   if (!v) return;
   voices.delete(note);
   const t = ctx.currentTime;
-  v.gain.gain.cancelScheduledValues(t);
-  v.gain.gain.setValueAtTime(Math.max(v.gain.gain.value, 0.0001), t);
-  v.gain.gain.exponentialRampToValueAtTime(0.0001, t + release);
+  releaseEnvelope(v.gain.gain, t, release);
   v.osc.stop(t + release + 0.02);
+}
+
+// ---------- Envelope sliders ----------
+// Time sliders run 0-100 but map exponentially to seconds, so there is fine
+// control over short times (5 ms) as well as long ones (3 s).
+const TIME_MIN = 0.005;
+const TIME_MAX = 3;
+const sliderToTime = (v) => TIME_MIN * (TIME_MAX / TIME_MIN) ** (v / 100);
+const timeToSlider = (t) => (100 * Math.log(t / TIME_MIN)) / Math.log(TIME_MAX / TIME_MIN);
+const formatTime = (t) => (t < 1 ? `${Math.round(t * 1000)} ms` : `${t.toFixed(2)} s`);
+
+const ENV_CONTROLS = {
+  attack: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
+  decay: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
+  sustain: { toValue: (v) => v / 100, toSlider: (s) => s * 100, format: (s) => `${Math.round(s * 100)}%` },
+  release: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
+};
+
+// Changes apply to notes played after the change; notes already sounding
+// keep the envelope they started with.
+for (const [name, control] of Object.entries(ENV_CONTROLS)) {
+  const input = $(`env-${name}`);
+  const output = $(`out-${name}`);
+  input.value = control.toSlider(env[name]);
+  output.textContent = control.format(env[name]);
+  input.addEventListener("input", () => {
+    env[name] = control.toValue(Number(input.value));
+    output.textContent = control.format(env[name]);
+  });
 }
 
 // ---------- Piano ----------
