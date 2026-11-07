@@ -84,6 +84,9 @@ export function createPiano(element, { onNoteOn, onNoteOff, base: initialBase = 
     if (!el) return;
     e.preventDefault();
     const note = Number(el.dataset.note);
+    // A press by a pointer that is still down means its pointerup never arrived;
+    // end that note first, or it would stay held under this pointer's name.
+    endPointer(e.pointerId);
     pointers.set(e.pointerId, note);
     onNoteOn(note, POINTER_VELOCITY, sourceOf(e.pointerId));
   });

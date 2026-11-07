@@ -5,6 +5,7 @@
 //   holds.press(60, "keyboard");
 //   holds.release(60, "midi");      // false: the keyboard still holds it
 //   holds.release(60, "keyboard");  // true: nobody does now, so stop the sound
+//   holds.releaseAll("keyboard");   // every note that source held; [60, ...] left with no holder
 //   holds.isDown(60)
 //
 // A note can be held from the MIDI keyboard, the computer keyboard and each
@@ -29,6 +30,19 @@ export function createHolds() {
       if (sources.size > 0) return false;
       holders.delete(note);
       return true;
+    },
+
+    // Drops everything one source was holding, for when it goes away without
+    // letting go: a window that lost focus, a MIDI device that was unplugged.
+    // Returns the notes that now have no holder, which are the ones to stop.
+    releaseAll(source) {
+      const freed = [];
+      for (const [note, sources] of holders) {
+        if (!sources.delete(source) || sources.size > 0) continue;
+        holders.delete(note);
+        freed.push(note);
+      }
+      return freed;
     },
 
     isDown(note) {

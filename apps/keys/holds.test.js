@@ -72,4 +72,41 @@ describe("createHolds", () => {
     expect(holds.isDown(60)).toBe(true);
     expect(holds.release(60, "midi")).toBe(true);
   });
+
+  describe("releaseAll", () => {
+    it("frees every note the source was holding and says which", () => {
+      const holds = createHolds();
+      holds.press(60, "midi-A");
+      holds.press(64, "midi-A");
+      expect(holds.releaseAll("midi-A").sort()).toEqual([60, 64]);
+      expect(holds.isDown(60)).toBe(false);
+      expect(holds.isDown(64)).toBe(false);
+    });
+
+    it("leaves a note down that another source still holds, and does not report it", () => {
+      const holds = createHolds();
+      holds.press(60, "midi-A");
+      holds.press(60, "midi-B");
+      holds.press(64, "midi-A");
+      expect(holds.releaseAll("midi-A")).toEqual([64]);
+      expect(holds.isDown(60)).toBe(true);
+      expect(holds.release(60, "midi-B")).toBe(true); // B alone holds it now
+    });
+
+    it("lets a note be silenced by another source after the first one is gone", () => {
+      // A device unplugged while holding a note must not keep that note down for good.
+      const holds = createHolds();
+      holds.press(60, "midi-A");
+      holds.releaseAll("midi-A");
+      holds.press(60, "midi-B");
+      expect(holds.release(60, "midi-B")).toBe(true);
+    });
+
+    it("does nothing for a source that holds nothing", () => {
+      const holds = createHolds();
+      holds.press(60, "midi-A");
+      expect(holds.releaseAll("midi-Z")).toEqual([]);
+      expect(holds.isDown(60)).toBe(true);
+    });
+  });
 });

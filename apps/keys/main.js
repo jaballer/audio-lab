@@ -136,6 +136,15 @@ function noteOff(note, source) {
   synth.noteOff(note);
 }
 
+// A source that goes away without letting go (a window that lost focus, a MIDI
+// device that was unplugged) ends all its notes at once.
+function releaseSource(source) {
+  for (const note of holds.releaseAll(source)) {
+    piano.release(note);
+    synth.noteOff(note);
+  }
+}
+
 function setSustain(on) {
   synth.setSustain(on);
   renderLcd();
@@ -178,11 +187,23 @@ const handlers = {
   },
 };
 
+// Each connected device is its own note holder: with two keyboards holding the
+// same note, the first one's Note Off must not stop it.
+const midiSource = (input) => `midi-${input.id ?? input.name}`;
+let midiSources = new Set(); // the holders of the inputs connected at the last scan
+
+// Called after every scan of the MIDI ports. A device that is gone can no longer
+// send its Note Offs, so let go of what it held, or those notes would sound until
+// the page was reloaded, and no other device could end them.
+function handleMidiChange(_access, inputs) {
+  const connected = new Set(inputs.map(midiSource));
+  for (const source of midiSources) if (!connected.has(source)) releaseSource(source);
+  midiSources = connected;
+}
+
 function handleMidi(input, data) {
   const profile = selectProfile(PROFILES, input.name);
-  // Each connected device is its own note holder: with two keyboards holding the
-  // same note, the first one's Note Off must not stop it.
-  const source = `midi-${input.id ?? input.name}`;
+  const source = midiSource(input);
   for (const event of profile.translate(parseMidi(data))) handlers[event.type](event, source);
 }
 
@@ -190,6 +211,7 @@ wireMidiButton(
   midiBtn,
   createMidiAccess({
     onMessage: handleMidi,
+    onChange: handleMidiChange,
     onStatus: (text) => (midiStatus.textContent = text),
   }),
 );
@@ -217,7 +239,7 @@ window.addEventListener("keyup", (e) => {
 // a notification, switching tabs), so its note would sound until the key was
 // pressed again. Let them all go when the page loses focus.
 function releaseKeyboard() {
-  for (const note of keyDown.values()) noteOff(note, KEYBOARD_SOURCE);
+  releaseSource(KEYBOARD_SOURCE);
   keyDown.clear();
 }
 window.addEventListener("blur", releaseKeyboard);
