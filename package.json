@@ -6,9 +6,19 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "check": "npm run lint && npm run format:check && npm run test && npm run build"
   },
   "devDependencies": {
-    "vite": "^8.3.6"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   }
 }
