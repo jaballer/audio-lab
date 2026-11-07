@@ -16,7 +16,11 @@ function setup({ steps = 16, bpm = 120 } = {}) {
     audio.ctx.currentTime += seconds;
     vi.advanceTimersByTime(LOOKAHEAD_MS);
   };
-  return { audio, transport, played, advance };
+  // Move the clock forward in scheduler ticks, as it moves when nothing stalls.
+  const run = (seconds) => {
+    for (let t = 0; t < seconds; t += LOOKAHEAD_MS / 1000) advance(LOOKAHEAD_MS / 1000);
+  };
+  return { audio, transport, played, advance, run };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -61,19 +65,60 @@ describe("createTransport", () => {
     expect(played).toHaveLength(1);
   });
 
-  it("wraps from the last step back to the first", () => {
+  it("skips steps missed during a stall instead of playing them all at once", () => {
+    const { transport, played, advance } = setup({ bpm: 120 }); // steps fall at 0.05 + n * 0.125 s
+    transport.start();
+    advance(0);
+    played.length = 0;
+
+    advance(1); // the timer was blocked for a second: steps 1 to 7 are long past
+    // Only the step that is still ahead of the clock plays, on the original grid.
+    expect(played).toHaveLength(1);
+    expect(played[0][0]).toBe(8);
+    expect(played[0][1]).toBeCloseTo(1.05);
+  });
+
+  it("moves the playhead across the steps skipped in a stall", () => {
+    const { transport, advance, audio } = setup({ bpm: 120 });
+    transport.start();
+    advance(0);
+    advance(1); // steps 1 to 7 are skipped; step 8 falls at 1.05 s, still ahead of the clock
+    transport.poll();
+    // The playhead is on the last step that has gone by, not stuck on step 0:
+    // a live hit is quantized against it.
+    expect(transport.playheadStep).toBe(7);
+    expect(transport.playheadTime).toBeCloseTo(0.925);
+
+    audio.ctx.currentTime = 1.06;
+    transport.poll();
+    expect(transport.playheadStep).toBe(8);
+  });
+
+  it("keeps the step order after a stall", () => {
     const { transport, played, advance } = setup({ steps: 4, bpm: 120 });
     transport.start();
+    advance(0);
     advance(1);
+    advance(0.25);
+    // Step n always falls at 0.05 + n * 0.125 s, whatever was skipped on the way.
+    for (const [step, time] of played) {
+      expect(step).toBe(Math.round((time - 0.05) / 0.125) % 4);
+    }
+  });
+
+  it("wraps from the last step back to the first", () => {
+    const { transport, played, run } = setup({ steps: 4, bpm: 120 });
+    transport.start();
+    run(1);
     expect(played.slice(0, 6).map(([step]) => step)).toEqual([0, 1, 2, 3, 0, 1]);
   });
 
   it("uses the tempo in force when each step is scheduled", () => {
-    const { transport, played, advance } = setup({ bpm: 120 });
+    const { transport, played, advance, run } = setup({ bpm: 120 });
     transport.start();
     advance(0);
     transport.setBpm(60); // a step is now 0.25 s
-    advance(0.5);
+    run(0.5);
     const gaps = played.slice(1).map(([, time], i) => time - played[i][1]);
     expect(gaps[0]).toBeCloseTo(0.125); // step 0 was scheduled at 120 BPM, so step 1 follows after 0.125 s
     expect(gaps[1]).toBeCloseTo(0.25);
@@ -88,9 +133,9 @@ describe("createTransport", () => {
   });
 
   it("stop ends the scheduler, clears the queue and resets the playhead", () => {
-    const { transport, played, advance, audio } = setup();
+    const { transport, played, advance, run, audio } = setup();
     transport.start();
-    advance(0.3);
+    run(0.3);
     audio.ctx.currentTime = 0.2;
     transport.poll();
     expect(transport.playheadStep).toBeGreaterThanOrEqual(0);
