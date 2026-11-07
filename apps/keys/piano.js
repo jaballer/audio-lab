@@ -15,7 +15,7 @@
 //   onNoteOn(note, velocity, source)
 //   onNoteOff(note, source)
 
-import { isBlack, noteName } from "./notes.js";
+import { isBlack, noteName } from "../../shared/notes.js";
 import { createPointerNotes } from "./pointer-notes.js";
 
 const SPAN = 24; // 25 keys: two octaves plus the top C

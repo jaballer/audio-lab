@@ -28,6 +28,18 @@ describe("parseMidi", () => {
     expect(parseMidi([0xe0, 127, 127]).value).toBeCloseTo(1, 3);
   });
 
+  it("reads key pressure (polyphonic aftertouch), as the MPC Sample pads send it", () => {
+    expect(parseMidi([0xa0, 42, 68])).toEqual({ type: "polyAftertouch", channel: 0, note: 42, pressure: 68 });
+  });
+
+  it("reads channel pressure, which has one data byte", () => {
+    expect(parseMidi([0xd3, 90])).toEqual({ type: "channelPressure", channel: 3, pressure: 90 });
+  });
+
+  it("reads a program change, which has one data byte", () => {
+    expect(parseMidi([0xc1, 5])).toEqual({ type: "programChange", channel: 1, program: 5 });
+  });
+
   it("passes other messages through as `other`", () => {
     expect(parseMidi([0xf8])).toMatchObject({ type: "other", status: 0xf8 });
   });

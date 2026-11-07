@@ -75,10 +75,29 @@ describe("createMidiAccess.connect", () => {
     const { midi, handlers } = setup({ access: fakeAccess({ inputs: [keys, pads] }) });
     await midi.connect();
 
-    keys.onmidimessage({ data: [0x90, 60, 100] });
-    pads.onmidimessage({ data: [0xb0, 104, 127] });
-    expect(handlers.onMessage).toHaveBeenNthCalledWith(1, keys, [0x90, 60, 100]);
-    expect(handlers.onMessage).toHaveBeenNthCalledWith(2, pads, [0xb0, 104, 127]);
+    keys.onmidimessage({ data: [0x90, 60, 100], timeStamp: 10 });
+    pads.onmidimessage({ data: [0xb0, 104, 127], timeStamp: 20 });
+    expect(handlers.onMessage).toHaveBeenNthCalledWith(1, keys, [0x90, 60, 100], 10);
+    expect(handlers.onMessage).toHaveBeenNthCalledWith(2, pads, [0xb0, 104, 127], 20);
+  });
+
+  it("passes on the time the system received a message, not the time the callback ran", async () => {
+    const keys = port("MPK mini");
+    const { midi, handlers } = setup({ access: fakeAccess({ inputs: [keys] }) });
+    await midi.connect();
+    keys.onmidimessage({ data: [0x90, 60, 100], timeStamp: 1234.5 });
+    expect(handlers.onMessage.mock.calls[0][2]).toBe(1234.5);
+  });
+
+  it("does not ask for System Exclusive access unless the app does", async () => {
+    const { midi, access } = setup();
+    await midi.connect();
+    expect(navigator.requestMIDIAccess).toHaveBeenCalledWith({ sysex: false });
+    expect(access).toBeDefined();
+
+    stubNavigator({ requestMIDIAccess: vi.fn(async () => fakeAccess()) });
+    await createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn(), sysex: true }).connect();
+    expect(navigator.requestMIDIAccess).toHaveBeenCalledWith({ sysex: true });
   });
 
   it("tells onChange about the access and the inputs it kept, so an app can find its outputs", async () => {
@@ -135,6 +154,13 @@ describe("createMidiAccess.autoConnect", () => {
     const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn() });
     expect(await midi.autoConnect()).toBe(true);
     expect(requestMIDIAccess).toHaveBeenCalled();
+  });
+
+  it("checks the permission it will ask for, so a sysex page is not reconnected on a plain grant", async () => {
+    const query = vi.fn(async () => ({ state: "prompt" }));
+    stubNavigator({ requestMIDIAccess: vi.fn(), permissions: { query } });
+    await createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn(), sysex: true }).autoConnect();
+    expect(query).toHaveBeenCalledWith({ name: "midi", sysex: true });
   });
 
   it("does not ask for permission on its own", async () => {

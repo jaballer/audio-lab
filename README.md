@@ -61,17 +61,23 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `synth.js` — the polyphonic synth (voices, sustain pedal, pitch bend, parameters); no DOM
   - `envelope.js` — ADSR scheduling on a Web Audio `AudioParam`
   - `params.js` — every synth parameter in one table (scale, display, knob order); adding one is one entry
-  - `notes.js` — note names and black/white keys
   - `devices.js` — device profiles: the generic keyboard and the AKAI MPK mini (knob CCs, channel-10 pads)
   - `pointer-notes.js` — which note each mouse button or finger is holding on the piano; no DOM
   - `holds.js` — who is holding each note (MIDI, computer keyboard, each finger), so a note stops only when the last holder lets go; no DOM
   - `pad-learner.js` — learns which MIDI notes are pads 1-8 and remembers them
   - `piano.js`, `pad-grid.js`, `knob-dials.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
   - `keys.css` — keys-page-only styles
+- `monitor.html` + `apps/monitor/` — MIDI monitor page: lists every message a device sends (notes, CCs, pressure, clock...) with its raw bytes, and a table of which notes were hit on which channel
+  - `main.js` — wires the page: connects MIDI to the log and the view, and the pause / clear / copy / filter controls
+  - `describe.js` — turns raw bytes into a name, channel, detail and hex, and a line of text for copying; no DOM
+  - `log.js` — the bounded message list and the running tally of notes hit; no DOM
+  - `view.js` — the on-screen message list and notes table
+  - `monitor.css` — monitor-only styles
 - `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by both apps
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name
-- `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` objects
+- `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects
+- `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
 - `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/base.css` — chassis, LCD and button styles used by both apps

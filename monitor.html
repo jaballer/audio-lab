@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PAD16 MIDI Monitor</title>
+  </head>
+  <body>
+    <main class="device monitor-page">
+      <header class="top">
+        <div class="brand">
+          <span class="brand-name">MIDI <b>MONITOR</b></span>
+          <span class="brand-sub">What your controller really sends</span>
+        </div>
+        <div class="power">
+          <a class="btn btn-small nav-link" href="./">&larr; Sampler</a>
+          <button id="midi-btn" class="btn btn-small" type="button">Connect MIDI</button>
+          <span id="midi-status" class="small-label" role="status">MIDI: off</span>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="Controls">
+        <button id="pause-btn" class="btn btn-small" type="button" aria-pressed="false">Pause</button>
+        <button id="clear-btn" class="btn btn-small" type="button">Clear</button>
+        <button id="copy-btn" class="btn btn-small" type="button">Copy log</button>
+        <fieldset class="filters">
+          <legend class="small-label">Show</legend>
+          <div id="filters" class="filter-row"></div>
+        </fieldset>
+      </section>
+
+      <div class="panes">
+        <section class="lcd" aria-label="Messages">
+          <div class="lcd-screen log-screen">
+            <ol id="log" class="log" aria-live="off"></ol>
+          </div>
+        </section>
+
+        <section class="notes" aria-label="Notes hit">
+          <div class="small-label notes-title">Notes hit &middot; per channel</div>
+          <table class="notes-table">
+            <thead>
+              <tr>
+                <th id="notes-source-head" scope="col" hidden>Input</th>
+                <th scope="col">Ch</th>
+                <th scope="col">Note</th>
+                <th scope="col">Name</th>
+                <th scope="col">Hits</th>
+                <th scope="col">Max vel</th>
+              </tr>
+            </thead>
+            <tbody id="notes-body"></tbody>
+          </table>
+        </section>
+      </div>
+
+      <footer class="footnote">
+        Hit each pad once, in order, to see which note it sends &middot; newest message on top &middot; the hex is the
+        raw bytes
+      </footer>
+    </main>
+    <script type="module" src="/apps/monitor/main.js"></script>
+  </body>
+</html>
