@@ -14,7 +14,7 @@ import { createMonitorView } from "./view.js";
 const $ = (id) => document.getElementById(id);
 
 const log = createLog();
-const view = createMonitorView({ list: $("log"), notes: $("notes-body") });
+const view = createMonitorView({ list: $("log"), notes: $("notes-body"), sourceHead: $("notes-source-head") });
 
 let paused = false;
 const hidden = new Set(); // kinds the filters have switched off
@@ -22,11 +22,11 @@ const hidden = new Set(); // kinds the filters have switched off
 const isVisible = (entry) => !hidden.has(entry.kind);
 
 // ---------- MIDI ----------
-function handleMidi(input, data) {
+function handleMidi(input, data, timeStamp) {
   if (paused) return;
-  // performance.now() is the page's own clock: only the gaps between messages
-  // matter here, so it does not need to line up with the MIDI event timestamp.
-  const entry = { time: performance.now(), source: input.name, ...describeMessage(data) };
+  // The time the system received the message, so the gaps shown stay true even
+  // when a flood of messages makes this callback run late.
+  const entry = { time: timeStamp, source: input.name, ...describeMessage(data) };
   log.add(entry);
   if (isVisible(entry)) view.append(entry);
   if (entry.hit) view.showNotes(log.notesHit());
@@ -37,6 +37,7 @@ wireMidiButton(
   createMidiAccess({
     onMessage: handleMidi,
     onStatus: (text) => ($("midi-status").textContent = text),
+    sysex: true, // the monitor shows SysEx, which the browser only delivers when asked for
   }),
 );
 

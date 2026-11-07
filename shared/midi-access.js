@@ -2,18 +2,26 @@
 // status text. Each app supplies its own message handler.
 //
 //   const midi = createMidiAccess({
-//     onMessage: (input, data) => {},   // every message from every input
-//     onStatus: (text) => {},           // "MIDI: <devices>" / error text
-//     onChange: (access, inputs) => {}, // after each (re)scan, e.g. to find outputs
+//     onMessage: (input, data, timeStamp) => {}, // every message from every input
+//     onStatus: (text) => {},                    // "MIDI: <devices>" / error text
+//     onChange: (access, inputs) => {},          // after each (re)scan, e.g. to find outputs
+//     sysex: false,                              // true to also receive System Exclusive messages
 //   });
+//
+// `timeStamp` is when the system received the message (the page's
+// performance.now() clock), not when this callback ran, so it stays accurate
+// when the main thread is busy.
+//
+// `sysex` is off by default: the browser shows a stronger permission prompt
+// for it, and only a page that wants to see raw sysex (the monitor) needs it.
 
-export function createMidiAccess({ onMessage, onStatus, onChange }) {
+export function createMidiAccess({ onMessage, onStatus, onChange, sysex = false }) {
   let access = null;
 
   function rescan() {
     const inputs = [...access.inputs.values()].filter((i) => i.state !== "disconnected" && !/through/i.test(i.name));
     inputs.forEach((input) => {
-      input.onmidimessage = (e) => onMessage(input, e.data);
+      input.onmidimessage = (e) => onMessage(input, e.data, e.timeStamp);
     });
     onStatus(inputs.length ? `MIDI: ${inputs.map((i) => i.name).join(", ")}` : "MIDI: no device");
     onChange?.(access, inputs);
@@ -25,7 +33,7 @@ export function createMidiAccess({ onMessage, onStatus, onChange }) {
       return false;
     }
     try {
-      access = await navigator.requestMIDIAccess();
+      access = await navigator.requestMIDIAccess({ sysex });
     } catch {
       onStatus("MIDI: permission denied");
       return false;
@@ -38,7 +46,7 @@ export function createMidiAccess({ onMessage, onStatus, onChange }) {
   // Reconnect silently on later visits if permission was already granted.
   async function autoConnect() {
     try {
-      const p = await navigator.permissions.query({ name: "midi" });
+      const p = await navigator.permissions.query({ name: "midi", sysex });
       if (p.state === "granted") return await connect();
     } catch {
       /* permissions API may not know about "midi" */

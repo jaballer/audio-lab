@@ -1,10 +1,10 @@
 // The monitor's on-screen lists. Draws into the elements it is handed and
 // decides nothing: main.js says what to show.
 //
-//   const view = createMonitorView({ list, notes });
+//   const view = createMonitorView({ list, notes, sourceHead });
 //   view.append(entry);        // newest message goes on top
 //   view.reset(entries);       // redraw after a filter changed (oldest first)
-//   view.showNotes(hits);      // the table of notes that were hit
+//   view.showNotes(hits);      // the table of notes that were hit; names the input only when there are several
 //
 // An entry is a describeMessage() result plus `time` and `source` (see main.js).
 
@@ -34,7 +34,7 @@ function messageRow(entry) {
   return row;
 }
 
-export function createMonitorView({ list, notes }) {
+export function createMonitorView({ list, notes, sourceHead }) {
   function append(entry) {
     list.prepend(messageRow(entry));
     while (list.children.length > MAX_ROWS) list.lastElementChild.remove();
@@ -46,10 +46,14 @@ export function createMonitorView({ list, notes }) {
   }
 
   function showNotes(hits) {
+    // With one input the name would only repeat on every row.
+    const showSource = new Set(hits.map((hit) => hit.source)).size > 1;
+    sourceHead.hidden = !showSource;
     notes.replaceChildren(
       ...hits.map((hit) => {
         const row = document.createElement("tr");
         const values = [hit.channel, hit.note, noteName(hit.note), hit.count, hit.maxVelocity];
+        if (showSource) values.unshift(hit.source);
         for (const value of values) {
           const td = document.createElement("td");
           td.textContent = String(value);

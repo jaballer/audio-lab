@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createLog } from "./log.js";
 
-const note = (n, velocity = 100, channel = 1) => ({
+const note = (n, velocity = 100, channel = 1, source = "MPC") => ({
   kind: "note",
+  source,
   channel,
   hit: { note: n, velocity },
 });
@@ -28,9 +29,20 @@ describe("createLog", () => {
     log.add(note(36, 127));
     log.add(note(36, 10, 10));
     expect(log.notesHit()).toEqual([
-      { channel: 1, note: 36, count: 2, maxVelocity: 127 },
-      { channel: 1, note: 37, count: 1, maxVelocity: 50 },
-      { channel: 10, note: 36, count: 1, maxVelocity: 10 },
+      { source: "MPC", channel: 1, note: 36, count: 2, maxVelocity: 127 },
+      { source: "MPC", channel: 1, note: 37, count: 1, maxVelocity: 50 },
+      { source: "MPC", channel: 10, note: 36, count: 1, maxVelocity: 10 },
+    ]);
+  });
+
+  it("keeps two inputs apart when they send the same channel and note", () => {
+    const log = createLog();
+    log.add(note(36, 90, 1, "MPC"));
+    log.add(note(36, 40, 1, "Launchpad"));
+    log.add(note(36, 100, 1, "MPC"));
+    expect(log.notesHit()).toEqual([
+      { source: "Launchpad", channel: 1, note: 36, count: 1, maxVelocity: 40 },
+      { source: "MPC", channel: 1, note: 36, count: 2, maxVelocity: 100 },
     ]);
   });
 
