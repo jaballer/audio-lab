@@ -9,8 +9,10 @@ import "../../shared/base.css";
 import "./keys.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
+import { selectProfile } from "../../shared/midi-devices.js";
 import { parseMidi } from "../../shared/midi-messages.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
+import { PROFILES, mpkMini } from "./devices.js";
 import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
@@ -96,19 +98,13 @@ function renderLcd() {
 
 const piano = createPiano($("piano"), { onNoteOn: noteOn, onNoteOff: noteOff });
 
-// Knob CC numbers, captured from the hardware (K1 first). The controller's
-// Program 1 sends CC 1-8, but K1 = CC 1 is also what the joystick's up axis
-// sends, and MIDI can't tell them apart. Program 2 (hold Prog Select and press
-// Pad 6) sends these instead, which keeps CC 1 free for the joystick.
-const KNOB_CCS = [20, 21, 22, 23, 16, 17, 18, 19];
-
 const PAD_STORE_KEY = "keys.learned";
 const padLearner = createPadLearner({
   load: () => loadJson(PAD_STORE_KEY),
   save: (data) => saveJson(PAD_STORE_KEY, data),
 });
 const padGrid = createPadGrid($("pads"), { notes: padLearner.notes });
-const knobDials = createKnobDials($("knobs"), { ccs: KNOB_CCS, labels: PARAMS.map((p) => p.name) });
+const knobDials = createKnobDials($("knobs"), { ccs: mpkMini.knobCcs, labels: PARAMS.map((p) => p.name) });
 
 // The joystick ball follows pitch bend (left/right) and mod (up).
 const stickBall = $("stick-ball");
@@ -146,43 +142,42 @@ function setBend(value) {
 const midiBtn = $("midi-btn");
 const midiStatus = $("midi-status");
 
-function handleMidi(data) {
-  const msg = parseMidi(data);
-  if (msg.type === "pitchBend") return setBend(msg.value);
-  if (msg.type === "cc") {
-    const { controller, value } = msg;
-    if (controller === 64) return setSustain(value >= 64);
-    if (controller === 1) {
-      mod = value; // joystick up
-      renderStick();
-    }
-    const knob = KNOB_CCS.indexOf(controller);
-    if (knob >= 0) {
-      knobDials.turn(knob, value);
-      // The on-screen controls jump to the knob's position as soon as it is turned.
-      applyKnob(knob, value);
-    }
-    lastCc = { cc: controller, value };
-    return renderLcd();
-  }
-  // The MPK mini's pads use channel 10: show them, but don't play the synth.
-  if (msg.channel === 9) {
-    if (msg.type === "noteOn") {
-      const slot = padLearner.slotFor(msg.note);
-      if (slot >= 0) padGrid.hit(slot, msg.note, msg.velocity);
-      lastPad = { note: msg.note, velocity: msg.velocity, channel: msg.channel + 1 };
-      renderLcd();
-    }
-    return;
-  }
-  if (msg.type === "noteOn") noteOn(msg.note, msg.velocity);
-  else if (msg.type === "noteOff") noteOff(msg.note);
+// What to do for each event a device profile (devices.js) can produce.
+const handlers = {
+  noteOn: (e) => noteOn(e.note, e.velocity),
+  noteOff: (e) => noteOff(e.note),
+  bend: (e) => setBend(e.value),
+  sustain: (e) => setSustain(e.on),
+  mod: (e) => {
+    mod = e.value;
+    renderStick();
+  },
+  knob: (e) => {
+    knobDials.turn(e.index, e.value);
+    // The on-screen controls jump to the knob's position as soon as it is turned.
+    applyKnob(e.index, e.value);
+  },
+  pad: (e) => {
+    const slot = padLearner.slotFor(e.note);
+    if (slot >= 0) padGrid.hit(slot, e.note, e.velocity);
+    lastPad = { note: e.note, velocity: e.velocity, channel: e.channel };
+    renderLcd();
+  },
+  cc: (e) => {
+    lastCc = { cc: e.controller, value: e.value };
+    renderLcd();
+  },
+};
+
+function handleMidi(input, data) {
+  const profile = selectProfile(PROFILES, input.name);
+  for (const event of profile.translate(parseMidi(data))) handlers[event.type](event);
 }
 
 wireMidiButton(
   midiBtn,
   createMidiAccess({
-    onMessage: (_input, data) => handleMidi(data),
+    onMessage: handleMidi,
     onStatus: (text) => (midiStatus.textContent = text),
   }),
 );
