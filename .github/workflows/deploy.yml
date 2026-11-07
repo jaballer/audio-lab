@@ -24,7 +24,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      # Lint, format check, tests and build. A failure here stops the deploy.
+      - run: npm run check
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
