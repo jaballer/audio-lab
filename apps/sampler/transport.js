@@ -8,6 +8,7 @@
 //
 //   transport.playing, transport.bpm, transport.playheadStep, transport.playheadTime
 //   transport.pendingSteps  // how many scheduled steps the playhead has yet to catch up with
+//   transport.markHeard(row, step)  // see below
 //
 // Timers drift and stall, the audio clock does not. So a timer wakes every
 // LOOKAHEAD_MS and schedules every step that falls within the next
@@ -15,6 +16,10 @@
 // AudioContext time) to play that step's sounds. The visible playhead follows
 // separately: each scheduled step is queued, and `poll()` moves the playhead
 // to the latest step whose time has actually arrived.
+//
+// `onStep(step, time, heard)` also gets `heard`, a Set of the rows (pads) that
+// must stay silent on this pass because they were just heard live: see
+// markHeard().
 
 import { clampBpm, stepSeconds } from "./tempo.js";
 
@@ -34,6 +39,11 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
   let playheadStep = -1;
   let playheadTime = 0;
   const visualQueue = []; // { step, time } for each scheduled step, until the playhead reaches it
+  // Live hits that were recorded into the step about to be scheduled: the sound was
+  // already heard, so that step's scheduling pass must not play it again.
+  let heardStep = -1;
+  const heardRows = new Set();
+  const NOBODY = new Set(); // what onStep gets when nothing was heard live
 
   // After a stall (a GC pause, a slow device) the steps that fell due meanwhile
   // are in the past, and Web Audio plays a sound scheduled in the past at once:
@@ -51,6 +61,7 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     const missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
     if (missed <= 0) return;
     const last = missed - 1;
+    forgetHeard(); // its step is skipped; a later pass over it is a new one
     visualQueue.push({ step: (nextStep + last) % steps, time: nextTime + last * length });
     nextTime += missed * length;
     nextStep = (nextStep + missed) % steps;
@@ -67,12 +78,31 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     if (superseded > 0) visualQueue.splice(0, superseded);
   }
 
+  // A pad hit while recording sounds at once and is also written into the step
+  // nearest to it, which can be the next one. If that step has not been scheduled
+  // yet (at slow tempos it is further off than the lookahead), the scheduler would
+  // play the new note a moment after the live hit: a flam. So tell it which row
+  // was just heard. A step that is already scheduled needs nothing: the recorded
+  // note first plays on the next trip round, as it should.
+  function markHeard(row, step) {
+    if (!playing || step !== nextStep) return;
+    if (heardStep !== step) forgetHeard();
+    heardStep = step;
+    heardRows.add(row);
+  }
+
+  function forgetHeard() {
+    heardStep = -1;
+    heardRows.clear();
+  }
+
   function schedule() {
     const now = audio.ctx.currentTime;
     dropSupersededSteps(now);
     skipMissedSteps(now);
     while (nextTime < now + SCHEDULE_AHEAD_S) {
-      onStep(nextStep, nextTime);
+      onStep(nextStep, nextTime, nextStep === heardStep ? new Set(heardRows) : NOBODY);
+      if (nextStep === heardStep) forgetHeard();
       visualQueue.push({ step: nextStep, time: nextTime });
       nextTime += stepSeconds(bpm);
       nextStep = (nextStep + 1) % steps;
@@ -83,6 +113,7 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     if (playing) return false;
     const ctx = audio.ensure();
     playing = true;
+    forgetHeard();
     nextStep = 0;
     nextTime = ctx.currentTime + START_DELAY_S;
     playheadStep = -1;
@@ -94,6 +125,7 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     playing = false;
     clearInterval(timer);
     visualQueue.length = 0;
+    forgetHeard();
     playheadStep = -1;
   }
 
@@ -134,5 +166,6 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     get pendingSteps() {
       return visualQueue.length;
     },
+    markHeard,
   };
 }

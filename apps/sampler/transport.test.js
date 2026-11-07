@@ -220,3 +220,103 @@ describe("poll", () => {
     expect(transport.playheadStep).toBeGreaterThanOrEqual(2);
   });
 });
+
+// Live recording at a slow tempo: the pad is heard live and written into the next
+// step, and that step may not have been scheduled yet. Without markHeard the
+// scheduler would then play the new note a second time, a moment after the live one.
+describe("markHeard", () => {
+  function setupRecording({ bpm }) {
+    const audio = fakeAudio();
+    const pattern = new Set(); // "row:step" for each note in the pattern
+    const sounded = []; // [row, step, time] for each sound the sequencer plays
+    const transport = createTransport({
+      audio,
+      steps: 16,
+      bpm,
+      onStep(step, time, heard) {
+        for (const row of [0, 1]) {
+          if (pattern.has(`${row}:${step}`) && !heard.has(row)) sounded.push([row, step, time]);
+        }
+      },
+    });
+    const run = (seconds) => {
+      for (let t = 0; t < seconds; t += LOOKAHEAD_MS / 1000) {
+        audio.ctx.currentTime += LOOKAHEAD_MS / 1000;
+        vi.advanceTimersByTime(LOOKAHEAD_MS);
+      }
+    };
+    return { audio, pattern, sounded, transport, run };
+  }
+
+  const soundedAt = (sounded, row, step) => sounded.filter(([r, s]) => r === row && s === step);
+
+  it("does not play a note again that was just heard live, on a step not yet scheduled", () => {
+    const { transport, pattern, sounded, run } = setupRecording({ bpm: 40 }); // a step is 0.375 s
+    transport.start();
+    run(0.2); // step 0 is scheduled; step 1 (at 0.425 s) is still outside the lookahead
+    pattern.add("0:1"); // a hit in the second half of step 0 is recorded into step 1
+    transport.markHeard(0, 1);
+
+    run(0.3);
+    expect(soundedAt(sounded, 0, 1)).toHaveLength(0); // it was heard live already
+
+    run(6); // one trip round the 16 steps: the recorded note now plays, as it should
+    const plays = soundedAt(sounded, 0, 1);
+    expect(plays).toHaveLength(1);
+    expect(plays[0][2]).toBeCloseTo(0.425 + 16 * 0.375);
+  });
+
+  it("changes nothing when the step was already scheduled", () => {
+    const { transport, pattern, sounded, run } = setupRecording({ bpm: 120 }); // a step is 0.125 s
+    transport.start();
+    run(0.2); // steps 0, 1 and 2 are scheduled
+    pattern.add("0:2");
+    transport.markHeard(0, 2); // too late to double: step 2 has already been passed over
+
+    run(2.2);
+    const plays = soundedAt(sounded, 0, 2);
+    expect(plays).toHaveLength(1);
+    expect(plays[0][2]).toBeCloseTo(0.05 + 2 * 0.125 + 16 * 0.125);
+  });
+
+  it("only silences the pad that was heard", () => {
+    const { transport, pattern, sounded, run } = setupRecording({ bpm: 40 });
+    transport.start();
+    run(0.2);
+    pattern.add("0:1");
+    pattern.add("1:1");
+    transport.markHeard(0, 1);
+
+    run(0.3);
+    expect(soundedAt(sounded, 0, 1)).toHaveLength(0);
+    expect(soundedAt(sounded, 1, 1)).toHaveLength(1);
+  });
+
+  it("forgets what it was told when the transport stops", () => {
+    const { transport, pattern, sounded, run } = setupRecording({ bpm: 40 });
+    transport.start();
+    transport.markHeard(0, 0);
+    transport.stop();
+    transport.start();
+    pattern.add("0:0");
+
+    run(0.2);
+    expect(soundedAt(sounded, 0, 0)).toHaveLength(1);
+  });
+
+  it("forgets it when a stall skips past the step", () => {
+    const { transport, pattern, sounded, audio, run } = setupRecording({ bpm: 40 });
+    transport.start();
+    run(0.2);
+    pattern.add("0:1");
+    transport.markHeard(0, 1);
+
+    audio.ctx.currentTime += 12; // two whole trips round the steps go by in a stall
+    vi.advanceTimersByTime(LOOKAHEAD_MS);
+    run(0.2);
+    // Step 1 comes round again, and this is a fresh pass: the note plays.
+    const plays = soundedAt(sounded, 0, 1);
+    expect(plays).toHaveLength(1);
+    expect(plays[0][2]).toBeCloseTo(0.425 + 12);
+  });
+});
