@@ -8,8 +8,28 @@ const cc = (controller, value = 127) => parseMidi([0xb0, controller, value]);
 
 describe("profile selection", () => {
   it("picks the Launchpad by name, ignoring case", () => {
+    expect(selectProfile(PROFILES, "Launchpad")).toBe(launchpad);
     expect(selectProfile(PROFILES, "Launchpad Mini")).toBe(launchpad);
     expect(selectProfile(PROFILES, "my LAUNCHPAD s")).toBe(launchpad);
+    expect(selectProfile(PROFILES, "Launchpad Mini MK1")).toBe(launchpad);
+    expect(selectProfile(PROFILES, "Launchpad Mini MK2 MIDI 1")).toBe(launchpad);
+    expect(selectProfile(PROFILES, "Launchpad S MIDI 1")).toBe(launchpad);
+  });
+
+  it("falls back for newer and unrecognized Launchpads, including their MIDI ports", () => {
+    for (const name of [
+      "Launchpad Mk2",
+      "Launchpad Pro",
+      "Launchpad Pro MK3",
+      "Launchpad X",
+      "Launchpad Mini MK3",
+      "Launchpad Mini MK3 MIDI 1",
+      "Launchpad S MK3",
+      "Launchpad 99",
+    ]) {
+      expect(selectProfile(PROFILES, name)).toBe(generic);
+      expect(launchpad.match(name)).toBe(false);
+    }
   });
 
   it("gives any other controller the generic profile", () => {

@@ -51,7 +51,7 @@ const stepNote = (index) => (index >> 3) * 16 + (index & 7);
 
 export const launchpad = {
   id: "launchpad",
-  match: (name) => /launchpad/i.test(name),
+  match: (name) => /\blaunchpad(?:\s+(?:s|mini(?:\s+mk\s*[12])?))?(?:\s+midi(?:\s+\d+)?)?\s*$/i.test(name),
   reset: [CC, 0, 0],
 
   translate(msg) {
