@@ -48,6 +48,63 @@ describe("createPattern", () => {
   });
 });
 
+describe("snapshot", () => {
+  it("lists the steps that are on, per pad, and leaves empty pads out", () => {
+    const pattern = createPattern(4, 8, { 0: [0, 4], 2: [7] });
+    expect(pattern.snapshot()).toEqual({ 0: [0, 4], 2: [7] });
+    expect(createPattern(4, 8).snapshot()).toEqual({});
+  });
+
+  it("is the shape createPattern starts from, so a pattern can be rebuilt from it", () => {
+    const pattern = createPattern(16, 16, STARTER_BEAT);
+    pattern.toggle(5, 3);
+    const copy = createPattern(16, 16, pattern.snapshot());
+    for (let row = 0; row < 16; row++) expect(copy.row(row)).toEqual(pattern.row(row));
+  });
+});
+
+describe("onChange", () => {
+  const setup = () => {
+    const changes = [];
+    const pattern = createPattern(2, 4, { 0: [1] }, { onChange: () => changes.push(1) });
+    return { pattern, changes };
+  };
+
+  it("is not called while the pattern is being built", () => {
+    expect(setup().changes).toHaveLength(0);
+  });
+
+  it("is called when a step is toggled or set to a different value", () => {
+    const { pattern, changes } = setup();
+    pattern.toggle(1, 2);
+    pattern.set(1, 3, true);
+    expect(changes).toHaveLength(2);
+  });
+
+  it("is not called when set does not change anything", () => {
+    const { pattern, changes } = setup();
+    pattern.set(0, 1, true); // already on
+    pattern.set(1, 0, false); // already off
+    expect(changes).toHaveLength(0);
+  });
+
+  it("is called when a clear removes something, and not when there was nothing to clear", () => {
+    const { pattern, changes } = setup();
+    pattern.clearRow(1);
+    pattern.clearAll();
+    expect(changes).toHaveLength(1); // only clearAll had a step to remove
+    pattern.clearAll();
+    expect(changes).toHaveLength(1);
+  });
+
+  it("is called after the pattern has changed", () => {
+    const seen = [];
+    const pattern = createPattern(1, 4, {}, { onChange: () => seen.push(pattern.isOn(0, 2)) });
+    pattern.toggle(0, 2);
+    expect(seen).toEqual([true]);
+  });
+});
+
 describe("STARTER_BEAT", () => {
   it("is a kick on the beat, a snare on 2 and 4, and eighth-note closed hats", () => {
     const pattern = createPattern(16, 16, STARTER_BEAT);
