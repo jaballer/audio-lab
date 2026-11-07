@@ -11,9 +11,7 @@ export function createMidiAccess({ onMessage, onStatus, onChange }) {
   let access = null;
 
   function rescan() {
-    const inputs = [...access.inputs.values()].filter(
-      (i) => i.state !== "disconnected" && !/through/i.test(i.name),
-    );
+    const inputs = [...access.inputs.values()].filter((i) => i.state !== "disconnected" && !/through/i.test(i.name));
     inputs.forEach((input) => {
       input.onmidimessage = (e) => onMessage(input, e.data);
     });

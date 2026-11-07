@@ -224,7 +224,9 @@ function renderLcd() {
   lcdVel.textContent = last ? `VEL  ${bar(last.velocity)} ${last.velocity}` : "VEL  --";
   const b = (bend * BEND_RANGE).toFixed(2);
   lcdWheels.textContent = `BEND ${bend >= 0 ? "+" : ""}${b}  MOD ${mod}  SUS ${sustain ? "ON" : "OFF"}`;
-  lcdCc.textContent = lastCc ? `CC${String(lastCc.cc).padStart(3, "0")} ${bar(lastCc.value)} ${lastCc.value}` : "CC   --";
+  lcdCc.textContent = lastCc
+    ? `CC${String(lastCc.cc).padStart(3, "0")} ${bar(lastCc.value)} ${lastCc.value}`
+    : "CC   --";
   lcdPad.textContent = lastPad
     ? `PAD  NOTE ${lastPad.note}  CH ${lastPad.channel}  VEL ${lastPad.velocity}`
     : "PAD  --";

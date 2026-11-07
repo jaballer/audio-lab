@@ -22,19 +22,34 @@
 }
 
 /* Re-skin the shared light-chassis pieces for the dark body. */
-.mpk .small-label { color: var(--label); }
-.mpk .top { border-bottom: 1px solid #3a3a40; }
-.mpk .brand-name { color: #f1eee6; }
-.mpk .brand-sub { color: var(--label); }
-.mpk .footnote { color: var(--label); }
+.mpk .small-label {
+  color: var(--label);
+}
+.mpk .top {
+  border-bottom: 1px solid #3a3a40;
+}
+.mpk .brand-name {
+  color: #f1eee6;
+}
+.mpk .brand-sub {
+  color: var(--label);
+}
+.mpk .footnote {
+  color: var(--label);
+}
 .mpk .btn {
   border-color: #09090a;
   background: linear-gradient(180deg, #3b3b41, #26262a);
   color: #e2dfd6;
 }
-.mpk .btn:hover { background: linear-gradient(180deg, #47474e, #2d2d32); }
+.mpk .btn:hover {
+  background: linear-gradient(180deg, #47474e, #2d2d32);
+}
 
-.nav-link { text-decoration: none; display: inline-block; }
+.nav-link {
+  text-decoration: none;
+  display: inline-block;
+}
 
 /* ---------- Deck: joystick, pads, knobs ---------- */
 .deck {
@@ -45,19 +60,35 @@
   margin-bottom: 18px;
 }
 
-.deck-block { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
-.deck-block > .small-label { font-size: 0.58rem; text-align: center; }
-.deck-block > :first-child:not(.stick-well) { width: 100%; }
+.deck-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.deck-block > .small-label {
+  font-size: 0.58rem;
+  text-align: center;
+}
+.deck-block > :first-child:not(.stick-well) {
+  width: 100%;
+}
 
 /* Joystick: the ball follows pitch bend (left/right) and mod (up). */
-.stick-block { justify-content: center; align-self: center; }
+.stick-block {
+  justify-content: center;
+  align-self: center;
+}
 .stick-well {
   position: relative;
   width: 112px;
   height: 112px;
   border-radius: 50%;
   background: radial-gradient(circle, #0b0b0c 0%, #1b1b1e 70%, #26262a 100%);
-  box-shadow: inset 0 3px 9px #000, 0 1px 0 #4b4b53;
+  box-shadow:
+    inset 0 3px 9px #000,
+    0 1px 0 #4b4b53;
 }
 .stick-ball {
   position: absolute;
@@ -68,7 +99,9 @@
   margin: -24px 0 0 -24px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 28%, #7a7a80 0%, #34343a 50%, #121214 100%);
-  box-shadow: 0 7px 9px rgba(0, 0, 0, 0.65), inset 0 2px 2px rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 7px 9px rgba(0, 0, 0, 0.65),
+    inset 0 2px 2px rgba(255, 255, 255, 0.2);
   transition: transform 0.05s linear;
 }
 
@@ -80,7 +113,9 @@
   padding: 11px;
   border-radius: 10px;
   background: #0e0e10;
-  box-shadow: inset 0 2px 8px #000, 0 1px 0 #4b4b53;
+  box-shadow:
+    inset 0 2px 8px #000,
+    0 1px 0 #4b4b53;
 }
 .pad {
   --v: 0; /* hit strength 0-1, set from MIDI velocity */
@@ -93,7 +128,9 @@
     inset 0 0 0 2px #323238,
     inset 0 -3px 0 rgba(var(--glow), 0.25),
     0 3px 0 #08080a;
-  transition: background 0.3s, box-shadow 0.3s;
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
 }
 .pad.hit {
   transition: none;
@@ -113,9 +150,18 @@
   color: #8b887f;
   pointer-events: none;
 }
-.pad .lbl { top: 5px; left: 7px; }
-.pad .nt { bottom: 5px; right: 7px; }
-.pad.hit .lbl, .pad.hit .nt { color: #ffe9e0; }
+.pad .lbl {
+  top: 5px;
+  left: 7px;
+}
+.pad .nt {
+  bottom: 5px;
+  right: 7px;
+}
+.pad.hit .lbl,
+.pad.hit .nt {
+  color: #ffe9e0;
+}
 
 /* Knobs: 4 x 2. The pointer turns with the incoming CC value. */
 .knobs {
@@ -124,7 +170,13 @@
   gap: 12px 8px;
   padding: 6px 0;
 }
-.knob-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.knob-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
 .dial {
   --a: -135deg;
   position: relative;
@@ -150,11 +202,19 @@
   border-radius: 2px;
   background: #f1eee6;
 }
-.knob-name { font: 800 0.62rem var(--mono); color: #cfccc3; }
-.knob-cc { font: 700 0.56rem var(--mono); color: var(--label); }
+.knob-name {
+  font: 800 0.62rem var(--mono);
+  color: #cfccc3;
+}
+.knob-cc {
+  font: 700 0.56rem var(--mono);
+  color: var(--label);
+}
 .knob-fn {
   min-height: 1em; /* keeps K5-K8 aligned with the labelled K1-K4 */
-  font: 800 0.56rem system-ui, sans-serif;
+  font:
+    800 0.56rem system-ui,
+    sans-serif;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #e2531f;
@@ -207,8 +267,12 @@
   cursor: pointer;
 }
 
-.key-white.down { background: linear-gradient(180deg, #ffd9c2, #f0a272); }
-.key-black.down { background: linear-gradient(180deg, #e2531f, #a8360d); }
+.key-white.down {
+  background: linear-gradient(180deg, #ffd9c2, #f0a272);
+}
+.key-black.down {
+  background: linear-gradient(180deg, #e2531f, #a8360d);
+}
 
 /* ---------- Monitor + envelope ---------- */
 .monitor {
@@ -218,24 +282,55 @@
   margin-top: 18px;
   align-items: stretch;
 }
-.monitor .lcd { box-shadow: 0 1px 0 #4b4b53, inset 0 2px 6px #000; }
-.kb-screen { min-height: 100%; }
+.monitor .lcd {
+  box-shadow:
+    0 1px 0 #4b4b53,
+    inset 0 2px 6px #000;
+}
+.kb-screen {
+  min-height: 100%;
+}
 
-.synth { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.synth {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
 
 .env {
   padding: 12px 14px 14px;
   border-radius: 10px;
   background: #1c1c1f;
-  box-shadow: inset 0 2px 8px #000, 0 1px 0 #4b4b53;
+  box-shadow:
+    inset 0 2px 8px #000,
+    0 1px 0 #4b4b53;
 }
-.env-title { margin-bottom: 10px; }
+.env-title {
+  margin-bottom: 10px;
+}
 
-.env-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 18px; }
+.env-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 18px;
+}
 
-.env-ctl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.env-ctl input { width: 100%; accent-color: #e2531f; cursor: pointer; }
-.env-ctl output { font: 700 0.78rem var(--mono); color: #e2dfd6; }
+.env-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.env-ctl input {
+  width: 100%;
+  accent-color: #e2531f;
+  cursor: pointer;
+}
+.env-ctl output {
+  font: 700 0.78rem var(--mono);
+  color: #e2dfd6;
+}
 .env-ctl select {
   width: 100%;
   padding: 5px 6px;
@@ -256,18 +351,40 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 800px) {
-  .deck { grid-template-columns: 1fr; gap: 16px; }
-  .stick-block { flex-direction: row; justify-content: center; gap: 16px; }
-  .monitor { grid-template-columns: 1fr; }
+  .deck {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .stick-block {
+    flex-direction: row;
+    justify-content: center;
+    gap: 16px;
+  }
+  .monitor {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 480px) {
-  .mpk { padding: 14px 12px; }
-  .piano { height: 140px; }
-  .key-white .label { font-size: 0.5rem; }
-  .dial { width: 44px; height: 44px; }
+  .mpk {
+    padding: 14px 12px;
+  }
+  .piano {
+    height: 140px;
+  }
+  .key-white .label {
+    font-size: 0.5rem;
+  }
+  .dial {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stick-ball, .dial, .pad { transition: none; }
+  .stick-ball,
+  .dial,
+  .pad {
+    transition: none;
+  }
 }

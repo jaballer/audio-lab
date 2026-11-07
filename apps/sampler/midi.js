@@ -96,8 +96,7 @@ export function createMidi(api) {
     onMessage: handle,
     onStatus: api.onStatus,
     onChange(access) {
-      const lp =
-        [...access.outputs.values()].find((o) => isLaunchpad(o.name) && o.state !== "disconnected") ?? null;
+      const lp = [...access.outputs.values()].find((o) => isLaunchpad(o.name) && o.state !== "disconnected") ?? null;
       if (lp !== output) {
         output = lp;
         lastSent.clear();

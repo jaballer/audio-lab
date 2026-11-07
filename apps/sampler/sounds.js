@@ -45,7 +45,9 @@ function snare(ctx, out, t) {
   const n = noise(ctx);
   const ng = ctx.createGain();
   envelope(ctx, ng.gain, t, 0.7, 0.2);
-  n.connect(filtered(ctx, "highpass", 1200)).connect(ng).connect(out);
+  n.connect(filtered(ctx, "highpass", 1200))
+    .connect(ng)
+    .connect(out);
   n.start(t);
   n.stop(t + 0.25);
 
@@ -64,7 +66,9 @@ function hat(ctx, out, t, decay = 0.05, level = 0.35) {
   const n = noise(ctx);
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, level, decay);
-  n.connect(filtered(ctx, "highpass", 7000)).connect(g).connect(out);
+  n.connect(filtered(ctx, "highpass", 7000))
+    .connect(g)
+    .connect(out);
   n.start(t);
   n.stop(t + decay + 0.05);
 }
@@ -91,14 +95,19 @@ function rim(ctx, out, t) {
   osc.frequency.value = 1700;
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, 0.3, 0.03);
-  osc.connect(filtered(ctx, "bandpass", 1700, 2)).connect(g).connect(out);
+  osc
+    .connect(filtered(ctx, "bandpass", 1700, 2))
+    .connect(g)
+    .connect(out);
   osc.start(t);
   osc.stop(t + 0.05);
 
   const n = noise(ctx);
   const ng = ctx.createGain();
   envelope(ctx, ng.gain, t, 0.25, 0.02);
-  n.connect(filtered(ctx, "highpass", 3500)).connect(ng).connect(out);
+  n.connect(filtered(ctx, "highpass", 3500))
+    .connect(ng)
+    .connect(out);
   n.start(t);
   n.stop(t + 0.04);
 }
@@ -148,7 +157,9 @@ function shaker(ctx, out, t) {
   g.gain.setValueAtTime(0.0001, t);
   g.gain.linearRampToValueAtTime(0.35, t + 0.015);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
-  n.connect(filtered(ctx, "bandpass", 6500, 1)).connect(g).connect(out);
+  n.connect(filtered(ctx, "bandpass", 6500, 1))
+    .connect(g)
+    .connect(out);
   n.start(t);
   n.stop(t + 0.12);
 }
@@ -172,7 +183,9 @@ function crash(ctx, out, t) {
   const n = noise(ctx);
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, 0.5, 1.2);
-  n.connect(filtered(ctx, "highpass", 4500)).connect(g).connect(out);
+  n.connect(filtered(ctx, "highpass", 4500))
+    .connect(g)
+    .connect(out);
   n.start(t);
   n.stop(t + 1.25);
 }
@@ -199,7 +212,10 @@ function zap(ctx, out, t) {
   osc.frequency.exponentialRampToValueAtTime(80, t + 0.25);
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, 0.4, 0.3);
-  osc.connect(filtered(ctx, "lowpass", 3000)).connect(g).connect(out);
+  osc
+    .connect(filtered(ctx, "lowpass", 3000))
+    .connect(g)
+    .connect(out);
   osc.start(t);
   osc.stop(t + 0.32);
 }
