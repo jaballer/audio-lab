@@ -1,5 +1,6 @@
 import "./style.css";
 import { SOUNDS } from "./sounds.js";
+import { createMidi } from "./midi.js";
 
 const STEPS = 16;
 const PAD_COUNT = SOUNDS.length; // 16 pads in a 4x4 grid
@@ -84,6 +85,7 @@ function renderLcd() {
     c.classList.toggle("on", pattern[selected][i]);
     c.classList.toggle("now", playing && i === playheadStep);
   });
+  midi.refresh();
 }
 
 // ---------- Pads ----------
@@ -127,10 +129,18 @@ function selectPad(idx) {
   renderLcd();
 }
 
-function triggerPad(idx) {
+// velocity is 0-1; a quieter hit plays through its own gain stage.
+function triggerPad(idx, velocity = 1) {
   ensureAudio();
-  SOUNDS[idx].play(ctx, master, ctx.currentTime);
+  let out = master;
+  if (velocity < 1) {
+    out = ctx.createGain();
+    out.gain.value = Math.max(velocity, 0.05);
+    out.connect(master);
+  }
+  SOUNDS[idx].play(ctx, out, ctx.currentTime);
   flash(idx);
+  midi.padHit(idx);
   if (recording && playing) recordHit(idx);
   selectPad(idx);
 }
@@ -162,14 +172,16 @@ for (let i = 0; i < STEPS; i++) {
   btn.type = "button";
   btn.className = "step";
   btn.textContent = String(i + 1);
-  btn.addEventListener("click", () => {
-    pattern[selected][i] = !pattern[selected][i];
-    refreshSteps();
-    renderLcd();
-  });
+  btn.addEventListener("click", () => toggleStep(i));
   cell.append(led, btn);
   group.appendChild(cell);
   stepCells.push({ cell, btn });
+}
+
+function toggleStep(i) {
+  pattern[selected][i] = !pattern[selected][i];
+  refreshSteps();
+  renderLcd();
 }
 
 function refreshSteps() {
@@ -239,26 +251,30 @@ function stop() {
 playBtn.addEventListener("click", start);
 $("stop").addEventListener("click", stop);
 
-recBtn.addEventListener("click", () => {
+function toggleRec() {
   recording = !recording;
   recBtn.setAttribute("aria-pressed", String(recording));
   setMessage(recording ? (playing ? "REC ON - HIT PADS" : "REC ARMED - PRESS PLAY") : "REC OFF");
   renderLcd();
-});
+}
 
-$("clear").addEventListener("click", () => {
+function clearPad() {
   pattern[selected].fill(false);
   refreshSteps();
   setMessage(`PAD ${pad2(selected + 1)} CLEARED`);
   renderLcd();
-});
+}
 
-$("clear-all").addEventListener("click", () => {
+function clearAll() {
   pattern.forEach((row) => row.fill(false));
   refreshSteps();
   setMessage("ALL PADS CLEARED");
   renderLcd();
-});
+}
+
+recBtn.addEventListener("click", toggleRec);
+$("clear").addEventListener("click", clearPad);
+$("clear-all").addEventListener("click", clearAll);
 
 // ---------- Tempo knob ----------
 function setBpm(value) {
@@ -306,7 +322,8 @@ knob.addEventListener("keydown", (e) => {
 
 // Tap tempo: average the last few intervals; reset after a 2 second gap.
 let taps = [];
-$("tap").addEventListener("click", () => {
+$("tap").addEventListener("click", tapTempo);
+function tapTempo() {
   const now = performance.now();
   if (taps.length && now - taps[taps.length - 1] > 2000) taps = [];
   taps.push(now);
@@ -318,7 +335,7 @@ $("tap").addEventListener("click", () => {
   } else {
     setMessage("TAP AGAIN...");
   }
-});
+}
 
 // ---------- Volume ----------
 volInput.addEventListener("input", () => {
@@ -345,6 +362,39 @@ window.addEventListener("keydown", (e) => {
       return;
     }
   }
+});
+
+// ---------- MIDI ----------
+const midiBtn = $("midi-btn");
+const midiStatus = $("midi-status");
+
+const midi = createMidi({
+  padCount: PAD_COUNT,
+  steps: STEPS,
+  triggerPad,
+  toggleStep,
+  start,
+  stop,
+  toggleRec,
+  clearPad,
+  clearAll,
+  tapTempo,
+  nudgeTempo: (delta) => setBpm(bpm + delta),
+  getState: () => ({
+    selected,
+    stepsOn: pattern[selected],
+    playheadStep,
+    playing,
+    recording,
+  }),
+  onStatus: (text) => (midiStatus.textContent = text),
+});
+
+midiBtn.addEventListener("click", async () => {
+  if (await midi.connect()) midiBtn.hidden = true;
+});
+midi.autoConnect().then((connected) => {
+  if (connected) midiBtn.hidden = true;
 });
 
 // ---------- Init ----------

@@ -7,6 +7,19 @@ A single-page drum sampler styled like a classic hardware pad sampler, built wit
 - LCD display, 16 step keys for the selected pad, and a looping sequencer (Space toggles play/stop)
 - Tempo knob (drag, scroll, or arrow keys), tap tempo, and a volume fader
 - REC mode: press Rec while playing and hit pads to record them, quantized to 16th notes
+- MIDI controller support (see below)
+
+## MIDI
+
+Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost` or HTTPS.
+
+**Novation Launchpad (original layout)** — pads are lit to mirror the app:
+
+- Bottom-left 4×4 block: the 16 pads (pad 1 in the bottom-left corner)
+- Top two rows: the 16 step keys for the selected pad
+- Top round buttons, left to right: Play, Stop, Rec, Clear Pad, Clear All, Tap Tempo, Tempo −, Tempo +
+
+**Any other controller:** MIDI notes 36–51 play pads 1–16, with velocity.
 
 ## Run it
 
