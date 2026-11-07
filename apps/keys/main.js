@@ -13,6 +13,7 @@ import { selectProfile } from "../../shared/midi-devices.js";
 import { parseMidi } from "../../shared/midi-messages.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { PROFILES, mpkMini } from "./devices.js";
+import { createHolds } from "./holds.js";
 import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
@@ -24,6 +25,8 @@ import { DEFAULT_PARAMS, createSynth } from "./synth.js";
 const $ = (id) => document.getElementById(id);
 
 const COMPUTER_KEYS = "awsedftgyhuj" + "k"; // C .. C one octave up
+const MIDI_SOURCE = "midi";
+const KEYBOARD_SOURCE = "keyboard";
 
 // ---------- State ----------
 let mod = 0;
@@ -115,15 +118,22 @@ function renderStick() {
 }
 
 // ---------- Note handling ----------
-function noteOn(note, velocity) {
+// A note can be held from the MIDI keyboard, the computer keyboard and each finger
+// on the piano at once, and sounds until the last of them lets go. `source` says
+// which one this is.
+const holds = createHolds();
+
+function noteOn(note, velocity, source) {
+  holds.press(note, source);
   last = { note, velocity };
   piano.press(note);
   synth.noteOn(note, velocity / 127);
   renderLcd();
 }
 
-function noteOff(note) {
-  if (!piano.release(note)) return; // it was not down
+function noteOff(note, source) {
+  if (!holds.release(note, source)) return; // not held by this source, or others still hold it
+  piano.release(note);
   synth.noteOff(note);
 }
 
@@ -144,8 +154,8 @@ const midiStatus = $("midi-status");
 
 // What to do for each event a device profile (devices.js) can produce.
 const handlers = {
-  noteOn: (e) => noteOn(e.note, e.velocity),
-  noteOff: (e) => noteOff(e.note),
+  noteOn: (e) => noteOn(e.note, e.velocity, MIDI_SOURCE),
+  noteOff: (e) => noteOff(e.note, MIDI_SOURCE),
   bend: (e) => setBend(e.value),
   sustain: (e) => setSustain(e.on),
   mod: (e) => {
@@ -191,14 +201,26 @@ window.addEventListener("keydown", (e) => {
   if (i < 0 || keyDown.has(e.code)) return;
   const note = piano.base + 12 + i;
   keyDown.set(e.code, note);
-  noteOn(note, 100);
+  noteOn(note, 100, KEYBOARD_SOURCE);
 });
 
 window.addEventListener("keyup", (e) => {
   const note = keyDown.get(e.code);
   if (note === undefined) return;
   keyDown.delete(e.code);
-  noteOff(note);
+  noteOff(note, KEYBOARD_SOURCE);
+});
+
+// A key let go while the page is in the background never sends its keyup (Alt-Tab,
+// a notification, switching tabs), so its note would sound until the key was
+// pressed again. Let them all go when the page loses focus.
+function releaseKeyboard() {
+  for (const note of keyDown.values()) noteOff(note, KEYBOARD_SOURCE);
+  keyDown.clear();
+}
+window.addEventListener("blur", releaseKeyboard);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") releaseKeyboard();
 });
 
 renderLcd();

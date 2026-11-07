@@ -7,7 +7,12 @@
 //   piano.base          // lowest note currently shown
 //
 // It only shows and reports: sound is the caller's job, from onNoteOn/onNoteOff
-// (called for pointer presses with velocity 100).
+// (called for pointer presses with velocity 100). Each finger or mouse button is
+// its own `source` ("pointer-<id>"), passed as the last argument, so the caller
+// can tell two fingers on one key apart:
+//
+//   onNoteOn(note, velocity, source)
+//   onNoteOff(note, source)
 
 import { isBlack, noteName } from "./notes.js";
 
@@ -66,20 +71,33 @@ export function createPiano(element, { onNoteOn, onNoteOff, base: initialBase = 
     return true;
   }
 
-  // Mouse / touch on the keys. The release listens on the window so letting go
-  // anywhere ends the note.
-  let pointerNote = null;
+  // Mouse / touch on the keys, one note per pointer: with two fingers down, each
+  // has to end its own note. The end listens on the window so letting go anywhere
+  // ends the note. A pointer can also be cancelled (the browser takes a touch for
+  // a scroll or a system gesture) and then no pointerup follows, and the window
+  // can lose focus mid-press: both must end the note too, or it sounds forever.
+  const pointers = new Map(); // pointerId -> note
+  const sourceOf = (pointerId) => `pointer-${pointerId}`;
+
   element.addEventListener("pointerdown", (e) => {
     const el = e.target.closest("[data-note]");
     if (!el) return;
     e.preventDefault();
-    pointerNote = Number(el.dataset.note);
-    onNoteOn(pointerNote, POINTER_VELOCITY);
+    const note = Number(el.dataset.note);
+    pointers.set(e.pointerId, note);
+    onNoteOn(note, POINTER_VELOCITY, sourceOf(e.pointerId));
   });
-  window.addEventListener("pointerup", () => {
-    if (pointerNote !== null) onNoteOff(pointerNote);
-    pointerNote = null;
-  });
+
+  function endPointer(pointerId) {
+    if (!pointers.has(pointerId)) return;
+    const note = pointers.get(pointerId);
+    pointers.delete(pointerId);
+    onNoteOff(note, sourceOf(pointerId));
+  }
+
+  window.addEventListener("pointerup", (e) => endPointer(e.pointerId));
+  window.addEventListener("pointercancel", (e) => endPointer(e.pointerId));
+  window.addEventListener("blur", () => [...pointers.keys()].forEach(endPointer));
 
   render();
 
