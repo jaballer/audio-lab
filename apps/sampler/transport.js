@@ -40,10 +40,18 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
   // next step on the original grid, so the beat stays in place and only the
   // missed hits are lost. A step that is only a little late still plays: a hit
   // a few milliseconds late is better than a missing one.
+  //
+  // The playhead still has to move across the skipped steps: it is where a live
+  // hit is quantized from, and it would otherwise sit on its pre-stall step until
+  // the next scheduled one arrives. So the last skipped step is queued for
+  // poll(), which only needs the newest step that has gone by.
   function skipMissedSteps(now) {
-    const missed = Math.ceil((now - MAX_LATE_S - nextTime) / stepSeconds(bpm));
+    const length = stepSeconds(bpm);
+    const missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
     if (missed <= 0) return;
-    nextTime += missed * stepSeconds(bpm);
+    const last = missed - 1;
+    visualQueue.push({ step: (nextStep + last) % steps, time: nextTime + last * length });
+    nextTime += missed * length;
     nextStep = (nextStep + missed) % steps;
   }
 

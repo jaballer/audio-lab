@@ -78,6 +78,22 @@ describe("createTransport", () => {
     expect(played[0][1]).toBeCloseTo(1.05);
   });
 
+  it("moves the playhead across the steps skipped in a stall", () => {
+    const { transport, advance, audio } = setup({ bpm: 120 });
+    transport.start();
+    advance(0);
+    advance(1); // steps 1 to 7 are skipped; step 8 falls at 1.05 s, still ahead of the clock
+    transport.poll();
+    // The playhead is on the last step that has gone by, not stuck on step 0:
+    // a live hit is quantized against it.
+    expect(transport.playheadStep).toBe(7);
+    expect(transport.playheadTime).toBeCloseTo(0.925);
+
+    audio.ctx.currentTime = 1.06;
+    transport.poll();
+    expect(transport.playheadStep).toBe(8);
+  });
+
   it("keeps the step order after a stall", () => {
     const { transport, played, advance } = setup({ steps: 4, bpm: 120 });
     transport.start();
