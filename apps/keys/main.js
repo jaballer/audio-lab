@@ -7,8 +7,8 @@ import "./keys.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { parseMidi } from "../../shared/midi-messages.js";
-import { exp, linear, squared } from "../../shared/scales.js";
-import { BEND_RANGE, DEFAULT_PARAMS, WAVES, createSynth } from "./synth.js";
+import { PARAMS, isChoice, knobChoice, knobPosition } from "./params.js";
+import { BEND_RANGE, DEFAULT_PARAMS, createSynth } from "./synth.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,91 +49,43 @@ audio.unlockOnInteraction(); // a MIDI message alone can't start audio
 
 const synth = createSynth(audio);
 
-// ---------- Envelope sliders ----------
-// Time sliders run 0-100 but map exponentially to seconds, so there is fine
-// control over short times (5 ms) as well as long ones (3 s).
-const TIME_MIN = 0.005;
-const TIME_MAX = 3;
-const formatTime = (t) => (t < 1 ? `${Math.round(t * 1000)} ms` : `${t.toFixed(2)} s`);
-const timeScale = exp(TIME_MIN, TIME_MAX);
+// ---------- Synth controls ----------
+// Every slider, the waveform select and the hardware knobs are wired from the
+// PARAMS table in params.js. These two setters are the one place a parameter
+// changes, whether it came from the page, a knob or the defaults. Envelope and
+// waveform changes apply to notes played after the change; cutoff, resonance
+// and volume also move notes that are already sounding.
+const controlEl = (p) => $(`${p.group}-${p.name}`);
 
-const ENV_CONTROLS = {
-  attack: { ...timeScale, format: formatTime },
-  decay: { ...timeScale, format: formatTime },
-  sustain: { ...linear(0, 1), format: (s) => `${Math.round(s * 100)}%` },
-  release: { ...timeScale, format: formatTime },
-};
-
-const ENV_NAMES = Object.keys(ENV_CONTROLS); // attack, decay, sustain, release = knobs K1-K4
-
-// The one place an envelope value changes, whether it came from a slider, a
-// knob or the defaults. `position` is the slider position, 0-100.
-// Changes apply to notes played after the change; notes already sounding
-// keep the envelope they started with.
-function setEnvSlider(name, position) {
-  const control = ENV_CONTROLS[name];
-  const value = control.toValue(position);
-  synth.set(name, value);
-  $(`env-${name}`).value = position;
-  $(`out-${name}`).textContent = control.format(value);
+// `position` is the slider position, 0-100.
+function setSlider(p, position) {
+  const value = p.toValue(position);
+  synth.set(p.name, value);
+  controlEl(p).value = position;
+  $(`out-${p.name}`).textContent = p.format(value);
 }
 
-for (const name of ENV_NAMES) {
-  setEnvSlider(name, ENV_CONTROLS[name].toSlider(synth.params[name]));
-  $(`env-${name}`).addEventListener("input", (e) => setEnvSlider(name, Number(e.target.value)));
+function setChoice(p, choice) {
+  synth.set(p.name, choice);
+  controlEl(p).value = choice;
 }
 
-// ---------- Tone controls ----------
-// Same idea as the envelope: each control converts a 0-100 slider position to a
-// real value (and back), and says how to display it.
-const CUTOFF_MIN = 60; // Hz
-const CUTOFF_MAX = 16000; // Hz
-const RESONANCE_MAX = 24; // dB
-
-const TONE_CONTROLS = {
-  // Exponential, because pitch is: equal slider steps should be equal musical steps.
-  cutoff: {
-    ...exp(CUTOFF_MIN, CUTOFF_MAX),
-    format: (hz) => (hz < 1000 ? `${Math.round(hz)} Hz` : `${(hz / 1000).toFixed(1)} kHz`),
-  },
-  resonance: { ...linear(0, RESONANCE_MAX), format: (db) => `${db.toFixed(1)} dB` },
-  volume: { ...squared(), format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%` },
-};
-
-const TONE_NAMES = Object.keys(TONE_CONTROLS); // cutoff, resonance, volume
-
-function setToneSlider(name, position) {
-  const control = TONE_CONTROLS[name];
-  const value = control.toValue(position);
-  synth.set(name, value);
-  $(`tone-${name}`).value = position;
-  $(`out-${name}`).textContent = control.format(value);
+for (const p of PARAMS) {
+  const el = controlEl(p);
+  if (isChoice(p)) {
+    setChoice(p, synth.params[p.name]);
+    el.addEventListener("change", () => setChoice(p, el.value));
+  } else {
+    setSlider(p, p.toSlider(synth.params[p.name]));
+    el.addEventListener("input", () => setSlider(p, Number(el.value)));
+  }
 }
 
-// Waveform is a choice, not a range, so it is a <select>. A knob picks one of
-// the four by splitting its 0-127 travel into quarters.
-const waveSelect = $("tone-wave");
-function setWave(index) {
-  synth.set("wave", WAVES[index]);
-  waveSelect.value = WAVES[index];
-}
-waveSelect.addEventListener("change", () => setWave(WAVES.indexOf(waveSelect.value)));
-setWave(WAVES.indexOf(synth.params.wave));
-
-for (const name of TONE_NAMES) {
-  setToneSlider(name, TONE_CONTROLS[name].toSlider(synth.params[name]));
-  $(`tone-${name}`).addEventListener("input", (e) => setToneSlider(name, Number(e.target.value)));
-}
-
-// What each knob does, K1 first.
-const KNOB_FUNCTIONS = [...ENV_NAMES, "wave", ...TONE_NAMES];
-
-function applyKnob(index, value) {
-  const name = KNOB_FUNCTIONS[index];
-  const position = (value / 127) * 100;
-  if (ENV_NAMES.includes(name)) setEnvSlider(name, position);
-  else if (name === "wave") setWave(Math.min(WAVES.length - 1, Math.floor(value / (128 / WAVES.length))));
-  else setToneSlider(name, position);
+function applyKnob(index, midiValue) {
+  const p = PARAMS[index];
+  if (!p) return; // more knobs than parameters
+  if (isChoice(p)) setChoice(p, knobChoice(midiValue, p.choices));
+  else setSlider(p, knobPosition(midiValue));
 }
 
 // ---------- Piano ----------
@@ -313,7 +265,7 @@ for (let i = 0; i < KNOB_CCS.length; i++) {
     `<div class="dial"></div>` +
     `<span class="knob-name">K${i + 1}</span>` +
     `<span class="knob-cc">CC ${KNOB_CCS[i]}</span>` +
-    `<span class="knob-fn">${KNOB_FUNCTIONS[i] ?? ""}</span>`;
+    `<span class="knob-fn">${PARAMS[i]?.name ?? ""}</span>`;
   $("knobs").appendChild(cell);
   dialEls.push(cell.querySelector(".dial"));
 }
