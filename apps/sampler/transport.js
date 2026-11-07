@@ -7,6 +7,7 @@
 //   transport.poll();       // call every animation frame; true when the playhead moved
 //
 //   transport.playing, transport.bpm, transport.playheadStep, transport.playheadTime
+//   transport.pendingSteps  // how many scheduled steps the playhead has yet to catch up with
 //
 // Timers drift and stall, the audio clock does not. So a timer wakes every
 // LOOKAHEAD_MS and schedules every step that falls within the next
@@ -55,8 +56,20 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     nextStep = (nextStep + missed) % steps;
   }
 
+  // poll() only uses the newest step that has arrived, but it runs from
+  // requestAnimationFrame, which browsers pause in a hidden tab while this
+  // scheduler keeps going (a tab playing audio is not throttled). Without this the
+  // queue would grow by a step every step until the tab came back. An arrived step
+  // that a newer arrived step has replaced can never be the answer, so drop it.
+  function dropSupersededSteps(now) {
+    let superseded = 0;
+    while (superseded + 1 < visualQueue.length && visualQueue[superseded + 1].time <= now) superseded++;
+    if (superseded > 0) visualQueue.splice(0, superseded);
+  }
+
   function schedule() {
     const now = audio.ctx.currentTime;
+    dropSupersededSteps(now);
     skipMissedSteps(now);
     while (nextTime < now + SCHEDULE_AHEAD_S) {
       onStep(nextStep, nextTime);
@@ -117,6 +130,9 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
     },
     get playheadTime() {
       return playheadTime;
+    },
+    get pendingSteps() {
+      return visualQueue.length;
     },
   };
 }
