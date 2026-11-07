@@ -57,10 +57,10 @@ const transport = createTransport({
   audio,
   steps: STEPS,
   bpm: saved?.bpm,
-  onStep(step, time) {
+  onStep(step, time, heard) {
     const { ctx, master } = audio;
     SOUNDS.forEach((sound, row) => {
-      if (pattern.isOn(row, step)) sound.play(ctx, master, time);
+      if (pattern.isOn(row, step) && !heard.has(row)) sound.play(ctx, master, time);
     });
   },
 });
@@ -128,7 +128,9 @@ function recordHit(idx) {
     bpm: transport.bpm,
     steps: STEPS,
   });
-  if (step >= 0) pattern.set(idx, step, true);
+  if (step < 0) return;
+  pattern.set(idx, step, true);
+  transport.markHeard(idx, step); // it was just played live: don't sound it again at a slow tempo
 }
 
 // ---------- Steps ----------
