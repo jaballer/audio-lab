@@ -77,6 +77,27 @@ Beyond what they enforce:
 - When a behaviour can only be judged by ear or by eye (envelope feel, layout), say so in the commit/PR rather
   than claiming it was verified.
 
+### Testing with MIDI hardware
+
+- **Use a real browser, not an embedded one.** The in-app browser pane of the Claude desktop app blocks Web
+  MIDI: `navigator.requestMIDIAccess()` throws `NotAllowedError` and the page shows "MIDI: PERMISSION DENIED".
+  Check anything that needs a connected controller (pad input, Launchpad LEDs, port names) in Firefox or
+  Chrome at `http://127.0.0.1:5173` (`npm run dev`); Claude in Chrome can drive Chrome when its extension is
+  connected. The built-in pane is fine for checks that do not touch MIDI.
+- **Match against the exact port name.** Read it from the MIDI monitor page (`monitor.html`). Without a
+  browser, `aconnect -l` or `/proc/asound/seq/clients` list the ALSA sequencer port names on Linux
+  (`/proc/asound/cards` does not: it has card descriptions, which differ from the port name). Test a
+  profile's `match` with the real string, not a guess. The monitor shows input names only; a profile with
+  lights (`lights`/`reset`) is matched against the output port's name too (`apps/sampler/midi.js`), and a
+  browser can name the two differently, so test both. In the browser console, list them with
+  `[...(await navigator.requestMIDIAccess()).outputs.values()].map((p) => p.name)`.
+- **Keep the model boundary, but allow for the browser's decoration.** Firefox on Linux reports ports as
+  `client:port MIDI 1 28:0` and Windows can prefix `2- `, so a `match` that insists on the string ending
+  right after the model name silently drops the profile. Accept those known prefixes and suffixes, and
+  exclude sibling models by name, so one profile does not also claim a different model with the same
+  leading name.
+- Device profiles cover the controllers actually in use here, not every model of a brand.
+
 ## Workflow: branch and pull request
 
 `main` is protected: changes land through a pull request, and the `check` job must pass first. Pushing to
