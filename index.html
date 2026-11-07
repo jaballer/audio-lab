@@ -3,25 +3,78 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pad Sampler</title>
+    <title>PAD16 Sampler</title>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>Pad Sampler</h1>
-        <p class="sub">Click the pads or use your keyboard. Sounds are synthesized in the browser.</p>
+    <main class="device">
+      <header class="top">
+        <div class="brand">
+          <span class="brand-name">PAD<b>16</b></span>
+          <span class="brand-sub">Digital Sampler &amp; Sequencer</span>
+        </div>
+        <div class="power">
+          <span class="power-led" aria-hidden="true"></span>
+          <span class="small-label">Power</span>
+        </div>
       </header>
 
-      <section id="pads" aria-label="Drum pads"></section>
+      <div class="body">
+        <section class="console" aria-label="Display and controls">
+          <div class="lcd" role="status" aria-label="Display">
+            <div class="lcd-screen">
+              <div class="lcd-line" id="lcd-1"></div>
+              <div class="lcd-line" id="lcd-2"></div>
+              <div class="lcd-line" id="lcd-3"></div>
+              <div class="ruler" id="ruler" aria-hidden="true"></div>
+              <div class="lcd-line lcd-msg" id="lcd-msg"></div>
+            </div>
+          </div>
 
-      <section class="transport" aria-label="Sequencer controls">
-        <button id="play" type="button" aria-pressed="false">▶ Play</button>
-        <label>BPM <input id="bpm" type="range" min="60" max="180" value="100" /> <output id="bpm-out">100</output></label>
-        <label>Volume <input id="vol" type="range" min="0" max="100" value="80" /></label>
-        <button id="clear" type="button">Clear</button>
+          <div class="controls">
+            <div class="ctl">
+              <div
+                id="knob"
+                class="knob"
+                role="slider"
+                tabindex="0"
+                aria-label="Tempo in beats per minute"
+                aria-valuemin="40"
+                aria-valuemax="240"
+                aria-valuenow="100"
+              ></div>
+              <span class="small-label">Tempo</span>
+            </div>
+
+            <div class="ctl ctl-fader">
+              <input id="vol" class="fader" type="range" min="0" max="100" value="80" aria-label="Master volume" />
+              <span class="small-label">Volume</span>
+            </div>
+
+            <div class="buttons">
+              <button id="play" class="btn btn-led" type="button" aria-pressed="false">Play</button>
+              <button id="stop" class="btn" type="button">Stop</button>
+              <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
+              <button id="tap" class="btn" type="button">Tap Tempo</button>
+              <button id="clear" class="btn" type="button">Clear Pad</button>
+              <button id="clear-all" class="btn" type="button">Clear All</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="pad-panel" aria-label="Pads">
+          <div id="pads" class="pads"></div>
+        </section>
+      </div>
+
+      <section class="step-panel" aria-label="Step keys for the selected pad">
+        <div class="small-label step-title">Step keys &middot; selected pad</div>
+        <div id="steps" class="steps"></div>
       </section>
 
-      <section id="grid" aria-label="Step sequencer"></section>
+      <footer class="footnote">
+        Keys: <kbd>1</kbd>–<kbd>4</kbd> <kbd>Q</kbd>–<kbd>R</kbd> <kbd>A</kbd>–<kbd>F</kbd> <kbd>Z</kbd>–<kbd>V</kbd> play pads
+        &middot; <kbd>Space</kbd> play / stop
+      </footer>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>
