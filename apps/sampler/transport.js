@@ -20,6 +20,9 @@ import { clampBpm, stepSeconds } from "./tempo.js";
 export const LOOKAHEAD_MS = 25; // how often the scheduler wakes up
 export const SCHEDULE_AHEAD_S = 0.12; // how far ahead of the audio clock it schedules
 const START_DELAY_S = 0.05; // a short run-up so the first step is not already late
+// How late a step may be and still play: a little over one scheduler tick. At the
+// fastest tempo a step is longer than this, so at most one step is ever this late.
+const MAX_LATE_S = 0.03;
 
 export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 }) {
   let bpm = initialBpm;
@@ -31,8 +34,22 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
   let playheadTime = 0;
   const visualQueue = []; // { step, time } for each scheduled step, until the playhead reaches it
 
+  // After a stall (a GC pause, a slow device) the steps that fell due meanwhile
+  // are in the past, and Web Audio plays a sound scheduled in the past at once:
+  // they would all land together as a burst. Skip them and carry on from the
+  // next step on the original grid, so the beat stays in place and only the
+  // missed hits are lost. A step that is only a little late still plays: a hit
+  // a few milliseconds late is better than a missing one.
+  function skipMissedSteps(now) {
+    const missed = Math.ceil((now - MAX_LATE_S - nextTime) / stepSeconds(bpm));
+    if (missed <= 0) return;
+    nextTime += missed * stepSeconds(bpm);
+    nextStep = (nextStep + missed) % steps;
+  }
+
   function schedule() {
     const now = audio.ctx.currentTime;
+    skipMissedSteps(now);
     while (nextTime < now + SCHEDULE_AHEAD_S) {
       onStep(nextStep, nextTime);
       visualQueue.push({ step: nextStep, time: nextTime });
