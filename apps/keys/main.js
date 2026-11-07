@@ -7,7 +7,8 @@ import "./keys.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { parseMidi } from "../../shared/midi-messages.js";
-import { startEnvelope, releaseEnvelope } from "./envelope.js";
+import { exp, linear, squared } from "../../shared/scales.js";
+import { BEND_RANGE, DEFAULT_PARAMS, WAVES, createSynth } from "./synth.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -16,24 +17,15 @@ const noteName = (n) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
 const isBlack = (n) => [1, 3, 6, 8, 10].includes(n % 12);
 
 const SPAN = 24; // the piano shows 25 keys: two octaves plus the top C
-const BEND_RANGE = 2; // semitones
 const COMPUTER_KEYS = "awsedftgyhuj" + "k"; // C .. C one octave up
 
 // ---------- State ----------
 let base = 48; // lowest note shown (a C)
-let bend = 0; // -1 .. 1
 let mod = 0;
-let sustain = false;
 let last = null; // { note, velocity }
 let lastCc = null;
 let lastPad = null; // { note, velocity, channel }
 const held = new Set(); // notes physically down
-const sustained = new Set(); // released but kept alive by the pedal
-const voices = new Map(); // note -> { osc, filter, gain }
-const env = { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.25 }; // seconds, sustain 0-1
-// Tone: waveform, low-pass cutoff (Hz), resonance (dB) and master volume (0-1 gain).
-const tone = { wave: "triangle", cutoff: 16000, resonance: 0, volume: 0.5 };
-const WAVES = ["sine", "triangle", "square", "sawtooth"];
 
 // ---------- Elements ----------
 const pianoEl = $("piano");
@@ -48,62 +40,28 @@ const keyEls = new Map();
 const audioStatus = $("audio-status");
 
 const audio = createAudioEngine({
-  volume: tone.volume,
+  volume: DEFAULT_PARAMS.volume,
   onStateChange: (state) => {
     audioStatus.textContent = state === "running" ? "Audio: on" : "Audio: click the page to enable";
   },
 });
 audio.unlockOnInteraction(); // a MIDI message alone can't start audio
 
-const freq = (note) => 440 * 2 ** ((note - 69) / 12);
-
-function startVoice(note, velocity) {
-  const ctx = audio.ensure();
-  stopVoice(note, 0.02);
-  const t = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  osc.type = tone.wave; // like the envelope, the waveform is read as the note starts
-  osc.frequency.value = freq(note);
-  osc.detune.value = bend * BEND_RANGE * 100;
-
-  // Each voice has its own low-pass filter between the oscillator and its
-  // envelope. Cutoff and resonance are changed live on all sounding voices.
-  const filter = ctx.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.value = tone.cutoff;
-  filter.Q.value = tone.resonance; // for a low-pass filter Q is in dB, not a plain ratio
-
-  const gain = ctx.createGain();
-  const peak = 0.15 + 0.5 * velocity;
-  startEnvelope(gain.gain, t, env, peak); // each voice reads the sliders as it starts
-  osc.connect(filter).connect(gain).connect(audio.master);
-  osc.start(t);
-  voices.set(note, { osc, filter, gain });
-}
-
-function stopVoice(note, release = env.release) {
-  const v = voices.get(note);
-  if (!v) return;
-  voices.delete(note);
-  const t = audio.ctx.currentTime;
-  releaseEnvelope(v.gain.gain, t, release);
-  v.osc.stop(t + release + 0.02);
-}
+const synth = createSynth(audio);
 
 // ---------- Envelope sliders ----------
 // Time sliders run 0-100 but map exponentially to seconds, so there is fine
 // control over short times (5 ms) as well as long ones (3 s).
 const TIME_MIN = 0.005;
 const TIME_MAX = 3;
-const sliderToTime = (v) => TIME_MIN * (TIME_MAX / TIME_MIN) ** (v / 100);
-const timeToSlider = (t) => (100 * Math.log(t / TIME_MIN)) / Math.log(TIME_MAX / TIME_MIN);
 const formatTime = (t) => (t < 1 ? `${Math.round(t * 1000)} ms` : `${t.toFixed(2)} s`);
+const timeScale = exp(TIME_MIN, TIME_MAX);
 
 const ENV_CONTROLS = {
-  attack: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
-  decay: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
-  sustain: { toValue: (v) => v / 100, toSlider: (s) => s * 100, format: (s) => `${Math.round(s * 100)}%` },
-  release: { toValue: sliderToTime, toSlider: timeToSlider, format: formatTime },
+  attack: { ...timeScale, format: formatTime },
+  decay: { ...timeScale, format: formatTime },
+  sustain: { ...linear(0, 1), format: (s) => `${Math.round(s * 100)}%` },
+  release: { ...timeScale, format: formatTime },
 };
 
 const ENV_NAMES = Object.keys(ENV_CONTROLS); // attack, decay, sustain, release = knobs K1-K4
@@ -114,13 +72,14 @@ const ENV_NAMES = Object.keys(ENV_CONTROLS); // attack, decay, sustain, release 
 // keep the envelope they started with.
 function setEnvSlider(name, position) {
   const control = ENV_CONTROLS[name];
-  env[name] = control.toValue(position);
+  const value = control.toValue(position);
+  synth.set(name, value);
   $(`env-${name}`).value = position;
-  $(`out-${name}`).textContent = control.format(env[name]);
+  $(`out-${name}`).textContent = control.format(value);
 }
 
 for (const name of ENV_NAMES) {
-  setEnvSlider(name, ENV_CONTROLS[name].toSlider(env[name]));
+  setEnvSlider(name, ENV_CONTROLS[name].toSlider(synth.params[name]));
   $(`env-${name}`).addEventListener("input", (e) => setEnvSlider(name, Number(e.target.value)));
 }
 
@@ -134,55 +93,35 @@ const RESONANCE_MAX = 24; // dB
 const TONE_CONTROLS = {
   // Exponential, because pitch is: equal slider steps should be equal musical steps.
   cutoff: {
-    toValue: (p) => CUTOFF_MIN * (CUTOFF_MAX / CUTOFF_MIN) ** (p / 100),
-    toSlider: (hz) => (100 * Math.log(hz / CUTOFF_MIN)) / Math.log(CUTOFF_MAX / CUTOFF_MIN),
+    ...exp(CUTOFF_MIN, CUTOFF_MAX),
     format: (hz) => (hz < 1000 ? `${Math.round(hz)} Hz` : `${(hz / 1000).toFixed(1)} kHz`),
   },
-  resonance: {
-    toValue: (p) => (p / 100) * RESONANCE_MAX,
-    toSlider: (db) => (db / RESONANCE_MAX) * 100,
-    format: (db) => `${db.toFixed(1)} dB`,
-  },
-  // Squared so the lower half of the slider has finer control, like a real fader.
-  volume: {
-    toValue: (p) => (p / 100) ** 2,
-    toSlider: (gain) => Math.sqrt(gain) * 100,
-    format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%`,
-  },
+  resonance: { ...linear(0, RESONANCE_MAX), format: (db) => `${db.toFixed(1)} dB` },
+  volume: { ...squared(), format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%` },
 };
 
 const TONE_NAMES = Object.keys(TONE_CONTROLS); // cutoff, resonance, volume
 
-// Push a changed tone value to the audio graph. Cutoff and resonance move
-// smoothly (setTargetAtTime) instead of jumping, which would click.
-function applyTone(name) {
-  if (name === "volume") audio.setVolume(tone.volume);
-  if (!audio.ctx) return; // nothing is playing yet; new notes read `tone`
-  const t = audio.ctx.currentTime;
-  if (name === "cutoff") voices.forEach((v) => v.filter.frequency.setTargetAtTime(tone.cutoff, t, 0.01));
-  if (name === "resonance") voices.forEach((v) => v.filter.Q.setTargetAtTime(tone.resonance, t, 0.01));
-}
-
 function setToneSlider(name, position) {
   const control = TONE_CONTROLS[name];
-  tone[name] = control.toValue(position);
+  const value = control.toValue(position);
+  synth.set(name, value);
   $(`tone-${name}`).value = position;
-  $(`out-${name}`).textContent = control.format(tone[name]);
-  applyTone(name);
+  $(`out-${name}`).textContent = control.format(value);
 }
 
 // Waveform is a choice, not a range, so it is a <select>. A knob picks one of
 // the four by splitting its 0-127 travel into quarters.
 const waveSelect = $("tone-wave");
 function setWave(index) {
-  tone.wave = WAVES[index];
-  waveSelect.value = tone.wave;
+  synth.set("wave", WAVES[index]);
+  waveSelect.value = WAVES[index];
 }
 waveSelect.addEventListener("change", () => setWave(WAVES.indexOf(waveSelect.value)));
-setWave(WAVES.indexOf(tone.wave));
+setWave(WAVES.indexOf(synth.params.wave));
 
 for (const name of TONE_NAMES) {
-  setToneSlider(name, TONE_CONTROLS[name].toSlider(tone[name]));
+  setToneSlider(name, TONE_CONTROLS[name].toSlider(synth.params[name]));
   $(`tone-${name}`).addEventListener("input", (e) => setToneSlider(name, Number(e.target.value)));
 }
 
@@ -248,36 +187,27 @@ window.addEventListener("pointerup", () => {
 
 // ---------- Note handling ----------
 function noteOn(note, velocity) {
-  sustained.delete(note);
   held.add(note);
   last = { note, velocity };
   shiftTo(note);
   keyEls.get(note)?.classList.add("down");
-  startVoice(note, velocity / 127);
+  synth.noteOn(note, velocity / 127);
   renderLcd();
 }
 
 function noteOff(note) {
   if (!held.delete(note)) return;
   keyEls.get(note)?.classList.remove("down");
-  if (sustain) sustained.add(note);
-  else stopVoice(note);
+  synth.noteOff(note);
 }
 
 function setSustain(on) {
-  sustain = on;
-  if (!on) {
-    sustained.forEach((n) => stopVoice(n));
-    sustained.clear();
-  }
+  synth.setSustain(on);
   renderLcd();
 }
 
 function setBend(value) {
-  bend = value;
-  if (audio.ctx) {
-    voices.forEach((v) => v.osc.detune.setTargetAtTime(bend * BEND_RANGE * 100, audio.ctx.currentTime, 0.01));
-  }
+  synth.setBend(value);
   renderStick();
   renderLcd();
 }
@@ -289,6 +219,7 @@ const bar = (value, max = 127, width = 16) => {
 };
 
 function renderLcd() {
+  const { bend, sustain } = synth;
   lcdNote.textContent = last ? `NOTE ${noteName(last.note).padEnd(3)} (${last.note})` : "NOTE --";
   lcdVel.textContent = last ? `VEL  ${bar(last.velocity)} ${last.velocity}` : "VEL  --";
   const b = (bend * BEND_RANGE).toFixed(2);
@@ -305,7 +236,7 @@ const stickBall = $("stick-ball");
 const STICK_TRAVEL = 30; // px
 
 function renderStick() {
-  stickBall.style.transform = `translate(${bend * STICK_TRAVEL}px, ${-(mod / 127) * STICK_TRAVEL}px)`;
+  stickBall.style.transform = `translate(${synth.bend * STICK_TRAVEL}px, ${-(mod / 127) * STICK_TRAVEL}px)`;
 }
 
 // Knob CC numbers, captured from the hardware (K1 first). The controller's
