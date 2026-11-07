@@ -25,6 +25,8 @@ Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI A
 
 ## Run it
 
+Needs Node 22.13 or newer, but not 23 or 25 (`nvm use` reads `.nvmrc`).
+
 ```bash
 npm install
 npm run dev      # http://localhost:5173
@@ -79,5 +81,6 @@ Tests sit next to the code as `*.test.js`. Conventions and architecture rules ar
 ```bash
 npm run check    # lint + format check + tests + build; CI and the deploy run this too
 npm test         # tests only
+npm run coverage # tests with a coverage table
 npm run format   # apply Prettier
 ```
