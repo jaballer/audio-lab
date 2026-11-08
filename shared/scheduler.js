@@ -2,8 +2,9 @@
 // sequencer; the sampler's runs on the audio clock.
 //
 //   const scheduler = createScheduler({ clock, steps: 16, onStep });   // also bpm, bpmRange: { min, max }
-//   scheduler.start();      // false if it was already playing
+//   scheduler.start();      // false if it was already playing; start(at) puts the first step at time `at`
 //   scheduler.stop();
+//   scheduler.setSteps(32); // change the loop length, while playing too
 //   scheduler.setBpm(120);  // returns the tempo actually set (clamped to bpmRange, 40-240 by default)
 //   scheduler.poll();       // call every animation frame; true when the playhead moved
 //
@@ -41,7 +42,8 @@ const START_DELAY_S = 0.05; // a short run-up so the first step is not already l
 // fastest tempo a step is longer than this, so at most one step is ever this late.
 const MAX_LATE_S = 0.03;
 
-export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100, bpmRange }) {
+export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initialBpm = 100, bpmRange }) {
+  let steps = initialSteps;
   let bpm = initialBpm;
   let playing = false;
   let timer = null;
@@ -120,13 +122,15 @@ export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100, b
     }
   }
 
-  function start() {
+  // `at` lets a page put step 0 on a moment it has already chosen, such as the first tick of a MIDI
+  // clock it sends alongside, so the two grids start together. Without it step 0 follows a short run-up.
+  function start(at) {
     if (playing) return false;
     clock.prepare?.();
     playing = true;
     forgetHeard();
     nextStep = 0;
-    nextTime = clock.now() + START_DELAY_S;
+    nextTime = at ?? clock.now() + START_DELAY_S;
     playheadStep = -1;
     timer = setInterval(schedule, SCHEDULER_TICK_MS);
     return true;
@@ -155,6 +159,15 @@ export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100, b
     return moved;
   }
 
+  // The loop got longer or shorter. A step that no longer exists cannot be next, so the count
+  // wraps; the steps already queued for the playhead wrap the same way.
+  function setSteps(value) {
+    steps = value;
+    nextStep %= steps;
+    for (const queued of visualQueue) queued.step %= steps;
+    if (heardStep >= steps) forgetHeard();
+  }
+
   function setBpm(value) {
     bpm = clampBpm(value, bpmRange);
     return bpm;
@@ -165,6 +178,7 @@ export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100, b
     stop,
     poll,
     setBpm,
+    setSteps,
     get playing() {
       return playing;
     },
