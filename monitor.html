@@ -63,7 +63,8 @@
         raw bytes
       </footer>
     </main>
-    <script type="module" src="/apps/monitor/main.js"></script>
+    <!-- First, so its timeout starts even when the page's own script is slow to arrive. -->
     <script type="module" src="/shared/loading-screen.js"></script>
+    <script type="module" src="/apps/monitor/main.js"></script>
   </body>
 </html>
