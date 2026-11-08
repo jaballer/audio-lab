@@ -41,11 +41,15 @@ body:
   - type: textarea
     id: midi
     attributes:
-      label: MIDI controller and port name
+      label: MIDI controller and port names
       description: >-
-        Only if a controller is involved. Copy the input name exactly as the MIDI monitor page (monitor.html) shows it,
-        because device profiles match on that string.
-      placeholder: Launchpad Mini 9 MIDI 1
+        Only if a controller is involved. Device profiles match on the exact port name, and a browser can name the
+        input and the output differently, so give both. The input name is on the MIDI monitor page (monitor.html). For
+        the output name (needed for Launchpad lights), run this in the browser console:
+        [...(await navigator.requestMIDIAccess()).outputs.values()].map((p) => p.name)
+      placeholder: |
+        Input: Launchpad Mini 9 MIDI 1
+        Output: Launchpad Mini 9 MIDI 1
   - type: textarea
     id: console
     attributes:
