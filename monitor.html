@@ -57,12 +57,15 @@
           </table>
         </section>
       </div>
-
-      <footer class="footnote">
-        Hit each pad once, in order, to see which note it sends &middot; newest message on top &middot; the hex is the
-        raw bytes
-      </footer>
     </main>
+
+    <aside class="help-panel" aria-labelledby="help-title">
+      <h2 id="help-title" class="help-title">Help</h2>
+      <ul class="help-list">
+        <li>Hit each pad once, in order, to see which note it sends</li>
+        <li>The newest message is on top, and the hex is the raw bytes</li>
+      </ul>
+    </aside>
     <!-- First, so its timeout starts even when the page's own script is slow to arrive. -->
     <script type="module" src="/shared/loading-screen.js"></script>
     <script type="module" src="/apps/monitor/main.js"></script>

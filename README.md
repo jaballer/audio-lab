@@ -82,6 +82,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo; its Play and Stop buttons ask the device to start or stop
   - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame, and plays the sampler's sounds when a pad is hit (the Sound button turns that off)
   - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop buttons send
+  - `pad-sound.js` — which sound a pad hit plays and how loud; drops a hit that arrives before audio is unlocked; no DOM
   - `board.js` — what the pads are doing in every bank, and which bank to show; no DOM
   - `transport.js` — whether the device is playing, its tempo and bar and beat read from the MIDI clock (a device already playing when the page connects, or one whose clock goes quiet, is noticed); no DOM
   - `pad-grid.js`, `bank-strip.js`, `transport-lights.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)

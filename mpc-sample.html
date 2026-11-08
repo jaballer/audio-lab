@@ -75,15 +75,20 @@
           </section>
         </div>
       </div>
-
-      <footer class="footnote">
-        Hit the pads on the device (they play the sampler's 16 sounds here, softer for a lighter hit) &middot; the
-        number in each pad is the note it sends in the current bank &middot;
-        <a href="monitor.html">MIDI monitor</a> shows every raw message &middot; <kbd>Space</kbd> plays or stops
-        &middot; no pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI
-        Config)
-      </footer>
     </main>
+
+    <aside class="help-panel" aria-labelledby="help-title">
+      <h2 id="help-title" class="help-title">Help</h2>
+      <ul class="help-list">
+        <li>Hit the pads on the device: they play the sampler's 16 sounds here, softer for a lighter hit</li>
+        <li>The number in each pad is the note it sends in the current bank</li>
+        <li><a href="monitor.html">MIDI monitor</a> shows every raw message</li>
+        <li><kbd>Space</kbd> plays or stops</li>
+        <li>
+          No pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI Config)
+        </li>
+      </ul>
+    </aside>
     <!-- First, so its timeout starts even when the page's own script is slow to arrive. -->
     <script type="module" src="/shared/loading-screen.js"></script>
     <script type="module" src="/apps/mpc-sample/main.js"></script>
