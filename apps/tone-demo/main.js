@@ -86,7 +86,10 @@ for (const wave of WAVES) {
   const option = new Option(wave, wave, false, wave === settings.wave);
   $("wave").append(option);
 }
-$("wave").addEventListener("change", (e) => setWave(e.target.value));
+$("wave").addEventListener("change", (e) => {
+  setWave(e.target.value);
+  e.target.blur(); // a menu keeps focus after a pick and would swallow the next note letters
+});
 $("delay").addEventListener("input", (e) => setDelay(Number(e.target.value)));
 $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
 
@@ -126,13 +129,14 @@ const piano = createPiano($("keys"), {
 });
 
 // The computer keyboard plays the same keys: A W S E D F T G Y H U J K, as on the keys page.
-// A letter typed while a menu or slider has focus is for that control, not for a note.
+// A letter typed while the menu has focus is for the menu (type-ahead), not for a note. A slider
+// takes no letters, so it never blocks the keys: clicking one must not silence the keyboard.
 const computerKeys = createComputerKeys({
   target: window,
   getBase: () => FIRST_NOTE - OCTAVE, // the keys play the octave above the base
   onNoteOn: (note) => press(note, COMPUTER),
   onNoteOff: (note) => release(note, COMPUTER),
-  ignore: (e) => e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement,
+  ignore: (e) => e.target instanceof HTMLSelectElement,
 });
 
 // A key held while the page goes to the background (Alt-Tab, a notification,
