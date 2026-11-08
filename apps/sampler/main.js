@@ -6,6 +6,7 @@ import "../../shared/base.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAppHeader } from "../../shared/app-header.js";
+import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
@@ -21,7 +22,8 @@ import { BPM_MAX, BPM_MIN } from "./tempo.js";
 
 const $ = (id) => document.getElementById(id);
 
-const header = createAppHeader($("header"), {
+const site = createSiteHeader($("site-header"), { current: "sampler" });
+createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
   sub: "Digital Sampler & Sequencer",
   powerLed: true,
@@ -146,10 +148,11 @@ const midi = createMidi({
   ...sampler,
   padCount: PAD_COUNT,
   steps: STEPS,
-  onStatus: header.setMidiStatus,
+  onStatus: site.setMidiStatus,
+  onLog: site.log,
 });
 
-wireMidiButton(header.midiButton, midi);
+wireMidiButton(site.midiButton, midi);
 
 // ---------- Init ----------
 sampler.selectPad(0);

@@ -68,6 +68,7 @@ export function createMidi(api) {
   const { connect, autoConnect } = createMidiAccess({
     onMessage: createMidiRouter(PROFILES, handlers),
     onStatus: api.onStatus,
+    onLog: api.onLog,
     onChange(access) {
       const port = [...access.outputs.values()].find((p) => profileForOutput(p)) ?? null;
       if (port !== output) {

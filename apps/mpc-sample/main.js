@@ -11,6 +11,7 @@
 import "../../shared/base.css";
 import "./mpc-sample.css";
 import { createAppHeader } from "../../shared/app-header.js";
+import { createSiteHeader } from "../../shared/site-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
@@ -28,10 +29,10 @@ import { createTransportLights } from "./transport-lights.js";
 
 const $ = (id) => document.getElementById(id);
 
-const header = createAppHeader($("header"), {
+const site = createSiteHeader($("site-header"), { current: "mpc-sample" });
+createAppHeader($("header"), {
   brand: { name: "MPC ", accent: "SAMPLE" },
   sub: "Companion",
-  back: { href: "./", label: "Sampler" },
 });
 
 const SOUND_VOLUME = 0.8; // the sampler's default volume
@@ -174,10 +175,11 @@ const handlers = {
 };
 
 wireMidiButton(
-  header.midiButton,
+  site.midiButton,
   createMidiAccess({
     onMessage: createMidiRouter(PROFILES, handlers),
-    onStatus: header.setMidiStatus,
+    onStatus: site.setMidiStatus,
+    onLog: site.log,
     onChange(access, inputs) {
       const wasConnected = connected;
       connected = inputs.some((input) => isMpcSample(input.name));

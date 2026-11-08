@@ -5,8 +5,14 @@
 //     onMessage: (input, data, timeStamp) => {}, // every message from every input
 //     onStatus: (text) => {},                    // "MIDI: <devices>" / error text
 //     onChange: (access, inputs) => {},          // after each (re)scan, e.g. to find outputs
+//     onLog: (text, level) => {},                // the detail: every input by name, plug and unplug,
+//                                                // errors; level is "info" | "warn" | "error"
 //     sysex: false,                              // true to also receive System Exclusive messages
 //   });
+//
+// `onStatus` stays short enough for the device's header (see summarizeInputs); a browser can
+// list dozens of ports (Firefox on Linux adds one for each connection it has opened), so the
+// full list goes to `onLog`, where a console drawer can show it.
 //
 // `timeStamp` is when the system received the message (the page's
 // performance.now() clock), not when this callback ran, so it stays accurate
@@ -15,27 +21,58 @@
 // `sysex` is off by default: the browser shows a stronger permission prompt
 // for it, and only a page that wants to see raw sysex (the monitor) needs it.
 
-export function createMidiAccess({ onMessage, onStatus, onChange, sysex = false }) {
+const MAX_NAMED_INPUTS = 2; // more than this and the header says how many, not which
+
+// The header's one-line status. Names while they fit, a count when they would not.
+export function summarizeInputs(names) {
+  if (!names.length) return "MIDI: no device";
+  if (names.length <= MAX_NAMED_INPUTS) return `MIDI: ${names.join(", ")}`;
+  return `MIDI: ${names.length} inputs`;
+}
+
+export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex = false }) {
   let access = null;
+  let known = null; // the inputs at the last scan as id -> name, to log what was plugged in or removed
+
+  // Two units of one model share a name, so inputs are told apart by the port's own id; the name
+  // is only for display. A port without an id falls back to its name.
+  const keyOf = (input) => input.id ?? input.name;
+
+  function logScan(inputs) {
+    if (!onLog) return;
+    const names = inputs.map((i) => i.name);
+    onLog(names.length ? `Inputs (${names.length}): ${names.join(", ")}` : "No MIDI inputs");
+    const now = new Map(inputs.map((i) => [keyOf(i), i.name]));
+    // The first scan only lists them: calling each one "connected" would repeat that list.
+    if (known) {
+      for (const [key, name] of now) if (!known.has(key)) onLog(`Connected: ${name}`);
+      for (const [key, name] of known) if (!now.has(key)) onLog(`Disconnected: ${name}`, "warn");
+    }
+    known = now;
+  }
 
   function rescan() {
     const inputs = [...access.inputs.values()].filter((i) => i.state !== "disconnected" && !/through/i.test(i.name));
     inputs.forEach((input) => {
       input.onmidimessage = (e) => onMessage(input, e.data, e.timeStamp);
     });
-    onStatus(inputs.length ? `MIDI: ${inputs.map((i) => i.name).join(", ")}` : "MIDI: no device");
+    const names = inputs.map((i) => i.name);
+    onStatus(summarizeInputs(names));
+    logScan(inputs);
     onChange?.(access, inputs);
   }
 
   async function connect() {
     if (!navigator.requestMIDIAccess) {
       onStatus("MIDI: use Chrome or Edge");
+      onLog?.("This browser has no Web MIDI (navigator.requestMIDIAccess is missing)", "error");
       return false;
     }
     try {
       access = await navigator.requestMIDIAccess({ sysex });
-    } catch {
+    } catch (error) {
       onStatus("MIDI: permission denied");
+      onLog?.(`MIDI access refused: ${error?.name ?? "error"}${error?.message ? ` (${error.message})` : ""}`, "error");
       return false;
     }
     access.onstatechange = rescan;
