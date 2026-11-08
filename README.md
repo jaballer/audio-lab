@@ -109,6 +109,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
 - `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
+- `CHANGELOG.md` — what changed on the live site, by day, newest first
 - `.claude/skills/dependabot/` — a Claude Code skill for triaging, verifying and merging Dependabot PRs
 
 Tests sit next to the code as `*.test.js`. Conventions and architecture rules are in [CLAUDE.md](CLAUDE.md).
