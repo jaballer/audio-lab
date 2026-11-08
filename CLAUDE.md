@@ -29,7 +29,7 @@ failing check blocks the deploy.
 ## Architecture rules
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
-  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `starter-beat.js`, `song.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
+  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `echo-guard.js`, `song.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
   `midi-messages.js`, `mpc-sample.js`, `board.js`, `storage.js`, `console-log.js`, `pages.js`, `page-ready.js` and `audio.js` only export functions, factories or plain data. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
   `pads.js`, `step-keys.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `synth-panel.js`, `site-header.js`, `console-drawer.js` and `lcd.js` export a `create…(element, options)` factory (the LCD

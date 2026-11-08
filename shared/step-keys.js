@@ -3,6 +3,8 @@
 //
 //   const keys = createStepKeys(element, { steps: 16, group: 4, onToggle });
 //   keys.refresh({ on, soundName });     // show which steps are on (on: booleans)
+//   keys.refresh({ on, soundName, first: 16 });   // the keys are steps 17-32 of a longer sequence; a key whose
+//                                                 // `on` is undefined is not a step (the sequence ends first)
 //   keys.paintPlayhead(playing, step);   // light the step the playhead is on
 
 export function createStepKeys(element, { steps, group: groupSize = 4, onToggle }) {
@@ -34,11 +36,14 @@ export function createStepKeys(element, { steps, group: groupSize = 4, onToggle 
   }
 
   return {
-    refresh({ on, soundName }) {
+    refresh({ on, soundName, first = 0 }) {
       cells.forEach(({ cell, btn }, i) => {
+        cell.hidden = on[i] === undefined;
+        if (cell.hidden) return;
+        btn.textContent = String(first + i + 1);
         cell.classList.toggle("on", on[i]);
         btn.setAttribute("aria-pressed", String(on[i]));
-        btn.setAttribute("aria-label", `${soundName} step ${i + 1}${on[i] ? ", on" : ", off"}`);
+        btn.setAttribute("aria-label", `${soundName} step ${first + i + 1}${on[i] ? ", on" : ", off"}`);
       });
     },
 

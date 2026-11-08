@@ -46,10 +46,22 @@
           <section class="mpc-transport" aria-label="Transport">
             <div class="mpc-lamps" role="group" aria-label="What the device is doing">
               <span class="small-label">Device is</span>
-              <button id="lamp-stop" class="mpc-lamp stop" type="button" title="Ask the device to stop" disabled>
+              <button
+                id="lamp-stop"
+                class="mpc-lamp stop"
+                type="button"
+                title="Stop the device and the step keys"
+                disabled
+              >
                 Stop
               </button>
-              <button id="lamp-play" class="mpc-lamp play" type="button" title="Ask the device to play" disabled>
+              <button
+                id="lamp-play"
+                class="mpc-lamp play"
+                type="button"
+                title="Start the device, and play the step keys on it"
+                disabled
+              >
                 Play
               </button>
             </div>
@@ -68,9 +80,30 @@
                 <option value="16">16</option>
               </select>
             </div>
+            <div class="mpc-tempo" role="group" aria-label="The tempo this page plays at">
+              <label class="small-label" for="seq-bpm">Tempo</label>
+              <input id="seq-bpm" class="mpc-select mpc-number" type="number" min="30" max="300" step="0.1" />
+              <span class="small-label">BPM</span>
+            </div>
           </section>
         </div>
       </div>
+
+      <section class="mpc-steps" aria-label="Step keys for the selected pad">
+        <div class="mpc-steps-head">
+          <div id="seq-title" class="small-label">Step keys</div>
+          <div class="mpc-steps-nav" role="group" aria-label="Which steps are shown">
+            <button id="seq-prev" class="mpc-lamp" type="button" aria-label="Previous steps">&lt;</button>
+            <span id="seq-range" class="small-label"></span>
+            <button id="seq-next" class="mpc-lamp" type="button" aria-label="Next steps">&gt;</button>
+          </div>
+        </div>
+        <div id="seq-steps"></div>
+        <div class="mpc-steps-foot">
+          <button id="seq-clear-pad" class="mpc-lamp" type="button">Clear pad</button>
+          <button id="seq-clear-all" class="mpc-lamp" type="button">Clear all</button>
+        </div>
+      </section>
     </main>
 
     <aside class="help-panel" aria-labelledby="help-title">
@@ -78,6 +111,14 @@
       <ul class="help-list">
         <li>Hit the pads on the device: they play the sampler's 16 sounds here, softer for a lighter hit</li>
         <li>The number in each pad is the note it sends in the current bank</li>
+        <li>
+          Click a pad to pick it, then turn its step keys on. Play starts the device and sends it a note for each step
+          that is on, so it plays its own sounds in time with this page's clock. The steps are not saved yet
+        </li>
+        <li>
+          Notes for the device to play need Pad MIDI In set to On there. It sends each one back as a pad hit: the pad
+          lights here, and the page does not play its own sound on top
+        </li>
         <li><a href="monitor.html">MIDI monitor</a> shows every raw message</li>
         <li>
           No pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI Config)
