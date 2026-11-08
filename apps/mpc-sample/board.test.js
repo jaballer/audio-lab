@@ -100,6 +100,33 @@ describe("banks", () => {
   });
 });
 
+// An unplugged device cannot send the release for a pad it was holding.
+describe("releaseAll", () => {
+  it("lets go of every held pad in every bank and clears pressure, keeping the hit counts", () => {
+    const board = createBoard();
+    board.apply(down(1, 0));
+    board.apply(press(1, 50, 0));
+    board.apply(down(2, 1));
+    board.apply(press(2, 70, 1));
+    board.releaseAll();
+
+    const bankB = board.snapshot();
+    expect(bankB.bank).toBe(1);
+    expect(bankB.pads[2]).toMatchObject({ down: false, pressure: 0, hits: 1 });
+    expect(bankB.last.pressure).toBe(0);
+
+    board.apply(down(3, 0)); // back to bank A to read its pads
+    board.apply(up(3, 0));
+    expect(board.snapshot().pads[1]).toMatchObject({ down: false, pressure: 0, hits: 1 });
+  });
+
+  it("does nothing to a board with nothing held", () => {
+    const board = createBoard();
+    board.releaseAll();
+    expect(board.snapshot().pads.every((p) => !p.down && p.hits === 0)).toBe(true);
+  });
+});
+
 describe("bankLabel", () => {
   it("names banks A-H and falls back to a number past them", () => {
     expect(BANK_LETTERS).toBe("ABCDEFGH");

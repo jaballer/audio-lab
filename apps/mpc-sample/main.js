@@ -57,7 +57,9 @@ wireMidiButton(
     onMessage: createMidiRouter(PROFILES, { padDown: apply, padUp: apply, padPressure: apply }),
     onStatus: header.setMidiStatus,
     onChange(_access, inputs) {
+      const wasConnected = connected;
       connected = inputs.some((input) => isMpcSample(input.name));
+      if (wasConnected && !connected) board.releaseAll();
       schedule();
     },
   }),

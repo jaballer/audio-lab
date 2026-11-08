@@ -43,6 +43,17 @@ export function createBoard() {
       }
     },
 
+    // For when the device goes away: it cannot send the release for a pad it was holding.
+    // The hit counts stay.
+    releaseAll() {
+      for (const pads of banks.values()) {
+        for (const pad of pads) {
+          pad.down = false;
+          pad.pressure = 0;
+        }
+      }
+    },
+
     snapshot() {
       const hitPad = lastHit && padsOf(lastHit.bank)[lastHit.index];
       return {
