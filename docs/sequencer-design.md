@@ -33,8 +33,8 @@ parts underneath. The view is shared when the second page needs it, so its API c
 
 1. **Name clash.** `apps/mpc-sample/transport.js` follows the device's state from its MIDI clock; the sampler's
    `transport.js` is a scheduler. The shared one is called `scheduler.js`.
-2. **Different clocks.** The sampler schedules in `AudioContext` time. The MPC page's `clock-master.js` queues MIDI
-   ticks in `performance.now()` time. The shared scheduler takes an injected clock, and `onStep(step, time)` is the
+2. **Different clocks.** The sampler schedules in `AudioContext` time. The MPC page works in `performance.now()` time (the
+   timestamps Web MIDI takes). The shared scheduler takes an injected clock, and `onStep(step, time)` is the
    seam between the scheduler and whatever plays the step (the device over MIDI, the browser's sounds, or both).
 3. **Who leads.** The device is a clock slave when started from the page (it needs Start plus a steady clock, see
    `docs/mpc-sample.md`) and the master when started from its own Play button. The pattern grid is the same either

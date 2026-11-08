@@ -20,12 +20,12 @@ import { createMidiRouter } from "../../shared/midi-devices.js";
 import { isMpcSample } from "../../shared/mpc-sample.js";
 import { togglePower } from "../../shared/power.js";
 import { createBankStrip } from "./bank-strip.js";
-import { CLOCK_TICK_MS, FIRST_TICK_DELAY_MS, createClockMaster } from "./clock-master.js";
 import { bankLabel, createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { createPadSound } from "./pad-sound.js";
+import { STARTER_BEAT } from "./starter-beat.js";
 import { createSequencer, rowFor, stepCount } from "./sequencer.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
@@ -47,17 +47,14 @@ const SEQUENCE_STORE_KEY = "mpc-sample.sequence";
 const barsInput = $("seq-bars");
 const beatsInput = $("seq-beats");
 const noteSelect = $("seq-note");
-const tempoInput = $("seq-bpm");
 
 // The device does not say how long its sequence is or what its time signature is, so they are
-// settings, kept between visits, and so is the tempo the page plays at. Anything saved that is not
-// valid falls back to 1 bar of 4/4 at 120 BPM.
+// settings, kept between visits. Anything saved that is not valid falls back to 1 bar of 4/4.
 let sequence = normalizeSequence(loadJson(SEQUENCE_STORE_KEY));
 function showSequence() {
   barsInput.value = String(sequence.bars);
   beatsInput.value = String(sequence.numerator);
   noteSelect.value = String(sequence.denominator);
-  tempoInput.value = String(sequence.bpm);
 }
 showSequence();
 
@@ -95,14 +92,7 @@ const lights = createTransportLights({ play: playLamp, stop: stopLamp });
 const lcd = createLcd([$("lcd-status"), $("lcd-pad"), $("lcd-vel"), $("lcd-transport")]);
 
 let connected = false; // is an MPC Sample among the MIDI inputs?
-let output = null; // its MIDI output port, for the Play and Stop lamps
-// The device only plays while it is sent clock (see clock-master.js), so Play starts one.
-const clockMaster = createClockMaster({
-  send: (bytes, time) => output?.send(bytes, time),
-  clear: () => output?.clear?.(),
-  startMessage: mpcSample.messages.play,
-});
-
+let output = null; // its MIDI output port, for the notes the step keys send
 function draw() {
   const snapshot = board.snapshot();
   const transportState = transport.snapshot();
@@ -140,6 +130,7 @@ const sequencer = createSequencer({
   messages: mpcSample.messages,
   steps: stepCount(sequence),
   bpm: sequence.bpm,
+  pattern: STARTER_BEAT,
 });
 
 // The step keys show 16 steps at a time, so a longer sequence is shown a page of them at a time.
@@ -173,10 +164,8 @@ function drawSteps() {
   drawPlayhead();
 }
 
-// The tempo is the page's to set only while it is stopped: the clock it sends has been started at one.
 function drawPlayhead() {
   stepKeys.paintPlayhead(sequencer.playing, sequencer.playheadStep - stepPage * STEPS_PER_PAGE);
-  tempoInput.disabled = sequencer.playing;
 }
 
 // The playhead follows the clock, so it is painted every animation frame while playing.
@@ -213,43 +202,19 @@ $("seq-clear-all").addEventListener("click", () => {
   drawSteps();
 });
 
-// The timer runs only while the page is sending clock, so an idle page wakes nothing.
-let clockTimer = null;
-function startClock(bpm, at) {
-  clockMaster.start(bpm, at);
-  clockTimer ??= setInterval(() => clockMaster.tick(performance.now()), CLOCK_TICK_MS);
-}
-function haltClock() {
-  clockMaster.halt();
-  clearInterval(clockTimer);
-  clockTimer = null;
-}
-
-// Play starts the device with Start and a clock, and the step keys with them: step 0 goes on the
-// first tick, and every step is six ticks after the one before, so the notes sit on the device's own
-// beats. Both begin a moment from now, so the first notes and ticks are queued before they are due.
-const RUNUP_MS = 60;
-function startPlayback() {
-  const at = performance.now() + RUNUP_MS;
-  startClock(sequencer.bpm, at); // the tempo field's, which changeSequence has already given the sequencer
-  sequencer.start((at + FIRST_TICK_DELAY_MS) / 1000);
-  startPaintLoop();
-  drawSteps();
-}
-
+// The device is the clock: its Start, Continue and ticks drive the steps (followDevice below). The page
+// sends no clock of its own, because the device distorted while following it (docs/mpc-sample.md).
 function stopPlayback() {
-  haltClock();
   sequencer.stop();
   drawSteps();
 }
 
-// A Start the page did not send came from the device's own Play button. The device then plays on its
-// own clock and ignores ours, so the pattern follows that clock instead of starting one.
+// A Start comes from the device's own Play button, so the pattern follows the clock it then sends.
 // A Continue resumes where the device was: at the song position it reports (which can arrive before or
 // after the Continue), or else where the pattern stopped.
 let reportedPosition = null;
 function followDevice(from) {
-  if (clockMaster.running || !sequencer.follow(from)) return;
+  if (!sequencer.follow(from)) return;
   if (reportedPosition !== null) sequencer.seek(reportedPosition);
   reportedPosition = null;
   site.log("Following the device's clock");
@@ -257,19 +222,6 @@ function followDevice(from) {
   drawSteps();
 }
 
-// The lamps follow what the device reports, not these clicks, so the page never claims a
-// state the device did not confirm.
-// A device already playing (started from its own button) or already being started from here is
-// left alone: a second Start would restart it. The tempo is the one in the Tempo field.
-playLamp.addEventListener("click", () => {
-  const { state } = transport.snapshot();
-  if (!output || state === "playing" || clockMaster.running) return;
-  startPlayback();
-});
-stopLamp.addEventListener("click", () => {
-  stopPlayback();
-  output?.send(mpcSample.messages.stop);
-});
 window.addEventListener("pagehide", stopPlayback);
 
 // A field left empty or out of range goes back to the last good value instead of being used.
@@ -279,7 +231,6 @@ function changeSequence() {
       bars: Number(barsInput.value),
       numerator: Number(beatsInput.value),
       denominator: Number(noteSelect.value),
-      bpm: Number(tempoInput.value),
     },
     sequence,
   );
@@ -287,17 +238,15 @@ function changeSequence() {
   transport.setLoopBars(sequence.bars);
   transport.setSignature(sequence.numerator, sequence.denominator);
   sequencer.setSteps(stepCount(sequence));
-  sequencer.setBpm(sequence.bpm);
   stepPage = Math.min(stepPage, lastPage());
   saveJson(SEQUENCE_STORE_KEY, sequence);
   drawSteps();
   schedule();
 }
-for (const control of [barsInput, beatsInput, noteSelect, tempoInput])
-  control.addEventListener("change", changeSequence);
+for (const control of [barsInput, beatsInput, noteSelect]) control.addEventListener("change", changeSequence);
 
-// The clock ends when the device stops, so now and then ask whether it went quiet. If it did,
-// the clock this page sends ends too, or a later Play would start over a stream still running.
+// The clock ends when the device stops, so now and then ask whether it went quiet. If it did, the steps
+// stop with it.
 const STALE_CHECK_MS = 250;
 setInterval(() => {
   if (!transport.expire(performance.now())) return;
@@ -363,7 +312,6 @@ wireMidiButton(
         transport.reset();
       }
       output = [...access.outputs.values()].find((p) => p.state !== "disconnected" && isMpcSample(p.name)) ?? null;
-      playLamp.disabled = stopLamp.disabled = !output;
       if (!output) stopPlayback();
       schedule();
     },

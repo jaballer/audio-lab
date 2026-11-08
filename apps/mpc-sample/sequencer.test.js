@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SCHEDULER_TICK_MS } from "../../shared/scheduler.js";
-import { CLOCKS_PER_BEAT, FIRST_TICK_DELAY_MS, createClockMaster } from "./clock-master.js";
 import { mpcSample } from "./devices.js";
 import { GATE_RATIO, NOTE_VELOCITY, PAD_COUNT, createSequencer, padOf, rowFor, stepCount } from "./sequencer.js";
+import { CLOCKS_PER_BEAT } from "./transport.js";
 
 const ON = 0x90;
 const OFF = 0x80;
@@ -193,39 +193,6 @@ describe("createSequencer", () => {
       sequencer.stop();
       expect(sequencer.isEcho(36, 55)).toBe(true);
     });
-  });
-});
-
-// The page sends the device a clock and the notes at once: a step has to fall on the sixth tick after
-// the one before it, or the notes drift against the device's own sequence.
-describe("one beat grid with the MIDI clock", () => {
-  it("puts each step on the tick the device counts it by", () => {
-    const { clock, sequencer, notes, run } = setup({ bpm: 100 });
-    const ticks = [];
-    const master = createClockMaster({
-      send: (bytes, time) => bytes[0] === 0xf8 && ticks.push(time),
-      startMessage: mpcSample.messages.play,
-    });
-    sequencer.toggle(0, 0);
-    sequencer.toggle(0, 3);
-    sequencer.toggle(0, 9);
-
-    const at = 0.05 * 1000; // where Start goes, as the page chooses it
-    master.start(100, at);
-    sequencer.start((at + FIRST_TICK_DELAY_MS) / 1000);
-    // Keep the clock master's ticks coming as the page's timer does.
-    for (let t = 0; t < 2; t += 0.025) {
-      run(0.025);
-      master.tick(clock.time * 1000);
-    }
-
-    const onTimes = notes(ON).map((m) => m.time);
-    expect(onTimes.slice(0, 3)).toHaveLength(3);
-    // Steps 0, 3 and 9 sit on ticks 0, 18 and 54: six ticks a step.
-    const ticksPerStep = CLOCKS_PER_BEAT / 4;
-    expect(onTimes[0]).toBeCloseTo(ticks[0], 6);
-    expect(onTimes[1]).toBeCloseTo(ticks[3 * ticksPerStep], 6);
-    expect(onTimes[2]).toBeCloseTo(ticks[9 * ticksPerStep], 6);
   });
 });
 

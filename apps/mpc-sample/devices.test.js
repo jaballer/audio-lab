@@ -96,10 +96,3 @@ describe("mpcSample.translate: transport", () => {
     expect(mpcSample.translate(parseMidi([0xf2, 0x7f, 0x01]))).toEqual([{ type: "songPosition", position: 255 }]);
   });
 });
-
-describe("mpcSample.messages", () => {
-  it("has the real-time Start and Stop bytes for the Play and Stop lamps", () => {
-    expect(mpcSample.messages.play).toEqual([0xfa]);
-    expect(mpcSample.messages.stop).toEqual([0xfc]);
-  });
-});

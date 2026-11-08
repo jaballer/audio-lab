@@ -168,8 +168,7 @@
   gap: 10px;
 }
 .mpc-lamps,
-.mpc-loop,
-.mpc-tempo {
+.mpc-loop {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -218,7 +217,8 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.mpc-lamp:disabled {
+.mpc-lamp:disabled,
+span.mpc-lamp {
   cursor: default;
 }
 .mpc-lamp:focus-visible {

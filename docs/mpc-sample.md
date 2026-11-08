@@ -51,9 +51,18 @@ MIDI Sync In was set to Midi Clock (confirmed by the owner).
 | MMC Deferred Play as SysEx             | No reply, but inconclusive: it did not answer an identity request either, so the send is unproven |
 
 So the device is a clock slave: **a bare Start does not start it, it starts on the first tick after Start and keeps
-going only while ticks keep arriving, at the tempo of those ticks.** A Play button that works means the page sends
-Start and then a steady clock for as long as it plays (and so sets the device's tempo); `apps/mpc-sample/clock-master.js` does that. Ticks sent after a Stop do not restart it. Not tried: Continue with
+going only while ticks keep arriving, at the tempo of those ticks.** A page Play button that works would send
+Start and then a steady clock for as long as it plays (and so set the device's tempo). Ticks sent after a Stop do not restart it. Not tried: Continue with
 clock, MIDI Sync In set to Off or MTC, and the page's own Play while the device was started from its hardware button.
+
+**Decision: the page does not send Start or clock.** On the owner's device (2026-11-08) the page's Play, which sent Start and a
+clock and then the notes, made the device's own speaker sound distorted, like a bit crusher; the same notes with no clock, and the
+page following the device's own Play, sounded clean. The clock itself was steady (about 1 ms of jitter, measured from the echoed
+ticks) and the notes went out once each at velocity 100, so the page's messages did not look wrong, and the cause is not known (a device
+setting for following an outside clock is the guess). The page therefore follows the device's clock only, and the Play and Stop lamps show
+what the device reports. The page's clock sender was removed; git history has it (`clock-master.js`) if the cause is found.
+Also seen while testing: every page connected to the device follows a Start the device echoes, so a second tab or window with the page
+open plays the pattern too and doubles each hit.
 
 ## Measured: what the device does with notes sent to it
 
