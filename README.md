@@ -54,7 +54,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `song.js` — what is kept between visits (pattern, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `transport.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from; no DOM
   - `tempo.js` — BPM limits, step length, tap tempo and snapping a live hit to the nearest step; no DOM
-  - `sounds.js` — drum synthesis
+  - `sounds.js` — the 16 drum sounds and the kit that lists them in pad order
+  - `dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
   - `pads.js`, `steps.js`, `tempo-knob.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `lcd.js` has the pure text formatter)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
