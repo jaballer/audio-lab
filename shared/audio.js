@@ -10,8 +10,13 @@
 //   audio.setVolume(0.8);          // safe to call before the context exists
 //   audio.unlockOnInteraction();   // see below
 //   audio.powerOff(); audio.powerOn();   // the device's power switch: off is silent until turned on
-//   audio.powered                  // false while off: a page should not start sounds then, they
-//                                  // would queue on the suspended context and play at power on
+//   audio.powered                  // false while off: a page should not start sounds then (they are
+//                                  // inaudible, but a held note would be heard again at power on)
+//   audio.running                  // true only while sound can be heard: powered, and the context running
+//
+// Power off mutes the master gain and leaves the context running. Suspending it would freeze
+// every sounding note and its release against a stopped clock, and a power cycle would bring
+// them back; running muted lets them play out, unheard, on the clock as usual.
 //
 // The context is created lazily, so nothing is built until it is needed.
 //
@@ -23,7 +28,6 @@
 export const POWER_SWITCH = "[data-power-switch]";
 
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
-const FADE_MS = 80; // long enough for the fade to reach silence (about 8 time constants)
 
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
@@ -31,7 +35,6 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
   let level = volume;
 
   let powered = true;
-  let fadeTimer = null;
 
   // While the power is off the engine says so, whatever the context's own state is.
   const notify = () => onStateChange?.(!powered ? "off" : ctx ? ctx.state : "closed");
@@ -43,39 +46,25 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
       // which would replace ours and leave the status stuck on "suspended".
       ctx.addEventListener("statechange", notify);
       master = ctx.createGain();
-      master.gain.value = level;
+      master.gain.value = powered ? level : 0;
       master.connect(ctx.destination);
     }
-    if (!powered) {
-      // Off stays off: a click, a key or a note must not wake it. A context a gesture
-      // has just started (they begin running) is put back to sleep.
-      if (ctx.state === "running") ctx.suspend();
-      notify();
-      return ctx;
-    }
     // "interrupted" is Safari after a phone call or a locked screen; resume() ends it too.
-    if (ctx.state === "suspended" || ctx.state === "interrupted") ctx.resume();
+    // Off stays off: a click, a key or a note must not wake a context the browser holds suspended.
+    if (powered && (ctx.state === "suspended" || ctx.state === "interrupted")) ctx.resume();
     notify();
     return ctx;
   }
 
-  // Fade out, then suspend, so sound already playing stops without a click.
+  // Muting is a fade, so sound already playing stops without a click.
   function powerOff() {
     powered = false;
-    clearTimeout(fadeTimer);
-    if (ctx) {
-      master.gain.setTargetAtTime(0, ctx.currentTime, FADE_TIME_CONSTANT);
-      // A timer is fine here: nothing is scheduled by it, it only waits out the fade.
-      fadeTimer = setTimeout(() => {
-        if (!powered && ctx.state === "running") ctx.suspend();
-      }, FADE_MS);
-    }
+    if (ctx) master.gain.setTargetAtTime(0, ctx.currentTime, FADE_TIME_CONSTANT);
     notify();
   }
 
   function powerOn() {
     powered = true;
-    clearTimeout(fadeTimer);
     // Builds the context if there is none yet and resumes it: this runs from a click,
     // which is the gesture browsers want.
     ensure();
@@ -117,7 +106,7 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
       return powered;
     },
     get running() {
-      return ctx?.state === "running";
+      return powered && ctx?.state === "running";
     },
   };
 }

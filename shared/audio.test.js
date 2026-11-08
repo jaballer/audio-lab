@@ -156,10 +156,7 @@ describe("createAudioEngine", () => {
   });
 
   describe("power", () => {
-    afterEach(() => vi.useRealTimers());
-
-    it("starts on, and turning it off fades the sound out before the context is suspended", () => {
-      vi.useFakeTimers();
+    it("starts on, and turning it off fades the sound out but leaves the context running", () => {
       installAudioContext();
       const audio = createAudioEngine({ volume: 0.5 });
       const ctx = audio.ensure();
@@ -167,35 +164,42 @@ describe("createAudioEngine", () => {
 
       audio.powerOff();
       expect(audio.powered).toBe(false);
-      // Faded first: suspending a sounding context would cut it off with a click.
+      // Faded, not suspended: a suspended context freezes sounding notes, and a power cycle revives them.
       expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, ctx.currentTime, expect.any(Number));
       expect(ctx.suspend).not.toHaveBeenCalled();
-      vi.runAllTimers();
-      expect(ctx.suspend).toHaveBeenCalledTimes(1);
+      expect(ctx.state).toBe("running");
+    });
+
+    it("is not running while off, even though the context is, so pages see no sound", () => {
+      installAudioContext();
+      const audio = createAudioEngine();
+      audio.ensure();
+      expect(audio.running).toBe(true);
+      audio.powerOff();
+      expect(audio.running).toBe(false);
+      audio.powerOn();
+      expect(audio.running).toBe(true);
     });
 
     it('reports "off" while it is off, whatever the context does', () => {
-      vi.useFakeTimers();
       installAudioContext();
       const onStateChange = vi.fn();
       const audio = createAudioEngine({ onStateChange });
       const ctx = audio.ensure();
       audio.powerOff();
       expect(onStateChange).toHaveBeenLastCalledWith("off");
-      vi.runAllTimers();
       ctx.changeState("suspended");
       expect(onStateChange).toHaveBeenLastCalledWith("off");
     });
 
-    it("stays silent while off: a press or a note does not wake the context", () => {
-      vi.useFakeTimers();
+    it("stays silent while off: a press or a note does not wake a suspended context", () => {
       installAudioContext();
       const audio = createAudioEngine();
       const target = fakeTarget();
       audio.unlockOnInteraction(target);
       const ctx = audio.ensure();
       audio.powerOff();
-      vi.runAllTimers();
+      ctx.changeState("suspended"); // the browser holds it
       ctx.resume.mockClear();
 
       target.listeners.find((l) => l.type === "pointerdown").handler();
@@ -204,25 +208,23 @@ describe("createAudioEngine", () => {
       expect(audio.running).toBe(false);
     });
 
-    it("suspends a context that a gesture just started while it is off", () => {
+    it("builds a context made while off muted, so a gesture that starts it makes no sound", () => {
       installAudioContext();
-      const audio = createAudioEngine();
+      const audio = createAudioEngine({ volume: 0.5 });
       audio.powerOff(); // before any context exists
-      const ctx = audio.ensure();
-      ctx.changeState("running"); // a browser starts a context built during a gesture
       audio.ensure();
-      expect(ctx.suspend).toHaveBeenCalled();
-      expect(audio.running).toBe(false);
+      expect(audio.master.gain.value).toBe(0);
+      audio.powerOn();
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, expect.any(Number), expect.any(Number));
     });
 
     it("turns back on: the sound returns at the volume it had and the state is reported", () => {
-      vi.useFakeTimers();
       installAudioContext();
       const onStateChange = vi.fn();
       const audio = createAudioEngine({ volume: 0.5, onStateChange });
       const ctx = audio.ensure();
       audio.powerOff();
-      vi.runAllTimers();
+      ctx.changeState("suspended"); // the browser stopped it meanwhile
 
       audio.powerOn();
       expect(audio.powered).toBe(true);
@@ -240,24 +242,23 @@ describe("createAudioEngine", () => {
       expect(audio.running).toBe(true);
     });
 
-    it("does not suspend if the power came back before the fade finished", () => {
-      vi.useFakeTimers();
+    it("never suspends the context, so a press during a fade has no suspension to race", () => {
       installAudioContext();
       const audio = createAudioEngine();
       const ctx = audio.ensure();
       audio.powerOff();
       audio.powerOn();
-      vi.runAllTimers();
+      audio.powerOff();
+      audio.powerOn();
       expect(ctx.suspend).not.toHaveBeenCalled();
+      expect(audio.running).toBe(true);
     });
 
     it("keeps a volume change made while off from bringing the sound back", () => {
-      vi.useFakeTimers();
       installAudioContext();
       const audio = createAudioEngine({ volume: 0.5 });
       const ctx = audio.ensure();
       audio.powerOff();
-      vi.runAllTimers();
       audio.master.gain.setTargetAtTime.mockClear();
 
       audio.setVolume(0.9);

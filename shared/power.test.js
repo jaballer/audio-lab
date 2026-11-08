@@ -11,7 +11,7 @@ describe("togglePower", () => {
     expect(audio.powerOn).not.toHaveBeenCalled();
   });
 
-  it("turns sound back on when pressed again while the fade-out has the context still running", () => {
+  it("turns sound back on when pressed again while the context is still running but power is off", () => {
     const audio = fakeAudio(true, false);
     togglePower(audio);
     expect(audio.powerOn).toHaveBeenCalled();
