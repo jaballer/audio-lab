@@ -1,31 +1,26 @@
 // The pad sampler and step sequencer. This file only wires the pieces together:
-// the pattern and transport (the sequencer), the views (pads, steps, LCD, tempo
-// knob) and the inputs (mouse, computer keyboard, MIDI).
+// the sampler (state and actions, controller.js), the views (pads, steps, LCD,
+// tempo knob) and the inputs (mouse, computer keyboard, MIDI).
 
 import "../../shared/base.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
-import { createLcd, pad2 } from "./lcd.js";
+import { DEFAULT_VOLUME, createSampler } from "./controller.js";
+import { createLcd } from "./lcd.js";
 import { createMidi } from "./midi.js";
-import { STARTER_BEAT, createPattern } from "./pattern.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { SOUNDS } from "./sounds.js";
 import { createStepKeys } from "./steps.js";
 import { createTempoKnob } from "./tempo-knob.js";
-import { BPM_MAX, BPM_MIN, createTapTempo, nearestStep } from "./tempo.js";
-import { createTransport } from "./transport.js";
+import { BPM_MAX, BPM_MIN } from "./tempo.js";
 
 const STEPS = 16;
 const PAD_COUNT = SOUNDS.length; // 16 pads in a 4x4 grid
 
 const $ = (id) => document.getElementById(id);
-
-// ---------- State ----------
-let selected = 0;
-let recording = false;
 
 const volInput = $("vol");
 const playBtn = $("play");
@@ -33,36 +28,35 @@ const recBtn = $("rec");
 
 // ---------- Saved song ----------
 // The pattern, tempo and volume come back on the next visit. This is read first
-// because the audio engine takes its starting level from the volume slider.
+// because the audio engine takes its starting level from the saved volume.
 // With nothing usable saved (first visit, blocked storage), the page starts
 // from the starter beat as it always did.
-const saved = parseSong(loadJson(SONG_KEY), { rows: PAD_COUNT, steps: STEPS });
-if (saved) volInput.value = String(saved.volume);
+const song = parseSong(loadJson(SONG_KEY), { rows: PAD_COUNT, steps: STEPS });
 
 const saver = createSongSaver({
-  read: () => ({ bpm: transport.bpm, volume: Number(volInput.value), pattern: pattern.snapshot() }),
-  save: (song) => saveJson(SONG_KEY, song),
+  read: () => sampler.getSong(),
+  save: (data) => saveJson(SONG_KEY, data),
 });
 window.addEventListener("pagehide", () => saver.flush());
 
 // ---------- Audio and sequencer ----------
-const audio = createAudioEngine({ volume: Number(volInput.value) / 100 });
+const audio = createAudioEngine({ volume: (song ? song.volume : DEFAULT_VOLUME) / 100 });
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
 
-const pattern = createPattern(PAD_COUNT, STEPS, saved ? saved.pattern : STARTER_BEAT, {
-  onChange: () => saver.schedule(),
-});
-
-const transport = createTransport({
+// The callbacks below use the views and `midi`, which are built after this. That
+// is fine because the sampler reports nothing until something happens.
+const sampler = createSampler({
   audio,
+  sounds: SOUNDS,
   steps: STEPS,
-  bpm: saved?.bpm,
-  onStep(step, time, heard) {
-    const { ctx, master } = audio;
-    SOUNDS.forEach((sound, row) => {
-      if (pattern.isOn(row, step) && !heard.has(row)) sound.play(ctx, master, time);
-    });
+  song,
+  onChange: render,
+  onMessage: (text) => lcd.showMessage(text),
+  onPadHit(index) {
+    padGrid.flash(index);
+    midi.padHit(index);
   },
+  onSongChange: () => saver.schedule(),
 });
 
 // ---------- Views ----------
@@ -73,152 +67,58 @@ const lcd = createLcd({
   steps: STEPS,
 });
 
-function renderLcd() {
-  lcd.render({
-    playing: transport.playing,
-    recording,
-    selected,
-    soundName: SOUNDS[selected].name,
-    bpm: transport.bpm,
-    playheadStep: transport.playheadStep,
-    steps: STEPS,
-    stepsOn: pattern.row(selected),
-  });
+const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (index) => sampler.triggerPad(index) });
+const stepKeys = createStepKeys($("steps"), { steps: STEPS, onToggle: (step) => sampler.toggleStep(step) });
+const knob = createTempoKnob($("knob"), {
+  min: BPM_MIN,
+  max: BPM_MAX,
+  getBpm: () => sampler.getState().bpm,
+  onChange: (bpm) => sampler.setBpm(bpm),
+});
+
+// Every view is drawn from the sampler's state, so it cannot disagree with it.
+function render() {
+  const state = sampler.getState();
+  const soundName = SOUNDS[state.selected].name;
+  padGrid.select(state.selected);
+  stepKeys.refresh({ on: state.stepsOn, soundName });
+  stepKeys.paintPlayhead(state.playing, state.playheadStep);
+  knob.render(state.bpm);
+  volInput.value = String(state.volume);
+  playBtn.setAttribute("aria-pressed", String(state.playing));
+  recBtn.setAttribute("aria-pressed", String(state.recording));
+  lcd.render({ ...state, soundName, steps: STEPS });
   midi.refresh();
+  if (state.playing) startPaintLoop();
 }
 
-const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (idx) => triggerPad(idx) });
-const stepKeys = createStepKeys($("steps"), { steps: STEPS, onToggle: (i) => toggleStep(i) });
-const knob = createTempoKnob($("knob"), { min: BPM_MIN, max: BPM_MAX, getBpm: () => transport.bpm, onChange: setBpm });
-
-function refreshSteps() {
-  stepKeys.refresh({ on: pattern.row(selected), soundName: SOUNDS[selected].name });
-}
-
-// ---------- Pads ----------
-function selectPad(idx) {
-  selected = idx;
-  padGrid.select(idx);
-  refreshSteps();
-  renderLcd();
-}
-
-// velocity is 0-1; a quieter hit plays through its own gain stage.
-function triggerPad(idx, velocity = 1) {
-  const ctx = audio.ensure();
-  let out = audio.master;
-  if (velocity < 1) {
-    out = ctx.createGain();
-    out.gain.value = Math.max(velocity, 0.05);
-    out.connect(audio.master);
-  }
-  SOUNDS[idx].play(ctx, out, ctx.currentTime);
-  padGrid.flash(idx);
-  midi.padHit(idx);
-  if (recording && transport.playing) recordHit(idx);
-  selectPad(idx);
-}
-
-// Live recording: quantize the hit to the nearest 16th step.
-function recordHit(idx) {
-  const step = nearestStep({
-    now: audio.ctx.currentTime,
-    playheadTime: transport.playheadTime,
-    playheadStep: transport.playheadStep,
-    bpm: transport.bpm,
-    steps: STEPS,
-  });
-  if (step < 0) return;
-  pattern.set(idx, step, true);
-  transport.markHeard(idx, step); // it was just played live: don't sound it again at a slow tempo
-}
-
-// ---------- Steps ----------
-function toggleStep(i) {
-  pattern.toggle(selected, i);
-  refreshSteps();
-  renderLcd();
-}
-
-// ---------- Transport ----------
 // The playhead follows the audio clock, so it is painted every animation frame
 // rather than from the scheduler's timer.
+let painting = false;
+
+function startPaintLoop() {
+  if (painting) return;
+  painting = true;
+  requestAnimationFrame(paintLoop);
+}
+
 function paintLoop() {
-  if (!transport.playing) return;
-  if (transport.poll()) {
-    stepKeys.paintPlayhead(transport.playing, transport.playheadStep);
-    renderLcd();
+  if (!sampler.getState().playing) {
+    painting = false;
+    return;
   }
+  if (sampler.poll()) render();
   requestAnimationFrame(paintLoop);
 }
 
-function start() {
-  if (!transport.start()) return; // already playing
-  playBtn.setAttribute("aria-pressed", "true");
-  requestAnimationFrame(paintLoop);
-  renderLcd();
-}
-
-function stop() {
-  transport.stop();
-  playBtn.setAttribute("aria-pressed", "false");
-  stepKeys.paintPlayhead(transport.playing, transport.playheadStep);
-  renderLcd();
-}
-
-playBtn.addEventListener("click", start);
-$("stop").addEventListener("click", stop);
-
-function toggleRec() {
-  recording = !recording;
-  recBtn.setAttribute("aria-pressed", String(recording));
-  lcd.showMessage(recording ? (transport.playing ? "REC ON - HIT PADS" : "REC ARMED - PRESS PLAY") : "REC OFF");
-  renderLcd();
-}
-
-function clearPad() {
-  pattern.clearRow(selected);
-  refreshSteps();
-  lcd.showMessage(`PAD ${pad2(selected + 1)} CLEARED`);
-  renderLcd();
-}
-
-function clearAll() {
-  pattern.clearAll();
-  refreshSteps();
-  lcd.showMessage("ALL PADS CLEARED");
-  renderLcd();
-}
-
-recBtn.addEventListener("click", toggleRec);
-$("clear").addEventListener("click", clearPad);
-$("clear-all").addEventListener("click", clearAll);
-
-// ---------- Tempo ----------
-function setBpm(value) {
-  knob.render(transport.setBpm(value));
-  renderLcd();
-  saver.schedule();
-}
-
-const taps = createTapTempo();
-$("tap").addEventListener("click", tapTempo);
-function tapTempo() {
-  const bpm = taps.tap(performance.now());
-  if (bpm === null) {
-    lcd.showMessage("TAP AGAIN...");
-  } else {
-    setBpm(bpm);
-    lcd.showMessage("TAP TEMPO");
-  }
-}
-
-// ---------- Volume ----------
-volInput.addEventListener("input", () => {
-  audio.setVolume(Number(volInput.value) / 100);
-  lcd.showMessage(`VOLUME ${volInput.value}`);
-  saver.schedule();
-});
+// ---------- Buttons ----------
+playBtn.addEventListener("click", sampler.start);
+$("stop").addEventListener("click", sampler.stop);
+recBtn.addEventListener("click", sampler.toggleRec);
+$("clear").addEventListener("click", sampler.clearPad);
+$("clear-all").addEventListener("click", sampler.clearAll);
+$("tap").addEventListener("click", sampler.tapTempo);
+volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------
 window.addEventListener("keydown", (e) => {
@@ -227,43 +127,26 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     if (document.activeElement?.tagName === "BUTTON") return; // let the button click
     e.preventDefault();
-    transport.playing ? stop() : start();
+    if (sampler.getState().playing) sampler.stop();
+    else sampler.start();
     return;
   }
 
-  const idx = padForKey(e.key.toLowerCase());
-  if (idx >= 0) triggerPad(idx);
+  const index = padForKey(e.key.toLowerCase());
+  if (index >= 0) sampler.triggerPad(index);
 });
 
 // ---------- MIDI ----------
-const midiBtn = $("midi-btn");
 const midiStatus = $("midi-status");
 
 const midi = createMidi({
+  ...sampler,
   padCount: PAD_COUNT,
   steps: STEPS,
-  triggerPad,
-  toggleStep,
-  start,
-  stop,
-  toggleRec,
-  clearPad,
-  clearAll,
-  tapTempo,
-  nudgeTempo: (delta) => setBpm(transport.bpm + delta),
-  getState: () => ({
-    selected,
-    stepsOn: pattern.row(selected),
-    playheadStep: transport.playheadStep,
-    playing: transport.playing,
-    recording,
-  }),
   onStatus: (text) => (midiStatus.textContent = text),
 });
 
-wireMidiButton(midiBtn, midi);
+wireMidiButton($("midi-btn"), midi);
 
 // ---------- Init ----------
-// Not setBpm: showing the starting tempo is not a change, so it shouldn't save.
-knob.render(transport.bpm);
-selectPad(0);
+sampler.selectPad(0);
