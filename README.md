@@ -84,6 +84,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
 - `shared/app-header.js` — the header every page shares (brand, back link, Connect MIDI button and status), drawn into the page's `<header>`
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects
+- `shared/flash.js` — light an element for a moment (a pad hit), restarting the time on a repeat hit
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
 - `shared/storage.js` — JSON in `localStorage` that never throws
