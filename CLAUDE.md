@@ -1,7 +1,8 @@
 # Conventions
 
-Vite + vanilla JS (ES modules) + Web Audio / Web MIDI. No framework, no runtime dependencies. Everything
-is synthesized in the browser.
+Vite + vanilla JS (ES modules) + Web Audio / Web MIDI. No framework, and no runtime dependencies except
+Tone.js, which only `tone-demo.html` + `apps/tone-demo/` may import: never from `shared/` or another app, or it
+lands in their bundles. Everything is synthesized in the browser.
 
 ## Commands
 

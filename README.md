@@ -79,6 +79,9 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `log.js` — the bounded message list and the running tally of notes hit; no DOM
   - `view.js` — the on-screen message list and notes table
   - `monitor.css` — monitor-only styles
+- `tone-demo.html` + `apps/tone-demo/` — a small synth built with [Tone.js](https://tonejs.github.io/), the only page that uses it (a feedback delay on the shared audio engine)
+  - `main.js` — wires the page: points Tone at the shared `AudioContext`, builds the synth and delay, draws the keys and controls
+  - `tone-demo.css` — demo-only styles
 - `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by both apps
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
