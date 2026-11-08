@@ -52,10 +52,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `controller.js` — the sampler's state (selected pad, recording, volume) and every action on it (hit a pad, toggle a step, record, tap tempo...), with the follow-ups each one needs (LCD message, save, redraw); no DOM
   - `layout.js` — how many pads (and in what grid) and steps the sampler has, decided once; the pad grid, step keys, key map and Launchpad profile read it; no DOM
   - `format.js` — small text helpers for the display and messages; no DOM
-  - `pattern.js` — the step grid (which pad plays on which step) and the starter beat; no DOM
+  - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
   - `song.js` — what is kept between visits (pattern, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
-  - `transport.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from; no DOM
-  - `tempo.js` — BPM limits, step length, tap tempo and snapping a live hit to the nearest step; no DOM
   - `pads.js`, `steps.js`, `tempo-knob.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `lcd.js` has the pure text formatter)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
@@ -112,6 +110,9 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/computer-keys.js` — the computer keyboard as a one-octave piano (takes its events from a target, so it is testable); no DOM of its own; played by the keys page and the Tone.js demo
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
+- `shared/pattern.js` — the step grid (which row plays on which step); no DOM; used by the sampler
+- `shared/tempo.js` — BPM limits, step length, tap tempo and snapping a live hit to the nearest step; no DOM
+- `shared/scheduler.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from, on whatever clock it is given (the sampler gives it the audio clock); no DOM
 - `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
 - `CHANGELOG.md` — what changed on the live site, by day, newest first

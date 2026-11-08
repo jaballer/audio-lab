@@ -1,6 +1,6 @@
 // The sequencer's pattern: one row of on/off steps per pad. No DOM.
 //
-//   const pattern = createPattern(16, 16, STARTER_BEAT, { onChange });   // rows, steps, optional starting steps
+//   const pattern = createPattern(16, 16, { 0: [0, 4] }, { onChange });   // rows, steps, optional starting steps
 //   pattern.isOn(0, 4);        // is pad 0's step 4 on?
 //   pattern.toggle(0, 4);      // flip it
 //   pattern.set(0, 4, true);
@@ -11,13 +11,6 @@
 //
 // `onChange()` is called after a step actually changes (not while the pattern is
 // being built, and not when a call leaves everything as it was).
-
-// Starter beat so Play makes noise right away: { pad row: [steps that are on] }.
-export const STARTER_BEAT = {
-  0: [0, 4, 8, 12], // kick
-  1: [4, 12], // snare
-  2: [0, 2, 4, 6, 8, 10, 12, 14], // closed hat
-};
 
 export function createPattern(rows, steps, initial = {}, { onChange } = {}) {
   const grid = Array.from({ length: rows }, () => new Array(steps).fill(false));

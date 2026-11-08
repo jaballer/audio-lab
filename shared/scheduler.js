@@ -1,36 +1,45 @@
-// The sequencer's clock: a lookahead scheduler. No DOM.
+// The sequencer's clock: a lookahead scheduler. No DOM. Shared by every page that runs a step
+// sequencer; the sampler's runs on the audio clock.
 //
-//   const transport = createTransport({ audio, steps: 16, onStep });
-//   transport.start();      // false if it was already playing
-//   transport.stop();
-//   transport.setBpm(120);  // returns the tempo actually set (clamped)
-//   transport.poll();       // call every animation frame; true when the playhead moved
+//   const scheduler = createScheduler({ clock, steps: 16, onStep });
+//   scheduler.start();      // false if it was already playing
+//   scheduler.stop();
+//   scheduler.setBpm(120);  // returns the tempo actually set (clamped)
+//   scheduler.poll();       // call every animation frame; true when the playhead moved
 //
-//   transport.playing, transport.bpm, transport.playheadStep, transport.playheadTime
-//   transport.pendingSteps  // how many scheduled steps the playhead has yet to catch up with
-//   transport.markHeard(row, step)  // see below
+//   scheduler.playing, scheduler.bpm, scheduler.playheadStep, scheduler.playheadTime
+//   scheduler.pendingSteps  // how many scheduled steps the playhead has yet to catch up with
+//   scheduler.markHeard(row, step)  // see below
+//
+// `clock` is what time means here: `{ now(), prepare?() }`. `now()` is the current time in
+// seconds, in whatever domain the steps are played in: the sampler gives it the AudioContext's
+// `currentTime`; a page that sends MIDI would give it `performance.now() / 1000`, the domain of
+// Web MIDI timestamps. `prepare()` runs once on start, for a clock that must be woken first
+// (the audio engine creates its context only after a user gesture).
 //
 // Timers drift and stall, the audio clock does not. So a timer wakes every
 // LOOKAHEAD_MS and schedules every step that falls within the next
-// SCHEDULE_AHEAD_S of audio time: `onStep(step, time)` is told when (in
-// AudioContext time) to play that step's sounds. The visible playhead follows
+// SCHEDULE_AHEAD_S of clock time: `onStep(step, time)` is told when (in the
+// clock's time) to play that step's sounds. The visible playhead follows
 // separately: each scheduled step is queued, and `poll()` moves the playhead
 // to the latest step whose time has actually arrived.
 //
 // `onStep(step, time, heard)` also gets `heard`, a Set of the rows (pads) that
 // must stay silent on this pass because they were just heard live: see
-// markHeard().
+// markHeard(). It is part of the scheduler, not the sampler, because it is tied to which
+// step is next and to the steps skipped after a stall, and any page that records live pad hits
+// needs it.
 
 import { clampBpm, stepSeconds } from "./tempo.js";
 
 export const LOOKAHEAD_MS = 25; // how often the scheduler wakes up
-export const SCHEDULE_AHEAD_S = 0.12; // how far ahead of the audio clock it schedules
+export const SCHEDULE_AHEAD_S = 0.12; // how far ahead of the clock it schedules
 const START_DELAY_S = 0.05; // a short run-up so the first step is not already late
 // How late a step may be and still play: a little over one scheduler tick. At the
 // fastest tempo a step is longer than this, so at most one step is ever this late.
 const MAX_LATE_S = 0.03;
 
-export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 }) {
+export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100 }) {
   let bpm = initialBpm;
   let playing = false;
   let timer = null;
@@ -97,7 +106,7 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
   }
 
   function schedule() {
-    const now = audio.ctx.currentTime;
+    const now = clock.now();
     dropSupersededSteps(now);
     skipMissedSteps(now);
     while (nextTime < now + SCHEDULE_AHEAD_S) {
@@ -111,11 +120,11 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
 
   function start() {
     if (playing) return false;
-    const ctx = audio.ensure();
+    clock.prepare?.();
     playing = true;
     forgetHeard();
     nextStep = 0;
-    nextTime = ctx.currentTime + START_DELAY_S;
+    nextTime = clock.now() + START_DELAY_S;
     playheadStep = -1;
     timer = setInterval(schedule, LOOKAHEAD_MS);
     return true;
@@ -130,7 +139,7 @@ export function createTransport({ audio, steps, onStep, bpm: initialBpm = 100 })
   }
 
   function poll() {
-    const now = audio.ctx.currentTime;
+    const now = clock.now();
     let moved = false;
     while (visualQueue.length && visualQueue[0].time <= now) {
       const { step, time } = visualQueue.shift();

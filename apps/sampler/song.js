@@ -7,7 +7,7 @@
 //   saver.schedule();   // something changed: save once things settle
 //   saver.flush();      // about to leave the page: save now if a change is waiting
 
-import { clampBpm } from "./tempo.js";
+import { clampBpm } from "../../shared/tempo.js";
 
 // Still named after the project's old name: changing it would orphan every beat
 // already saved in visitors' browsers.

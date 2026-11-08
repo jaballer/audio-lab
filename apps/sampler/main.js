@@ -20,7 +20,7 @@ import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "./steps.js";
 import { createTempoKnob } from "./tempo-knob.js";
-import { BPM_MAX, BPM_MIN } from "./tempo.js";
+import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
 

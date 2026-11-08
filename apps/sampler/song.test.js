@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { STARTER_BEAT } from "./pattern.js";
+import { STARTER_BEAT } from "./starter-beat.js";
 import { SONG_VERSION, createSongSaver, parseSong, serializeSong, upgradeSong } from "./song.js";
 
 const SHAPE = { rows: 16, steps: 16 };

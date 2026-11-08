@@ -30,9 +30,10 @@
 
 import { playSound } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
-import { STARTER_BEAT, createPattern } from "./pattern.js";
-import { createTapTempo, nearestStep } from "./tempo.js";
-import { createTransport } from "./transport.js";
+import { createPattern } from "../../shared/pattern.js";
+import { createScheduler } from "../../shared/scheduler.js";
+import { createTapTempo, nearestStep } from "../../shared/tempo.js";
+import { STARTER_BEAT } from "./starter-beat.js";
 
 export const DEFAULT_VOLUME = 80; // 0-100; the same as the slider's markup
 const VOLUME_SCALE = 100;
@@ -58,8 +59,10 @@ export function createSampler({
     onChange: onSongChange,
   });
 
-  const transport = createTransport({
-    audio,
+  // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
+  const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
+  const scheduler = createScheduler({
+    clock,
     steps,
     bpm: song?.bpm,
     onStep(step, time, heard) {
@@ -82,7 +85,7 @@ export function createSampler({
   function triggerPad(index, velocity = 1) {
     playSound(audio, sounds[index], velocity);
     onPadHit(index);
-    if (recording && transport.playing) recordHit(index);
+    if (recording && scheduler.playing) recordHit(index);
     selectPad(index);
   }
 
@@ -90,14 +93,14 @@ export function createSampler({
   function recordHit(index) {
     const step = nearestStep({
       now: audio.ctx.currentTime,
-      playheadTime: transport.playheadTime,
-      playheadStep: transport.playheadStep,
-      bpm: transport.bpm,
+      playheadTime: scheduler.playheadTime,
+      playheadStep: scheduler.playheadStep,
+      bpm: scheduler.bpm,
       steps,
     });
     if (step < 0) return;
     pattern.set(index, step, true);
-    transport.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
+    scheduler.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
   }
 
   // ---------- Steps ----------
@@ -118,26 +121,26 @@ export function createSampler({
     onChange();
   }
 
-  // ---------- Transport ----------
+  // ---------- Play and stop ----------
   function start() {
-    if (!transport.start()) return; // already playing
+    if (!scheduler.start()) return; // already playing
     onChange();
   }
 
   function stop() {
-    transport.stop();
+    scheduler.stop();
     onChange();
   }
 
   function toggleRec() {
     recording = !recording;
-    onMessage(recording ? (transport.playing ? "REC ON - HIT PADS" : "REC ARMED - PRESS PLAY") : "REC OFF");
+    onMessage(recording ? (scheduler.playing ? "REC ON - HIT PADS" : "REC ARMED - PRESS PLAY") : "REC OFF");
     onChange();
   }
 
   // ---------- Tempo and volume ----------
   function setBpm(value) {
-    transport.setBpm(value);
+    scheduler.setBpm(value);
     onChange();
     onSongChange();
   }
@@ -170,21 +173,21 @@ export function createSampler({
     stop,
     toggleRec,
     setBpm,
-    nudgeTempo: (delta) => setBpm(transport.bpm + delta),
+    nudgeTempo: (delta) => setBpm(scheduler.bpm + delta),
     tapTempo,
     setVolume,
-    poll: () => transport.poll(),
+    poll: () => scheduler.poll(),
 
     getState: () => ({
       selected,
       recording,
-      playing: transport.playing,
-      bpm: transport.bpm,
+      playing: scheduler.playing,
+      bpm: scheduler.bpm,
       volume,
-      playheadStep: transport.playheadStep,
+      playheadStep: scheduler.playheadStep,
       stepsOn: pattern.row(selected),
     }),
 
-    getSong: () => ({ bpm: transport.bpm, volume, pattern: pattern.snapshot() }),
+    getSong: () => ({ bpm: scheduler.bpm, volume, pattern: pattern.snapshot() }),
   };
 }
