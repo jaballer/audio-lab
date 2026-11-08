@@ -139,7 +139,7 @@ Pad 1 on steps 1, 5, 9, 11 and 13 at 120 BPM in a 4 s loop, the page's Play pres
   hits that were already queued: the scheduler queues 0.12 s ahead (`SCHEDULE_AHEAD_S` in `shared/scheduler.js`).
   In this run, one pad at 120 BPM (a step is 125 ms), that was one hit. At faster tempos, or with several pads on a
   step, more hits fall inside that window and all of them play. That was reasoned from the code, not measured.
-- **The page's Play does nothing while the device is already running from its own button.** With the clock already
+- **The page's Play does nothing while the device is already running from its own button** (the device's own Play is now followed: the sequencer steps from the device's clock, not yet tried on the hardware). With the clock already
   streaming from the device, pressing the page's Play produced no Start and none of the pattern's notes; the page's
   Play works once the device is stopped. Seen once, without reading the page's lamp state.
 - **A hit on the device's own pads plays the page's browser sound as well.** The page plays the sampler's sound for
