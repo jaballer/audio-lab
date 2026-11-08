@@ -134,8 +134,9 @@ Pad 1 on steps 1, 5, 9, 11 and 13 at 120 BPM in a 4 s loop, the page's Play pres
   Each note-off came 98 to 101 ms after its note-on.
 - **A note can sound after Stop.** A step queued ahead of the Stop click played 70 ms after the click, with its
   note-off 99 ms later, because Chrome 157 has no `MIDIOutput.clear()` (`typeof output.clear` is `undefined`), so
-  what was queued cannot be dropped. The page releases each pad after the last queued note, so the note is cut off
-  and never hangs, but a Stop can leave one extra hit of up to the lookahead.
+  what was queued cannot be dropped. The page also releases each pad at the time of the last queued note-off, which
+  is when the stray note ends anyway, so it plays its full gate and is never left held. A Stop can therefore leave
+  one extra hit of up to the lookahead.
 - **The page's Play does nothing while the device is already running from its own button.** With the clock already
   streaming from the device, pressing the page's Play produced no Start and none of the pattern's notes; the page's
   Play works once the device is stopped. Seen once, without reading the page's lamp state.

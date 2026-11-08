@@ -43,6 +43,6 @@ parts underneath. The view is shared when the second page needs it, so its API c
 ## The open question, answered by measurement
 
 Whether the device plays notes the page sends it (Pad MIDI In = On) was measured, see `docs/mpc-sample.md`: it plays
-them, on any channel and any bank, and echoes each back as a pad hit on channel 1. The page's sequencer therefore
+them (tried on channels 1, 2, 3, 9 and 16, and on banks A and B), and echoes each back as a pad hit on channel 1. The page's sequencer therefore
 sends the device its notes (`apps/mpc-sample/sequencer.js`) and `echo-guard.js` keeps the page from playing its own
 sound on top of those echoes. The browser's sounds remain a second output for a later phase (epic #63, phase 3).
