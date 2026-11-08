@@ -203,7 +203,7 @@
   outline: 3px solid #6aa8ff;
   outline-offset: 2px;
 }
-/* The lamps show the device's state, as it reports it; clicking one only asks the device. */
+/* The step keys' page buttons (previous / next). */
 .mpc-lamp {
   cursor: pointer;
   padding: 6px 12px;
@@ -217,23 +217,41 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.mpc-lamp:disabled,
-span.mpc-lamp {
+.mpc-lamp:disabled {
   cursor: default;
 }
 .mpc-lamp:focus-visible {
   outline: 3px solid #6aa8ff;
   outline-offset: 2px;
 }
-.mpc-lamp.play.on {
-  background: var(--led-green);
-  border-color: #2c7a24;
-  color: #0e2b0b;
+/* Indicator lights for the device's state, as it reports it. A dot and a label, not a button: they
+   cannot be clicked, because the page does not start or stop the device. */
+.mpc-light {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+  font:
+    800 0.7rem system-ui,
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
-.mpc-lamp.stop.on {
+.mpc-light::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8d897d;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.mpc-light.play.on::before {
+  background: var(--led-green);
+  box-shadow: 0 0 6px var(--led-green);
+}
+.mpc-light.stop.on::before {
   background: var(--led-red);
-  border-color: #7a1f19;
-  color: #fff;
+  box-shadow: 0 0 6px var(--led-red);
 }
 
 /* ---------- Step keys ---------- */
