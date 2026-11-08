@@ -16,10 +16,12 @@ The sampler's sequencer was mostly generic, so its pieces now live in `shared/` 
   `markHeard` stayed in it: it is tied to which step is next and to steps skipped after a stall, and any page that
   records live pad hits needs it.
 
-Still to be shared when the second page needs it:
+- `shared/step-keys.js` + `shared/step-keys.css`: the step-key view, with its classes renamed from the sampler's
+  unscoped `.cell`, `.step`, `.led`, `.step-group` to `step-keys-*` (see "Class names are scoped to the page" in
+  `CLAUDE.md`). The sampler passes its own group size; each page that uses it imports the stylesheet.
 
-- `apps/sampler/steps.js`: the step-key view. Its classes (`.cell`, `.step`, `.led`, `.step-group`) are not
-  page-prefixed, so sharing it means renaming them (see "Class names are scoped to the page" in `CLAUDE.md`).
+Still to be shared when a second page needs it:
+
 - `apps/sampler/song.js`: persistence, tied to the sampler's storage key and volume field. Stays app-specific until
   it is generalised on its own.
 

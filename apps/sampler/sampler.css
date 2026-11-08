@@ -255,61 +255,6 @@
   margin-bottom: 10px;
 }
 
-.steps {
-  display: grid;
-  grid-template-columns: repeat(var(--step-groups, 4), 1fr);
-  gap: 16px;
-}
-.step-group {
-  display: grid;
-  grid-template-columns: repeat(var(--step-group, 4), 1fr);
-  gap: 6px;
-}
-
-.cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.cell .led {
-  width: 70%;
-  height: 6px;
-  border-radius: 2px;
-  background: #4a4a45;
-  box-shadow: inset 0 1px 2px #000;
-}
-.cell.on .led {
-  background: var(--led-red);
-  box-shadow: 0 0 7px 1px rgba(255, 59, 47, 0.8);
-}
-.cell.now .led {
-  background: var(--led-green);
-  box-shadow: 0 0 7px 1px rgba(88, 224, 74, 0.8);
-}
-.cell.on.now .led {
-  background: #ffd04a;
-  box-shadow: 0 0 8px 2px rgba(255, 208, 74, 0.8);
-}
-
-.step {
-  width: 100%;
-  aspect-ratio: 1 / 1.25;
-  padding: 0;
-  border: 1px solid #0b0b0c;
-  border-bottom-width: 4px;
-  border-radius: 5px;
-  background: linear-gradient(180deg, #3b3b40, #1c1c1f);
-  color: #b9b6ac;
-  font: 700 0.68rem var(--mono);
-  cursor: pointer;
-}
-.step:active {
-  transform: translateY(2px);
-  border-bottom-width: 2px;
-}
-
 /* ---------- Focus ---------- */
 .knob:focus-visible,
 .fader:focus-visible {
@@ -321,10 +266,6 @@
 @media (max-width: 800px) {
   .body {
     grid-template-columns: 1fr;
-  }
-  .steps {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px 16px;
   }
 }
 
