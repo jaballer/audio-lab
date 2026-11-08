@@ -2,7 +2,7 @@
 
 A single-page drum sampler styled like a classic hardware pad sampler, built with Vite and the Web Audio API. Every sound is synthesized in the browser, so there are no sample files.
 
-**Live demo: https://jaballer.github.io/pad-sampler/**
+**Live demo: https://jaballer.github.io/audio-lab/**
 
 - 4×4 grid of 16 pads (Kick, Snare, hats, Clap, Rim, toms, Cowbell, Conga, Shaker, Bass, Crash, Ride, Zap, Blip)
 - Play pads by clicking or with the keyboard; the keys mirror the pad grid: `1 2 3 4` / `Q W E R` / `A S D F` / `Z X C V`
@@ -37,8 +37,8 @@ npm run build    # production build in dist/
 
 ```bash
 npm run build
-docker build -t pad-sampler .
-docker run --rm -p 8080:80 pad-sampler   # http://localhost:8080
+docker build -t audio-lab .
+docker run --rm -p 8080:80 audio-lab   # http://localhost:8080
 ```
 
 ## Layout

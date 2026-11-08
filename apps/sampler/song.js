@@ -9,6 +9,8 @@
 
 import { clampBpm } from "./tempo.js";
 
+// Still named after the project's old name: changing it would orphan every beat
+// already saved in visitors' browsers.
 export const SONG_KEY = "pad-sampler:song";
 
 // Bump this when the saved shape changes, and add a migration from the old
