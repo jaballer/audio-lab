@@ -86,3 +86,10 @@ export function choiceKnob(choice, choices) {
   const part = 128 / choices.length;
   return Math.min(KNOB_MAX, (choices.indexOf(choice) + 0.5) * part);
 }
+
+// Where a choice knob's dial should point once the choice is `choice`: where it is
+// now if that already means this choice, so it keeps following the hand (or the
+// hardware knob) instead of snapping to the middle; else the choice's middle.
+export function knobForChoice(current, choice, choices) {
+  return knobChoice(current, choices) === choice ? current : choiceKnob(choice, choices);
+}

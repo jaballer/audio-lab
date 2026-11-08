@@ -21,7 +21,7 @@ import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { createPadLearner } from "./pad-learner.js";
-import { GROUPS, PARAMS, choiceKnob, choiceLabel, knobChoice, positionKnob } from "./params.js";
+import { GROUPS, PARAMS, choiceLabel, knobForChoice, positionKnob } from "./params.js";
 import { createPiano } from "./piano.js";
 import { createStick } from "./stick.js";
 import { createSynthPanel } from "./synth-panel.js";
@@ -72,10 +72,9 @@ const keys = createKeysController({
     panel.showChoice(param, choice);
     const index = PARAMS.indexOf(param);
     // A dial already inside this choice's part of the travel stays where it is, so
-    // it keeps turning smoothly under the hand instead of snapping to the middle.
-    if (knobChoice(knobDials.value(index), param.choices) !== choice) {
-      knobDials.turn(index, choiceKnob(choice, param.choices), choiceLabel(choice));
-    }
+    // it keeps following the hand instead of snapping to the middle. The text is set
+    // every time: the dial moves itself while dragged, without knowing the choice's name.
+    knobDials.turn(index, knobForChoice(knobDials.value(index), choice, param.choices), choiceLabel(choice));
   },
 });
 
@@ -129,8 +128,12 @@ const handlers = {
   bend: (e) => keys.setBend(e.value),
   sustain: (e) => keys.setSustain(e.on),
   mod: (e) => keys.setMod(e.value),
-  // The on-screen controls and dials jump to the knob's position as soon as it is turned.
-  knob: (e) => keys.applyKnob(e.index, e.value),
+  knob: (e) => {
+    // The dial shows the knob's own position, even where a choice knob stays on one choice.
+    knobDials.turn(e.index, e.value);
+    // The on-screen controls jump to the knob's position as soon as it is turned.
+    keys.applyKnob(e.index, e.value);
+  },
   pad: (e) => {
     const slot = padLearner.slotFor(e.note);
     if (slot >= 0) padGrid.hit(slot, e.note, e.velocity);

@@ -7,6 +7,7 @@ import {
   clampKnob,
   isChoice,
   knobChoice,
+  knobForChoice,
   knobPosition,
   labelFor,
   positionKnob,
@@ -112,6 +113,17 @@ describe("choiceKnob", () => {
   it("puts the first choice low and the last one high", () => {
     expect(choiceKnob("sine", WAVES)).toBeLessThan(choiceKnob("sawtooth", WAVES));
     expect(choiceKnob("sawtooth", WAVES)).toBeLessThanOrEqual(127);
+  });
+});
+
+describe("knobForChoice", () => {
+  it("keeps a position that already means the choice", () => {
+    expect(knobForChoice(50, "triangle", WAVES)).toBe(50);
+    expect(knobForChoice(0, "sine", WAVES)).toBe(0);
+  });
+
+  it("moves to the middle of the choice when the position means another", () => {
+    expect(knobForChoice(50, "sawtooth", WAVES)).toBe(choiceKnob("sawtooth", WAVES));
   });
 });
 
