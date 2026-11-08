@@ -91,7 +91,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler and the MPC Sample page
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
 - `shared/audio.js` — the `AudioContext`, master volume, power on/off and first-interaction unlock, used by every app
-- `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone, MPC Sample) show until the first click or key press (hidden on touch screens)
+- `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone, MPC Sample) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
 - `shared/power.js` — what pressing a device's POWER switch does to its audio (on goes off, anything else comes on)
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers

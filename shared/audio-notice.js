@@ -3,7 +3,8 @@
 // not count, so a controller played on a fresh load looks broken. This says what
 // to do, and points at POWER when that is what was turned off. (On a phone or
 // tablet the first tap unlocks audio by itself, so base.css hides the notice
-// there: a touch screen needs no telling. The POWER light still shows the state.)
+// there until a MIDI hit makes no sound and `nudge()` brings it up. The POWER
+// light still shows the state.)
 //
 //   const notice = createAudioNotice(element);
 //   notice.update(state);   // from the audio engine's onStateChange
@@ -30,6 +31,7 @@ export function createAudioNotice(element) {
       const text = audioNoticeText(state);
       element.textContent = text;
       element.hidden = text === "";
+      if (text === "") element.classList.remove("nudge"); // a touch screen shows it only once nudged
     },
 
     // Draws the eye to the notice again, for a hit that made no sound.

@@ -18,8 +18,8 @@ Numbers link to the pull request.
 ### Changed
 
 - Every page shows the same "sound is off" banner until the first click or key press (it replaces the sampler's own
-  banner and the keys and tone pages' header line), shakes when a MIDI hit arrives while sound is off, and is hidden on
-  touch screens ([#60](https://github.com/jaballer/audio-lab/pull/60)).
+  banner and the keys and tone pages' header line), shakes when a MIDI hit arrives while sound is off, and on touch
+  screens appears only then ([#60](https://github.com/jaballer/audio-lab/pull/60)).
 
 ## 2026-11-08
 

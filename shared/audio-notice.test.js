@@ -37,6 +37,14 @@ describe("createAudioNotice", () => {
     expect(el.textContent).toBe("");
   });
 
+  it("clears the nudge when audio runs, so a touch screen hides the notice again", () => {
+    const removed = [];
+    const el = { ...fakeElement(), classList: { remove: (c) => removed.push(c), add() {} } };
+    const notice = createAudioNotice(el);
+    notice.update("running");
+    expect(removed).toEqual(["nudge"]);
+  });
+
   it("only restarts the nudge animation while the notice is showing", () => {
     const calls = [];
     const el = { ...fakeElement(), classList: { remove: () => calls.push("remove"), add: () => calls.push("add") } };

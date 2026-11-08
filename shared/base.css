@@ -458,9 +458,10 @@ a:focus-visible {
     outline: 3px solid #b08a1f;
   }
 }
-/* A touch screen unlocks audio with the first tap, so there is nothing to tell. */
+/* A touch screen unlocks audio with the first tap, so there is nothing to tell, unless a MIDI
+   controller is played first: that cannot unlock audio, and the page nudges the notice then. */
 @media (hover: none) and (pointer: coarse) {
-  .audio-notice {
+  .audio-notice:not(.nudge) {
     display: none;
   }
 }
