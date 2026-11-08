@@ -16,11 +16,6 @@
 //
 // Reference notes on the device's MIDI settings and what its guide leaves out: docs/mpc-sample.md
 //
-// `messages` are what clicking the Play and Stop lamps sends to the device's output port:
-// real-time Start and Stop, which need no SysEx permission. Stop works as sent. Start is
-// ignored on its own: the device plays only while it is also sent clock (clock-master.js).
-// The lamps follow what the device reports back either way.
-//
 // `messages.padOn` and `padOff` are what the sequencer sends to play a pad (docs/mpc-sample.md, "notes sent
 // to it"): channel 1 is enough, whatever channel is sent the device plays it and echoes it back on its own.
 //
@@ -39,8 +34,6 @@ export const mpcSample = {
   id: "mpc-sample",
   match: isMpcSample,
   messages: {
-    play: [0xfa],
-    stop: [0xfc],
     padOn: (index, bank, velocity) => [0x90, noteForPad(index, bank), velocity],
     padOff: (index, bank) => [0x80, noteForPad(index, bank), 0],
   },

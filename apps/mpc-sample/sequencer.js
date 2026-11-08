@@ -13,6 +13,7 @@
 //     clear,        // optional: drops what is queued ahead on the output
 //     messages,     // the device profile's padOn(index, bank, velocity) and padOff(index, bank)
 //     steps, bpm,
+//     pattern,      // optional: { row: [steps on] } to start with
 //   });
 //   sequencer.start(at);            // `at` in seconds: where step 0 goes, to line up with a clock sent alongside
 //   sequencer.toggle(row, step);    // row is bank * 16 + pad
@@ -20,16 +21,16 @@
 //   sequencer.poll();               // every animation frame; true when the playhead moved
 //   sequencer.stop();
 //
-// The device is clock slave to the page when the page starts it (apps/mpc-sample/clock-master.js), so
-// the page sends ticks on the beat grid that starts at the same moment as step 0: a step is a 16th note,
-// six ticks.
+// The device is the clock: the page follows its Start, Continue and ticks and sends a note for each step.
+// The page does not send a clock of its own (it made the device distort: docs/mpc-sample.md). A step is a
+// 16th note, six ticks.
 
 import { BANK_COUNT, PADS_PER_BANK, noteForPad } from "../../shared/mpc-sample.js";
 import { createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { stepSeconds } from "../../shared/tempo.js";
-import { CLOCKS_PER_BEAT, MAX_BPM, MIN_BPM } from "./clock-master.js";
 import { createEchoGuard } from "./echo-guard.js";
+import { CLOCKS_PER_BEAT, MAX_BPM, MIN_BPM } from "./transport.js";
 
 export const PAD_COUNT = BANK_COUNT * PADS_PER_BANK; // a row of the pattern per pad of every bank
 export const NOTE_VELOCITY = 100; // every step is as hard as this until a step can have its own
@@ -46,9 +47,9 @@ export const padOf = (row) => ({ index: row % PADS_PER_BANK, bank: Math.floor(ro
 // Steps in the sequence: a step is a 16th note, and a beat is the note value of the time signature.
 export const stepCount = ({ bars, numerator, denominator }) => bars * numerator * (SIXTEENTHS_PER_WHOLE / denominator);
 
-export function createSequencer({ clock, send, clear, messages, steps: initialSteps, bpm = 120 }) {
+export function createSequencer({ clock, send, clear, messages, steps: initialSteps, bpm = 120, pattern: start }) {
   let steps = initialSteps; // the loop's length
-  let pattern = createPattern(PAD_COUNT, steps); // as long as the longest loop so far
+  let pattern = createPattern(PAD_COUNT, steps, start); // as long as the longest loop so far
   const sounded = new Set(); // rows whose note was sent since the start, so Stop can release each
   let queuedUntil = 0; // the latest time (ms) anything was queued for, so Stop can release after it
   const guard = createEchoGuard();

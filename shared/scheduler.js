@@ -33,8 +33,7 @@
 
 import { clampBpm, stepSeconds } from "./tempo.js";
 
-// Not the same as the MIDI clock master's lookahead (apps/mpc-sample/clock-master.js): that is how far
-// ahead it queues ticks, this is how often the scheduler wakes.
+// How often the scheduler wakes (not how far ahead it schedules: SCHEDULE_AHEAD_S).
 export const SCHEDULER_TICK_MS = 25;
 export const SCHEDULE_AHEAD_S = 0.12; // how far ahead of the clock it schedules
 const START_DELAY_S = 0.05; // a short run-up so the first step is not already late

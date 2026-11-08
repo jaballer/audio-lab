@@ -17,9 +17,10 @@
 //   transport.setSignature(numerator, denominator);      // the project's time signature, e.g. 3, 4
 //   transport.reset();                                   // the device went away
 
-import { DEFAULT_BPM, MAX_BPM, MIN_BPM } from "./clock-master.js";
-
 export const CLOCKS_PER_BEAT = 24; // MIDI clock is 24 ticks per quarter note
+export const DEFAULT_BPM = 120; // when the device has not told the page its tempo
+export const MIN_BPM = 30;
+export const MAX_BPM = 300;
 export const BEATS_PER_BAR = 4; // the default time signature is 4/4: it is not sent, so the page is told
 export const MAX_LOOP_BARS = 128; // the longest sequence the device has
 export const MAX_BEATS_PER_BAR = 32; // the page's limit on a signature's numerator

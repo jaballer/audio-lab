@@ -46,24 +46,8 @@
           <section class="mpc-transport" aria-label="Transport">
             <div class="mpc-lamps" role="group" aria-label="What the device is doing">
               <span class="small-label">Device is</span>
-              <button
-                id="lamp-stop"
-                class="mpc-lamp stop"
-                type="button"
-                title="Stop the device and the step keys"
-                disabled
-              >
-                Stop
-              </button>
-              <button
-                id="lamp-play"
-                class="mpc-lamp play"
-                type="button"
-                title="Start the device, and play the step keys on it"
-                disabled
-              >
-                Play
-              </button>
+              <span id="lamp-stop" class="mpc-light stop">Stop</span>
+              <span id="lamp-play" class="mpc-light play">Play</span>
             </div>
             <div class="mpc-loop" role="group" aria-label="The sequence on the device">
               <label class="small-label" for="seq-bars">Sequence is</label>
@@ -79,11 +63,6 @@
                 <option value="8">8</option>
                 <option value="16">16</option>
               </select>
-            </div>
-            <div class="mpc-tempo" role="group" aria-label="The tempo this page plays at">
-              <label class="small-label" for="seq-bpm">Tempo</label>
-              <input id="seq-bpm" class="mpc-select mpc-number" type="number" min="30" max="300" step="0.1" />
-              <span class="small-label">BPM</span>
             </div>
           </section>
         </div>
@@ -112,8 +91,8 @@
         <li>Hit the pads on the device: they play the sampler's 16 sounds here, softer for a lighter hit</li>
         <li>The number in each pad is the note it sends in the current bank</li>
         <li>
-          Click a pad to pick it, then turn its step keys on. Play starts the device and sends it a note for each step
-          that is on, so it plays its own sounds in time with this page's clock. The steps are not saved yet
+          Click a pad to pick it, then turn its step keys on. Press Play on the device: this page follows its clock and
+          sends it a note for each step that is on, so it plays its own sounds. The steps are not saved yet
         </li>
         <li>
           Notes for the device to play need Pad MIDI In set to On there. It sends each one back as a pad hit: the pad
@@ -124,8 +103,8 @@
           No pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI Config)
         </li>
         <li>
-          Play does nothing? Set MIDI Sync In to Midi Clock there too. The device only plays while it is sent clock, so
-          it follows this page's tempo until it stops. Keep this tab in front while it plays
+          Steps not moving? They run only while the device plays and sends its clock: press Play on the device. Set
+          Bars, Beats and Note to match the sequence there. The page sends no clock of its own
         </li>
       </ul>
     </aside>

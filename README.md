@@ -76,10 +76,10 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `monitor.css` — monitor-only styles
 - `docs/mpc-sample.md` — reference notes on the Akai MPC Sample's MIDI settings, with links to its user guide
 - `docs/sequencer-design.md` — which parts of the sequencer are shared between pages, and why the MPC Sample page does not reuse the sampler's transport as it is
-- `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo (the Stop lamp stops the device; the Play lamp starts it by sending Start and a steady clock), and a step sequencer whose notes the device plays
+- `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo (the Play and Stop lamps only show what the device reports: the page sends no Start or clock, because the device distorted while following it), and a step sequencer that follows the device's clock and sends it a note for each step
   - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame, and plays the sampler's sounds when a pad is hit, and runs the step keys and the Play and Stop lamps
-  - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop lamps send
-  - `clock-master.js` — the MIDI clock the page sends to start the device (it plays only while sent clock): Start, then ticks queued a little ahead at a tempo; no DOM
+  - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the sequencer sends to play a pad
+  - `starter-beat.js` — the boom-tap the step keys start with on every load, so Play makes the device sound without drawing a pattern first; no DOM
   - `sequencer.js` — the step sequencer: a pattern with a row for every pad of every bank, played by the shared scheduler as notes sent to the device with timestamps; stops by releasing what sounded; no DOM
   - `echo-guard.js` — tells the device's echo of a note we sent from a hit on its pads, so the page does not play its own sound on top; no DOM
   - `pad-sound.js` — which sound a pad hit plays and how loud; drops a hit that arrives before audio is unlocked; no DOM
