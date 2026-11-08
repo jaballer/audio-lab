@@ -40,8 +40,9 @@ parts underneath. The view is shared when the second page needs it, so its API c
    `docs/mpc-sample.md`) and the master when started from its own Play button. The pattern grid is the same either
    way; what triggers a step differs.
 
-## Open question, answered by measurement
+## The open question, answered by measurement
 
-Whether the device plays notes the page sends it (Pad MIDI In = On) is not measured yet. If it does not, or it
-echoes the notes back as pad hits, the page falls back to the browser's sounds and the shared pieces above still
-apply. The results go in `docs/mpc-sample.md`.
+Whether the device plays notes the page sends it (Pad MIDI In = On) was measured, see `docs/mpc-sample.md`: it plays
+them (tried on channels 1, 2, 3, 9 and 16, and on banks A and B), and echoes each back as a pad hit on channel 1. The page's sequencer therefore
+sends the device its notes (`apps/mpc-sample/sequencer.js`) and `echo-guard.js` keeps the page from playing its own
+sound on top of those echoes. The browser's sounds remain a second output for a later phase (epic #63, phase 3).
