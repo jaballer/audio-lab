@@ -16,6 +16,25 @@ describe("page profile selection", () => {
   });
 });
 
+describe("mpcSample.messages, for playing pads", () => {
+  it("plays a pad with a note on its note, and releases it with a note off", () => {
+    expect(mpcSample.messages.padOn(0, 0, 100)).toEqual([0x90, 36, 100]);
+    expect(mpcSample.messages.padOff(0, 0)).toEqual([0x80, 36, 0]);
+    expect(mpcSample.messages.padOn(15, 1, 64)).toEqual([0x90, 67, 64]);
+  });
+
+  it("round-trips through translate: what is sent comes back as the same pad", () => {
+    for (const [index, bank] of [
+      [0, 0],
+      [7, 3],
+      [15, 7],
+    ]) {
+      const [event] = mpcSample.translate(parseMidi(mpcSample.messages.padOn(index, bank, 90)));
+      expect(event).toMatchObject({ type: "padDown", index, bank, velocity: 90 });
+    }
+  });
+});
+
 describe("mpcSample.translate", () => {
   it("reports a hit with its pad, bank, note and velocity", () => {
     expect(mpcSample.translate(noteOn(54, 101))).toEqual([
@@ -80,6 +99,7 @@ describe("mpcSample.translate: transport", () => {
 
 describe("mpcSample.messages", () => {
   it("has the real-time Start and Stop bytes for the Play and Stop lamps", () => {
-    expect(mpcSample.messages).toEqual({ play: [0xfa], stop: [0xfc] });
+    expect(mpcSample.messages.play).toEqual([0xfa]);
+    expect(mpcSample.messages.stop).toEqual([0xfc]);
   });
 });

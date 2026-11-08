@@ -21,10 +21,13 @@
 // ignored on its own: the device plays only while it is also sent clock (clock-master.js).
 // The lamps follow what the device reports back either way.
 //
+// `messages.padOn` and `padOff` are what the sequencer sends to play a pad (docs/mpc-sample.md, "notes sent
+// to it"): channel 1 is enough, whatever channel is sent the device plays it and echoes it back on its own.
+//
 // There is only this profile: a port that is not an MPC Sample gets no profile, so the
 // router ignores whatever else is plugged in.
 
-import { isMpcSample, padFromNote } from "../../shared/mpc-sample.js";
+import { isMpcSample, noteForPad, padFromNote } from "../../shared/mpc-sample.js";
 
 const KINDS = { noteOn: "padDown", noteOff: "padUp", polyAftertouch: "padPressure" };
 
@@ -35,7 +38,12 @@ const REALTIME = { 0xf8: "clock", 0xfa: "transportStart", 0xfb: "transportContin
 export const mpcSample = {
   id: "mpc-sample",
   match: isMpcSample,
-  messages: { play: [0xfa], stop: [0xfc] },
+  messages: {
+    play: [0xfa],
+    stop: [0xfc],
+    padOn: (index, bank, velocity) => [0x90, noteForPad(index, bank), velocity],
+    padOff: (index, bank) => [0x80, noteForPad(index, bank), 0],
+  },
 
   translate(msg) {
     if (msg.type === "other") {
