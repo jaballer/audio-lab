@@ -20,6 +20,9 @@ Numbers link to the pull request.
 - Every page shows the same "sound is off" banner until the first click or key press (it replaces the sampler's own
   banner and the keys and tone pages' header line), shakes when a MIDI hit arrives while sound is off, and on touch
   screens appears only then ([#60](https://github.com/jaballer/audio-lab/pull/60)).
+- MPC Sample page: the Stop and Play lamps are the buttons (Stop first, as on the device). Play starts the device by
+  sending Start and a steady clock, so the device follows the page's tempo while it plays. The separate Play and
+  Stop buttons, the Space shortcut and the Sound button are gone: the pads always play the sampler's sounds.
 
 ## 2026-11-08
 

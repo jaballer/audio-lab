@@ -77,9 +77,11 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `log.js` — the bounded message list and the running tally of notes hit; no DOM
   - `view.js` — the on-screen message list and notes table
   - `monitor.css` — monitor-only styles
-- `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo; its Play and Stop buttons ask the device to start or stop
-  - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame, and plays the sampler's sounds when a pad is hit (the Sound button turns that off)
-  - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop buttons send
+- `docs/mpc-sample.md` — reference notes on the Akai MPC Sample's MIDI settings, with links to its user guide
+- `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo (the Stop lamp stops the device; the Play lamp starts it by sending Start and a steady clock)
+  - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame, and plays the sampler's sounds when a pad is hit
+  - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop lamps send
+  - `clock-master.js` — the MIDI clock the page sends to start the device (it plays only while sent clock): Start, then ticks queued a little ahead at a tempo; no DOM
   - `pad-sound.js` — which sound a pad hit plays and how loud; drops a hit that arrives before audio is unlocked; no DOM
   - `board.js` — what the pads are doing in every bank, and which bank to show; no DOM
   - `transport.js` — whether the device is playing, its tempo and bar and beat read from the MIDI clock (a device already playing when the page connects, or one whose clock goes quiet, is noticed); no DOM

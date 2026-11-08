@@ -79,7 +79,7 @@ describe("mpcSample.translate: transport", () => {
 });
 
 describe("mpcSample.messages", () => {
-  it("has the raw messages for the Play and Stop buttons", () => {
+  it("has the real-time Start and Stop bytes for the Play and Stop lamps", () => {
     expect(mpcSample.messages).toEqual({ play: [0xfa], stop: [0xfc] });
   });
 });

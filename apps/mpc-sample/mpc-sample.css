@@ -157,8 +157,6 @@
   gap: 10px;
 }
 .mpc-lamps,
-.mpc-buttons,
-.mpc-sound,
 .mpc-loop {
   display: flex;
   align-items: center;
@@ -194,8 +192,9 @@
   outline: 3px solid #6aa8ff;
   outline-offset: 2px;
 }
-/* The lamps show the device's state; the buttons below only ask it. */
+/* The lamps show the device's state, as it reports it; clicking one only asks the device. */
 .mpc-lamp {
+  cursor: pointer;
   padding: 6px 12px;
   border: 1px solid #77736a;
   border-radius: 5px;
@@ -207,6 +206,13 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+.mpc-lamp:disabled {
+  cursor: default;
+}
+.mpc-lamp:focus-visible {
+  outline: 3px solid #6aa8ff;
+  outline-offset: 2px;
+}
 .mpc-lamp.play.on {
   background: var(--led-green);
   border-color: #2c7a24;
@@ -216,15 +222,4 @@
   background: var(--led-red);
   border-color: #7a1f19;
   color: #fff;
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Lit while the pads are making sound in the browser. */
-.mpc-sound-btn[aria-pressed="true"] {
-  background: var(--led-green);
-  border-color: #2c7a24;
-  color: #0e2b0b;
 }

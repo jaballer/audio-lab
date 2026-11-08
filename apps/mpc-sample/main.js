@@ -1,12 +1,10 @@
 // MPC Sample companion page: shows what the device's pads and transport are doing (hits,
-// velocity, pressure, bank, play/stop, tempo) so you can check it is talking to the browser,
-// and has Play and Stop buttons that ask the device to start or stop.
+// velocity, pressure, bank, play/stop, tempo) so you can check it is talking to the browser.
 //
 // The pads also play the sampler's 16 sounds through the browser, so they can be tried without
-// a sampler or a synth plugged in; the Sound button turns that off (the device has its own
-// sound, which would double up).
+// a sampler or a synth plugged in.
 //
-// This file only wires the pieces together: MIDI in and out, the state, and the views.
+// This file only wires the pieces together: MIDI in, the state, and the views.
 
 import "../../shared/base.css";
 import "./mpc-sample.css";
@@ -18,6 +16,7 @@ import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { isMpcSample } from "../../shared/mpc-sample.js";
 import { createBankStrip } from "./bank-strip.js";
+import { CLOCK_TICK_MS, DEFAULT_BPM, createClockMaster } from "./clock-master.js";
 import { createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
@@ -25,7 +24,7 @@ import { createPadGrid } from "./pad-grid.js";
 import { createPadSound } from "./pad-sound.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
-import { createTransport, normalizeSequence, toggleAction } from "./transport.js";
+import { createTransport, normalizeSequence } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
 
 const $ = (id) => document.getElementById(id);
@@ -53,35 +52,14 @@ function showSequence() {
 }
 showSequence();
 
-const SOUND_STORE_KEY = "mpc-sample.sound";
-const soundButton = $("sound-btn");
-let soundOn = loadJson(SOUND_STORE_KEY) !== false; // on unless it was turned off
 const audioNotice = createAudioNotice($("audio-notice"));
-let audioState = "closed";
-// With the page's Sound button off nothing here makes a sound, so there is nothing to explain.
-const showAudioNotice = () => audioNotice.update(soundOn ? audioState : "running");
 // The page may be opened with the device already plugged in, and a MIDI hit does not count as
 // the click a browser needs before it lets audio start, so unlock on the first click or key.
 const audio = createAudioEngine({
   volume: SOUND_VOLUME,
-  onStateChange: (state) => {
-    audioState = state;
-    showAudioNotice();
-  },
+  onStateChange: (state) => audioNotice.update(state),
 });
 audio.unlockOnInteraction();
-
-function showSound() {
-  soundButton.setAttribute("aria-pressed", String(soundOn));
-  soundButton.textContent = soundOn ? "On" : "Off";
-  showAudioNotice();
-}
-showSound();
-soundButton.addEventListener("click", () => {
-  soundOn = !soundOn;
-  showSound();
-  saveJson(SOUND_STORE_KEY, soundOn);
-});
 
 const board = createBoard();
 const transport = createTransport({
@@ -91,13 +69,18 @@ const transport = createTransport({
 });
 const grid = createPadGrid($("pads"));
 const strip = createBankStrip($("banks"));
-const lights = createTransportLights({ play: $("lamp-play"), stop: $("lamp-stop") });
+const playLamp = $("lamp-play");
+const stopLamp = $("lamp-stop");
+const lights = createTransportLights({ play: playLamp, stop: stopLamp });
 const lcd = createLcd([$("lcd-status"), $("lcd-pad"), $("lcd-vel"), $("lcd-transport")]);
-const playButton = $("play-btn");
-const stopButton = $("stop-btn");
 
 let connected = false; // is an MPC Sample among the MIDI inputs?
-let output = null; // its MIDI output port, for the Play and Stop buttons
+let output = null; // its MIDI output port, for the Play and Stop lamps
+// The device only plays while it is sent clock (see clock-master.js), so Play starts one.
+const clockMaster = createClockMaster({
+  send: (bytes, time) => output?.send(bytes, time),
+  startMessage: mpcSample.messages.play,
+});
 
 function draw() {
   const snapshot = board.snapshot();
@@ -127,13 +110,20 @@ function applyToTransport(event) {
   schedule();
 }
 
-// The lamps follow what the device reports, not these buttons, so the page never claims a
+// The lamps follow what the device reports, not these clicks, so the page never claims a
 // state the device did not confirm.
-function send(message) {
-  output?.send(message);
-}
-playButton.addEventListener("click", () => send(mpcSample.messages.play));
-stopButton.addEventListener("click", () => send(mpcSample.messages.stop));
+// A device already playing (started from its own button) is left alone: a second Start would
+// restart it.
+playLamp.addEventListener("click", () => {
+  const { state, bpm } = transport.snapshot();
+  if (!output || state === "playing") return;
+  clockMaster.start(bpm ?? DEFAULT_BPM, performance.now());
+});
+stopLamp.addEventListener("click", () => {
+  clockMaster.halt();
+  output?.send(mpcSample.messages.stop);
+});
+setInterval(() => clockMaster.tick(performance.now()), CLOCK_TICK_MS);
 
 // A field left empty or out of range goes back to the last good value instead of being used.
 function changeSequence() {
@@ -153,14 +143,6 @@ function changeSequence() {
 }
 for (const control of [barsInput, beatsInput, noteSelect]) control.addEventListener("change", changeSequence);
 
-// Space plays or stops, as on the sampler page. A focused button or field keeps its own Space.
-window.addEventListener("keydown", (event) => {
-  const inControl = event.target instanceof Element && event.target.closest("button, a, input, select, textarea");
-  if (event.code !== "Space" || event.repeat || inControl) return;
-  event.preventDefault();
-  send(mpcSample.messages[toggleAction(transport.snapshot().state)]);
-});
-
 // The clock ends when the device stops, so now and then ask whether it went quiet. This only
 // redraws; nothing is scheduled by it.
 const STALE_CHECK_MS = 250;
@@ -168,11 +150,11 @@ setInterval(() => {
   if (transport.expire(performance.now())) schedule();
 }, STALE_CHECK_MS);
 
-const padSound = createPadSound({ audio, sounds: SOUNDS, isOn: () => soundOn });
+const padSound = createPadSound({ audio, sounds: SOUNDS });
 function playPad(event) {
   applyToBoard(event);
   // A hit while audio is still locked is dropped (see pad-sound.js): point at the notice.
-  if (!padSound.hit(event) && soundOn && !audio.running) audioNotice.nudge();
+  if (!padSound.hit(event) && !audio.running) audioNotice.nudge();
 }
 
 const handlers = {
@@ -182,7 +164,11 @@ const handlers = {
   transportStart: applyToTransport,
   transportContinue: applyToTransport,
   songPosition: applyToTransport,
-  transportStop: applyToTransport,
+  // However it stopped (a button on the device, or its clock running out), the ticks end too.
+  transportStop: (event) => {
+    clockMaster.halt();
+    applyToTransport(event);
+  },
   // The tick's own arrival time, not when this runs, so a busy page does not skew the tempo.
   clock: (event, _input, time) => applyToTransport({ ...event, time }),
 };
@@ -202,7 +188,8 @@ wireMidiButton(
         transport.reset();
       }
       output = [...access.outputs.values()].find((p) => p.state !== "disconnected" && isMpcSample(p.name)) ?? null;
-      playButton.disabled = stopButton.disabled = !output;
+      playLamp.disabled = stopLamp.disabled = !output;
+      if (!output) clockMaster.halt();
       schedule();
     },
   }),

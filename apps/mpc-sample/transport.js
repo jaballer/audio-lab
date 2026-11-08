@@ -1,8 +1,7 @@
 // Whether the MPC Sample is playing, its tempo and where it is in the song. Pure: no DOM.
 //
-// The state follows what the device reports and nothing else: the page's own Play and Stop
-// buttons only ask the device, so the lights and the device cannot disagree. The tempo comes
-// from the MIDI clock, which the device sends only while playing (captured: none while idle).
+// The state follows what the device reports and nothing else, so the lights and the device
+// cannot disagree. The tempo comes from the MIDI clock, which the device sends only while playing (captured: none while idle).
 // So clock from a device the page has not heard Start from means it was already playing when
 // the page connected, and a clock that goes quiet means it stopped. The place in the song is
 // what the device says (Play sends position 0, Continue the place it resumes from), counted
@@ -40,9 +39,6 @@ const CHANGE_RATIO = 0.03;
 const DEAD_BAND = 0.2;
 const TENTH = 10; // the tempo is reported to a tenth of a BPM
 const MS_PER_MINUTE = 60000;
-
-// What a toggle (the Space key) asks the device for.
-export const toggleAction = (state) => (state === "playing" ? "stop" : "play");
 
 const isLoopBars = (bars) => Number.isInteger(bars) && bars >= 1 && bars <= MAX_LOOP_BARS;
 const isNumerator = (n) => Number.isInteger(n) && n >= 1 && n <= MAX_BEATS_PER_BAR;
