@@ -228,3 +228,57 @@ describe("one beat grid with the MIDI clock", () => {
     expect(onTimes[2]).toBeCloseTo(ticks[9 * ticksPerStep], 6);
   });
 });
+
+describe("litStep (the step the light shows)", () => {
+  it("shows no step on a page that has not played", () => {
+    const { sequencer } = setup();
+    expect(sequencer.litStep).toBe(-1);
+  });
+
+  it("follows the playhead while playing", () => {
+    const { sequencer, clock, advance } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    advance(0.01);
+    sequencer.poll();
+    expect(sequencer.litStep).toBe(sequencer.playheadStep);
+    expect(sequencer.litStep).toBeGreaterThanOrEqual(0);
+  });
+
+  it("stays on the step that played last after Stop", () => {
+    const { sequencer, clock, advance, run } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    const last = sequencer.playheadStep;
+    expect(last).toBeGreaterThan(0);
+    sequencer.stop();
+    expect(sequencer.playing).toBe(false);
+    expect(sequencer.litStep).toBe(last);
+    advance(1);
+    expect(sequencer.litStep).toBe(last);
+  });
+
+  it("clears on a fresh start, until the new playhead arrives", () => {
+    const { sequencer, clock, run } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    sequencer.stop();
+    sequencer.start();
+    expect(sequencer.litStep).toBe(-1);
+  });
+
+  it("wraps when the loop gets shorter than the lit step", () => {
+    const { sequencer, clock, run } = setup({ steps: 16, bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.9);
+    sequencer.poll();
+    sequencer.stop();
+    sequencer.setSteps(4);
+    expect(sequencer.litStep).toBeLessThan(4);
+  });
+});

@@ -175,7 +175,8 @@ function drawSteps() {
 
 // The tempo is the page's to set only while it is stopped: the clock it sends has been started at one.
 function drawPlayhead() {
-  stepKeys.paintPlayhead(sequencer.playing, sequencer.playheadStep - stepPage * STEPS_PER_PAGE);
+  // Stopped, the light stays on the step that played last (-1 lights nothing).
+  stepKeys.paintPlayhead(sequencer.litStep >= 0, sequencer.litStep - stepPage * STEPS_PER_PAGE);
   tempoInput.disabled = sequencer.playing;
 }
 
