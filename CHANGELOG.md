@@ -23,6 +23,8 @@ Numbers link to the pull request.
 
 ### Changed
 
+- MPC Sample page: Play starts the device at the Tempo field's tempo (120 BPM until it is changed), not at the
+  tempo last heard from the device.
 - Every page shows the same "sound is off" banner until the first click or key press (it replaces the sampler's own
   banner and the keys and tone pages' header line), shakes when a MIDI hit arrives while sound is off, and on touch
   screens appears only then ([#60](https://github.com/jaballer/audio-lab/pull/60)).

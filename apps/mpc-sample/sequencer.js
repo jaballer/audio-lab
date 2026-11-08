@@ -1,7 +1,9 @@
 // The step sequencer that plays the MPC Sample's own sounds: it sends the device a note for each step
 // that is on. No DOM, nothing at import time.
 //
-// The pattern has a row for every pad the device has (8 banks of 16), so any bank can be edited. The
+// The pattern has a row for every pad the device has (8 banks of 16), so any bank can be edited. It keeps
+// every step it has been given, so a sequence made shorter for a moment gets its steps back when it is
+// made longer again; only the first `steps` of them play. The
 // scheduler (shared/scheduler.js) runs on the clock it is given and reports each step with the time
 // to play it at; that time is in the same domain as Web MIDI timestamps, so the note goes out with it.
 //
@@ -43,20 +45,11 @@ export const padOf = (row) => ({ index: row % PADS_PER_BANK, bank: Math.floor(ro
 // Steps in the sequence: a step is a 16th note, and a beat is the note value of the time signature.
 export const stepCount = ({ bars, numerator, denominator }) => bars * numerator * (SIXTEENTHS_PER_WHOLE / denominator);
 
-// A pattern as pattern.snapshot() gives it, with the steps past the new length dropped.
-export function fitSteps(snapshot, steps) {
-  const fitted = {};
-  for (const [row, on] of Object.entries(snapshot)) {
-    const kept = on.filter((step) => step < steps);
-    if (kept.length) fitted[row] = kept;
-  }
-  return fitted;
-}
-
 export function createSequencer({ clock, send, clear, messages, steps: initialSteps, bpm = 120 }) {
-  let steps = initialSteps;
-  let pattern = createPattern(PAD_COUNT, steps);
+  let steps = initialSteps; // the loop's length
+  let pattern = createPattern(PAD_COUNT, steps); // as long as the longest loop so far
   const sounded = new Set(); // rows whose note was sent since the start, so Stop can release each
+  let queuedUntil = 0; // the latest time (ms) anything was queued for, so Stop can release after it
   const guard = createEchoGuard();
 
   function onStep(step, time) {
@@ -66,7 +59,9 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       const { index, bank } = padOf(row);
       const at = time * MS;
       send(messages.padOn(index, bank, NOTE_VELOCITY), at);
-      send(messages.padOff(index, bank), at + length * GATE_RATIO * MS);
+      const off = at + length * GATE_RATIO * MS;
+      send(messages.padOff(index, bank), off);
+      queuedUntil = Math.max(queuedUntil, off);
       guard.expect(noteForPad(index, bank), at, clock.now() * MS);
       sounded.add(row);
     }
@@ -78,21 +73,27 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     start: (at) => scheduler.start(at),
 
     // Notes still queued ahead are dropped, and each pad that sounded is released now, so a gated
-    // sample cannot hang on after Stop.
+    // sample cannot hang on after Stop. Not every browser can drop what is queued (Firefox has no
+    // MIDIOutput.clear), so a second release follows the last queued note: the notes that still
+    // arrive are cut short and cannot be left held. The guard keeps what it waits for, for the same
+    // reason: their echoes are still coming.
     stop() {
       scheduler.stop();
       clear?.();
+      const after = Math.max(queuedUntil, clock.now() * MS);
       for (const row of sounded) {
         const { index, bank } = padOf(row);
-        send(messages.padOff(index, bank));
+        const release = messages.padOff(index, bank);
+        send(release);
+        send(release, after);
       }
       sounded.clear();
-      guard.clear();
     },
 
     setSteps(count) {
       if (count === steps) return;
-      pattern = createPattern(PAD_COUNT, count, fitSteps(pattern.snapshot(), count));
+      // Only a longer loop than any so far needs a bigger pattern; a shorter one is a view of it.
+      if (count > pattern.steps) pattern = createPattern(PAD_COUNT, count, pattern.snapshot());
       steps = count;
       scheduler.setSteps(count);
     },

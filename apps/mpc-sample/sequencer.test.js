@@ -2,16 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SCHEDULER_TICK_MS } from "../../shared/scheduler.js";
 import { CLOCKS_PER_BEAT, FIRST_TICK_DELAY_MS, createClockMaster } from "./clock-master.js";
 import { mpcSample } from "./devices.js";
-import {
-  GATE_RATIO,
-  NOTE_VELOCITY,
-  PAD_COUNT,
-  createSequencer,
-  fitSteps,
-  padOf,
-  rowFor,
-  stepCount,
-} from "./sequencer.js";
+import { GATE_RATIO, NOTE_VELOCITY, PAD_COUNT, createSequencer, padOf, rowFor, stepCount } from "./sequencer.js";
 
 const ON = 0x90;
 const OFF = 0x80;
@@ -63,13 +54,6 @@ describe("rows and pads", () => {
   });
 });
 
-describe("fitSteps", () => {
-  it("drops the steps past the new length, and the rows left empty", () => {
-    expect(fitSteps({ 0: [0, 4, 20], 3: [30], 5: [1] }, 16)).toEqual({ 0: [0, 4], 5: [1] });
-    expect(fitSteps({ 0: [0, 4] }, 64)).toEqual({ 0: [0, 4] });
-  });
-});
-
 describe("createSequencer", () => {
   it("sends a note on and a note off for each step that is on, at the step's time", () => {
     const { sequencer, notes, advance } = setup({ bpm: 120 }); // a step is 125 ms
@@ -113,16 +97,32 @@ describe("createSequencer", () => {
     expect(times[1] - times[0]).toBeCloseTo(500);
   });
 
-  it("keeps the steps that still exist when the loop changes, and drops the others", () => {
+  it("keeps every step when the loop is made shorter, and gives them back when it is longer again", () => {
     const { sequencer } = setup({ steps: 32 });
     sequencer.toggle(0, 3);
     sequencer.toggle(0, 20);
     sequencer.setSteps(16);
     expect(sequencer.steps).toBe(16);
+    sequencer.setSteps(64);
+    expect(sequencer.steps).toBe(64);
     expect(sequencer.isOn(0, 3)).toBe(true);
-    sequencer.setSteps(32);
-    expect(sequencer.isOn(0, 20)).toBe(false); // gone for good, as on the device's shorter sequence
-    expect(sequencer.isOn(0, 3)).toBe(true);
+    expect(sequencer.isOn(0, 20)).toBe(true);
+    sequencer.toggle(0, 50); // the longer loop is editable too
+    expect(sequencer.isOn(0, 50)).toBe(true);
+  });
+
+  it("plays only the steps inside a shorter loop", () => {
+    const { sequencer, notes, run } = setup({ steps: 8, bpm: 120 });
+    sequencer.toggle(0, 1);
+    sequencer.toggle(0, 6);
+    sequencer.setSteps(4);
+    sequencer.start(0.05);
+    run(2);
+    const gaps = notes(ON)
+      .map((m, i, all) => (i ? m.time - all[i - 1].time : null))
+      .slice(1);
+    expect(notes(ON).length).toBeGreaterThan(2);
+    for (const gap of gaps) expect(gap).toBeCloseTo(500); // step 1 of a 4-step loop; step 6 never sounds
   });
 
   it("releases every pad that sounded, and drops what was queued, when it stops", () => {
@@ -134,12 +134,26 @@ describe("createSequencer", () => {
     sent.length = 0;
     sequencer.stop();
     expect(cleared).toHaveBeenCalled();
-    expect(sent.map((m) => m.bytes)).toEqual([
+    const released = sent.filter((m) => m.time === undefined).map((m) => m.bytes); // now, not queued
+    expect(released).toEqual([
       [OFF, 36, 0],
       [OFF, 41, 0],
     ]);
-    expect(sent.every((m) => m.time === undefined)).toBe(true); // now, not queued
     expect(sequencer.playing).toBe(false);
+  });
+
+  // Firefox has no MIDIOutput.clear(): what was queued ahead still arrives after Stop.
+  it("releases again after the last queued note, for a browser that cannot drop what is queued", () => {
+    const { sequencer, sent, advance } = setup({ bpm: 120 });
+    sequencer.toggle(0, 0);
+    sequencer.start(0.05);
+    advance(0);
+    const lastQueued = Math.max(...sent.map((m) => m.time ?? 0));
+    sent.length = 0;
+    sequencer.stop();
+    const later = sent.filter((m) => m.time !== undefined);
+    expect(later.map((m) => m.bytes)).toEqual([[OFF, 36, 0]]);
+    expect(later[0].time).toBeGreaterThanOrEqual(lastQueued);
   });
 
   it("sends no more after it stops", () => {
@@ -162,24 +176,22 @@ describe("createSequencer", () => {
 
   describe("the device's echo", () => {
     it("knows the notes it sent when they come back, and only those", () => {
-      const { sequencer, advance, clock } = setup();
+      const { sequencer, advance } = setup();
       sequencer.toggle(0, 0);
       sequencer.start(0.05);
       advance(0);
-      const now = clock.time * 1000;
       expect(sequencer.isEcho(37, 55)).toBe(false); // another pad
       expect(sequencer.isEcho(36, 55)).toBe(true); // the note, a few ms after it was due
       expect(sequencer.isEcho(36, 56)).toBe(false); // each note comes back once
-      expect(now).toBeGreaterThanOrEqual(0);
     });
 
-    it("forgets what it sent when it stops", () => {
+    it("still knows the echoes of notes queued before it stopped", () => {
       const { sequencer, advance } = setup();
       sequencer.toggle(0, 0);
       sequencer.start(0.05);
       advance(0);
       sequencer.stop();
-      expect(sequencer.isEcho(36, 55)).toBe(false);
+      expect(sequencer.isEcho(36, 55)).toBe(true);
     });
   });
 });
