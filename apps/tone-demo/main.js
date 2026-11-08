@@ -15,6 +15,7 @@ import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
 import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
+import { createHolds } from "../../shared/holds.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -85,23 +86,34 @@ $("delay").addEventListener("input", (e) => setDelay(Number(e.target.value)));
 $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
 
 // ---------- Keys ----------
-// A key sounds from the moment it goes down until it is let go, by pointer or by
-// Enter / Space. `held` keeps a lost pointer-up from leaving a note stuck.
-const held = new Set();
-
+// A key sounds from the moment it goes down until it is let go, by pointer, by Enter / Space on
+// the focused key, or by the computer keyboard. The same note can be held from more than one of
+// those at once; it sounds until the last lets go, so each holds it under its own source.
+const POINTER = "pointer";
+const FOCUSED_KEY = "focused key";
+const COMPUTER = "computer keyboard";
+const SOURCES = [POINTER, FOCUSED_KEY, COMPUTER];
+const holds = createHolds();
 const keyButtons = new Map(); // note -> its button, to light it however it was played
 
-function press(note) {
-  if (held.has(note)) return;
-  held.add(note);
+function press(note, source) {
+  if (!holds.press(note, source)) return; // already sounding, held by another source or this one
   keyButtons.get(note).classList.add("is-down");
   ensureVoice().synth.triggerAttack(noteName(note));
 }
 
-function release(note) {
-  if (!held.delete(note)) return;
+function stop(note) {
   keyButtons.get(note).classList.remove("is-down");
   voice.synth.triggerRelease(noteName(note));
+}
+
+function release(note, source) {
+  if (holds.release(note, source)) stop(note); // false while another source still holds it
+}
+
+// A source that goes away without letting go (the page lost focus) frees what it held.
+function releaseSource(source) {
+  for (const note of holds.releaseAll(source)) stop(note);
 }
 
 for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
@@ -117,20 +129,20 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
 
   key.addEventListener("pointerdown", (e) => {
     key.setPointerCapture(e.pointerId); // so the pointer-up arrives even if it slid off the key
-    press(note);
+    press(note, POINTER);
   });
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
-    key.addEventListener(type, () => release(note));
+    key.addEventListener(type, () => release(note, POINTER));
   }
   key.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
-    press(note);
+    press(note, FOCUSED_KEY);
   });
   key.addEventListener("keyup", (e) => {
-    if (e.key === "Enter" || e.key === " ") release(note);
+    if (e.key === "Enter" || e.key === " ") release(note, FOCUSED_KEY);
   });
-  key.addEventListener("blur", () => release(note));
+  key.addEventListener("blur", () => release(note, FOCUSED_KEY));
 
   $("keys").append(key);
 }
@@ -140,8 +152,8 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
 const computerKeys = createComputerKeys({
   target: window,
   getBase: () => FIRST_NOTE - OCTAVE, // the keys play the octave above the base
-  onNoteOn: press,
-  onNoteOff: release,
+  onNoteOn: (note) => press(note, COMPUTER),
+  onNoteOff: (note) => release(note, COMPUTER),
   ignore: (e) => e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement,
 });
 
@@ -150,7 +162,7 @@ const computerKeys = createComputerKeys({
 // the same key was pressed again. Let go of everything when the page loses focus
 // or is hidden, as the keys page does.
 function releaseAll() {
-  for (const note of [...held]) release(note);
+  for (const source of SOURCES) releaseSource(source);
   computerKeys.reset(); // so the same letter can be pressed again, its keyup never having come
 }
 window.addEventListener("blur", releaseAll);

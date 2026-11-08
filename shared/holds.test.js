@@ -110,4 +110,12 @@ describe("createHolds", () => {
       expect(holds.release(60, "midi-A")).toBe(true);
     });
   });
+
+  it("says whether a press made the note newly held, so only that one starts the sound", () => {
+    const holds = createHolds();
+    expect(holds.press(60, "midi")).toBe(true);
+    expect(holds.press(60, "keyboard")).toBe(false); // already sounding
+    expect(holds.press(60, "midi")).toBe(false); // the same source again
+    expect(holds.press(62, "midi")).toBe(true);
+  });
 });

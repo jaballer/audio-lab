@@ -1,8 +1,8 @@
 // Who is holding each note. No DOM.
 //
 //   const holds = createHolds();
-//   holds.press(60, "midi");
-//   holds.press(60, "keyboard");
+//   holds.press(60, "midi");        // true: newly held, so start the sound
+//   holds.press(60, "keyboard");    // false: already sounding
 //   holds.release(60, "midi");      // false: the keyboard still holds it
 //   holds.release(60, "keyboard");  // true: nobody does now, so stop the sound
 //   holds.releaseAll("keyboard");   // every note that source held; [60, ...] left with no holder
@@ -16,9 +16,13 @@ export function createHolds() {
   const holders = new Map(); // note -> Set of sources holding it
 
   return {
+    // True when nobody held the note before: the moment to start it. A page that starts a
+    // sound on every press can ignore this.
     press(note, source) {
-      if (!holders.has(note)) holders.set(note, new Set());
+      const wasHeld = holders.has(note);
+      if (!wasHeld) holders.set(note, new Set());
       holders.get(note).add(source);
+      return !wasHeld;
     },
 
     // True when this release leaves the note with no holder: the moment to stop it.
