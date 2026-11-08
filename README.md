@@ -59,15 +59,17 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
   - `sampler.css` — sampler-only styles
 - `keyboard.html` + `apps/keys/` — MIDI keyboard test page (notes, velocity, pitch bend, mod, sustain, CCs, pads)
-  - `main.js` — wires the page: connects MIDI and the computer keyboard to the synth and the views
+  - `main.js` — wires the page: connects MIDI and the computer keyboard to the synth, the page's state and the views
+  - `controller.js` — the page's state (held notes, pedal, joystick, CC and pad readouts) and every parameter change, in one place; no DOM
+  - `computer-keys.js` — the computer keyboard as a one-octave piano (takes its events from a target, so it is testable); no DOM of its own
   - `synth.js` — the polyphonic synth (voices, sustain pedal, pitch bend, parameters); no DOM
   - `envelope.js` — ADSR scheduling on a Web Audio `AudioParam`
-  - `params.js` — every synth parameter in one table (scale, display, knob order); adding one is one entry
+  - `params.js` — every synth parameter in one table (scale, display, knob order, labels); adding one is one entry
   - `devices.js` — device profiles: the generic keyboard and the AKAI MPK mini (knob CCs, channel-10 pads)
   - `pointer-notes.js` — which note each mouse button or finger is holding on the piano; no DOM
   - `holds.js` — who is holding each note (MIDI, computer keyboard, each finger), so a note stops only when the last holder lets go; no DOM
   - `pad-learner.js` — learns which MIDI notes are pads 1-8 and remembers them
-  - `piano.js`, `pad-grid.js`, `knob-dials.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
+  - `piano.js`, `pad-grid.js`, `knob-dials.js`, `stick.js`, `synth-panel.js`, `lcd.js` — the on-screen views (`synth-panel.js` draws the sliders and select from `params.js`, `stick.js` has the pure ball position) (`lcd.js` also has the pure text formatter)
   - `keys.css` — keys-page-only styles
 - `monitor.html` + `apps/monitor/` — MIDI monitor page: lists every message a device sends (notes, CCs, pressure, clock...) with its raw bytes, and a table of which notes were hit on which channel
   - `main.js` — wires the page: connects MIDI to the log and the view, and the pause / clear / copy / filter controls

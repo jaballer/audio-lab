@@ -55,63 +55,7 @@
           </div>
         </div>
 
-        <div class="synth">
-          <section class="env" aria-label="Envelope">
-            <div class="small-label env-title">Envelope &middot; ADSR</div>
-            <div class="env-grid">
-              <label class="env-ctl">
-                <span class="small-label">Attack</span>
-                <input id="env-attack" type="range" min="0" max="100" step="any" />
-                <output id="out-attack"></output>
-              </label>
-              <label class="env-ctl">
-                <span class="small-label">Decay</span>
-                <input id="env-decay" type="range" min="0" max="100" step="any" />
-                <output id="out-decay"></output>
-              </label>
-              <label class="env-ctl">
-                <span class="small-label">Sustain</span>
-                <input id="env-sustain" type="range" min="0" max="100" step="any" />
-                <output id="out-sustain"></output>
-              </label>
-              <label class="env-ctl">
-                <span class="small-label">Release</span>
-                <input id="env-release" type="range" min="0" max="100" step="any" />
-                <output id="out-release"></output>
-              </label>
-            </div>
-          </section>
-
-          <section class="env" aria-label="Tone">
-            <div class="small-label env-title">Tone &middot; K5&ndash;K8</div>
-            <div class="env-grid">
-              <label class="env-ctl">
-                <span class="small-label">Wave</span>
-                <select id="tone-wave">
-                  <option value="sine">Sine</option>
-                  <option value="triangle">Triangle</option>
-                  <option value="square">Square</option>
-                  <option value="sawtooth">Saw</option>
-                </select>
-              </label>
-              <label class="env-ctl">
-                <span class="small-label">Cutoff</span>
-                <input id="tone-cutoff" type="range" min="0" max="100" step="any" />
-                <output id="out-cutoff"></output>
-              </label>
-              <label class="env-ctl">
-                <span class="small-label">Resonance</span>
-                <input id="tone-resonance" type="range" min="0" max="100" step="any" />
-                <output id="out-resonance"></output>
-              </label>
-              <label class="env-ctl">
-                <span class="small-label">Volume</span>
-                <input id="tone-volume" type="range" min="0" max="100" step="any" />
-                <output id="out-volume"></output>
-              </label>
-            </div>
-          </section>
-        </div>
+        <div id="synth" class="synth"></div>
       </section>
 
       <footer class="footnote">

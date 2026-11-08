@@ -28,10 +28,10 @@ failing check blocks the deploy.
 ## Architecture rules
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
-  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `song.js`, `transport.js`, `tempo.js`, `controller.js`, `format.js`, `scales.js`,
+  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `song.js`, `transport.js`, `tempo.js`, `controller.js`, `computer-keys.js`, `format.js`, `scales.js`,
   `midi-messages.js`, `storage.js` and `audio.js` only export functions/factories. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
-  `pads.js`, `steps.js`, `tempo-knob.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
+  `pads.js`, `steps.js`, `tempo-knob.js`, `stick.js`, `synth-panel.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.
@@ -51,7 +51,7 @@ failing check blocks the deploy.
 - **Slider-to-value mappings use `shared/scales.js`**, not hand-written formulas.
 - **One place changes each value.** A parameter that can be set from a slider, a MIDI knob or a default goes
   through a single setter (see `setSlider` / `setChoice` in `keys/main.js` and `synth.set`), so the UI, the
-  audio graph and the display cannot disagree. Parameters are listed once, in `apps/keys/params.js`.
+  audio graph and the display cannot disagree. Parameters are listed once, in `apps/keys/params.js`; the page draws their controls from that table.
 - Schedule sounds at `AudioContext` times (a lookahead scheduler, `AudioParam` events), never by starting them
   directly from `setTimeout`/`setInterval` callbacks. Timers drift and stall; the audio clock does not.
 
