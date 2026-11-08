@@ -10,7 +10,7 @@
 //   const sequencer = createSequencer({
 //     clock,        // { now(): seconds }, in the domain of the timestamps `send` takes (ms / 1000)
 //     send,         // (bytes, timeMs) => void; no time means now
-//     clear,        // optional: drops what is queued ahead on the output
+//     clear,        // optional: drops what is queued ahead on the output; returns true when it could
 //     messages,     // the device profile's padOn(index, bank, velocity) and padOff(index, bank)
 //     steps, bpm,
 //   });
@@ -52,6 +52,12 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
   const sounded = new Set(); // rows whose note was sent since the start, so Stop can release each
   let queuedUntil = 0; // the latest time (ms) anything was queued for, so Stop can release after it
   const guard = createEchoGuard();
+  // The step the light stays on after Stop: the scheduler forgets its playhead, but the light keeps the
+  // step that played last. -1 until something has played.
+  let litAt = -1;
+  // The last step queued ahead that sends a note, with the time it sounds at (s): when the output cannot
+  // drop what was queued, that note still plays after Stop.
+  let lastSounding = null;
 
   // Following the device's own clock (it was started from its Play button): the steps come from its
   // ticks, so the pattern keeps the device's tempo and cannot drift from it.
@@ -75,13 +81,21 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       queuedUntil = Math.max(queuedUntil, off);
       guard.expect(noteForPad(index, bank), at, clock.now() * MS);
       sounded.add(row);
+      lastSounding = { step, time };
     }
   }
 
   const scheduler = createScheduler({ clock, steps, onStep, bpm, bpmRange: { min: MIN_BPM, max: MAX_BPM } });
 
   return {
-    start: (at) => scheduler.start(at),
+    start(at) {
+      const started = scheduler.start(at);
+      if (started) {
+        litAt = -1;
+        lastSounding = null;
+      }
+      return started;
+    },
 
     // Notes still queued ahead are dropped, and each pad that sounded is released now, so a gated
     // sample cannot hang on after Stop. Not every browser can drop what is queued (neither Firefox nor
@@ -116,12 +130,24 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     },
 
     stop() {
-      if (following) stoppedAt = Math.ceil(ticks / TICKS_PER_STEP) * TICKS_PER_STEP; // the next step, not a half one
+      if (following) {
+        litAt = followStep; // played at the tick, nothing is queued ahead
+        stoppedAt = Math.ceil(ticks / TICKS_PER_STEP) * TICKS_PER_STEP; // the next step, not a half one
+      } else if (scheduler.playing) {
+        // Steps that came due since the last animation frame have sounded already; catch the playhead up
+        // so the light stays on the one that played last.
+        scheduler.poll();
+        litAt = scheduler.playheadStep;
+      }
+      const wasPlaying = scheduler.playing;
+      const dropped = clear?.() === true;
+      // Without a way to recall what is queued, a note already sent for a later step still sounds after
+      // Stop, so the light goes to that step: the last one heard. Empty steps send nothing, so they do not count.
+      if (!dropped && wasPlaying && lastSounding && lastSounding.time > clock.now()) litAt = lastSounding.step % steps;
       following = false;
       followStep = -1;
       polledStep = -1;
       scheduler.stop();
-      clear?.();
       const after = Math.max(queuedUntil, clock.now() * MS);
       for (const row of sounded) {
         const { index, bank } = padOf(row);
@@ -138,6 +164,7 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       if (count > pattern.steps) pattern = createPattern(PAD_COUNT, count, pattern.snapshot());
       steps = count;
       scheduler.setSteps(count);
+      if (litAt >= 0) litAt %= count;
     },
 
     setBpm: (value) => scheduler.setBpm(value),
@@ -169,6 +196,10 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     },
     get playheadStep() {
       return following ? followStep : scheduler.playheadStep;
+    },
+    // The step to light: the playhead's while playing, the one it stopped on after that.
+    get litStep() {
+      return this.playing ? this.playheadStep : litAt;
     },
   };
 }

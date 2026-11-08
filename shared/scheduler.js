@@ -160,10 +160,11 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
   }
 
   // The loop got longer or shorter. A step that no longer exists cannot be next, so the count
-  // wraps; the steps already queued for the playhead wrap the same way.
+  // wraps; the steps already queued for the playhead, and the playhead itself, wrap the same way.
   function setSteps(value) {
     steps = value;
     nextStep %= steps;
+    if (playheadStep >= 0) playheadStep %= steps;
     for (const queued of visualQueue) queued.step %= steps;
     if (heardStep >= steps) forgetHeard();
   }

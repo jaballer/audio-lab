@@ -7,10 +7,10 @@ import { GATE_RATIO, NOTE_VELOCITY, PAD_COUNT, createSequencer, padOf, rowFor, s
 const ON = 0x90;
 const OFF = 0x80;
 
-function setup({ steps = 16, bpm = 120 } = {}) {
+function setup({ steps = 16, bpm = 120, canClear = true } = {}) {
   const clock = { time: 0, now: () => clock.time };
   const sent = []; // { bytes, time } as the output was given them; time is undefined for "now"
-  const cleared = vi.fn();
+  const cleared = vi.fn(() => canClear);
   const sequencer = createSequencer({
     clock,
     send: (bytes, time) => sent.push({ bytes, time }),
@@ -226,6 +226,128 @@ describe("one beat grid with the MIDI clock", () => {
     expect(onTimes[0]).toBeCloseTo(ticks[0], 6);
     expect(onTimes[1]).toBeCloseTo(ticks[3 * ticksPerStep], 6);
     expect(onTimes[2]).toBeCloseTo(ticks[9 * ticksPerStep], 6);
+  });
+});
+
+describe("litStep (the step the light shows)", () => {
+  it("shows no step on a page that has not played", () => {
+    const { sequencer } = setup();
+    expect(sequencer.litStep).toBe(-1);
+  });
+
+  it("follows the playhead while playing", () => {
+    const { sequencer, clock, advance } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    advance(0.01);
+    sequencer.poll();
+    expect(sequencer.litStep).toBe(sequencer.playheadStep);
+    expect(sequencer.litStep).toBeGreaterThanOrEqual(0);
+  });
+
+  it("stays on the step that played last after Stop", () => {
+    const { sequencer, clock, advance, run } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    const last = sequencer.playheadStep;
+    expect(last).toBeGreaterThan(0);
+    sequencer.stop();
+    expect(sequencer.playing).toBe(false);
+    expect(sequencer.litStep).toBe(last);
+    advance(1);
+    expect(sequencer.litStep).toBe(last);
+  });
+
+  it("clears on a fresh start, until the new playhead arrives", () => {
+    const { sequencer, clock, run } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    sequencer.stop();
+    sequencer.start();
+    expect(sequencer.litStep).toBe(-1);
+  });
+
+  it("wraps when the loop gets shorter than the lit step", () => {
+    const { sequencer, clock, run } = setup({ steps: 16, bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.9);
+    sequencer.poll();
+    sequencer.stop();
+    sequencer.setSteps(4);
+    expect(sequencer.litStep).toBeLessThan(4);
+  });
+
+  it("catches the playhead up to the clock before keeping it, when Stop lands between two polls", () => {
+    const { sequencer, clock, run } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    const polled = sequencer.playheadStep;
+    run(0.2); // steps have come due since the last animation frame
+    sequencer.stop();
+    expect(sequencer.litStep).toBeGreaterThan(polled);
+  });
+
+  it("wraps the lit step when the loop is made shorter while playing, then stopped", () => {
+    const { sequencer, clock, run } = setup({ steps: 16, bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.9);
+    sequencer.poll();
+    expect(sequencer.playheadStep).toBeGreaterThanOrEqual(4);
+    sequencer.setSteps(4);
+    sequencer.stop();
+    expect(sequencer.litStep).toBeLessThan(4);
+    expect(sequencer.litStep).toBeGreaterThanOrEqual(0);
+  });
+
+  it("moves to the last queued step that sends a note when the output cannot drop what was sent ahead", () => {
+    const { sequencer, clock, run } = setup({ bpm: 120, canClear: false });
+    for (let step = 0; step < 16; step++) sequencer.toggle(rowFor(0, 0), step);
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    const polled = sequencer.playheadStep;
+    sequencer.stop();
+    expect(sequencer.litStep).toBeGreaterThan(polled);
+  });
+
+  it("does not move past the playhead for queued steps that are empty, or when nothing can sound", () => {
+    const sparse = setup({ bpm: 120, canClear: false });
+    sparse.sequencer.toggle(rowFor(0, 0), 0); // only step 0 has a note, and it has long sounded
+    sparse.sequencer.start();
+    sparse.clock.time += 0.06;
+    sparse.run(0.4);
+    sparse.sequencer.poll();
+    const sparsePolled = sparse.sequencer.playheadStep;
+    sparse.sequencer.stop();
+    expect(sparse.sequencer.litStep).toBe(sparsePolled);
+
+    const empty = setup({ bpm: 120, canClear: false });
+    empty.sequencer.start();
+    empty.clock.time += 0.06;
+    empty.run(0.4);
+    empty.sequencer.poll();
+    const emptyPolled = empty.sequencer.playheadStep;
+    empty.sequencer.stop();
+    expect(empty.sequencer.litStep).toBe(emptyPolled);
+  });
+
+  it("keeps the step the device's clock played last after Stop, and clears on the next follow", () => {
+    const { sequencer } = setup({ steps: 8 });
+    expect(sequencer.litStep).toBe(-1);
+    sequencer.follow();
+    for (let i = 0; i < (CLOCKS_PER_BEAT / 4) * 3 + 1; i++) sequencer.tick(i, 120); // steps 0 to 3 played
+    expect(sequencer.litStep).toBe(3);
+    sequencer.stop();
+    expect(sequencer.litStep).toBe(3);
   });
 });
 
