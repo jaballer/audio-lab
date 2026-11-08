@@ -1,9 +1,8 @@
 // MPC Sample companion page: shows what the device's pads and transport are doing (hits,
 // velocity, pressure, bank, play/stop, tempo) so you can check it is talking to the browser.
 //
-// The pads also play the sampler's 16 sounds through the browser, so they can be tried without
-// a sampler or a synth plugged in. Below them is a step sequencer: Play starts the device with a
-// clock and sends it a note for each step that is on, so the device plays its own sounds.
+// The page makes no sound: the device plays its own samples. Below the pads is a step sequencer that
+// follows the device's clock and sends it a note for each step that is on.
 //
 // This file only wires the pieces together: MIDI in, the state, and the views.
 
@@ -13,21 +12,16 @@ import "./mpc-sample.css";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createStepKeys } from "../../shared/step-keys.js";
-import { createAudioEngine } from "../../shared/audio.js";
-import { createAudioNotice } from "../../shared/audio-notice.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { isMpcSample } from "../../shared/mpc-sample.js";
-import { togglePower } from "../../shared/power.js";
 import { createBankStrip } from "./bank-strip.js";
 import { bankLabel, createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
-import { createPadSound } from "./pad-sound.js";
 import { STARTER_BEAT } from "./starter-beat.js";
 import { createSequencer, rowFor, stepCount } from "./sequencer.js";
-import { SOUNDS } from "../../shared/sounds.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { createTransport, normalizeSequence } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
@@ -35,13 +29,10 @@ import { createTransportLights } from "./transport-lights.js";
 const $ = (id) => document.getElementById(id);
 
 const site = createSiteHeader($("site-header"), { current: "mpc-sample" });
-const header = createAppHeader($("header"), {
+createAppHeader($("header"), {
   brand: { name: "MPC ", accent: "SAMPLE" },
   sub: "Companion",
-  onPower: () => togglePower(audio),
 });
-
-const SOUND_VOLUME = 0.8; // the sampler's default volume
 
 const SEQUENCE_STORE_KEY = "mpc-sample.sequence";
 const barsInput = $("seq-bars");
@@ -57,18 +48,6 @@ function showSequence() {
   noteSelect.value = String(sequence.denominator);
 }
 showSequence();
-
-const audioNotice = createAudioNotice($("audio-notice"));
-// The page may be opened with the device already plugged in, and a MIDI hit does not count as
-// the click a browser needs before it lets audio start, so unlock on the first click or key.
-const audio = createAudioEngine({
-  volume: SOUND_VOLUME,
-  onStateChange: (state) => {
-    audioNotice.update(state);
-    header.setPowered(state === "running");
-  },
-});
-audio.unlockOnInteraction();
 
 const board = createBoard();
 const transport = createTransport({
@@ -254,17 +233,8 @@ setInterval(() => {
   schedule();
 }, STALE_CHECK_MS);
 
-const padSound = createPadSound({ audio, sounds: SOUNDS });
-function playPad(event, time) {
-  applyToBoard(event);
-  // The device echoes the notes the sequencer sends it, and its own sound is already playing them.
-  if (sequencer.isEcho(event.note, time)) return;
-  // A hit while audio is still locked is dropped (see pad-sound.js): point at the notice.
-  if (!padSound.hit(event) && !audio.running) audioNotice.nudge();
-}
-
 const handlers = {
-  padDown: (event, _input, time) => playPad(event, time),
+  padDown: applyToBoard,
   padUp: applyToBoard,
   padPressure: applyToBoard,
   transportStart: (event) => {

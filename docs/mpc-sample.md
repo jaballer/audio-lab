@@ -88,8 +88,8 @@ What this shows:
 - **It echoes them back.** Every note arrives on its input as a note on and a note off with the velocity and the
   note kept, the channel rewritten to its MIDI Out Channel (1), and our timing kept. A page that sends the
   device notes therefore also receives each one as a pad hit: `padDown` events, the pad grid lighting up, and the
-  page's own browser sound for the pad playing on top of the device's. Whatever plays notes from the page has to
-  handle that, for example by ignoring hits that arrive just after a note the page sent.
+  (the page once played its own sound for each hit, so it filtered these echoes; it now makes no sound, so they only light
+  the pad).
 - The channel rewrite means this is not MIDI Thru (which would keep channel 2) and that MIDI In Channel accepts at
   least channels 1 and 2 (probably All). Its value was not read from the device.
 - **Velocity changes the loudness.** The owner heard the velocity 25 note as quieter than the velocity 127 ones, and
@@ -151,9 +151,9 @@ Pad 1 on steps 1, 5, 9, 11 and 13 at 120 BPM in a 4 s loop, the page's Play pres
 - **The page's Play does nothing while the device is already running from its own button** (the device's own Play is now followed: the sequencer steps from the device's clock, not yet tried on the hardware). With the clock already
   streaming from the device, pressing the page's Play produced no Start and none of the pattern's notes; the page's
   Play works once the device is stopped. Seen once, without reading the page's lamp state.
-- **A hit on the device's own pads plays the page's browser sound as well.** The page plays the sampler's sound for
-  every pad hit that reaches it, so with samples on the device both sound at once. Only the echoes of the
-  sequencer's own notes are filtered. Tracked in epic #63, phase 3 (#67).
+- **Decision: the page makes no sound.** It used to play the sampler's sound for every pad hit, so with samples on the
+  device both sounded at once. The device is the sound source, so the browser sound and the echo filter were removed
+  (the sampler page still plays its own sounds). Git history has `pad-sound.js` and `echo-guard.js`.
 
 ## What the device sends, captured
 

@@ -20,7 +20,6 @@
       <span class="loading-text">Loading</span>
     </div>
     <header id="site-header"></header>
-    <div id="audio-notice" class="audio-notice" role="status" hidden></div>
     <main class="device mpc-page">
       <header id="header" class="top"></header>
 
@@ -88,15 +87,17 @@
     <aside class="help-panel" aria-labelledby="help-title">
       <h2 id="help-title" class="help-title">Help</h2>
       <ul class="help-list">
-        <li>Hit the pads on the device: they play the sampler's 16 sounds here, softer for a lighter hit</li>
+        <li>
+          Hit the pads on the device: they light up here. The page makes no sound, the device plays its own samples
+        </li>
         <li>The number in each pad is the note it sends in the current bank</li>
         <li>
           Click a pad to pick it, then turn its step keys on. Press Play on the device: this page follows its clock and
           sends it a note for each step that is on, so it plays its own sounds. The steps are not saved yet
         </li>
         <li>
-          Notes for the device to play need Pad MIDI In set to On there. It sends each one back as a pad hit: the pad
-          lights here, and the page does not play its own sound on top
+          Notes for the device to play need Pad MIDI In set to On there. It sends each one back as a pad hit, and the
+          pad lights here
         </li>
         <li><a href="monitor.html">MIDI monitor</a> shows every raw message</li>
         <li>
