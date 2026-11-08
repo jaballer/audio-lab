@@ -48,9 +48,12 @@ let voice = null; // { synth, delay }, built on the first note
 
 // Built on first use: Tone must be pointed at the shared context before it
 // creates any node, and that context does not exist until the first interaction.
+// Importing Tone has already made it a context of its own (its Transport and
+// Destination exports need one), so dispose of that one when swapping: otherwise
+// it stays open, unused, and takes up one of the browser's limited audio contexts.
 function ensureVoice() {
   if (voice) return voice;
-  Tone.setContext(audio.ensure());
+  Tone.setContext(audio.ensure(), true);
   const delay = new Tone.FeedbackDelay(DELAY_TIME, DELAY_FEEDBACK).connect(audio.master);
   const synth = new Tone.PolySynth(Tone.Synth).connect(delay);
   voice = { synth, delay };
@@ -124,3 +127,15 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
 
   $("keys").append(key);
 }
+
+// A key held while the page goes to the background (Alt-Tab, a notification,
+// another tab) never sends its keyup / pointerup, so its note would sound until
+// the same key was pressed again. Let go of everything when the page loses focus
+// or is hidden, as the keys page does.
+function releaseAll() {
+  for (const note of [...held]) release(note);
+}
+window.addEventListener("blur", releaseAll);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") releaseAll();
+});
