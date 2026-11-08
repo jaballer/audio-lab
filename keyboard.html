@@ -4,8 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PAD16 Keys</title>
+    <link rel="stylesheet" href="/shared/loading.css" />
+    <noscript
+      ><style>
+        .loading-screen {
+          display: none;
+        }
+      </style></noscript
+    >
   </head>
   <body>
+    <div id="loading" class="loading-screen" role="status">
+      <span class="loading-name">Audio <b>Lab</b></span>
+      <span class="loading-bar" aria-hidden="true"></span>
+      <span class="loading-text">Loading</span>
+    </div>
     <header id="site-header"></header>
     <main class="mpk">
       <header id="header" class="top"></header>
@@ -55,5 +68,6 @@
       </footer>
     </main>
     <script type="module" src="/apps/keys/main.js"></script>
+    <script type="module" src="/shared/loading-screen.js"></script>
   </body>
 </html>

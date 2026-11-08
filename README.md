@@ -95,6 +95,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
 - `shared/mpc-sample.js` — what is known about the Akai MPC Sample's MIDI: how to recognise its port and which pad and bank a note belongs to
+- `shared/loading-screen.js` + `shared/loading.css` — the "Loading" overlay every page starts with, so the page does not jump while its scripts build it; removed once everything has loaded
+- `shared/page-ready.js` — resolves when the page has settled (load event, fonts, two drawn frames) or after a timeout; no DOM
 - `shared/site-header.js` — the bar above the machine, the same on every page: the site name, a link to each page, and Connect MIDI, its short status and the Console button
 - `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test)
 - `shared/app-header.js` — the machine's own header: its name and tagline, the audio status and the power light
