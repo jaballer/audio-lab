@@ -4,14 +4,18 @@
 //   keys.refresh({ on, soundName });     // show which steps are on (on: booleans)
 //   keys.paintPlayhead(playing, step);   // light the step the playhead is on
 
+import { STEP_GROUP } from "./layout.js";
+
 export function createStepKeys(element, { steps, onToggle }) {
   const cells = [];
+  element.style.setProperty("--step-groups", String(steps / STEP_GROUP));
 
   let group = null;
   for (let i = 0; i < steps; i++) {
-    if (i % 4 === 0) {
+    if (i % STEP_GROUP === 0) {
       group = document.createElement("div");
       group.className = "step-group";
+      group.style.setProperty("--step-group", String(STEP_GROUP));
       element.appendChild(group);
     }
     const cell = document.createElement("div");
