@@ -186,13 +186,6 @@ kbd {
   border-bottom-width: 2px;
 }
 
-.footnote {
-  margin-top: 14px;
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-}
-
 /* ---------- Focus ---------- */
 button:focus-visible,
 a:focus-visible {
@@ -365,4 +358,38 @@ a:focus-visible {
 .site-bar a:focus-visible,
 .site-bar button:focus-visible {
   outline-color: #8ab4ff; /* the shared focus blue is too dark on the desk background */
+}
+
+/* ---------- Help panel (below the machine, outside it) ---------- */
+.help-panel {
+  width: min(980px, 100%);
+  padding: 14px 22px 16px;
+  border: 1px solid #34302b;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cfcbbd;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+.help-title {
+  margin: 0 0 6px;
+  font:
+    800 0.66rem system-ui,
+    sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a9a597;
+}
+.help-list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 1.1em;
+}
+.help-panel a {
+  color: #ffa57a;
+}
+/* The shared <kbd> has a light background, so its text must stay dark here. */
+.help-panel kbd {
+  color: var(--ink);
 }

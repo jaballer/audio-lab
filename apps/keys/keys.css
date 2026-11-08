@@ -34,9 +34,6 @@
 .mpk .brand-sub {
   color: var(--label);
 }
-.mpk .footnote {
-  color: var(--label);
-}
 .mpk .btn {
   border-color: #09090a;
   background: linear-gradient(180deg, #3b3b41, #26262a);
