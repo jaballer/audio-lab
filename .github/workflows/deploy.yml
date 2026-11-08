@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       # Lint, format check, tests and build. A failure here stops the deploy.
       - run: npm run check
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
