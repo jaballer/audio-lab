@@ -17,17 +17,16 @@ import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
-import { createComputerKeys } from "../../shared/computer-keys.js";
+import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
 import { createHolds } from "../../shared/holds.js";
 import { createPiano } from "../../shared/piano.js";
+import { DEFAULT_ECHO_TIME, ECHO_TIMES, PARAMS } from "./params.js";
 
 const $ = (id) => document.getElementById(id);
 
 const WAVES = ["sine", "triangle", "square", "sawtooth"];
 const FIRST_NOTE = 60; // middle C
 const OCTAVE = 12;
-const DELAY_TIME = "8n";
-const DELAY_FEEDBACK = 0.4;
 
 createSiteHeader($("site-header"), { current: "tone-demo", midi: false }); // no MIDI on this page
 const header = createAppHeader($("header"), {
@@ -39,7 +38,7 @@ const header = createAppHeader($("header"), {
 // ---------- Audio ----------
 const audioNotice = createAudioNotice($("audio-notice"));
 const audio = createAudioEngine({
-  volume: Number($("volume").value),
+  volume: PARAMS.volume.value,
   // Not a plain AudioContext handed to Tone: Tone's setup throws on one in Firefox, see audio.js.
   createContext: () => Tone.getContext().rawContext,
   onStateChange: (state) => {
@@ -51,14 +50,20 @@ audio.unlockOnInteraction();
 
 // The page's settings. Every change goes through setWave / setDelay, whether it
 // comes from the controls or from the defaults, so the sound and the controls agree.
-const settings = { wave: "triangle", delay: Number($("delay").value) };
+const settings = {
+  wave: "triangle",
+  delay: PARAMS.delay.value,
+  echoTime: DEFAULT_ECHO_TIME,
+  feedback: PARAMS.feedback.value,
+  release: PARAMS.release.toValue(PARAMS.release.value),
+};
 let voice = null; // { synth, delay }, built on the first note
 
 // Built on first use, after the first interaction has started the context.
 function ensureVoice() {
   if (voice) return voice;
   audio.ensure();
-  const delay = new Tone.FeedbackDelay(DELAY_TIME, DELAY_FEEDBACK).connect(audio.master);
+  const delay = new Tone.FeedbackDelay(settings.echoTime, settings.feedback).connect(audio.master);
   const synth = new Tone.PolySynth(Tone.Synth).connect(delay);
   voice = { synth, delay };
   applySettings();
@@ -67,8 +72,10 @@ function ensureVoice() {
 
 function applySettings() {
   if (!voice) return;
-  voice.synth.set({ oscillator: { type: settings.wave } });
+  voice.synth.set({ oscillator: { type: settings.wave }, envelope: { release: settings.release } });
   voice.delay.wet.value = settings.delay;
+  voice.delay.delayTime.value = settings.echoTime;
+  voice.delay.feedback.value = settings.feedback;
 }
 
 function setWave(wave) {
@@ -81,14 +88,86 @@ function setDelay(amount) {
   applySettings();
 }
 
+function setEchoTime(time) {
+  settings.echoTime = time;
+  applySettings();
+}
+
+function setFeedback(amount) {
+  settings.feedback = amount;
+  applySettings();
+}
+
+function setRelease(seconds) {
+  settings.release = seconds;
+  applySettings();
+}
+
 // ---------- Controls ----------
 for (const wave of WAVES) {
   const option = new Option(wave, wave, false, wave === settings.wave);
   $("wave").append(option);
 }
 $("wave").addEventListener("change", (e) => setWave(e.target.value));
-$("delay").addEventListener("input", (e) => setDelay(Number(e.target.value)));
-$("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
+for (const { value, label } of ECHO_TIMES) {
+  $("echo-time").append(new Option(label, value, false, value === settings.echoTime));
+}
+$("echo-time").addEventListener("change", (e) => setEchoTime(e.target.value));
+
+// Whether a menu got its focus from the mouse or touch. A pointer user picking an option expects
+// the keys to play next, but the menu keeps focus (even when the same option is picked again, so
+// there is no `change` to blur on). A keyboard user who tabbed to it is using it. Judge by the last
+// input device: clicking a label focuses its menu without a pointerdown on the menu itself.
+let lastInputWasPointer = false;
+let pointerMenu = null; // the menu focused by pointer, if any
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    lastInputWasPointer = true;
+    // A menu that already has focus (tabbed to) sends no new `focus` event when it is clicked.
+    const clicked = e.target.closest?.(".tone-control")?.querySelector("select");
+    const focused = document.activeElement instanceof HTMLSelectElement && document.activeElement;
+    pointerMenu = clicked || focused || pointerMenu;
+  },
+  true,
+);
+window.addEventListener("keydown", () => (lastInputWasPointer = false), true);
+document.addEventListener("focusin", (e) => {
+  if (e.target instanceof HTMLSelectElement) pointerMenu = lastInputWasPointer ? e.target : null;
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target === pointerMenu) pointerMenu = null;
+});
+
+// A pointer-focused menu gives its focus to the first note key, and the key must not also run the
+// menu's own type-ahead (which could change the wave).
+function menuClaimsKey(e) {
+  if (!(e.target instanceof HTMLSelectElement)) return false;
+  // Arrows, Enter and Escape are not note keys: they always belong to the menu.
+  const isNoteKey = e.key.length === 1 && COMPUTER_KEYS.includes(e.key.toLowerCase());
+  if (e.target !== pointerMenu || !isNoteKey) return true;
+  e.preventDefault();
+  e.target.blur();
+  return false;
+}
+
+// A slider's range, default and readout come from PARAMS, so the HTML holds no numbers.
+function bindSlider(id, onChange) {
+  const param = PARAMS[id];
+  const input = $(id);
+  Object.assign(input, { min: param.min, max: param.max, step: param.step, value: param.value });
+  const read = () => (param.toValue ? param.toValue(Number(input.value)) : Number(input.value));
+  const show = () => ($(`${id}-value`).textContent = param.format(read()));
+  input.addEventListener("input", () => {
+    onChange(read());
+    show();
+  });
+  show();
+}
+bindSlider("delay", setDelay);
+bindSlider("feedback", setFeedback);
+bindSlider("release", setRelease);
+bindSlider("volume", (v) => audio.setVolume(v));
 
 // ---------- Keys ----------
 // A key sounds from the moment it goes down until it is let go, by the on-screen piano or by
@@ -126,13 +205,14 @@ const piano = createPiano($("keys"), {
 });
 
 // The computer keyboard plays the same keys: A W S E D F T G Y H U J K, as on the keys page.
-// A letter typed while a menu or slider has focus is for that control, not for a note.
+// A letter typed in the menu after tabbing to it is for the menu (type-ahead), not for a note. A
+// slider takes no letters, so it never blocks the keys: clicking one must not silence the keyboard.
 const computerKeys = createComputerKeys({
   target: window,
   getBase: () => FIRST_NOTE - OCTAVE, // the keys play the octave above the base
   onNoteOn: (note) => press(note, COMPUTER),
   onNoteOff: (note) => release(note, COMPUTER),
-  ignore: (e) => e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement,
+  ignore: menuClaimsKey,
 });
 
 // A key held while the page goes to the background (Alt-Tab, a notification,

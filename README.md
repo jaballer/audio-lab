@@ -89,6 +89,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `mpc-sample.css` — page-only styles
 - `tone-demo.html` + `apps/tone-demo/` — a small synth built with [Tone.js](https://tonejs.github.io/), the only page that uses it (a feedback delay on the shared audio engine)
   - `main.js` — wires the page: points Tone at the shared `AudioContext`, builds the synth and delay, draws the keys and controls
+  - `params.js` — the controls' ranges, defaults and readout formats
   - `tone-demo.css` — demo-only styles
 - `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler and the MPC Sample page
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter

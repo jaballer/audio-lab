@@ -28,7 +28,7 @@ import { BANK_COUNT, PADS_PER_BANK, noteForPad } from "../../shared/mpc-sample.j
 import { createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { stepSeconds } from "../../shared/tempo.js";
-import { MAX_BPM, MIN_BPM } from "./clock-master.js";
+import { CLOCKS_PER_BEAT, MAX_BPM, MIN_BPM } from "./clock-master.js";
 import { createEchoGuard } from "./echo-guard.js";
 
 export const PAD_COUNT = BANK_COUNT * PADS_PER_BANK; // a row of the pattern per pad of every bank
@@ -38,6 +38,7 @@ export const NOTE_VELOCITY = 100; // every step is as hard as this until a step 
 export const GATE_RATIO = 0.8;
 const MS = 1000;
 const SIXTEENTHS_PER_WHOLE = 16;
+const TICKS_PER_STEP = CLOCKS_PER_BEAT / 4; // a step is a 16th note
 
 export const rowFor = (bank, index) => bank * PADS_PER_BANK + index;
 export const padOf = (row) => ({ index: row % PADS_PER_BANK, bank: Math.floor(row / PADS_PER_BANK) });
@@ -51,12 +52,25 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
   const sounded = new Set(); // rows whose note was sent since the start, so Stop can release each
   let queuedUntil = 0; // the latest time (ms) anything was queued for, so Stop can release after it
   const guard = createEchoGuard();
-  // The step the playhead was on when it stopped: the scheduler forgets its own, but the light stays there
-  // and a Continue resumes from it. -1 until something has played.
-  let stoppedAt = -1;
+  // The step the light stays on after Stop: the scheduler forgets its playhead, but the light keeps the
+  // step that played last. -1 until something has played.
+  let litAt = -1;
+  // The last step queued ahead that sends a note, with the time it sounds at (s): when the output cannot
+  // drop what was queued, that note still plays after Stop.
+  let lastSounding = null;
 
-  function onStep(step, time) {
-    const length = stepSeconds(scheduler.bpm);
+  // Following the device's own clock (it was started from its Play button): the steps come from its
+  // ticks, so the pattern keeps the device's tempo and cannot drift from it.
+  let following = false;
+  let ticks = 0; // ticks since the device's Start, or from the place it was set to
+  let stoppedAt = 0; // where `ticks` was when following ended, for a Continue
+  let followStep = -1;
+  let polledStep = -1;
+
+  const onStep = (step, time) => playStep(step, time, scheduler.bpm);
+
+  function playStep(step, time, bpm) {
+    const length = stepSeconds(bpm);
     for (let row = 0; row < PAD_COUNT; row++) {
       if (!pattern.isOn(row, step)) continue;
       const { index, bank } = padOf(row);
@@ -67,6 +81,7 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       queuedUntil = Math.max(queuedUntil, off);
       guard.expect(noteForPad(index, bank), at, clock.now() * MS);
       sounded.add(row);
+      lastSounding = { step, time };
     }
   }
 
@@ -75,7 +90,10 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
   return {
     start(at) {
       const started = scheduler.start(at);
-      if (started) stoppedAt = -1;
+      if (started) {
+        litAt = -1;
+        lastSounding = null;
+      }
       return started;
     },
 
@@ -84,18 +102,51 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     // Chrome 157 has MIDIOutput.clear), so a second release is sent at the time of the last queued note-off:
     // the notes that still arrive play their normal gate, and none can be left held. The guard keeps what it
     // waits for, for the same reason: their echoes are still coming.
+    // The device started itself and sends the clock: step 0 plays on its first tick.
+    // `from` is where in the song: "continue" resumes where it stopped, anything else is the start.
+    follow(from) {
+      if (following || scheduler.playing) return false;
+      following = true;
+      ticks = from === "continue" ? stoppedAt : 0;
+      followStep = -1;
+      polledStep = -1;
+      return true;
+    },
+
+    // One tick of the device's clock, `bpm` being its tempo. A note goes out at once: the tick has
+    // only just arrived, so there is no later time to queue it for.
+    tick(_time, bpm) {
+      if (!following) return;
+      if (ticks % TICKS_PER_STEP === 0) {
+        followStep = (ticks / TICKS_PER_STEP) % steps;
+        playStep(followStep, clock.now(), bpm);
+      }
+      ticks++;
+    },
+
+    // The device said where it is, in sixteenth notes (its song position).
+    seek(position) {
+      ticks = position * TICKS_PER_STEP;
+    },
+
     stop() {
-      if (scheduler.playing) {
+      if (following) {
+        litAt = followStep; // played at the tick, nothing is queued ahead
+        stoppedAt = Math.ceil(ticks / TICKS_PER_STEP) * TICKS_PER_STEP; // the next step, not a half one
+      } else if (scheduler.playing) {
         // Steps that came due since the last animation frame have sounded already; catch the playhead up
         // so the light stays on the one that played last.
         scheduler.poll();
-        stoppedAt = scheduler.playheadStep;
+        litAt = scheduler.playheadStep;
       }
-      const upcoming = scheduler.lastQueuedStep;
+      const wasPlaying = scheduler.playing;
       const dropped = clear?.() === true;
-      // Without a way to recall what is queued, the steps already sent still sound after Stop, so the
-      // light goes to the last of them: the last one heard.
-      if (!dropped && scheduler.playing && upcoming >= 0) stoppedAt = upcoming;
+      // Without a way to recall what is queued, a note already sent for a later step still sounds after
+      // Stop, so the light goes to that step: the last one heard. Empty steps send nothing, so they do not count.
+      if (!dropped && wasPlaying && lastSounding && lastSounding.time > clock.now()) litAt = lastSounding.step % steps;
+      following = false;
+      followStep = -1;
+      polledStep = -1;
       scheduler.stop();
       const after = Math.max(queuedUntil, clock.now() * MS);
       for (const row of sounded) {
@@ -113,11 +164,16 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       if (count > pattern.steps) pattern = createPattern(PAD_COUNT, count, pattern.snapshot());
       steps = count;
       scheduler.setSteps(count);
-      if (stoppedAt >= 0) stoppedAt %= count;
+      if (litAt >= 0) litAt %= count;
     },
 
     setBpm: (value) => scheduler.setBpm(value),
-    poll: () => scheduler.poll(),
+    poll() {
+      if (!following) return scheduler.poll();
+      const moved = followStep !== polledStep;
+      polledStep = followStep;
+      return moved;
+    },
     isOn: (row, step) => pattern.isOn(row, step),
     toggle: (row, step) => pattern.toggle(row, step),
     clearRow: (row) => pattern.clearRow(row),
@@ -130,17 +186,20 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       return steps;
     },
     get playing() {
-      return scheduler.playing;
+      return following || scheduler.playing;
+    },
+    get following() {
+      return following;
     },
     get bpm() {
       return scheduler.bpm;
     },
     get playheadStep() {
-      return scheduler.playheadStep;
+      return following ? followStep : scheduler.playheadStep;
     },
     // The step to light: the playhead's while playing, the one it stopped on after that.
     get litStep() {
-      return scheduler.playing ? scheduler.playheadStep : stoppedAt;
+      return this.playing ? this.playheadStep : litAt;
     },
   };
 }

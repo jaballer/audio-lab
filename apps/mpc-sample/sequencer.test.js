@@ -307,8 +307,9 @@ describe("litStep (the step the light shows)", () => {
     expect(sequencer.litStep).toBeGreaterThanOrEqual(0);
   });
 
-  it("moves to the last queued step when the output cannot drop what was sent ahead", () => {
+  it("moves to the last queued step that sends a note when the output cannot drop what was sent ahead", () => {
     const { sequencer, clock, run } = setup({ bpm: 120, canClear: false });
+    for (let step = 0; step < 16; step++) sequencer.toggle(rowFor(0, 0), step);
     sequencer.start();
     clock.time += 0.06;
     run(0.4);
@@ -316,5 +317,136 @@ describe("litStep (the step the light shows)", () => {
     const polled = sequencer.playheadStep;
     sequencer.stop();
     expect(sequencer.litStep).toBeGreaterThan(polled);
+  });
+
+  it("does not move past the playhead for queued steps that are empty, or when nothing can sound", () => {
+    const sparse = setup({ bpm: 120, canClear: false });
+    sparse.sequencer.toggle(rowFor(0, 0), 0); // only step 0 has a note, and it has long sounded
+    sparse.sequencer.start();
+    sparse.clock.time += 0.06;
+    sparse.run(0.4);
+    sparse.sequencer.poll();
+    const sparsePolled = sparse.sequencer.playheadStep;
+    sparse.sequencer.stop();
+    expect(sparse.sequencer.litStep).toBe(sparsePolled);
+
+    const empty = setup({ bpm: 120, canClear: false });
+    empty.sequencer.start();
+    empty.clock.time += 0.06;
+    empty.run(0.4);
+    empty.sequencer.poll();
+    const emptyPolled = empty.sequencer.playheadStep;
+    empty.sequencer.stop();
+    expect(empty.sequencer.litStep).toBe(emptyPolled);
+  });
+
+  it("keeps the step the device's clock played last after Stop, and clears on the next follow", () => {
+    const { sequencer } = setup({ steps: 8 });
+    expect(sequencer.litStep).toBe(-1);
+    sequencer.follow();
+    for (let i = 0; i < (CLOCKS_PER_BEAT / 4) * 3 + 1; i++) sequencer.tick(i, 120); // steps 0 to 3 played
+    expect(sequencer.litStep).toBe(3);
+    sequencer.stop();
+    expect(sequencer.litStep).toBe(3);
+  });
+});
+
+describe("following a clock the device sends", () => {
+  const TICKS_PER_STEP = CLOCKS_PER_BEAT / 4; // a step is a 16th note
+
+  it("plays step 0 on the first tick and then one step every six ticks", () => {
+    const { sequencer, notes } = setup({ steps: 4 });
+    sequencer.toggle(rowFor(0, 0), 0);
+    sequencer.toggle(rowFor(0, 1), 2);
+    sequencer.follow();
+    for (let i = 0; i < TICKS_PER_STEP * 4; i++) {
+      sequencer.tick(i, 120);
+      if (i === 0) expect(notes(ON).map((m) => m.bytes[1])).toEqual([36]);
+    }
+    expect(notes(ON).map((m) => m.bytes[1])).toEqual([36, 37]);
+  });
+
+  it("loops, and ends each note a gate's share of a step after it began", () => {
+    const { sequencer, notes } = setup({ steps: 2 });
+    sequencer.toggle(rowFor(0, 0), 0);
+    sequencer.follow();
+    for (let i = 0; i < TICKS_PER_STEP * 4; i++) sequencer.tick(i, 120);
+    expect(notes(ON)).toHaveLength(2); // step 0 comes round again after two steps
+    expect(notes(OFF)[0].time - notes(ON)[0].time).toBeCloseTo(125 * GATE_RATIO);
+  });
+
+  it("is playing while it follows, with the playhead on the step, and not after stop", () => {
+    const { sequencer } = setup({ steps: 4 });
+    expect(sequencer.following).toBe(false);
+    sequencer.follow();
+    expect(sequencer.playing).toBe(true);
+    for (let i = 0; i <= TICKS_PER_STEP; i++) sequencer.tick(i, 120);
+    expect(sequencer.poll()).toBe(true);
+    expect(sequencer.playheadStep).toBe(1);
+    expect(sequencer.poll()).toBe(false); // nothing new since
+    sequencer.stop();
+    expect(sequencer.playing).toBe(false);
+    expect(sequencer.following).toBe(false);
+  });
+
+  it("releases the pads that sounded when it stops", () => {
+    const { sequencer, notes } = setup({ steps: 4 });
+    sequencer.toggle(rowFor(0, 0), 0);
+    sequencer.follow();
+    sequencer.tick(0, 120);
+    const before = notes(OFF).length;
+    sequencer.stop();
+    expect(notes(OFF).length).toBeGreaterThan(before);
+  });
+
+  it("ignores ticks when it is not following", () => {
+    const { sequencer, sent } = setup({ steps: 4 });
+    sequencer.toggle(rowFor(0, 0), 0);
+    sequencer.tick(0, 120);
+    expect(sent).toEqual([]);
+  });
+});
+
+describe("continuing from where the device was", () => {
+  const TICKS_PER_STEP = CLOCKS_PER_BEAT / 4;
+  const runTicks = (sequencer, count) => {
+    for (let i = 0; i < count; i++) sequencer.tick(i, 120);
+  };
+
+  it("resumes on the step after the one it stopped on", () => {
+    const { sequencer } = setup({ steps: 8 });
+    sequencer.follow();
+    runTicks(sequencer, TICKS_PER_STEP * 3 + 1); // steps 0 to 3 have played, and 3 is under way
+    sequencer.stop();
+    sequencer.follow("continue");
+    sequencer.tick(0, 120);
+    expect(sequencer.poll()).toBe(true);
+    expect(sequencer.playheadStep).toBe(4);
+  });
+
+  it("starts at step 0 again on a fresh start", () => {
+    const { sequencer } = setup({ steps: 8 });
+    sequencer.follow();
+    runTicks(sequencer, TICKS_PER_STEP * 3);
+    sequencer.stop();
+    sequencer.follow();
+    sequencer.tick(0, 120);
+    expect(sequencer.playheadStep).toBe(0);
+  });
+
+  it("moves to the position the device reports, in sixteenth notes", () => {
+    const { sequencer } = setup({ steps: 8 });
+    sequencer.follow("continue");
+    sequencer.seek(5);
+    sequencer.tick(0, 120);
+    expect(sequencer.playheadStep).toBe(5);
+  });
+
+  it("wraps a position that is past the end of a shorter loop", () => {
+    const { sequencer } = setup({ steps: 8 });
+    sequencer.follow();
+    sequencer.seek(19);
+    sequencer.tick(0, 120);
+    expect(sequencer.playheadStep).toBe(3);
   });
 });

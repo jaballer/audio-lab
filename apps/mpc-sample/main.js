@@ -248,6 +248,20 @@ function stopPlayback() {
   drawSteps();
 }
 
+// A Start the page did not send came from the device's own Play button. The device then plays on its
+// own clock and ignores ours, so the pattern follows that clock instead of starting one.
+// A Continue resumes where the device was: at the song position it reports (which can arrive before or
+// after the Continue), or else where the pattern stopped.
+let reportedPosition = null;
+function followDevice(from) {
+  if (clockMaster.running || !sequencer.follow(from)) return;
+  if (reportedPosition !== null) sequencer.seek(reportedPosition);
+  reportedPosition = null;
+  site.log("Following the device's clock");
+  startPaintLoop();
+  drawSteps();
+}
+
 // The lamps follow what the device reports, not these clicks, so the page never claims a
 // state the device did not confirm.
 // A device already playing (started from its own button) or already being started from here is
@@ -309,16 +323,34 @@ const handlers = {
   padDown: (event, _input, time) => playPad(event, time),
   padUp: applyToBoard,
   padPressure: applyToBoard,
-  transportStart: applyToTransport,
-  transportContinue: applyToTransport,
-  songPosition: applyToTransport,
+  transportStart: (event) => {
+    reportedPosition = null; // a Start begins at 0, whatever was reported before
+    applyToTransport(event);
+    followDevice();
+  },
+  transportContinue: (event) => {
+    applyToTransport(event);
+    followDevice("continue");
+  },
+  songPosition: (event) => {
+    applyToTransport(event);
+    if (sequencer.following) sequencer.seek(event.position);
+    else reportedPosition = event.position;
+  },
   // However it stopped (a button on the device, or its clock running out), the ticks end too.
   transportStop: (event) => {
     stopPlayback();
     applyToTransport(event);
   },
   // The tick's own arrival time, not when this runs, so a busy page does not skew the tempo.
-  clock: (event, _input, time) => applyToTransport({ ...event, time }),
+  clock: (event, _input, time) => {
+    applyToTransport({ ...event, time });
+    // The page's tempo and bars run from ticks alone, so follow them too if no Start was heard (it can
+    // come before the page is listening). Step 0 then lands on the first tick heard, not the device's bar.
+    if (transport.snapshot().state === "playing") followDevice();
+    // The device's own clock (started from its Play button) steps the pattern.
+    sequencer.tick(time, transport.snapshot().bpm ?? sequencer.bpm);
+  },
 };
 
 wireMidiButton(
