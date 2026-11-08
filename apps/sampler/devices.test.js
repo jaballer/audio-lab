@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { selectProfile } from "../../shared/midi-devices.js";
 import { parseMidi } from "../../shared/midi-messages.js";
-import { CONTROLS, PROFILES, generic, launchpad } from "./devices.js";
+import { CONTROLS, PROFILES, generic, launchpad, mpcSample } from "./devices.js";
 
 const noteOn = (note, velocity = 100, channel = 0) => parseMidi([0x90 | channel, note, velocity]);
 const cc = (controller, value = 127) => parseMidi([0xb0, controller, value]);
@@ -58,6 +58,64 @@ describe("profile selection", () => {
   it("gives any other controller the generic profile", () => {
     expect(selectProfile(PROFILES, "IAC Driver Bus")).toBe(generic);
     expect(selectProfile(PROFILES, "")).toBe(generic);
+  });
+});
+
+describe("MPC Sample profile selection", () => {
+  // The connected controller: ALSA names its port "MPC Sample MIDI 1"; Firefox on Linux adds
+  // the client name and "client:port" numbers, and Windows can prefix "2- ".
+  it("picks the MPC Sample however the browser spells its port", () => {
+    for (const name of [
+      "MPC Sample",
+      "mpc sample",
+      "MPC Sample MIDI 1",
+      "MPC Sample:MPC Sample MIDI 1 28:0",
+      "MPC Sample MIDI 1 28:0",
+      "MPC Sample 2",
+      "2- MPC Sample",
+      "MIDIIN2 (MPC Sample)",
+    ]) {
+      expect(selectProfile(PROFILES, name)).toBe(mpcSample);
+    }
+  });
+
+  it("leaves other MPCs and unknown Sample variants to the generic profile", () => {
+    for (const name of ["MPC One", "MPC Live II", "MPC Key 37", "MPC Studio", "MPC Sampler", "MPC Sample Pro"]) {
+      expect(selectProfile(PROFILES, name)).toBe(generic);
+      expect(mpcSample.match(name)).toBe(false);
+    }
+  });
+});
+
+describe("mpcSample.translate", () => {
+  // Captured from the device: each pad bank is 16 notes, bank A from 36 and bank B from 52;
+  // pad 1 is bottom-left and sends the bank's first note. Channel 1, velocity as played.
+  it("plays pads 1-16 from notes 36-51 in bank A, keeping the velocity", () => {
+    expect(mpcSample.translate(noteOn(36, 78))).toEqual([{ type: "pad", index: 0, velocity: 78, bank: 0 }]);
+    expect(mpcSample.translate(noteOn(51, 107))).toEqual([{ type: "pad", index: 15, velocity: 107, bank: 0 }]);
+  });
+
+  it("plays the same 16 pads from every bank, and says which bank it was", () => {
+    expect(mpcSample.translate(noteOn(52, 127))).toEqual([{ type: "pad", index: 0, velocity: 127, bank: 1 }]);
+    expect(mpcSample.translate(noteOn(67, 127))).toEqual([{ type: "pad", index: 15, velocity: 127, bank: 1 }]);
+    // Bank C was not played on the device; this follows the same 16-note step.
+    expect(mpcSample.translate(noteOn(68))[0]).toMatchObject({ index: 0, bank: 2 });
+  });
+
+  it("ignores notes below the first pad", () => {
+    expect(mpcSample.translate(noteOn(35))).toEqual([]);
+    expect(mpcSample.translate(noteOn(0))).toEqual([]);
+  });
+
+  it("ignores releases, aftertouch and controllers", () => {
+    expect(mpcSample.translate(parseMidi([0x80, 36, 0]))).toEqual([]);
+    expect(mpcSample.translate(parseMidi([0x90, 36, 0]))).toEqual([]);
+    expect(mpcSample.translate(parseMidi([0xa0, 38, 104]))).toEqual([]); // poly aftertouch
+    expect(mpcSample.translate(cc(7))).toEqual([]);
+  });
+
+  it("has no lights until the device is known to take them", () => {
+    expect(mpcSample.lights).toBeUndefined();
   });
 });
 

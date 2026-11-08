@@ -3,6 +3,7 @@
 // to light the controller:
 //
 //   { type: "pad",     index, velocity }   index 0 is pad 1; velocity 1-127
+//                                          (a profile may add `bank`; the app does not use it yet)
 //   { type: "step",    index }             index 0 is step 1
 //   { type: "control", name }              one of CONTROLS
 //
@@ -121,6 +122,36 @@ export const launchpad = {
 // 1-16, and the hit's velocity sets the volume.
 const FIRST_PAD_NOTE = 36;
 
+// Akai MPC Sample, as captured from the device over USB (channel 1): its 16 pads send
+// notes 36-51 in bank A and the next block of 16 in each following bank (bank B starts at
+// 52), pad 1 first. So the pad is the position within the bank, and the bank is reported
+// beside it. The hardware has 8 banks, which would pass note 127; how it keeps them in
+// range has not been captured: only banks A and B were played, and later banks follow
+// the same 16-note step by inference.
+//
+// The name is a whitelist like the Launchpad's: after "MPC Sample" only a known port
+// decoration may follow, so another model ("MPC Sample Pro", a future one) falls back to
+// the generic profile. ALSA says "MPC Sample MIDI 1"; Firefox on Linux adds "client:port".
+const MPC_BANK_SIZE = 16; // the hardware's pads per bank, not the app's pad count
+const MPC_SAMPLE_NAME = new RegExp(String.raw`\bmpc\s+sample(?:\s+\d+)?` + PORT_DECORATION, "i");
+
+export const mpcSample = {
+  id: "mpc-sample",
+  match: (name) => MPC_SAMPLE_NAME.test(name),
+  translate(msg) {
+    if (msg.type !== "noteOn" || msg.note < FIRST_PAD_NOTE) return [];
+    const offset = msg.note - FIRST_PAD_NOTE;
+    return [
+      {
+        type: "pad",
+        index: offset % MPC_BANK_SIZE,
+        velocity: msg.velocity,
+        bank: Math.floor(offset / MPC_BANK_SIZE),
+      },
+    ];
+  },
+};
+
 export const generic = {
   id: "generic",
   match: () => true,
@@ -133,4 +164,4 @@ export const generic = {
 };
 
 // Most specific first; `generic` matches anything, so it goes last.
-export const PROFILES = [launchpad, generic];
+export const PROFILES = [launchpad, mpcSample, generic];
