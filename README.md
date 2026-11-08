@@ -79,7 +79,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `monitor.css` — monitor-only styles
 - `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by both apps
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
-- `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name
+- `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
+- `shared/app-header.js` — the header every page shares (brand, back link, Connect MIDI button and status), drawn into the page's `<header>`
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)

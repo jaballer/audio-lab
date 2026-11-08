@@ -8,6 +8,7 @@
 
 import "../../shared/base.css";
 import "./keys.css";
+import { createAppHeader } from "../../shared/app-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
@@ -30,13 +31,18 @@ const $ = (id) => document.getElementById(id);
 const KEYBOARD_SOURCE = "keyboard";
 const KEYBOARD_VELOCITY = 100; // a computer key has no velocity of its own
 
-// ---------- Audio ----------
-const audioStatus = $("audio-status");
+const header = createAppHeader($("header"), {
+  brand: { name: "KEYS" },
+  sub: "MIDI keyboard test",
+  back: { href: "./", label: "Sampler" },
+  audioStatus: true,
+});
 
+// ---------- Audio ----------
 const audio = createAudioEngine({
   volume: DEFAULT_PARAMS.volume,
   onStateChange: (state) => {
-    audioStatus.textContent = state === "running" ? "Audio: on" : "Audio: click the page to enable";
+    header.setAudioStatus(state === "running" ? "Audio: on" : "Audio: click the page to enable");
   },
 });
 audio.unlockOnInteraction(); // a MIDI message alone can't start audio
@@ -99,9 +105,6 @@ const panel = createSynthPanel($("synth"), {
 });
 
 // ---------- MIDI ----------
-const midiBtn = $("midi-btn");
-const midiStatus = $("midi-status");
-
 // What to do for each event a device profile (devices.js) can produce.
 const handlers = {
   noteOn: (e, input) => keys.noteOn(e.note, e.velocity, midiSource(input)),
@@ -137,11 +140,11 @@ function handleMidiChange(_access, inputs) {
 }
 
 wireMidiButton(
-  midiBtn,
+  header.midiButton,
   createMidiAccess({
     onMessage: createMidiRouter(PROFILES, handlers),
     onChange: handleMidiChange,
-    onStatus: (text) => (midiStatus.textContent = text),
+    onStatus: header.setMidiStatus,
   }),
 );
 

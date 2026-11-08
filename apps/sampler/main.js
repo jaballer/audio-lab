@@ -5,6 +5,7 @@
 import "../../shared/base.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
+import { createAppHeader } from "../../shared/app-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
@@ -21,6 +22,12 @@ const STEPS = 16;
 const PAD_COUNT = SOUNDS.length; // 16 pads in a 4x4 grid
 
 const $ = (id) => document.getElementById(id);
+
+const header = createAppHeader($("header"), {
+  brand: { name: "PAD", accent: "16" },
+  sub: "Digital Sampler & Sequencer",
+  powerLed: true,
+});
 
 const volInput = $("vol");
 const playBtn = $("play");
@@ -137,16 +144,14 @@ window.addEventListener("keydown", (e) => {
 });
 
 // ---------- MIDI ----------
-const midiStatus = $("midi-status");
-
 const midi = createMidi({
   ...sampler,
   padCount: PAD_COUNT,
   steps: STEPS,
-  onStatus: (text) => (midiStatus.textContent = text),
+  onStatus: header.setMidiStatus,
 });
 
-wireMidiButton($("midi-btn"), midi);
+wireMidiButton(header.midiButton, midi);
 
 // ---------- Init ----------
 sampler.selectPad(0);

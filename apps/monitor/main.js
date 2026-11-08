@@ -6,12 +6,19 @@
 
 import "../../shared/base.css";
 import "./monitor.css";
+import { createAppHeader } from "../../shared/app-header.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { KINDS, describeMessage, formatLine } from "./describe.js";
 import { createLog } from "./log.js";
 import { createMonitorView } from "./view.js";
 
 const $ = (id) => document.getElementById(id);
+
+const header = createAppHeader($("header"), {
+  brand: { name: "MIDI ", accent: "MONITOR" },
+  sub: "What your controller really sends",
+  back: { href: "./", label: "Sampler" },
+});
 
 const log = createLog();
 const view = createMonitorView({ list: $("log"), notes: $("notes-body"), sourceHead: $("notes-source-head") });
@@ -33,10 +40,10 @@ function handleMidi(input, data, timeStamp) {
 }
 
 wireMidiButton(
-  $("midi-btn"),
+  header.midiButton,
   createMidiAccess({
     onMessage: handleMidi,
-    onStatus: (text) => ($("midi-status").textContent = text),
+    onStatus: header.setMidiStatus,
     sysex: true, // the monitor shows SysEx, which the browser only delivers when asked for
   }),
 );
