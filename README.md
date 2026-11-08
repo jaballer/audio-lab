@@ -65,9 +65,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `envelope.js` — ADSR scheduling on a Web Audio `AudioParam`
   - `params.js` — every synth parameter in one table (scale, display, knob order, labels); adding one is one entry
   - `devices.js` — device profiles: the generic keyboard and the AKAI MPK mini (knob CCs, channel-10 pads)
-  - `pointer-notes.js` — which note each mouse button or finger is holding on the piano; no DOM
   - `pad-learner.js` — learns which MIDI notes are pads 1-8 and remembers them
-  - `piano.js`, `pad-grid.js`, `knob-dials.js`, `stick.js`, `synth-panel.js`, `lcd.js` — the on-screen views (`synth-panel.js` draws the sliders and select from `params.js`, `stick.js` has the pure ball position) (`lcd.js` also has the pure text formatter)
+  - `pad-grid.js`, `knob-dials.js`, `stick.js`, `synth-panel.js`, `lcd.js` — the on-screen views (`synth-panel.js` draws the sliders and select from `params.js`, `stick.js` has the pure ball position) (`lcd.js` also has the pure text formatter)
   - `keys.css` — keys-page-only styles
 - `monitor.html` + `apps/monitor/` — MIDI monitor page: lists every message a device sends (notes, CCs, pressure, clock...) with its raw bytes, and a table of which notes were hit on which channel
   - `main.js` — wires the page: connects MIDI to the log and the view, and the pause / clear / copy / filter controls
@@ -109,6 +108,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects
 - `shared/flash.js` — light an element for a moment (a pad hit), restarting the time on a repeat hit
 - `shared/holds.js` — who is holding each note (MIDI, computer keyboard, each finger), so a note stops only when the last holder lets go; no DOM; used by the keys page and the Tone.js demo
+- `shared/piano.js` + `piano.css` — the on-screen piano (lights keys, follows played notes, turns mouse/touch into notes); used by the keys page and the Tone.js demo
+- `shared/pointer-notes.js` — which note each mouse button or finger is holding on the piano; no DOM
 - `shared/computer-keys.js` — the computer keyboard as a one-octave piano (takes its events from a target, so it is testable); no DOM of its own; played by the keys page and the Tone.js demo
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
