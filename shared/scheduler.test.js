@@ -78,6 +78,34 @@ describe("createScheduler", () => {
     expect(scheduler.setBpm(999)).toBe(300);
   });
 
+  it("puts step 0 on the time it is given", () => {
+    const { scheduler, played, advance } = setup({ bpm: 120 });
+    scheduler.start(0.06); // 60 ms from now, not the usual 50 ms run-up
+    advance(0);
+    expect(played).toHaveLength(1);
+    expect(played[0][0]).toBe(0);
+    expect(played[0][1]).toBeCloseTo(0.06);
+  });
+
+  it("wraps to the new length when the loop is made shorter, and keeps going when it is longer", () => {
+    const { scheduler, played, advance, run } = setup({ steps: 16, bpm: 120 });
+    scheduler.start();
+    run(1.6); // past step 12
+    scheduler.setSteps(4);
+    played.length = 0;
+    run(1);
+    const steps = played.map(([step]) => step);
+    expect(steps.every((step) => step < 4)).toBe(true);
+    for (let i = 1; i < steps.length; i++) expect(steps[i]).toBe((steps[i - 1] + 1) % 4);
+
+    scheduler.setSteps(8);
+    played.length = 0;
+    advance(0);
+    run(2);
+    const longer = played.map(([step]) => step);
+    expect(Math.max(...longer)).toBe(7);
+  });
+
   it("reports step times in the clock's own domain, and needs no prepare", () => {
     // A clock that starts far from zero, as performance.now() / 1000 does, with no prepare().
     const clock = { time: 5000, now: () => clock.time };

@@ -16,9 +16,15 @@ Numbers link to the pull request.
   again ([#60](https://github.com/jaballer/audio-lab/pull/60)).
 - MPC Sample page: the same POWER switch, so the pads' sound can be turned off
   ([#62](https://github.com/jaballer/audio-lab/pull/62)).
+- MPC Sample page: a step sequencer. Click a pad to pick it, turn its step keys on, and Play starts the device and
+  sends it a note for each step, so it plays its own sounds in time with the page's clock. It follows the sequence's
+  bars and time signature (16 steps shown at a time), covers every pad of every bank, and has its own Tempo field.
+  The steps are not saved between visits yet.
 
 ### Changed
 
+- MPC Sample page: Play starts the device at the Tempo field's tempo (120 BPM until it is changed), not at the
+  tempo last heard from the device.
 - Every page shows the same "sound is off" banner until the first click or key press (it replaces the sampler's own
   banner and the keys and tone pages' header line), shakes when a MIDI hit arrives while sound is off, and on touch
   screens appears only then ([#60](https://github.com/jaballer/audio-lab/pull/60)).

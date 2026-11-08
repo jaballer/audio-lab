@@ -18,6 +18,11 @@
   gap: 6px;
   min-width: 0;
 }
+/* A key past the end of the sequence keeps its place in the row, so the groups line up, but is not there. */
+.step-keys-cell[hidden] {
+  display: flex;
+  visibility: hidden;
+}
 .step-keys-cell .step-keys-led {
   width: 70%;
   height: 6px;

@@ -30,7 +30,7 @@ export const MIN_BPM = 30;
 export const MAX_BPM = 300;
 export const LOOKAHEAD_MS = 100; // how far ahead ticks are queued
 export const CLOCK_TICK_MS = 25; // how often the caller should run tick()
-const FIRST_TICK_DELAY_MS = 1; // the first tick follows Start by a moment, as the MIDI spec asks
+export const FIRST_TICK_DELAY_MS = 1; // the first tick follows Start by a moment, as the MIDI spec asks
 const MS_PER_MINUTE = 60000;
 const CLOCK = [0xf8];
 
@@ -40,21 +40,14 @@ export function createClockMaster({ send, clear, startMessage }) {
   let running = false;
   let gap = 0; // ms between ticks
   let next = 0; // when the next tick is due, in the caller's clock
-  let lastBpm = null; // the tempo of the latest start: the device echoes Start and forgets its own tempo
 
   return {
     get running() {
       return running;
     },
 
-    // The tempo the latest start was sent at, or null before any.
-    get lastBpm() {
-      return lastBpm;
-    },
-
     start(bpm, now) {
-      lastBpm = clampBpm(bpm);
-      gap = MS_PER_MINUTE / (lastBpm * CLOCKS_PER_BEAT);
+      gap = MS_PER_MINUTE / (clampBpm(bpm) * CLOCKS_PER_BEAT);
       clear?.(); // ticks left from an earlier stream would overlap this one
       running = true;
       send(startMessage, now);
