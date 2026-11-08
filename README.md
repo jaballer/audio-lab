@@ -46,7 +46,9 @@ docker run --rm -p 8080:80 pad-sampler   # http://localhost:8080
 Each app is its own page with its own code; shared code lives in `shared/`.
 
 - `index.html` + `apps/sampler/` — the pad sampler
-  - `main.js` — wires the page: connects the pads, step keys, tempo knob, computer keyboard and MIDI to the sequencer and the views
+  - `main.js` — wires the page: connects the pads, step keys, tempo knob, computer keyboard and MIDI to the sampler and the views
+  - `controller.js` — the sampler's state (selected pad, recording, volume) and every action on it (hit a pad, toggle a step, record, tap tempo...), with the follow-ups each one needs (LCD message, save, redraw); no DOM
+  - `format.js` — small text helpers for the display and messages; no DOM
   - `pattern.js` — the step grid (which pad plays on which step) and the starter beat; no DOM
   - `song.js` — what is kept between visits (pattern, tempo, volume): the saved format, checking it on load, and the debounced saver; no DOM
   - `transport.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from; no DOM
