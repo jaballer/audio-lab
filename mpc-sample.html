@@ -18,13 +18,29 @@
           </div>
         </section>
 
-        <section class="lcd" aria-label="Display">
-          <div class="lcd-screen mpc-screen" role="status" aria-live="off">
-            <div class="lcd-line" id="lcd-status"></div>
-            <div class="lcd-line" id="lcd-pad"></div>
-            <div class="lcd-line" id="lcd-vel"></div>
-          </div>
-        </section>
+        <div class="mpc-side">
+          <section class="lcd" aria-label="Display">
+            <div class="lcd-screen mpc-screen" role="status" aria-live="off">
+              <div class="lcd-line" id="lcd-status"></div>
+              <div class="lcd-line" id="lcd-pad"></div>
+              <div class="lcd-line" id="lcd-vel"></div>
+              <div class="lcd-line" id="lcd-transport"></div>
+            </div>
+          </section>
+
+          <section class="mpc-transport" aria-label="Transport">
+            <div class="mpc-lamps" role="group" aria-label="What the device is doing">
+              <span class="small-label">Device is</span>
+              <span id="lamp-play" class="mpc-lamp play">Play</span>
+              <span id="lamp-stop" class="mpc-lamp stop">Stop</span>
+            </div>
+            <div class="mpc-buttons" role="group" aria-label="Ask the device">
+              <span class="small-label">Ask it to</span>
+              <button id="play-btn" class="btn btn-small" type="button" disabled>Play</button>
+              <button id="stop-btn" class="btn btn-small" type="button" disabled>Stop</button>
+            </div>
+          </section>
+        </div>
       </div>
 
       <footer class="footnote">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLcd } from "./lcd.js";
+import { formatLcd, formatTransport } from "./lcd.js";
 
 const last = { index: 2, bank: 1, note: 54, velocity: 101, pressure: 0, hits: 3 };
 
@@ -33,5 +33,20 @@ describe("formatLcd", () => {
     const text = formatLcd({ connected: true, last: { ...last, index: 0, velocity: 6, pressure: 44 } });
     expect(text[1]).toBe("PAD 01  BANK B  NOTE 54");
     expect(text[2]).toBe("VEL 006  PRESS 044  HITS 3");
+  });
+});
+
+describe("formatTransport", () => {
+  it("shows nothing known until the device has sent Play or Stop", () => {
+    expect(formatTransport({ state: "unknown", bpm: null })).toBe("TRANSPORT --  BPM --");
+  });
+
+  it("shows the play state and the tempo to a tenth", () => {
+    expect(formatTransport({ state: "playing", bpm: 93 })).toBe("PLAYING  BPM 93.0");
+    expect(formatTransport({ state: "stopped", bpm: 120.4 })).toBe("STOPPED  BPM 120.4");
+  });
+
+  it("says the tempo is not known yet while playing", () => {
+    expect(formatTransport({ state: "playing", bpm: null })).toBe("PLAYING  BPM --");
   });
 });

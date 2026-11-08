@@ -142,3 +142,50 @@
     transition: none;
   }
 }
+
+/* ---------- Transport ---------- */
+.mpc-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mpc-transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mpc-lamps,
+.mpc-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* The lamps show the device's state; the buttons below only ask it. */
+.mpc-lamp {
+  padding: 6px 12px;
+  border: 1px solid #77736a;
+  border-radius: 5px;
+  background: #cfcbbe;
+  color: var(--ink-soft);
+  font:
+    800 0.7rem system-ui,
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mpc-lamp.play.on {
+  background: var(--led-green);
+  border-color: #2c7a24;
+  color: #0e2b0b;
+}
+.mpc-lamp.stop.on {
+  background: var(--led-red);
+  border-color: #7a1f19;
+  color: #fff;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
