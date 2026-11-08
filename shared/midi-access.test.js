@@ -195,6 +195,24 @@ describe("createMidiAccess onLog", () => {
     expect(onLog).toHaveBeenCalledWith("Disconnected: MPK mini", "warn");
   });
 
+  // Two units of one controller model have the same name; only the port id tells them apart.
+  it("tells two inputs with the same name apart by port id", async () => {
+    const a = { id: "a", name: "MPK mini", state: "connected", onmidimessage: null };
+    const b = { id: "b", name: "MPK mini", state: "connected", onmidimessage: null };
+    const access = fakeAccess({ inputs: [a] });
+    const { onLog } = await withLog(access);
+    onLog.mockClear();
+
+    access.inputs.set("in1", b);
+    access.onstatechange();
+    expect(onLog).toHaveBeenCalledWith("Connected: MPK mini");
+
+    onLog.mockClear();
+    access.inputs.delete("in0");
+    access.onstatechange();
+    expect(onLog).toHaveBeenCalledWith("Disconnected: MPK mini", "warn");
+  });
+
   it("logs a refused permission prompt as an error, with the browser's reason", async () => {
     stubNavigator({
       requestMIDIAccess: vi.fn(async () => {
