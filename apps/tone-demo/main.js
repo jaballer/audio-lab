@@ -3,7 +3,7 @@
 // This is the only page that imports Tone.js. Keep it out of shared/ and the
 // other apps, or the library ends up in their bundles too.
 //
-// Tone is pointed at the shared AudioContext and its output goes into
+// The shared audio engine uses the context Tone built, and Tone's output goes into
 // audio.master, so the rule "all audio goes through shared/audio.js" still holds.
 // This file only wires the pieces together; it has no logic worth a unit test.
 
@@ -33,6 +33,8 @@ const header = createAppHeader($("header"), {
 // ---------- Audio ----------
 const audio = createAudioEngine({
   volume: Number($("volume").value),
+  // Not a plain AudioContext handed to Tone: Tone's setup throws on one in Firefox, see audio.js.
+  createContext: () => Tone.getContext().rawContext,
   onStateChange: (state) => {
     header.setAudioStatus(state === "running" ? "Audio: on" : "Audio: click the page to enable");
   },
@@ -44,14 +46,10 @@ audio.unlockOnInteraction();
 const settings = { wave: "triangle", delay: Number($("delay").value) };
 let voice = null; // { synth, delay }, built on the first note
 
-// Built on first use: Tone must be pointed at the shared context before it
-// creates any node, and that context does not exist until the first interaction.
-// Importing Tone has already made it a context of its own (its Transport and
-// Destination exports need one), so dispose of that one when swapping: otherwise
-// it stays open, unused, and takes up one of the browser's limited audio contexts.
+// Built on first use, after the first interaction has started the context.
 function ensureVoice() {
   if (voice) return voice;
-  Tone.setContext(audio.ensure(), true);
+  audio.ensure();
   const delay = new Tone.FeedbackDelay(DELAY_TIME, DELAY_FEEDBACK).connect(audio.master);
   const synth = new Tone.PolySynth(Tone.Synth).connect(delay);
   voice = { synth, delay };

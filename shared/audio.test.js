@@ -10,10 +10,22 @@ function installAudioContext() {
       this.state = "suspended";
       this.currentTime = 4;
       this.destination = { name: "destination" };
+      this.listeners = [];
       this.resume = vi.fn(() => {
         this.state = "running";
       });
       instances.push(this);
+    }
+
+    addEventListener(type, handler) {
+      this.listeners.push({ type, handler });
+    }
+
+    // What the browser does when the state changes: the property handler and every listener hear it.
+    changeState(state) {
+      this.state = state;
+      this.onstatechange?.();
+      for (const l of this.listeners) if (l.type === "statechange") l.handler();
     }
 
     createGain() {
@@ -52,6 +64,15 @@ describe("createAudioEngine", () => {
     expect(instances).toEqual([ctx]);
     expect(audio.master.gain.value).toBe(0.4);
     expect(audio.master.connect).toHaveBeenCalledWith(ctx.destination);
+  });
+
+  it("uses the context its owner builds, when it is given a way to build one", () => {
+    const instances = installAudioContext();
+    const own = new AudioContext();
+    instances.length = 0;
+    const audio = createAudioEngine({ createContext: () => own });
+    expect(audio.ensure()).toBe(own);
+    expect(instances).toHaveLength(0);
   });
 
   it("returns the same context every time", () => {
@@ -104,8 +125,19 @@ describe("createAudioEngine", () => {
       const ctx = audio.ensure();
       expect(onStateChange).toHaveBeenLastCalledWith("running");
 
-      ctx.state = "suspended";
-      ctx.onstatechange();
+      ctx.changeState("suspended");
+      expect(onStateChange).toHaveBeenLastCalledWith("suspended");
+    });
+
+    // Tone.js assigns `onstatechange` on the context it is given, which would silently replace
+    // a handler set the same way: the header then stays on "click the page to enable".
+    it("keeps reporting after a library replaces the context's onstatechange", () => {
+      installAudioContext();
+      const onStateChange = vi.fn();
+      const audio = createAudioEngine({ onStateChange });
+      const ctx = audio.ensure();
+      ctx.onstatechange = () => {};
+      ctx.changeState("suspended");
       expect(onStateChange).toHaveBeenLastCalledWith("suspended");
     });
   });
