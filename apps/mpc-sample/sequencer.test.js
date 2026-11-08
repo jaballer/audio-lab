@@ -7,10 +7,10 @@ import { GATE_RATIO, NOTE_VELOCITY, PAD_COUNT, createSequencer, padOf, rowFor, s
 const ON = 0x90;
 const OFF = 0x80;
 
-function setup({ steps = 16, bpm = 120 } = {}) {
+function setup({ steps = 16, bpm = 120, canClear = true } = {}) {
   const clock = { time: 0, now: () => clock.time };
   const sent = []; // { bytes, time } as the output was given them; time is undefined for "now"
-  const cleared = vi.fn();
+  const cleared = vi.fn(() => canClear);
   const sequencer = createSequencer({
     clock,
     send: (bytes, time) => sent.push({ bytes, time }),
@@ -305,5 +305,16 @@ describe("litStep (the step the light shows)", () => {
     sequencer.stop();
     expect(sequencer.litStep).toBeLessThan(4);
     expect(sequencer.litStep).toBeGreaterThanOrEqual(0);
+  });
+
+  it("moves to the last queued step when the output cannot drop what was sent ahead", () => {
+    const { sequencer, clock, run } = setup({ bpm: 120, canClear: false });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    const polled = sequencer.playheadStep;
+    sequencer.stop();
+    expect(sequencer.litStep).toBeGreaterThan(polled);
   });
 });

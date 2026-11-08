@@ -192,6 +192,11 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     get playheadTime() {
       return playheadTime;
     },
+    // The newest step queued for the playhead, arrived or not; -1 when none is waiting. Its notes have
+    // already gone out, so a caller that cannot recall them knows it is the last one that will sound.
+    get lastQueuedStep() {
+      return visualQueue.length ? visualQueue[visualQueue.length - 1].step : -1;
+    },
     get pendingSteps() {
       return visualQueue.length;
     },

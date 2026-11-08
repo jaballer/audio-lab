@@ -136,7 +136,11 @@ function applyToTransport(event) {
 const sequencer = createSequencer({
   clock: { now: () => performance.now() / 1000 },
   send: (bytes, time) => output?.send(bytes, time),
-  clear: () => output?.clear?.(),
+  clear: () => {
+    if (typeof output?.clear !== "function") return false; // Firefox and Chrome: queued notes still arrive
+    output.clear();
+    return true;
+  },
   messages: mpcSample.messages,
   steps: stepCount(sequence),
   bpm: sequence.bpm,

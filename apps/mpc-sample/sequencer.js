@@ -10,7 +10,7 @@
 //   const sequencer = createSequencer({
 //     clock,        // { now(): seconds }, in the domain of the timestamps `send` takes (ms / 1000)
 //     send,         // (bytes, timeMs) => void; no time means now
-//     clear,        // optional: drops what is queued ahead on the output
+//     clear,        // optional: drops what is queued ahead on the output; returns true when it could
 //     messages,     // the device profile's padOn(index, bank, velocity) and padOff(index, bank)
 //     steps, bpm,
 //   });
@@ -91,8 +91,12 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
         scheduler.poll();
         stoppedAt = scheduler.playheadStep;
       }
+      const upcoming = scheduler.lastQueuedStep;
+      const dropped = clear?.() === true;
+      // Without a way to recall what is queued, the steps already sent still sound after Stop, so the
+      // light goes to the last of them: the last one heard.
+      if (!dropped && scheduler.playing && upcoming >= 0) stoppedAt = upcoming;
       scheduler.stop();
-      clear?.();
       const after = Math.max(queuedUntil, clock.now() * MS);
       for (const row of sounded) {
         const { index, bank } = padOf(row);
