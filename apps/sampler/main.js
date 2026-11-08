@@ -14,7 +14,7 @@ import { PAD_COUNT, STEPS } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
-import { SOUNDS } from "./sounds.js";
+import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "./steps.js";
 import { createTempoKnob } from "./tempo-knob.js";
 import { BPM_MAX, BPM_MIN } from "./tempo.js";

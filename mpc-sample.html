@@ -39,6 +39,10 @@
               <button id="play-btn" class="btn btn-small" type="button" disabled>Play</button>
               <button id="stop-btn" class="btn btn-small" type="button" disabled>Stop</button>
             </div>
+            <div class="mpc-sound" role="group" aria-label="Sound in the browser">
+              <span class="small-label">Pads sound</span>
+              <button id="sound-btn" class="btn btn-small mpc-sound-btn" type="button" aria-pressed="true">On</button>
+            </div>
             <div class="mpc-loop" role="group" aria-label="The sequence on the device">
               <label class="small-label" for="seq-bars">Sequence is</label>
               <input id="seq-bars" class="mpc-select mpc-number" type="number" min="1" max="128" step="1" />
@@ -59,7 +63,8 @@
       </div>
 
       <footer class="footnote">
-        Hit the pads on the device &middot; the number in each pad is the note it sends in the current bank &middot;
+        Hit the pads on the device (they play the sampler's 16 sounds here, softer for a lighter hit) &middot; the
+        number in each pad is the note it sends in the current bank &middot;
         <a href="monitor.html">MIDI monitor</a> shows every raw message &middot; <kbd>Space</kbd> plays or stops
         &middot; no pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI
         Config)

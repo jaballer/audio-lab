@@ -1,6 +1,7 @@
 // Synthesized drum sounds, and the kit that lists them in pad order. Each sound
 // schedules itself at time `t` on the given AudioContext and connects to `out`.
 // The pieces they are built from (noise, envelopes, filters) are in dsp.js.
+// Shared because more than one page plays the kit: the sampler and the MPC Sample companion.
 
 import { envelope, filtered, noise } from "./dsp.js";
 
@@ -224,3 +225,19 @@ export const SOUNDS = [
   { id: "zap", name: "Zap", play: zap },
   { id: "blip", name: "Blip", play: blip },
 ];
+
+// A hit never goes fully silent: a velocity of 0 would otherwise do nothing at all.
+const MIN_GAIN = 0.05;
+
+// Plays one sound now through the shared audio engine. `velocity` is 0-1; a quieter hit plays
+// through its own gain stage, which a full-velocity hit skips.
+export function playSound(audio, sound, velocity = 1) {
+  const ctx = audio.ensure();
+  let out = audio.master;
+  if (velocity < 1) {
+    out = ctx.createGain();
+    out.gain.value = Math.max(velocity, MIN_GAIN);
+    out.connect(audio.master);
+  }
+  sound.play(ctx, out, ctx.currentTime);
+}

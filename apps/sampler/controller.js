@@ -28,6 +28,7 @@
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
 
+import { playSound } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
 import { STARTER_BEAT, createPattern } from "./pattern.js";
 import { createTapTempo, nearestStep } from "./tempo.js";
@@ -35,8 +36,6 @@ import { createTransport } from "./transport.js";
 
 export const DEFAULT_VOLUME = 80; // 0-100; the same as the slider's markup
 const VOLUME_SCALE = 100;
-// A hit never goes fully silent: a velocity of 0 would otherwise do nothing at all.
-const MIN_GAIN = 0.05;
 
 const noop = () => {};
 
@@ -79,16 +78,9 @@ export function createSampler({
     onChange();
   }
 
-  // velocity is 0-1; a quieter hit plays through its own gain stage.
+  // velocity is 0-1.
   function triggerPad(index, velocity = 1) {
-    const ctx = audio.ensure();
-    let out = audio.master;
-    if (velocity < 1) {
-      out = ctx.createGain();
-      out.gain.value = Math.max(velocity, MIN_GAIN);
-      out.connect(audio.master);
-    }
-    sounds[index].play(ctx, out, ctx.currentTime);
+    playSound(audio, sounds[index], velocity);
     onPadHit(index);
     if (recording && transport.playing) recordHit(index);
     selectPad(index);

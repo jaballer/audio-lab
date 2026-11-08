@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SOUNDS } from "./sounds.js";
+import { SOUNDS, playSound } from "./sounds.js";
 
 // How a sound sounds can only be judged by ear. What can be checked here is that
 // each one schedules cleanly: starts nothing before its time, stops everything
@@ -142,5 +142,47 @@ describe("SOUNDS", () => {
     snare.play(second.ctx, second.out, WHEN);
     expect(second.ctx.createBuffer).toHaveBeenCalledTimes(1);
     expect(second.ctx.createBuffer.mock.calls[0][2]).toBe(22050);
+  });
+});
+
+describe("playSound", () => {
+  // A stand-in engine: ensure() hands back a context whose gains record their level and target.
+  function fakeEngine() {
+    const master = { name: "master" };
+    const gains = [];
+    const ctx = {
+      currentTime: 4,
+      createGain: () => {
+        const gain = { gain: { value: 1 }, connect: vi.fn() };
+        gains.push(gain);
+        return gain;
+      },
+    };
+    return { audio: { ensure: () => ctx, master }, ctx, master, gains };
+  }
+  const probe = () => ({ play: vi.fn() });
+
+  it("plays at the context's current time straight into the master at full velocity", () => {
+    const { audio, ctx, master, gains } = fakeEngine();
+    const sound = probe();
+    playSound(audio, sound);
+    expect(sound.play).toHaveBeenCalledWith(ctx, master, 4);
+    expect(gains).toHaveLength(0);
+  });
+
+  it("routes a softer hit through its own gain stage into the master", () => {
+    const { audio, master, gains } = fakeEngine();
+    const sound = probe();
+    playSound(audio, sound, 0.4);
+    expect(gains).toHaveLength(1);
+    expect(gains[0].gain.value).toBe(0.4);
+    expect(gains[0].connect).toHaveBeenCalledWith(master);
+    expect(sound.play.mock.calls[0][1]).toBe(gains[0]);
+  });
+
+  it("never lets a hit go fully silent", () => {
+    const { audio, gains } = fakeEngine();
+    playSound(audio, probe(), 0);
+    expect(gains[0].gain.value).toBeGreaterThan(0);
   });
 });
