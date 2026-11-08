@@ -8,6 +8,11 @@ Numbers link to the pull request.
 
 ## [Unreleased]
 
+### Added
+
+- Keys page: the K1–K8 dials can be turned with the mouse (drag, scroll or arrow keys), and they follow the sliders
+  ([#57](https://github.com/jaballer/audio-lab/pull/57)).
+
 ## 2026-11-08
 
 ### Added
