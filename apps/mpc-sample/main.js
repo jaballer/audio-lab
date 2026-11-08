@@ -155,6 +155,8 @@ const stepKeys = createStepKeys($("seq-steps"), {
 const stepsPrev = $("seq-prev");
 const stepsNext = $("seq-next");
 
+const lastPage = () => Math.ceil(sequencer.steps / STEPS_PER_PAGE) - 1;
+
 function drawSteps() {
   const first = stepPage * STEPS_PER_PAGE;
   const row = rowFor(selected.bank, selected.index);
@@ -199,7 +201,7 @@ stepsPrev.addEventListener("click", () => {
   drawSteps();
 });
 stepsNext.addEventListener("click", () => {
-  stepPage = Math.min(Math.ceil(sequencer.steps / STEPS_PER_PAGE) - 1, stepPage + 1);
+  stepPage = Math.min(lastPage(), stepPage + 1);
   drawSteps();
 });
 $("seq-clear-pad").addEventListener("click", () => {
@@ -228,9 +230,8 @@ function haltClock() {
 // beats. Both begin a moment from now, so the first notes and ticks are queued before they are due.
 const RUNUP_MS = 60;
 function startPlayback() {
-  const bpm = sequencer.setBpm(sequence.bpm);
   const at = performance.now() + RUNUP_MS;
-  startClock(bpm, at);
+  startClock(sequencer.bpm, at); // the tempo field's, which changeSequence has already given the sequencer
   sequencer.start((at + FIRST_TICK_DELAY_MS) / 1000);
   startPaintLoop();
   drawSteps();
@@ -273,7 +274,7 @@ function changeSequence() {
   transport.setSignature(sequence.numerator, sequence.denominator);
   sequencer.setSteps(stepCount(sequence));
   sequencer.setBpm(sequence.bpm);
-  stepPage = Math.min(stepPage, Math.ceil(sequencer.steps / STEPS_PER_PAGE) - 1);
+  stepPage = Math.min(stepPage, lastPage());
   saveJson(SEQUENCE_STORE_KEY, sequence);
   drawSteps();
   schedule();

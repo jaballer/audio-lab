@@ -40,21 +40,14 @@ export function createClockMaster({ send, clear, startMessage }) {
   let running = false;
   let gap = 0; // ms between ticks
   let next = 0; // when the next tick is due, in the caller's clock
-  let lastBpm = null; // the tempo of the latest start: the device echoes Start and forgets its own tempo
 
   return {
     get running() {
       return running;
     },
 
-    // The tempo the latest start was sent at, or null before any.
-    get lastBpm() {
-      return lastBpm;
-    },
-
     start(bpm, now) {
-      lastBpm = clampBpm(bpm);
-      gap = MS_PER_MINUTE / (lastBpm * CLOCKS_PER_BEAT);
+      gap = MS_PER_MINUTE / (clampBpm(bpm) * CLOCKS_PER_BEAT);
       clear?.(); // ticks left from an earlier stream would overlap this one
       running = true;
       send(startMessage, now);
