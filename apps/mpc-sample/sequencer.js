@@ -25,11 +25,10 @@
 // The page does not send a clock of its own (it made the device distort: docs/mpc-sample.md). A step is a
 // 16th note, six ticks.
 
-import { BANK_COUNT, PADS_PER_BANK, noteForPad } from "../../shared/mpc-sample.js";
+import { BANK_COUNT, PADS_PER_BANK } from "../../shared/mpc-sample.js";
 import { createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { stepSeconds } from "../../shared/tempo.js";
-import { createEchoGuard } from "./echo-guard.js";
 import { CLOCKS_PER_BEAT, MAX_BPM, MIN_BPM } from "./transport.js";
 
 export const PAD_COUNT = BANK_COUNT * PADS_PER_BANK; // a row of the pattern per pad of every bank
@@ -52,7 +51,6 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
   let pattern = createPattern(PAD_COUNT, steps, start); // as long as the longest loop so far
   const sounded = new Set(); // rows whose note was sent since the start, so Stop can release each
   let queuedUntil = 0; // the latest time (ms) anything was queued for, so Stop can release after it
-  const guard = createEchoGuard();
 
   // Following the device's own clock (it was started from its Play button): the steps come from its
   // ticks, so the pattern keeps the device's tempo and cannot drift from it.
@@ -74,7 +72,6 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       const off = at + length * GATE_RATIO * MS;
       send(messages.padOff(index, bank), off);
       queuedUntil = Math.max(queuedUntil, off);
-      guard.expect(noteForPad(index, bank), at, clock.now() * MS);
       sounded.add(row);
     }
   }
@@ -87,8 +84,7 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     // Notes still queued ahead are dropped, and each pad that sounded is released now, so a gated
     // sample cannot hang on after Stop. Not every browser can drop what is queued (neither Firefox nor
     // Chrome 157 has MIDIOutput.clear), so a second release is sent at the time of the last queued note-off:
-    // the notes that still arrive play their normal gate, and none can be left held. The guard keeps what it
-    // waits for, for the same reason: their echoes are still coming.
+    // the notes that still arrive play their normal gate, and none can be left held.
     // The device started itself and sends the clock: step 0 plays on its first tick.
     // `from` is where in the song: "continue" resumes where it stopped, anything else is the start.
     follow(from) {
@@ -152,9 +148,6 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     toggle: (row, step) => pattern.toggle(row, step),
     clearRow: (row) => pattern.clearRow(row),
     clearAll: () => pattern.clearAll(),
-
-    // Is this hit the device's echo of a note sent from here? `note` and `now` (ms) as the hit arrived.
-    isEcho: (note, now) => guard.isEcho(note, now),
 
     get steps() {
       return steps;

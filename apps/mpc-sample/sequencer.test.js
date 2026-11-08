@@ -173,27 +173,6 @@ describe("createSequencer", () => {
     expect(sequencer.setBpm(10)).toBe(30);
     expect(sequencer.setBpm(999)).toBe(300);
   });
-
-  describe("the device's echo", () => {
-    it("knows the notes it sent when they come back, and only those", () => {
-      const { sequencer, advance } = setup();
-      sequencer.toggle(0, 0);
-      sequencer.start(0.05);
-      advance(0);
-      expect(sequencer.isEcho(37, 55)).toBe(false); // another pad
-      expect(sequencer.isEcho(36, 55)).toBe(true); // the note, a few ms after it was due
-      expect(sequencer.isEcho(36, 56)).toBe(false); // each note comes back once
-    });
-
-    it("still knows the echoes of notes queued before it stopped", () => {
-      const { sequencer, advance } = setup();
-      sequencer.toggle(0, 0);
-      sequencer.start(0.05);
-      advance(0);
-      sequencer.stop();
-      expect(sequencer.isEcho(36, 55)).toBe(true);
-    });
-  });
 });
 
 describe("following a clock the device sends", () => {
