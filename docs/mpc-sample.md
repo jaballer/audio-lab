@@ -136,7 +136,9 @@ Pad 1 on steps 1, 5, 9, 11 and 13 at 120 BPM in a 4 s loop, the page's Play pres
   note-off 99 ms later, because Chrome 157 has no `MIDIOutput.clear()` (`typeof output.clear` is `undefined`), so
   what was queued cannot be dropped. The page also releases each pad at the time of the last queued note-off, which
   is when the stray note ends anyway, so it plays its full gate and is never left held. A Stop can therefore leave
-  one extra hit of up to the lookahead.
+  hits that were already queued: the scheduler queues 0.12 s ahead (`SCHEDULE_AHEAD_S` in `shared/scheduler.js`).
+  In this run, one pad at 120 BPM (a step is 125 ms), that was one hit. At faster tempos, or with several pads on a
+  step, more hits fall inside that window and all of them play. That was reasoned from the code, not measured.
 - **The page's Play does nothing while the device is already running from its own button.** With the clock already
   streaming from the device, pressing the page's Play produced no Start and none of the pattern's notes; the page's
   Play works once the device is stopped. Seen once, without reading the page's lamp state.
