@@ -15,6 +15,8 @@
 // app, and `reset` is the message that turns every LED off. `match` is used for
 // the controller's output port as well as its input.
 
+import { PORT_DECORATION } from "../../shared/midi-devices.js";
+import { isMpcSample, padFromNote } from "../../shared/mpc-sample.js";
 import { PAD_COLUMNS, PAD_ROWS, STEPS, padColumn, padIndex, padRow } from "./layout.js";
 
 // What the transport and edit buttons can ask for.
@@ -69,7 +71,6 @@ const stepNote = (index) => gridNote(Math.floor(index / GRID_SIZE), index % GRID
 // Firefox on Linux reports ports as "client:port MIDI 1 28:0", and Windows adds a "2- "
 // prefix.
 const LAUNCHPAD_MODEL = String.raw`\blaunchpad(?:\s+(?:s|mini(?:\s+mk\s*[12])?)(?:\s+\d+)?|(?:\s+\d)?)`;
-const PORT_DECORATION = String.raw`(?=\s*$|[:)\]]|\s+(?:midi\b|\d+:\d+\b|[(\[]))`;
 const LAUNCHPAD_NAME = new RegExp(LAUNCHPAD_MODEL + PORT_DECORATION, "i");
 
 export const launchpad = {
@@ -122,33 +123,15 @@ export const launchpad = {
 // 1-16, and the hit's velocity sets the volume.
 const FIRST_PAD_NOTE = 36;
 
-// Akai MPC Sample, as captured from the device over USB (channel 1): its 16 pads send
-// notes 36-51 in bank A and the next block of 16 in each following bank (bank B starts at
-// 52), pad 1 first. So the pad is the position within the bank, and the bank is reported
-// beside it. The hardware has 8 banks, which would pass note 127; how it keeps them in
-// range has not been captured: only banks A and B were played, and later banks follow
-// the same 16-note step by inference.
-//
-// The name is a whitelist like the Launchpad's: after "MPC Sample" only a known port
-// decoration may follow, so another model ("MPC Sample Pro", a future one) falls back to
-// the generic profile. ALSA says "MPC Sample MIDI 1"; Firefox on Linux adds "client:port".
-const MPC_BANK_SIZE = 16; // the hardware's pads per bank, not the app's pad count
-const MPC_SAMPLE_NAME = new RegExp(String.raw`\bmpc\s+sample(?:\s+\d+)?` + PORT_DECORATION, "i");
-
+// Akai MPC Sample: every pad bank plays the same 16 pads, and the bank is reported beside
+// the pad. What its notes are, and how its port is recognised, is in shared/mpc-sample.js.
 export const mpcSample = {
   id: "mpc-sample",
-  match: (name) => MPC_SAMPLE_NAME.test(name),
+  match: isMpcSample,
   translate(msg) {
-    if (msg.type !== "noteOn" || msg.note < FIRST_PAD_NOTE) return [];
-    const offset = msg.note - FIRST_PAD_NOTE;
-    return [
-      {
-        type: "pad",
-        index: offset % MPC_BANK_SIZE,
-        velocity: msg.velocity,
-        bank: Math.floor(offset / MPC_BANK_SIZE),
-      },
-    ];
+    if (msg.type !== "noteOn") return [];
+    const { index, bank } = padFromNote(msg.note);
+    return [{ type: "pad", index, velocity: msg.velocity, bank }];
   },
 };
 

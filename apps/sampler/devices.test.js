@@ -102,9 +102,11 @@ describe("mpcSample.translate", () => {
     expect(mpcSample.translate(noteOn(68))[0]).toMatchObject({ index: 0, bank: 2 });
   });
 
-  it("ignores notes below the first pad", () => {
-    expect(mpcSample.translate(noteOn(35))).toEqual([]);
-    expect(mpcSample.translate(noteOn(0))).toEqual([]);
+  // Captured: 8 banks of 16 wrap past note 127, so banks F-H use the lowest notes.
+  it("plays pads from the low notes too, as the last banks", () => {
+    expect(mpcSample.translate(noteOn(3, 90))).toEqual([{ type: "pad", index: 15, velocity: 90, bank: 5 }]);
+    expect(mpcSample.translate(noteOn(20, 90))).toEqual([{ type: "pad", index: 0, velocity: 90, bank: 7 }]);
+    expect(mpcSample.translate(noteOn(35, 90))).toEqual([{ type: "pad", index: 15, velocity: 90, bank: 7 }]);
   });
 
   it("ignores releases, aftertouch and controllers", () => {

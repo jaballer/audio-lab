@@ -1,0 +1,144 @@
+/* MPC Sample companion page (builds on shared/base.css). */
+
+.mpc-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mpc-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+/* ---------- Pads ---------- */
+.mpc-pads {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+  padding: 11px;
+  border-radius: 10px;
+  background: #0e0e10;
+  box-shadow:
+    inset 0 2px 8px #000,
+    0 1px 0 #4b4b53;
+}
+
+.mpc-pad {
+  --v: 0; /* hit strength 0-1, from the velocity */
+  --pressure: 0; /* 0-1, from the poly aftertouch */
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 2px solid #08080a;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2d2d32, #19191c);
+  box-shadow:
+    inset 0 0 0 2px #323238,
+    0 3px 0 #08080a;
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
+}
+/* The pressure fills the pad from the bottom. */
+.mpc-pad::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: calc(var(--pressure) * 100%);
+  background: rgba(255, 200, 80, 0.55);
+  pointer-events: none;
+}
+.mpc-pad.down {
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(255, 130, 110, calc(0.45 + 0.4 * var(--v))) 0%,
+    rgb(150, 24, 16) 100%
+  );
+}
+.mpc-pad.hit {
+  transition: none;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(255, 150, 130, calc(0.55 + 0.45 * var(--v))) 0%,
+    rgb(190, 34, 22) 100%
+  );
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 190, 170, 0.5),
+    0 0 calc(8px + 22px * var(--v)) rgba(255, 90, 70, 0.85);
+}
+.mpc-pad .num,
+.mpc-pad .note {
+  position: absolute;
+  z-index: 1;
+  font: 700 0.65rem var(--mono);
+  color: #8b887f;
+  pointer-events: none;
+}
+.mpc-pad .num {
+  top: 5px;
+  left: 7px;
+}
+.mpc-pad .note {
+  bottom: 5px;
+  right: 7px;
+}
+.mpc-pad.down .num,
+.mpc-pad.down .note {
+  color: #ffe9e0;
+}
+
+/* ---------- Banks ---------- */
+.mpc-banks-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mpc-banks {
+  display: flex;
+  gap: 6px;
+}
+.mpc-bank {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #77736a;
+  border-radius: 5px;
+  background: #cfcbbe;
+  color: var(--ink-soft);
+  font:
+    800 0.7rem system-ui,
+    sans-serif;
+}
+/* A bank that has had a hit is underlined; the one in play is lit. */
+.mpc-bank.seen {
+  box-shadow: 0 3px 0 var(--chassis-edge);
+  color: var(--ink);
+}
+.mpc-bank.current {
+  background: var(--led-green);
+  border-color: #2c7a24;
+  color: #0e2b0b;
+}
+
+/* ---------- Display ---------- */
+.mpc-screen {
+  min-height: 0;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .mpc-deck {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mpc-pad {
+    transition: none;
+  }
+}
