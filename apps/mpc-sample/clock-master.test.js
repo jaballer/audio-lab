@@ -53,13 +53,24 @@ describe("createClockMaster", () => {
     expect(times.length).toBeLessThanOrEqual(2 * CLOCKS_PER_BEAT + 6);
   });
 
-  it("catches up with a late timer instead of leaving a gap", () => {
+  // Past-due timestamps are delivered at once by Web MIDI, which the device would read as a burst.
+  it("skips ticks that are already overdue after a stall, staying on the beat grid", () => {
     const { master, ticks } = setup();
     master.start(120, 0);
+    const before = ticks().length;
     master.tick(400); // the timer stalled for 400 ms
-    const times = ticks().map((m) => m.time);
-    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeCloseTo(500 / CLOCKS_PER_BEAT, 6);
-    expect(Math.max(...times)).toBeGreaterThan(400);
+    const late = ticks()
+      .slice(before)
+      .map((m) => m.time);
+    expect(late.length).toBeGreaterThan(0);
+    expect(Math.min(...late)).toBeGreaterThanOrEqual(400);
+    // the same grid as before the stall: a multiple of the gap after the first tick
+    const gap = 500 / CLOCKS_PER_BEAT;
+    const first = ticks()[0].time;
+    for (const t of late) expect((t - first) / gap).toBeCloseTo(Math.round((t - first) / gap), 6);
+    // a long freeze does not queue thousands of ticks either
+    master.tick(10 * 60 * 1000);
+    expect(ticks().length - before - late.length).toBeLessThan(10);
   });
 
   it("sends no more ticks once halted", () => {
@@ -81,6 +92,20 @@ describe("createClockMaster", () => {
     expect(sent[0]).toEqual({ bytes: START, time: 9000 });
     expect(sent[1].time).toBeGreaterThan(9000);
     expect(master.running).toBe(true);
+  });
+
+  it("clears the ticks already queued when halted, where the output can", () => {
+    let cleared = 0;
+    const master = createClockMaster({ send() {}, clear: () => cleared++, startMessage: START });
+    master.start(120, 0);
+    master.halt();
+    expect(cleared).toBe(1);
+  });
+
+  it("halts without a clear function (not every browser has MIDIOutput.clear)", () => {
+    const { master } = setup();
+    master.start(120, 0);
+    expect(() => master.halt()).not.toThrow();
   });
 
   it("does nothing on tick() before it has started", () => {
