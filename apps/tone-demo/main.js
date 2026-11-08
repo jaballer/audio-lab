@@ -12,6 +12,7 @@ import "../../shared/base.css";
 import "./tone-demo.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAppHeader } from "../../shared/app-header.js";
+import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
 
 const $ = (id) => document.getElementById(id);
@@ -22,16 +23,12 @@ const NOTE_COUNT = 13; // one octave plus the top C
 const DELAY_TIME = "8n";
 const DELAY_FEEDBACK = 0.4;
 
+createSiteHeader($("site-header"), { current: "tone-demo", midi: false }); // no MIDI on this page
 const header = createAppHeader($("header"), {
   brand: { name: "TONE", accent: "DEMO" },
   sub: "Tone.js on the shared audio engine",
-  back: { href: "./", label: "Sampler" },
   audioStatus: true,
-  console: false, // no MIDI here, so nothing to log
 });
-// This page has no MIDI input: hide the shared header's MIDI controls.
-header.midiButton.hidden = true;
-header.setMidiStatus("");
 
 // ---------- Audio ----------
 const audio = createAudioEngine({

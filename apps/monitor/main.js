@@ -7,6 +7,7 @@
 import "../../shared/base.css";
 import "./monitor.css";
 import { createAppHeader } from "../../shared/app-header.js";
+import { createSiteHeader } from "../../shared/site-header.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { KINDS, describeMessage, formatLine } from "./describe.js";
 import { createLog } from "./log.js";
@@ -14,10 +15,10 @@ import { createMonitorView } from "./view.js";
 
 const $ = (id) => document.getElementById(id);
 
-const header = createAppHeader($("header"), {
+const site = createSiteHeader($("site-header"), { current: "monitor" });
+createAppHeader($("header"), {
   brand: { name: "MIDI ", accent: "MONITOR" },
   sub: "What your controller really sends",
-  back: { href: "./", label: "Sampler" },
 });
 
 const log = createLog();
@@ -40,11 +41,11 @@ function handleMidi(input, data, timeStamp) {
 }
 
 wireMidiButton(
-  header.midiButton,
+  site.midiButton,
   createMidiAccess({
     onMessage: handleMidi,
-    onStatus: header.setMidiStatus,
-    onLog: header.log,
+    onStatus: site.setMidiStatus,
+    onLog: site.log,
     sysex: true, // the monitor shows SysEx, which the browser only delivers when asked for
   }),
 );

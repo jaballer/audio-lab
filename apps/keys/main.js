@@ -9,6 +9,7 @@
 import "../../shared/base.css";
 import "./keys.css";
 import { createAppHeader } from "../../shared/app-header.js";
+import { createSiteHeader } from "../../shared/site-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
@@ -31,10 +32,10 @@ const $ = (id) => document.getElementById(id);
 const KEYBOARD_SOURCE = "keyboard";
 const KEYBOARD_VELOCITY = 100; // a computer key has no velocity of its own
 
+const site = createSiteHeader($("site-header"), { current: "keys" });
 const header = createAppHeader($("header"), {
   brand: { name: "KEYS" },
   sub: "MIDI keyboard test",
-  back: { href: "./", label: "Sampler" },
   audioStatus: true,
 });
 
@@ -140,12 +141,12 @@ function handleMidiChange(_access, inputs) {
 }
 
 wireMidiButton(
-  header.midiButton,
+  site.midiButton,
   createMidiAccess({
     onMessage: createMidiRouter(PROFILES, handlers),
     onChange: handleMidiChange,
-    onStatus: header.setMidiStatus,
-    onLog: header.log,
+    onStatus: site.setMidiStatus,
+    onLog: site.log,
   }),
 );
 
