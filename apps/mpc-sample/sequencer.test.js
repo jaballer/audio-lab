@@ -142,7 +142,7 @@ describe("createSequencer", () => {
     expect(sequencer.playing).toBe(false);
   });
 
-  // Firefox has no MIDIOutput.clear(): what was queued ahead still arrives after Stop.
+  // Firefox and Chrome have no MIDIOutput.clear(): what was queued ahead still arrives after Stop.
   it("releases again after the last queued note, for a browser that cannot drop what is queued", () => {
     const { sequencer, sent, advance } = setup({ bpm: 120 });
     sequencer.toggle(0, 0);

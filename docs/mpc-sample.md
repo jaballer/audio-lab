@@ -122,8 +122,26 @@ that had already ended. A sequencer should not expect a note to sound for its fu
 the device. The meaning of CC 7 = 90 and CC 64 = 0 was not looked up; they arrive with every Play and Stop.
 
 Not confirmed: whether a different sample per bank sounds different (the owner has samples on pads 1 to 4 of one bank
-only), and whether the page's own Play behaves the same while the device was started from its hardware button.
-Not tried: Continue with clock, and MIDI Sync In set to Off or MTC.
+only). Not tried: Continue with clock, and MIDI Sync In set to Off or MTC.
+
+### Seen on the running page, with the sequencer (2026-11-08, Chrome on macOS)
+
+Pad 1 on steps 1, 5, 9, 11 and 13 at 120 BPM in a 4 s loop, the page's Play pressed with the device idle:
+
+- **The notes sit on the device's beat grid.** The first note arrived with the first clock tick, 6 ms after the
+  device's Start. The gaps were 500, 499, 253, 250 and then 2499 ms, which is what that pattern gives, the loop
+  repeated every 4.0 s, and every echoed note landed 0 to 2 ms after a clock tick that starts a step.
+  Each note-off came 98 to 101 ms after its note-on.
+- **A note can sound after Stop.** A step queued ahead of the Stop click played 70 ms after the click, with its
+  note-off 99 ms later, because Chrome 157 has no `MIDIOutput.clear()` (`typeof output.clear` is `undefined`), so
+  what was queued cannot be dropped. The page releases each pad after the last queued note, so the note is cut off
+  and never hangs, but a Stop can leave one extra hit of up to the lookahead.
+- **The page's Play does nothing while the device is already running from its own button.** With the clock already
+  streaming from the device, pressing the page's Play produced no Start and none of the pattern's notes; the page's
+  Play works once the device is stopped. Seen once, without reading the page's lamp state.
+- **A hit on the device's own pads plays the page's browser sound as well.** The page plays the sampler's sound for
+  every pad hit that reaches it, so with samples on the device both sound at once. Only the echoes of the
+  sequencer's own notes are filtered. Tracked in epic #63, phase 3 (#67).
 
 ## What the device sends, captured
 

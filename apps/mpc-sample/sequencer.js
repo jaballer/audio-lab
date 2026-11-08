@@ -73,8 +73,8 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     start: (at) => scheduler.start(at),
 
     // Notes still queued ahead are dropped, and each pad that sounded is released now, so a gated
-    // sample cannot hang on after Stop. Not every browser can drop what is queued (Firefox has no
-    // MIDIOutput.clear), so a second release follows the last queued note: the notes that still
+    // sample cannot hang on after Stop. Not every browser can drop what is queued (neither Firefox nor
+    // Chrome 157 has MIDIOutput.clear), so a second release follows the last queued note: the notes that still
     // arrive are cut short and cannot be left held. The guard keeps what it waits for, for the same
     // reason: their echoes are still coming.
     stop() {
