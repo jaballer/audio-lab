@@ -88,12 +88,26 @@ for (const wave of WAVES) {
 }
 $("wave").addEventListener("change", (e) => setWave(e.target.value));
 
-// Whether the menu got its focus from the mouse or touch. A mouse user picking a wave expects the
-// keys to play next, but the menu keeps focus even when the same option is picked again (no
-// `change`), so blurring on change is not enough. A keyboard user who tabbed to it is using it.
+// Whether the menu got its focus from the mouse or touch. A pointer user picking a wave expects
+// the keys to play next, but the menu keeps focus (even when the same option is picked again, so
+// there is no `change` to blur on). A keyboard user who tabbed to it is using it. Judge by the last
+// input device: clicking the label focuses the menu without a pointerdown on the menu itself.
+let lastInputWasPointer = false;
+window.addEventListener("pointerdown", () => (lastInputWasPointer = true), true);
+window.addEventListener("keydown", () => (lastInputWasPointer = false), true);
 let menuFocusedByPointer = false;
-$("wave").addEventListener("pointerdown", () => (menuFocusedByPointer = true));
+$("wave").addEventListener("focus", () => (menuFocusedByPointer = lastInputWasPointer));
 $("wave").addEventListener("blur", () => (menuFocusedByPointer = false));
+
+// A pointer-focused menu gives its focus to the first note key, and the key must not also run the
+// menu's own type-ahead (which could change the wave).
+function menuClaimsKey(e) {
+  if (!(e.target instanceof HTMLSelectElement)) return false;
+  if (!menuFocusedByPointer) return true;
+  e.preventDefault();
+  e.target.blur();
+  return false;
+}
 $("delay").addEventListener("input", (e) => setDelay(Number(e.target.value)));
 $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
 
@@ -140,7 +154,7 @@ const computerKeys = createComputerKeys({
   getBase: () => FIRST_NOTE - OCTAVE, // the keys play the octave above the base
   onNoteOn: (note) => press(note, COMPUTER),
   onNoteOff: (note) => release(note, COMPUTER),
-  ignore: (e) => e.target instanceof HTMLSelectElement && !menuFocusedByPointer,
+  ignore: menuClaimsKey,
 });
 
 // A key held while the page goes to the background (Alt-Tab, a notification,
