@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { GROUPS, PARAMS, choiceLabel, isChoice, knobChoice, knobPosition, labelFor } from "./params.js";
+import {
+  GROUPS,
+  PARAMS,
+  choiceKnob,
+  choiceLabel,
+  clampKnob,
+  isChoice,
+  knobChoice,
+  knobPosition,
+  labelFor,
+  positionKnob,
+} from "./params.js";
 import { DEFAULT_PARAMS, WAVES } from "./synth.js";
 
 const byName = (name) => PARAMS.find((p) => p.name === name);
@@ -74,6 +85,33 @@ describe("knobChoice", () => {
     expect(knobChoice(64, WAVES)).toBe("square");
     expect(knobChoice(96, WAVES)).toBe("sawtooth");
     expect(knobChoice(127, WAVES)).toBe("sawtooth");
+  });
+});
+
+describe("positionKnob", () => {
+  it("is the way back from knobPosition", () => {
+    expect(positionKnob(0)).toBe(0);
+    expect(positionKnob(100)).toBe(127);
+    for (const v of [0, 1, 40, 64, 127]) expect(positionKnob(knobPosition(v))).toBeCloseTo(v);
+  });
+});
+
+describe("clampKnob", () => {
+  it("keeps a dragged value inside the knob's travel", () => {
+    expect(clampKnob(-5)).toBe(0);
+    expect(clampKnob(64.5)).toBe(64.5);
+    expect(clampKnob(300)).toBe(127);
+  });
+});
+
+describe("choiceKnob", () => {
+  it("sits inside the choice's own part of the travel", () => {
+    for (const choice of WAVES) expect(knobChoice(choiceKnob(choice, WAVES), WAVES)).toBe(choice);
+  });
+
+  it("puts the first choice low and the last one high", () => {
+    expect(choiceKnob("sine", WAVES)).toBeLessThan(choiceKnob("sawtooth", WAVES));
+    expect(choiceKnob("sawtooth", WAVES)).toBeLessThanOrEqual(127);
   });
 });
 

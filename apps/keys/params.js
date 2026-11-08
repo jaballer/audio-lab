@@ -66,9 +66,23 @@ export const choiceLabel = (choice) => CHOICE_LABELS[choice] ?? capitalize(choic
 export const isChoice = (param) => Array.isArray(param.choices);
 
 // A knob sends 0-127. As a slider position that is 0-100.
-export const knobPosition = (midiValue) => (midiValue / 127) * 100;
+export const KNOB_MAX = 127;
+export const knobPosition = (midiValue) => (midiValue / KNOB_MAX) * 100;
+
+// The way back: where a knob sits for a slider position, so an on-screen dial can
+// follow the slider (and a drag on the dial starts from where the sound is).
+export const positionKnob = (position) => (position / 100) * KNOB_MAX;
+
+export const clampKnob = (value) => Math.min(KNOB_MAX, Math.max(0, value));
 
 // For a choice, the knob's 0-127 travel is split into equal parts, one per choice.
 export function knobChoice(midiValue, choices) {
   return choices[Math.min(choices.length - 1, Math.floor(midiValue / (128 / choices.length)))];
+}
+
+// Where a knob sits for a choice: the middle of that choice's part of the travel,
+// so it reads back as the same choice (and a drag has room either way).
+export function choiceKnob(choice, choices) {
+  const part = 128 / choices.length;
+  return Math.min(KNOB_MAX, (choices.indexOf(choice) + 0.5) * part);
 }

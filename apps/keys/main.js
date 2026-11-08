@@ -21,7 +21,7 @@ import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { createPadLearner } from "./pad-learner.js";
-import { GROUPS, PARAMS } from "./params.js";
+import { GROUPS, PARAMS, choiceKnob, choiceLabel, knobChoice, positionKnob } from "./params.js";
 import { createPiano } from "./piano.js";
 import { createStick } from "./stick.js";
 import { createSynthPanel } from "./synth-panel.js";
@@ -64,8 +64,19 @@ const keys = createKeysController({
   onChange: render,
   onNoteDown: (note) => piano.press(note),
   onNoteUp: (note) => piano.release(note),
-  onSlider: (param, position, text) => panel.showSlider(param, position, text),
-  onChoice: (param, choice) => panel.showChoice(param, choice),
+  onSlider: (param, position, text) => {
+    panel.showSlider(param, position, text);
+    knobDials.turn(PARAMS.indexOf(param), positionKnob(position), text);
+  },
+  onChoice: (param, choice) => {
+    panel.showChoice(param, choice);
+    const index = PARAMS.indexOf(param);
+    // A dial already inside this choice's part of the travel stays where it is, so
+    // it keeps turning smoothly under the hand instead of snapping to the middle.
+    if (knobChoice(knobDials.value(index), param.choices) !== choice) {
+      knobDials.turn(index, choiceKnob(choice, param.choices), choiceLabel(choice));
+    }
+  },
 });
 
 // ---------- Views ----------
@@ -96,7 +107,12 @@ const padLearner = createPadLearner({
   save: (data) => saveJson(PAD_STORE_KEY, data),
 });
 const padGrid = createPadGrid($("pads"), { notes: padLearner.notes });
-const knobDials = createKnobDials($("knobs"), { ccs: mpkMini.knobCcs, labels: PARAMS.map((p) => p.name) });
+// A dial dragged with the mouse takes the same road as a hardware knob.
+const knobDials = createKnobDials($("knobs"), {
+  ccs: mpkMini.knobCcs,
+  labels: PARAMS.map((p) => p.name),
+  onChange: (index, value) => keys.applyKnob(index, value),
+});
 
 const panel = createSynthPanel($("synth"), {
   params: PARAMS,
@@ -113,11 +129,8 @@ const handlers = {
   bend: (e) => keys.setBend(e.value),
   sustain: (e) => keys.setSustain(e.on),
   mod: (e) => keys.setMod(e.value),
-  knob: (e) => {
-    knobDials.turn(e.index, e.value);
-    // The on-screen controls jump to the knob's position as soon as it is turned.
-    keys.applyKnob(e.index, e.value);
-  },
+  // The on-screen controls and dials jump to the knob's position as soon as it is turned.
+  knob: (e) => keys.applyKnob(e.index, e.value),
   pad: (e) => {
     const slot = padLearner.slotFor(e.note);
     if (slot >= 0) padGrid.hit(slot, e.note, e.velocity);
