@@ -281,4 +281,29 @@ describe("litStep (the step the light shows)", () => {
     sequencer.setSteps(4);
     expect(sequencer.litStep).toBeLessThan(4);
   });
+
+  it("catches the playhead up to the clock before keeping it, when Stop lands between two polls", () => {
+    const { sequencer, clock, run } = setup({ bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.4);
+    sequencer.poll();
+    const polled = sequencer.playheadStep;
+    run(0.2); // steps have come due since the last animation frame
+    sequencer.stop();
+    expect(sequencer.litStep).toBeGreaterThan(polled);
+  });
+
+  it("wraps the lit step when the loop is made shorter while playing, then stopped", () => {
+    const { sequencer, clock, run } = setup({ steps: 16, bpm: 120 });
+    sequencer.start();
+    clock.time += 0.06;
+    run(0.9);
+    sequencer.poll();
+    expect(sequencer.playheadStep).toBeGreaterThanOrEqual(4);
+    sequencer.setSteps(4);
+    sequencer.stop();
+    expect(sequencer.litStep).toBeLessThan(4);
+    expect(sequencer.litStep).toBeGreaterThanOrEqual(0);
+  });
 });

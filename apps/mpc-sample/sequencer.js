@@ -85,7 +85,12 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     // the notes that still arrive play their normal gate, and none can be left held. The guard keeps what it
     // waits for, for the same reason: their echoes are still coming.
     stop() {
-      if (scheduler.playing) stoppedAt = scheduler.playheadStep;
+      if (scheduler.playing) {
+        // Steps that came due since the last animation frame have sounded already; catch the playhead up
+        // so the light stays on the one that played last.
+        scheduler.poll();
+        stoppedAt = scheduler.playheadStep;
+      }
       scheduler.stop();
       clear?.();
       const after = Math.max(queuedUntil, clock.now() * MS);
