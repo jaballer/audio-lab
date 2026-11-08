@@ -20,6 +20,7 @@ import { noteName } from "../../shared/notes.js";
 import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
 import { createHolds } from "../../shared/holds.js";
 import { createPiano } from "../../shared/piano.js";
+import { PARAMS } from "./params.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,7 +40,7 @@ const header = createAppHeader($("header"), {
 // ---------- Audio ----------
 const audioNotice = createAudioNotice($("audio-notice"));
 const audio = createAudioEngine({
-  volume: Number($("volume").value),
+  volume: PARAMS.volume.value,
   // Not a plain AudioContext handed to Tone: Tone's setup throws on one in Firefox, see audio.js.
   createContext: () => Tone.getContext().rawContext,
   onStateChange: (state) => {
@@ -51,7 +52,7 @@ audio.unlockOnInteraction();
 
 // The page's settings. Every change goes through setWave / setDelay, whether it
 // comes from the controls or from the defaults, so the sound and the controls agree.
-const settings = { wave: "triangle", delay: Number($("delay").value) };
+const settings = { wave: "triangle", delay: PARAMS.delay.value };
 let voice = null; // { synth, delay }, built on the first note
 
 // Built on first use, after the first interaction has started the context.
@@ -121,8 +122,21 @@ function menuClaimsKey(e) {
   e.target.blur();
   return false;
 }
-$("delay").addEventListener("input", (e) => setDelay(Number(e.target.value)));
-$("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
+
+// A slider's range, default and readout come from PARAMS, so the HTML holds no numbers.
+function bindSlider(id, onChange) {
+  const param = PARAMS[id];
+  const input = $(id);
+  Object.assign(input, { min: param.min, max: param.max, step: param.step, value: param.value });
+  const show = () => ($(`${id}-value`).textContent = param.format(Number(input.value)));
+  input.addEventListener("input", () => {
+    onChange(Number(input.value));
+    show();
+  });
+  show();
+}
+bindSlider("delay", setDelay);
+bindSlider("volume", (v) => audio.setVolume(v));
 
 // ---------- Keys ----------
 // A key sounds from the moment it goes down until it is let go, by the on-screen piano or by
