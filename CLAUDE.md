@@ -31,7 +31,7 @@ failing check blocks the deploy.
   `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `song.js`, `transport.js`, `tempo.js`, `controller.js`, `computer-keys.js`, `format.js`, `scales.js`,
   `midi-messages.js`, `storage.js` and `audio.js` only export functions/factories. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
-  `pads.js`, `steps.js`, `tempo-knob.js`, `stick.js`, `synth-panel.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
+  `pads.js`, `steps.js`, `tempo-knob.js`, `app-header.js`, `stick.js`, `synth-panel.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.
@@ -40,7 +40,7 @@ failing check blocks the deploy.
 - **All audio goes through `shared/audio.js`.** Use `audio.ensure()` to get the context and `audio.master` as
   the output. Never construct an `AudioContext` or a master gain elsewhere. Nothing may assume the context
   exists before the first user interaction.
-- **All MIDI input goes through `shared/midi-access.js` and `parseMidi`.** Do not mask status bytes by hand;
+- **All MIDI input goes through `shared/midi-access.js` and `parseMidi`; messages reach an app through `createMidiRouter`.** Do not mask status bytes by hand;
   match on `msg.type`.
 - **Controller-specific numbers live in a device profile, not in a handler.** A profile (see
   `shared/midi-devices.js`) has `match(inputName)` and `translate(msg)`, which returns the app's own events
