@@ -98,6 +98,7 @@ describe("createClockMaster", () => {
     let cleared = 0;
     const master = createClockMaster({ send() {}, clear: () => cleared++, startMessage: START });
     master.start(120, 0);
+    cleared = 0; // the start clears too; this is about the halt
     master.halt();
     expect(cleared).toBe(1);
   });
@@ -106,6 +107,23 @@ describe("createClockMaster", () => {
     const { master } = setup();
     master.start(120, 0);
     expect(() => master.halt()).not.toThrow();
+  });
+
+  it("remembers the tempo it was last started at, kept after a halt", () => {
+    const { master } = setup();
+    expect(master.lastBpm).toBeNull();
+    master.start(95, 0);
+    master.halt();
+    expect(master.lastBpm).toBe(95);
+    master.start(9999, 0);
+    expect(master.lastBpm).toBe(MAX_BPM); // the tempo actually sent, not the one asked for
+  });
+
+  it("clears anything still queued when it starts a new stream", () => {
+    let cleared = 0;
+    const master = createClockMaster({ send() {}, clear: () => cleared++, startMessage: START });
+    master.start(120, 0);
+    expect(cleared).toBe(1);
   });
 
   it("does nothing on tick() before it has started", () => {

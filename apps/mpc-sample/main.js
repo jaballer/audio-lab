@@ -130,12 +130,13 @@ function haltClock() {
 
 // The lamps follow what the device reports, not these clicks, so the page never claims a
 // state the device did not confirm.
-// A device already playing (started from its own button) is left alone: a second Start would
-// restart it.
+// A device already playing (started from its own button) or already being started from here is
+// left alone: a second Start would restart it. The tempo is the one the device was heard at,
+// else the one the page last sent (the device forgets its own tempo when it echoes our Start).
 playLamp.addEventListener("click", () => {
   const { state, bpm } = transport.snapshot();
-  if (!output || state === "playing") return;
-  startClock(bpm ?? DEFAULT_BPM);
+  if (!output || state === "playing" || clockMaster.running) return;
+  startClock(bpm ?? clockMaster.lastBpm ?? DEFAULT_BPM);
 });
 stopLamp.addEventListener("click", () => {
   haltClock();
@@ -160,11 +161,13 @@ function changeSequence() {
 }
 for (const control of [barsInput, beatsInput, noteSelect]) control.addEventListener("change", changeSequence);
 
-// The clock ends when the device stops, so now and then ask whether it went quiet. This only
-// redraws; nothing is scheduled by it.
+// The clock ends when the device stops, so now and then ask whether it went quiet. If it did,
+// the clock this page sends ends too, or a later Play would start over a stream still running.
 const STALE_CHECK_MS = 250;
 setInterval(() => {
-  if (transport.expire(performance.now())) schedule();
+  if (!transport.expire(performance.now())) return;
+  haltClock();
+  schedule();
 }, STALE_CHECK_MS);
 
 const padSound = createPadSound({ audio, sounds: SOUNDS });
