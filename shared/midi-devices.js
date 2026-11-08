@@ -30,20 +30,22 @@ export function selectProfile(profiles, inputName = "") {
 
 // A message handler for createMidiAccess's `onMessage`: finds the profile for the
 // input a message came from, has it translate the message, and hands each event
-// to `handlers[event.type](event, input)`.
+// to `handlers[event.type](event, input, timeStamp)`. `timeStamp` is when the system received
+// the message (see midi-access.js), for a handler that cares about timing, such as a tempo
+// read from clock ticks.
 //
 //   const onMessage = createMidiRouter(PROFILES, { pad: (e, input) => {}, knob: (e) => {} });
 //
 // An event with no handler is a mismatch between a profile and the app, so it
 // throws rather than being dropped without a trace.
 export function createMidiRouter(profiles, handlers) {
-  return function route(input, data) {
+  return function route(input, data, timeStamp) {
     const profile = selectProfile(profiles, input.name);
     if (!profile) return;
     for (const event of profile.translate(parseMidi(data))) {
       const handle = handlers[event.type];
       if (!handle) throw new Error(`No handler for MIDI event "${event.type}"`);
-      handle(event, input);
+      handle(event, input, timeStamp);
     }
   };
 }

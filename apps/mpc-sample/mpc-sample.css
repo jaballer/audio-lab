@@ -142,3 +142,81 @@
     transition: none;
   }
 }
+
+/* ---------- Transport ---------- */
+.mpc-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mpc-transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mpc-lamps,
+.mpc-buttons,
+.mpc-loop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mpc-select {
+  padding: 5px 6px;
+  border: 1px solid #77736a;
+  border-radius: 5px;
+  background: #cfcbbe;
+  color: var(--ink-soft);
+  font:
+    700 0.78rem system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.mpc-number {
+  width: 4.2em;
+}
+.mpc-loop {
+  flex-wrap: wrap;
+}
+/* Labels for a screen reader only: the visible text beside the field already says what it is. */
+.mpc-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.mpc-select:focus-visible {
+  outline: 3px solid #6aa8ff;
+  outline-offset: 2px;
+}
+/* The lamps show the device's state; the buttons below only ask it. */
+.mpc-lamp {
+  padding: 6px 12px;
+  border: 1px solid #77736a;
+  border-radius: 5px;
+  background: #cfcbbe;
+  color: var(--ink-soft);
+  font:
+    800 0.7rem system-ui,
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mpc-lamp.play.on {
+  background: var(--led-green);
+  border-color: #2c7a24;
+  color: #0e2b0b;
+}
+.mpc-lamp.stop.on {
+  background: var(--led-red);
+  border-color: #7a1f19;
+  color: #fff;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

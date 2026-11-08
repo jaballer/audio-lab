@@ -18,19 +18,51 @@
           </div>
         </section>
 
-        <section class="lcd" aria-label="Display">
-          <div class="lcd-screen mpc-screen" role="status" aria-live="off">
-            <div class="lcd-line" id="lcd-status"></div>
-            <div class="lcd-line" id="lcd-pad"></div>
-            <div class="lcd-line" id="lcd-vel"></div>
-          </div>
-        </section>
+        <div class="mpc-side">
+          <section class="lcd" aria-label="Display">
+            <div class="lcd-screen mpc-screen" role="status" aria-live="off">
+              <div class="lcd-line" id="lcd-status"></div>
+              <div class="lcd-line" id="lcd-pad"></div>
+              <div class="lcd-line" id="lcd-vel"></div>
+              <div class="lcd-line" id="lcd-transport"></div>
+            </div>
+          </section>
+
+          <section class="mpc-transport" aria-label="Transport">
+            <div class="mpc-lamps" role="group" aria-label="What the device is doing">
+              <span class="small-label">Device is</span>
+              <span id="lamp-play" class="mpc-lamp play">Play</span>
+              <span id="lamp-stop" class="mpc-lamp stop">Stop</span>
+            </div>
+            <div class="mpc-buttons" role="group" aria-label="Ask the device">
+              <span class="small-label">Ask it to</span>
+              <button id="play-btn" class="btn btn-small" type="button" disabled>Play</button>
+              <button id="stop-btn" class="btn btn-small" type="button" disabled>Stop</button>
+            </div>
+            <div class="mpc-loop" role="group" aria-label="The sequence on the device">
+              <label class="small-label" for="seq-bars">Sequence is</label>
+              <input id="seq-bars" class="mpc-select mpc-number" type="number" min="1" max="128" step="1" />
+              <span class="small-label">bars of</span>
+              <label class="mpc-visually-hidden" for="seq-beats">Beats per bar</label>
+              <input id="seq-beats" class="mpc-select mpc-number" type="number" min="1" max="32" step="1" />
+              <span class="small-label">/</span>
+              <label class="mpc-visually-hidden" for="seq-note">Note value of a beat</label>
+              <select id="seq-note" class="mpc-select">
+                <option value="2">2</option>
+                <option value="4">4</option>
+                <option value="8">8</option>
+                <option value="16">16</option>
+              </select>
+            </div>
+          </section>
+        </div>
       </div>
 
       <footer class="footnote">
         Hit the pads on the device &middot; the number in each pad is the note it sends in the current bank &middot;
-        <a href="monitor.html">MIDI monitor</a> shows every raw message &middot; no pad events? On the device set MIDI
-        Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI Config)
+        <a href="monitor.html">MIDI monitor</a> shows every raw message &middot; <kbd>Space</kbd> plays or stops
+        &middot; no pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI
+        Config)
       </footer>
     </main>
     <script type="module" src="/apps/mpc-sample/main.js"></script>

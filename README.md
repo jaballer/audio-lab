@@ -81,11 +81,12 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `log.js` — the bounded message list and the running tally of notes hit; no DOM
   - `view.js` — the on-screen message list and notes table
   - `monitor.css` — monitor-only styles
-- `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play and the note each pad sends
+- `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo; its Play and Stop buttons ask the device to start or stop
   - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame
-  - `devices.js` — the page's device profile: pad hits, releases and pressure, with the bank and raw note
+  - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop buttons send
   - `board.js` — what the pads are doing in every bank, and which bank to show; no DOM
-  - `pad-grid.js`, `bank-strip.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
+  - `transport.js` — whether the device is playing, its tempo and bar and beat read from the MIDI clock (a device already playing when the page connects, or one whose clock goes quiet, is noticed); no DOM
+  - `pad-grid.js`, `bank-strip.js`, `transport-lights.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
   - `mpc-sample.css` — page-only styles
 - `tone-demo.html` + `apps/tone-demo/` — a small synth built with [Tone.js](https://tonejs.github.io/), the only page that uses it (a feedback delay on the shared audio engine)
   - `main.js` — wires the page: points Tone at the shared `AudioContext`, builds the synth and delay, draws the keys and controls

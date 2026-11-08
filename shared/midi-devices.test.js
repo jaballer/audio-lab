@@ -34,12 +34,12 @@ describe("createMidiRouter", () => {
   };
   const silent = { id: "silent", match: () => true, translate: () => [] };
 
-  it("hands the events of the matching profile to their handlers, with the input", () => {
+  it("hands the events of the matching profile to their handlers, with the input and the time", () => {
     const play = vi.fn();
     const route = createMidiRouter([player, silent], { play });
     const input = { name: "My Player" };
-    route(input, NOTE_ON);
-    expect(play).toHaveBeenCalledWith({ type: "play", note: 60 }, input);
+    route(input, NOTE_ON, 1234.5);
+    expect(play).toHaveBeenCalledWith({ type: "play", note: 60 }, input, 1234.5);
   });
 
   it("does nothing for a message its profile has no event for", () => {
