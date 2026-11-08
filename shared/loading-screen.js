@@ -1,6 +1,8 @@
 // Takes the loading overlay (see loading.css) away once the page has settled. Loaded as a
 // script on every page, like a page's main.js: it wires the overlay element to whenPageReady and
-// decides nothing itself. Without scripts the overlay is hidden by a <noscript> rule instead.
+// decides nothing itself. Without scripts the overlay is hidden by a <noscript> rule instead, and
+// if this script cannot load at all, a CSS animation in loading.css lifts the overlay after six
+// seconds, so nothing here can leave the page covered for good.
 //
 // It is the first script on each page, not the last: module scripts run in document order, so a
 // page script that is slow to arrive would otherwise hold back the timeout that is meant to
