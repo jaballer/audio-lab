@@ -3,6 +3,7 @@
 // tempo knob) and the inputs (mouse, computer keyboard, MIDI).
 
 import "../../shared/base.css";
+import "../../shared/step-keys.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAudioNotice } from "../../shared/audio-notice.js";
@@ -13,12 +14,12 @@ import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createLcd } from "./lcd.js";
-import { PAD_COUNT, STEPS } from "./layout.js";
+import { PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { SOUNDS } from "../../shared/sounds.js";
-import { createStepKeys } from "./steps.js";
+import { createStepKeys } from "../../shared/step-keys.js";
 import { createTempoKnob } from "./tempo-knob.js";
 import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
@@ -86,7 +87,11 @@ const lcd = createLcd({
 });
 
 const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (index) => sampler.triggerPad(index) });
-const stepKeys = createStepKeys($("steps"), { steps: STEPS, onToggle: (step) => sampler.toggleStep(step) });
+const stepKeys = createStepKeys($("steps"), {
+  steps: STEPS,
+  group: STEP_GROUP,
+  onToggle: (step) => sampler.toggleStep(step),
+});
 const knob = createTempoKnob($("knob"), {
   min: BPM_MIN,
   max: BPM_MAX,
