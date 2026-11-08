@@ -6,7 +6,6 @@ import {
   STALE_MS,
   createTransport,
   normalizeSequence,
-  toggleAction,
 } from "./transport.js";
 
 const start = { type: "transportStart" };
@@ -383,14 +382,6 @@ describe("song position", () => {
     expect(transport.snapshot().position).toBeNull();
     transport.apply(at(8));
     expect(transport.snapshot().position).toEqual({ bar: 1, beat: 3 });
-  });
-});
-
-describe("toggleAction", () => {
-  it("stops a device that is playing and plays one that is not", () => {
-    expect(toggleAction("playing")).toBe("stop");
-    expect(toggleAction("stopped")).toBe("play");
-    expect(toggleAction("unknown")).toBe("play");
   });
 });
 

@@ -3,10 +3,10 @@ import { createPadSound } from "./pad-sound.js";
 
 const SOUNDS = [{ id: "kick" }, { id: "snare" }];
 
-function setup({ running = true, on = true } = {}) {
+function setup({ running = true } = {}) {
   const audio = { running };
   const play = vi.fn();
-  const padSound = createPadSound({ audio, sounds: SOUNDS, isOn: () => on, play });
+  const padSound = createPadSound({ audio, sounds: SOUNDS, play });
   return { audio, play, padSound };
 }
 
@@ -26,21 +26,5 @@ describe("createPadSound.hit", () => {
     const { play, padSound } = setup({ running: false });
     expect(padSound.hit({ index: 0, velocity: 100 })).toBe(false);
     expect(play).not.toHaveBeenCalled();
-  });
-
-  it("plays nothing while the Sound button is off", () => {
-    const { play, padSound } = setup({ on: false });
-    expect(padSound.hit({ index: 0, velocity: 100 })).toBe(false);
-    expect(play).not.toHaveBeenCalled();
-  });
-
-  it("reads the Sound setting on every hit, not once", () => {
-    let on = false;
-    const play = vi.fn();
-    const padSound = createPadSound({ audio: { running: true }, sounds: SOUNDS, isOn: () => on, play });
-    padSound.hit({ index: 0, velocity: 100 });
-    on = true;
-    padSound.hit({ index: 0, velocity: 100 });
-    expect(play).toHaveBeenCalledTimes(1);
   });
 });

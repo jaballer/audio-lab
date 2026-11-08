@@ -14,7 +14,12 @@
 // and the clock ends. These are real-time bytes, which the browser delivers without the SysEx
 // permission, so the MMC copies are left unread.
 //
-// `messages` are what the page's own buttons send to the device's output port.
+// Reference notes on the device's MIDI settings and what its guide leaves out: docs/mpc-sample.md
+//
+// `messages` are what clicking the Play and Stop lamps sends to the device's output port:
+// real-time Start and Stop, which need no SysEx permission. Stop works as sent. Start is
+// ignored on its own: the device plays only while it is also sent clock (clock-master.js).
+// The lamps follow what the device reports back either way.
 //
 // There is only this profile: a port that is not an MPC Sample gets no profile, so the
 // router ignores whatever else is plugged in.

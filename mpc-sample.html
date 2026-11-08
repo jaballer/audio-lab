@@ -46,17 +46,12 @@
           <section class="mpc-transport" aria-label="Transport">
             <div class="mpc-lamps" role="group" aria-label="What the device is doing">
               <span class="small-label">Device is</span>
-              <span id="lamp-play" class="mpc-lamp play">Play</span>
-              <span id="lamp-stop" class="mpc-lamp stop">Stop</span>
-            </div>
-            <div class="mpc-buttons" role="group" aria-label="Ask the device">
-              <span class="small-label">Ask it to</span>
-              <button id="play-btn" class="btn btn-small" type="button" disabled>Play</button>
-              <button id="stop-btn" class="btn btn-small" type="button" disabled>Stop</button>
-            </div>
-            <div class="mpc-sound" role="group" aria-label="Sound in the browser">
-              <span class="small-label">Pads sound</span>
-              <button id="sound-btn" class="btn btn-small mpc-sound-btn" type="button" aria-pressed="true">On</button>
+              <button id="lamp-stop" class="mpc-lamp stop" type="button" title="Ask the device to stop" disabled>
+                Stop
+              </button>
+              <button id="lamp-play" class="mpc-lamp play" type="button" title="Ask the device to play" disabled>
+                Play
+              </button>
             </div>
             <div class="mpc-loop" role="group" aria-label="The sequence on the device">
               <label class="small-label" for="seq-bars">Sequence is</label>
@@ -84,9 +79,12 @@
         <li>Hit the pads on the device: they play the sampler's 16 sounds here, softer for a lighter hit</li>
         <li>The number in each pad is the note it sends in the current bank</li>
         <li><a href="monitor.html">MIDI monitor</a> shows every raw message</li>
-        <li><kbd>Space</kbd> plays or stops</li>
         <li>
           No pad events? On the device set MIDI Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI Config)
+        </li>
+        <li>
+          Play does nothing? Set MIDI Sync In to Midi Clock there too. The device only plays while it is sent clock, so
+          it follows this page's tempo until it stops. Keep this tab in front while it plays
         </li>
       </ul>
     </aside>
