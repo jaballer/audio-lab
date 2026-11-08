@@ -55,6 +55,16 @@ release page). For a major bump, list the breaking changes that could touch this
    `deploy.yml` runs only on pushes to `main`. A bump to a step used only in `deploy.yml` (`deploy-pages`,
    `upload-pages-artifact`) can pass `check` and still break the deploy after merge. Treat a green `check`
    as weak evidence for those, and rely on the release notes plus the compatibility check above.
+
+   A `workflow_dispatch` run of `deploy.yml` on the PR branch (`gh workflow run deploy.yml --ref <branch>`)
+   exercises the `build` job, including `upload-pages-artifact`, `checkout` and `setup-node`. Its `deploy`
+   job will be refused, because the `github-pages` environment only accepts deployments from `main`, so
+   `deploy-pages` can never be tested before merging. Also, the workflow shares the `pages` concurrency
+   group with `cancel-in-progress: true`, so a dispatch can cancel a real deploy of `main` that is in
+   flight: check `gh run list --workflow deploy.yml --limit 3` first, and ask the user before dispatching.
+   Dotfiles matter for `upload-pages-artifact` v4 and later (they are skipped); check
+   `find dist -name '.*'` after a build.
+
 2. **Locally, for npm PRs.**
 
    ```bash
@@ -75,9 +85,9 @@ Report a table, one row per PR: number, what changed (`name from → to`), level
 one-line reason.
 
 - **Merge**: CI green, no breaking changes that touch this repo, verified as far as the layers above allow.
-- **Merge after a manual check**: say exactly what to check (for example "trigger the Deploy workflow on the
-  branch with `gh workflow run`" or "look at the build in the dev server"), and why it cannot be checked
-  here.
+- **Merge after a manual check**: say exactly what to check (for example "dispatch the Deploy workflow on
+  the branch and confirm the `build` job passes" or "look at the build in the dev server"), and why it
+  cannot be checked here.
 - **Hold or close**: a breaking change that needs a code or config change first, a dropped Node version, a
   pair that must move together but only one half is open. Say what has to happen.
 
