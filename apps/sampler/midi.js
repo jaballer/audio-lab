@@ -7,9 +7,8 @@
 // - output: when a connected output port belongs to a profile that has lights
 //   (the Launchpad), its LEDs are kept in step with what is on screen.
 
-import { selectProfile } from "../../shared/midi-devices.js";
+import { createMidiRouter } from "../../shared/midi-devices.js";
 import { createMidiAccess } from "../../shared/midi-access.js";
-import { parseMidi } from "../../shared/midi-messages.js";
 import { PROFILES } from "./devices.js";
 
 const LIT_PROFILES = PROFILES.filter((profile) => profile.lights);
@@ -61,18 +60,13 @@ export function createMidi(api) {
     for (const [status, data1, value] of lights) led(status, data1, value);
   }
 
-  function handle(input, data) {
-    const profile = selectProfile(PROFILES, input.name);
-    for (const event of profile.translate(parseMidi(data))) handlers[event.type](event);
-  }
-
   const profileForOutput = (port) =>
     port.state === "disconnected" ? undefined : LIT_PROFILES.find((profile) => profile.match(port.name));
 
   // Device scanning and permission live in shared/midi-access.js; here we only
   // pick out the output port whose LEDs should mirror the app.
   const { connect, autoConnect } = createMidiAccess({
-    onMessage: handle,
+    onMessage: createMidiRouter(PROFILES, handlers),
     onStatus: api.onStatus,
     onChange(access) {
       const port = [...access.outputs.values()].find((p) => profileForOutput(p)) ?? null;

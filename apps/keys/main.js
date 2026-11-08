@@ -10,8 +10,7 @@ import "../../shared/base.css";
 import "./keys.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
-import { selectProfile } from "../../shared/midi-devices.js";
-import { parseMidi } from "../../shared/midi-messages.js";
+import { createMidiRouter } from "../../shared/midi-devices.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { createComputerKeys } from "./computer-keys.js";
 import { createKeysController } from "./controller.js";
@@ -137,15 +136,10 @@ function handleMidiChange(_access, inputs) {
   midiSources = connected;
 }
 
-function handleMidi(input, data) {
-  const profile = selectProfile(PROFILES, input.name);
-  for (const event of profile.translate(parseMidi(data))) handlers[event.type](event, input);
-}
-
 wireMidiButton(
   midiBtn,
   createMidiAccess({
-    onMessage: handleMidi,
+    onMessage: createMidiRouter(PROFILES, handlers),
     onChange: handleMidiChange,
     onStatus: (text) => (midiStatus.textContent = text),
   }),

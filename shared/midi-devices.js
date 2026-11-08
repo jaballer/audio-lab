@@ -14,8 +14,30 @@
 // to each app: see apps/keys/devices.js. Supporting another controller means
 // adding a profile, not editing the app's handlers.
 
+import { parseMidi } from "./midi-messages.js";
+
 // The first profile whose `match` accepts the input's name. Put a catch-all
 // (one whose match is always true) last so every device gets something.
 export function selectProfile(profiles, inputName = "") {
   return profiles.find((profile) => profile.match(inputName)) ?? null;
+}
+
+// A message handler for createMidiAccess's `onMessage`: finds the profile for the
+// input a message came from, has it translate the message, and hands each event
+// to `handlers[event.type](event, input)`.
+//
+//   const onMessage = createMidiRouter(PROFILES, { pad: (e, input) => {}, knob: (e) => {} });
+//
+// An event with no handler is a mismatch between a profile and the app, so it
+// throws rather than being dropped without a trace.
+export function createMidiRouter(profiles, handlers) {
+  return function route(input, data) {
+    const profile = selectProfile(profiles, input.name);
+    if (!profile) return;
+    for (const event of profile.translate(parseMidi(data))) {
+      const handle = handlers[event.type];
+      if (!handle) throw new Error(`No handler for MIDI event "${event.type}"`);
+      handle(event, input);
+    }
+  };
 }
