@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STARTER_BEAT } from "./pattern.js";
-import { SONG_VERSION, createSongSaver, parseSong, serializeSong } from "./song.js";
+import { SONG_VERSION, createSongSaver, parseSong, serializeSong, upgradeSong } from "./song.js";
 
 const SHAPE = { rows: 16, steps: 16 };
 const song = { bpm: 96.5, volume: 60, pattern: { 0: [0, 4, 8, 12], 3: [2] } };
@@ -160,5 +160,39 @@ describe("createSongSaver", () => {
     const { saver, saved } = setup();
     saver.flush();
     expect(saved).toEqual([]);
+  });
+});
+
+describe("upgradeSong", () => {
+  const current = serializeSong(song);
+
+  it("leaves a song that is already current as it is", () => {
+    expect(upgradeSong(current)).toEqual(current);
+  });
+
+  it("gives up on a song from a newer page", () => {
+    expect(upgradeSong({ ...current, version: SONG_VERSION + 1 })).toBeNull();
+  });
+
+  it("gives up on an older song when no migration covers it", () => {
+    expect(upgradeSong({ ...current, version: SONG_VERSION - 1 })).toBeNull();
+  });
+
+  it("gives up on anything without a whole-number version", () => {
+    for (const bad of [null, "song", [], {}, { ...current, version: "1" }, { ...current, version: 1.5 }]) {
+      expect(upgradeSong(bad)).toBeNull();
+    }
+  });
+
+  it("applies each migration in turn, stamping the version after it", () => {
+    const old = { version: SONG_VERSION - 1, bpm: 90, volume: 50, pattern: { 0: [1] } };
+    const migrations = { [SONG_VERSION - 1]: (s) => ({ ...s, bpm: s.bpm + 1 }) };
+    expect(upgradeSong(old, migrations)).toEqual({ version: SONG_VERSION, bpm: 91, volume: 50, pattern: { 0: [1] } });
+  });
+
+  it("stops at a gap in the chain", () => {
+    const old = { version: SONG_VERSION - 2, bpm: 90, volume: 50, pattern: {} };
+    const migrations = { [SONG_VERSION - 2]: (s) => s }; // nothing for the next step
+    expect(upgradeSong(old, migrations)).toBeNull();
   });
 });
