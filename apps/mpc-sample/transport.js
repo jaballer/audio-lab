@@ -15,10 +15,16 @@
 //   transport.expire(now);                               // call now and then; true if it changed state
 //   transport.snapshot();                                // { state, bpm, position }
 //   transport.setLoopBars(n);                            // the sequence is n bars long: the bar count wraps
+//   transport.setSignature(numerator, denominator);      // the project's time signature, e.g. 3, 4
 //   transport.reset();                                   // the device went away
 
 export const CLOCKS_PER_BEAT = 24; // MIDI clock is 24 ticks per quarter note
-export const BEATS_PER_BAR = 4; // assumed: the device's time signature is not sent
+export const BEATS_PER_BAR = 4; // the default time signature is 4/4: it is not sent, so the page is told
+export const MAX_LOOP_BARS = 128; // the longest sequence the device has
+export const MAX_BEATS_PER_BAR = 32; // the page's limit on a signature's numerator
+export const NOTE_VALUES = [2, 4, 8, 16]; // what one beat can be: a half, quarter, eighth or sixteenth note
+const DEFAULT_NOTE_VALUE = 4;
+const CLOCKS_PER_WHOLE = 4 * CLOCKS_PER_BEAT; // a whole note
 export const STALE_MS = 1000; // a clock this quiet while playing means the device stopped
 const CLOCKS_PER_SIXTEENTH = CLOCKS_PER_BEAT / 4; // song position counts sixteenth notes
 // Ticks reach the page about a millisecond off their true time, and the estimate is the span
@@ -38,10 +44,36 @@ const MS_PER_MINUTE = 60000;
 // What a toggle (the Space key) asks the device for.
 export const toggleAction = (state) => (state === "playing" ? "stop" : "play");
 
-// `loopBars` is how long the device's sequence is. It is not sent, so the page is told; the
-// default counts on without end.
-export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
+const isLoopBars = (bars) => Number.isInteger(bars) && bars >= 1 && bars <= MAX_LOOP_BARS;
+const isNumerator = (n) => Number.isInteger(n) && n >= 1 && n <= MAX_BEATS_PER_BAR;
+const isNoteValue = (d) => NOTE_VALUES.includes(d);
+
+const DEFAULT_SEQUENCE = { bars: 1, numerator: BEATS_PER_BAR, denominator: DEFAULT_NOTE_VALUE };
+
+// What the sequence settings are, from whatever was saved or typed: each field that is not valid
+// falls back to the one in `fallback` (one bar of 4/4 unless given), so a stale or hand-edited
+// value cannot break the page and a typo leaves the field as it was.
+export function normalizeSequence(saved, fallback = DEFAULT_SEQUENCE) {
+  const value = saved && typeof saved === "object" ? saved : {};
+  return {
+    bars: isLoopBars(value.bars) ? value.bars : fallback.bars,
+    numerator: isNumerator(value.numerator) ? value.numerator : fallback.numerator,
+    denominator: isNoteValue(value.denominator) ? value.denominator : fallback.denominator,
+  };
+}
+
+// `loopBars` is how long the device's sequence is, and `numerator` / `denominator` its time
+// signature. None of them are sent, so the page is told; by default it counts bars of 4/4 on
+// without end.
+export function createTransport({
+  loopBars: initialLoopBars = Infinity,
+  numerator: initialNumerator = BEATS_PER_BAR,
+  denominator: initialDenominator = DEFAULT_NOTE_VALUE,
+} = {}) {
   let loopBars = initialLoopBars;
+  let numerator = initialNumerator;
+  let denominator = initialDenominator;
+  let guessedStop = false; // stopped because the clock went quiet, not because the device said so
   let state = "unknown"; // "unknown" until the device sends Start, Continue or Stop, or a clock
   let bpm = null;
   let times = []; // arrival time of the most recent clock ticks
@@ -70,10 +102,17 @@ export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
     if (bpm === null || Math.abs(next - bpm) >= DEAD_BAND) bpm = next;
   }
 
+  // Clock is 24 ticks per quarter note whatever the signature, so a beat (the note value the
+  // signature counts in) is a whole note's ticks divided by that value.
   function position() {
     if (base === null) return null;
-    const beats = Math.floor(clocksIn() / CLOCKS_PER_BEAT) % (loopBars * BEATS_PER_BAR);
-    return { bar: Math.floor(beats / BEATS_PER_BAR) + 1, beat: (beats % BEATS_PER_BAR) + 1 };
+    const clocksPerBeat = CLOCKS_PER_WHOLE / denominator;
+    const clocksPerBar = numerator * clocksPerBeat;
+    const clocks = clocksIn() % (loopBars * clocksPerBar);
+    return {
+      bar: Math.floor(clocks / clocksPerBar) + 1,
+      beat: Math.floor((clocks % clocksPerBar) / clocksPerBeat) + 1,
+    };
   }
 
   return {
@@ -81,6 +120,7 @@ export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
       switch (event.type) {
         case "transportStart":
           state = "playing";
+          guessedStop = false;
           bpm = null; // a start may come with a new tempo, so do not show the old one
           base = 0;
           since = 0;
@@ -88,12 +128,14 @@ export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
           break;
         case "transportContinue":
           state = "playing";
+          guessedStop = false;
           if (base !== null) base = clocksIn(); // pick up where it stopped, unless it says otherwise
           since = 0;
           forgetTicks();
           break;
         case "transportStop":
           state = "stopped"; // the last tempo and place stay on show
+          guessedStop = false;
           forgetTicks();
           break;
         case "songPosition":
@@ -101,8 +143,15 @@ export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
           since = 0;
           break;
         case "clock":
-          // A tick after a Stop is a stray one, not a sign it is playing again.
-          if (state === "stopped") break;
+          // A tick after a Stop is a stray one, not a sign it is playing again. After a guessed
+          // stop it is the proof the guess was wrong, and the ticks missed meanwhile cannot be
+          // counted, so the place is not known until the device says it again.
+          if (state === "stopped" && !guessedStop) break;
+          if (guessedStop) {
+            guessedStop = false;
+            base = null;
+            since = 0;
+          }
           state = "playing";
           if (base !== null) since += 1;
           lastTick = event.time;
@@ -118,16 +167,24 @@ export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
     expire(now) {
       if (state !== "playing" || lastTick === null || now - lastTick <= STALE_MS) return false;
       state = "stopped";
+      guessedStop = true;
       forgetTicks();
       return true;
     },
 
     setLoopBars(bars) {
-      if (Number.isInteger(bars) && bars > 0) loopBars = bars;
+      if (isLoopBars(bars)) loopBars = bars;
+    },
+
+    setSignature(newNumerator, newDenominator) {
+      if (!isNumerator(newNumerator) || !isNoteValue(newDenominator)) return;
+      numerator = newNumerator;
+      denominator = newDenominator;
     },
 
     reset() {
       state = "unknown";
+      guessedStop = false;
       bpm = null;
       base = null;
       since = 0;

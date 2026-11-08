@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { BEATS_PER_BAR, CLOCKS_PER_BEAT, STALE_MS, createTransport, toggleAction } from "./transport.js";
+import {
+  BEATS_PER_BAR,
+  CLOCKS_PER_BEAT,
+  MAX_LOOP_BARS,
+  STALE_MS,
+  createTransport,
+  normalizeSequence,
+  toggleAction,
+} from "./transport.js";
 
 const start = { type: "transportStart" };
 const stop = { type: "transportStop" };
@@ -79,6 +87,37 @@ describe("a clock that goes quiet", () => {
     expect(transport.expire(60_000)).toBe(false);
     transport.apply(stop);
     expect(transport.expire(60_000)).toBe(false);
+  });
+
+  // A suspended or throttled page, or a stalled stream, goes quiet while the device plays on.
+  // That is a guess that it stopped, so clock that comes back proves the guess wrong.
+  it("plays again when clock comes back after the guess that it stopped", () => {
+    const transport = createTransport();
+    transport.apply(start);
+    const last = tick(transport, 120, 60);
+    expect(transport.expire(last + STALE_MS + 1)).toBe(true);
+    tick(transport, 98, 60, last + 5000);
+    expect(transport.snapshot()).toMatchObject({ state: "playing", bpm: 98 });
+  });
+
+  // The ticks missed in the gap cannot be counted, so the bar is not shown rather than wrong.
+  it("does not know the bar after a gap in the clock", () => {
+    const transport = createTransport();
+    transport.apply(start);
+    const last = tick(transport, 120, 60);
+    transport.expire(last + STALE_MS + 1);
+    tick(transport, 120, 5, last + 5000);
+    expect(transport.snapshot().position).toBeNull();
+  });
+
+  it("still ignores stray clock after a Stop the device really sent", () => {
+    const transport = createTransport();
+    transport.apply(start);
+    const last = tick(transport, 120, 60);
+    transport.apply(stop);
+    transport.expire(last + STALE_MS + 1);
+    tick(transport, 120, 30, last + 5000);
+    expect(transport.snapshot().state).toBe("stopped");
   });
 });
 
@@ -182,12 +221,116 @@ describe("a looping sequence", () => {
     expect(transport.snapshot().position).toEqual({ bar: 1, beat: 3 });
   });
 
-  it("ignores a length that is not a whole number of bars", () => {
+  it("ignores a length that is not a whole number of bars, or more than the device has", () => {
     const transport = createTransport({ loopBars: 2 });
-    for (const bad of [0, -1, 1.5, NaN, "4", null]) transport.setLoopBars(bad);
+    for (const bad of [0, -1, 1.5, NaN, "4", null, MAX_LOOP_BARS + 1]) transport.setLoopBars(bad);
     transport.apply(start);
     beatsIn(transport, 5);
     expect(transport.snapshot().position).toEqual({ bar: 2, beat: 2 });
+  });
+
+  // The device offers 1 to 128 bars, not only powers of two.
+  it("takes any length from 1 to 128 bars", () => {
+    for (const bars of [3, 16, 100, MAX_LOOP_BARS]) {
+      const transport = createTransport({ loopBars: bars });
+      transport.apply({ type: "songPosition", position: bars * 16 + 4 }); // one beat past the end
+      expect(transport.snapshot().position).toEqual({ bar: 1, beat: 2 });
+      transport.apply({ type: "songPosition", position: (bars - 1) * 16 });
+      expect(transport.snapshot().position).toEqual({ bar: bars, beat: 1 });
+    }
+  });
+});
+
+// The device's time signature is the project's own, so the page is told it too. Clock is 24 ticks
+// per quarter note whatever the signature, so a beat is a quarter divided by the note value.
+describe("a time signature", () => {
+  it("counts a bar of 3/4 as three quarter-note beats", () => {
+    const transport = createTransport({ numerator: 3, denominator: 4 });
+    transport.apply(start);
+    tick(transport, 120, 1 + 3 * CLOCKS_PER_BEAT);
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 1 });
+    tick(transport, 120, 2 * CLOCKS_PER_BEAT, 10_000);
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 3 });
+  });
+
+  it("counts a bar of 6/8 as six eighth-note beats, half a quarter each", () => {
+    const transport = createTransport({ numerator: 6, denominator: 8 });
+    transport.apply(start);
+    tick(transport, 120, 1 + 5 * (CLOCKS_PER_BEAT / 2));
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 6 });
+    tick(transport, 120, CLOCKS_PER_BEAT / 2, 10_000);
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 1 });
+  });
+
+  it("wraps a looping sequence at its bars of that length", () => {
+    const transport = createTransport({ numerator: 3, denominator: 4, loopBars: 2 });
+    transport.apply(start);
+    tick(transport, 120, 1 + 6 * CLOCKS_PER_BEAT);
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 1 });
+  });
+
+  it("reads the device's song position in sixteenths, so 12 of them are 3/4's first bar", () => {
+    const transport = createTransport({ numerator: 3, denominator: 4 });
+    transport.apply({ type: "songPosition", position: 12 });
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 1 });
+  });
+
+  it("can be changed while playing, keeping the place in the song", () => {
+    const transport = createTransport();
+    transport.apply({ type: "songPosition", position: 24 }); // six quarters in
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 3 });
+    transport.setSignature(3, 4);
+    expect(transport.snapshot().position).toEqual({ bar: 3, beat: 1 });
+  });
+
+  it("ignores a signature the page cannot count", () => {
+    const transport = createTransport();
+    for (const [n, d] of [
+      [0, 4],
+      [4, 3],
+      [4, 0],
+      [1.5, 4],
+      [33, 4],
+      ["4", 4],
+      [4, null],
+    ]) {
+      transport.setSignature(n, d);
+    }
+    transport.apply({ type: "songPosition", position: 16 });
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 1 });
+  });
+});
+
+describe("normalizeSequence", () => {
+  it("keeps good settings and falls back to 1 bar of 4/4 for anything else", () => {
+    expect(normalizeSequence({ bars: 16, numerator: 7, denominator: 8 })).toEqual({
+      bars: 16,
+      numerator: 7,
+      denominator: 8,
+    });
+    expect(normalizeSequence(null)).toEqual({ bars: 1, numerator: 4, denominator: 4 });
+    expect(normalizeSequence("x")).toEqual({ bars: 1, numerator: 4, denominator: 4 });
+    expect(normalizeSequence({ bars: 0, numerator: 99, denominator: 5 })).toEqual({
+      bars: 1,
+      numerator: 4,
+      denominator: 4,
+    });
+    expect(normalizeSequence({ bars: 8 })).toEqual({ bars: 8, numerator: 4, denominator: 4 });
+  });
+
+  // Typing a bad value into one field should leave that field as it was, not reset it.
+  it("falls back to the settings it is given, field by field", () => {
+    const current = { bars: 16, numerator: 7, denominator: 8 };
+    expect(normalizeSequence({ bars: 500, numerator: 3, denominator: 4 }, current)).toEqual({
+      bars: 16,
+      numerator: 3,
+      denominator: 4,
+    });
+    expect(normalizeSequence({ bars: 2, numerator: 0, denominator: 5 }, current)).toEqual({
+      bars: 2,
+      numerator: 7,
+      denominator: 8,
+    });
   });
 });
 

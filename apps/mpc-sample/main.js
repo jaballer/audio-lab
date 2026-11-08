@@ -16,7 +16,7 @@ import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
-import { createTransport, toggleAction } from "./transport.js";
+import { createTransport, normalizeSequence, toggleAction } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
 
 const $ = (id) => document.getElementById(id);
@@ -27,18 +27,27 @@ const header = createAppHeader($("header"), {
   back: { href: "./", label: "Sampler" },
 });
 
-const LOOP_STORE_KEY = "mpc-sample.loop-bars";
-const DEFAULT_LOOP_BARS = 1;
-const loopSelect = $("loop-bars");
+const SEQUENCE_STORE_KEY = "mpc-sample.sequence";
+const barsInput = $("seq-bars");
+const beatsInput = $("seq-beats");
+const noteSelect = $("seq-note");
 
-// The device does not say how long its sequence is, so it is a setting, kept between visits.
-// A saved value the list no longer has falls back to the default.
-const savedLoop = loadJson(LOOP_STORE_KEY, DEFAULT_LOOP_BARS);
-loopSelect.value = String(savedLoop);
-if (loopSelect.value !== String(savedLoop)) loopSelect.value = String(DEFAULT_LOOP_BARS);
+// The device does not say how long its sequence is or what its time signature is, so they are
+// settings, kept between visits. Anything saved that is not valid falls back to 1 bar of 4/4.
+let sequence = normalizeSequence(loadJson(SEQUENCE_STORE_KEY));
+function showSequence() {
+  barsInput.value = String(sequence.bars);
+  beatsInput.value = String(sequence.numerator);
+  noteSelect.value = String(sequence.denominator);
+}
+showSequence();
 
 const board = createBoard();
-const transport = createTransport({ loopBars: Number(loopSelect.value) });
+const transport = createTransport({
+  loopBars: sequence.bars,
+  numerator: sequence.numerator,
+  denominator: sequence.denominator,
+});
 const grid = createPadGrid($("pads"));
 const strip = createBankStrip($("banks"));
 const lights = createTransportLights({ play: $("lamp-play"), stop: $("lamp-stop") });
@@ -85,12 +94,23 @@ function send(message) {
 playButton.addEventListener("click", () => send(mpcSample.messages.play));
 stopButton.addEventListener("click", () => send(mpcSample.messages.stop));
 
-loopSelect.addEventListener("change", () => {
-  const bars = Number(loopSelect.value);
-  transport.setLoopBars(bars);
-  saveJson(LOOP_STORE_KEY, bars);
+// A field left empty or out of range goes back to the last good value instead of being used.
+function changeSequence() {
+  sequence = normalizeSequence(
+    {
+      bars: Number(barsInput.value),
+      numerator: Number(beatsInput.value),
+      denominator: Number(noteSelect.value),
+    },
+    sequence,
+  );
+  showSequence();
+  transport.setLoopBars(sequence.bars);
+  transport.setSignature(sequence.numerator, sequence.denominator);
+  saveJson(SEQUENCE_STORE_KEY, sequence);
   schedule();
-});
+}
+for (const control of [barsInput, beatsInput, noteSelect]) control.addEventListener("change", changeSequence);
 
 // Space plays or stops, as on the sampler page. A focused button or field keeps its own Space.
 window.addEventListener("keydown", (event) => {
