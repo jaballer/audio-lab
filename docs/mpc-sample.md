@@ -83,12 +83,21 @@ What this shows:
   handle that, for example by ignoring hits that arrive just after a note the page sent.
 - The channel rewrite means this is not MIDI Thru (which would keep channel 2) and that MIDI In Channel accepts at
   least channels 1 and 2 (probably All). Its value was not read from the device.
+- **Velocity changes the loudness.** The owner heard the velocity 25 note as quieter than the velocity 127 ones.
 
-Not confirmed, because it cannot be told from the log and was not reported by ear: whether velocity changes the
-loudness, and whether a short note-off cuts the sample short or the pad plays out as a one-shot. The owner could not
-tell the banks' sounds apart, so a different sample per bank is also unconfirmed. Not tried: how accurately a
-timestamped `output.send(bytes, t)` lands in a browser, whether sending Start and clock at the same time changes
-any of this, and what happens while the device is also playing its own sequence.
+A second run, from Chrome on macOS with Web MIDI instead of ALSA, repeated the six notes and added note 36 on
+channels 3, 9 and 16. The device played and echoed all of them on channel 1, which makes MIDI In Channel = All very
+likely (the setting itself was still not read). Each note was scheduled with `output.send(bytes, t)` and the echo's
+`timeStamp` compared with `t`: the note on came back 9.2 to 10.9 ms late every time, and the echoed note-off gaps were
+within about 3 ms of what was sent. That is nine notes on an otherwise quiet device, so it says nothing about a busy
+sequence. A steady lag of about 10 ms may include USB and driver delay, so a sequencer could send that much early.
+Chrome on macOS names the port plain `MPC Sample`, for both the input and the output.
+
+Not confirmed: whether a short note-off cuts the sample short or the pad plays out as a one-shot. The owner could not
+hear a difference between the 50 ms and the 1 s note, which says more about the short samples loaded than about the
+device, so try it with a long, sustained sample. The owner could not tell the banks' sounds apart, so a different
+sample per bank is also unconfirmed. Not tried: whether sending Start and clock at the same time changes any of
+this, and what happens while the device is also playing its own sequence.
 
 ## What the device sends, captured
 
