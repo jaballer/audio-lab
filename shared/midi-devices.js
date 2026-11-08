@@ -16,6 +16,12 @@
 
 import { parseMidi } from "./midi-messages.js";
 
+// What may follow a model name in a MIDI port name, for a `match` that must not be
+// anchored to the end: ALSA appends an instance number, Firefox on Linux reports ports as
+// "client:port MIDI 1 28:0", and Windows adds a "2- " prefix. Use it as a lookahead right
+// after the model, so a longer model name ("... Pro") does not match the shorter one.
+export const PORT_DECORATION = String.raw`(?=\s*$|[:)\]]|\s+(?:midi\b|\d+:\d+\b|[(\[]))`;
+
 // The first profile whose `match` accepts the input's name. Put a catch-all
 // (one whose match is always true) last so every device gets something.
 export function selectProfile(profiles, inputName = "") {

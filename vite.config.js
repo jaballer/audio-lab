@@ -11,6 +11,7 @@ export default defineConfig({
         main: resolve(import.meta.dirname, "index.html"),
         keyboard: resolve(import.meta.dirname, "keyboard.html"),
         monitor: resolve(import.meta.dirname, "monitor.html"),
+        mpcSample: resolve(import.meta.dirname, "mpc-sample.html"),
         toneDemo: resolve(import.meta.dirname, "tone-demo.html"),
       },
     },

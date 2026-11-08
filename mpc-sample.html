@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MPC Sample Companion</title>
+  </head>
+  <body>
+    <main class="device mpc-page">
+      <header id="header" class="top"></header>
+
+      <div class="mpc-deck">
+        <section class="mpc-pad-block" aria-label="Pads">
+          <div id="pads" class="mpc-pads" role="group" aria-label="Pads, pad 1 bottom-left"></div>
+          <div class="mpc-banks-row">
+            <span class="small-label">Bank</span>
+            <div id="banks" class="mpc-banks" role="group" aria-label="Pad banks"></div>
+          </div>
+        </section>
+
+        <section class="lcd" aria-label="Display">
+          <div class="lcd-screen mpc-screen" role="status" aria-live="off">
+            <div class="lcd-line" id="lcd-status"></div>
+            <div class="lcd-line" id="lcd-pad"></div>
+            <div class="lcd-line" id="lcd-vel"></div>
+          </div>
+        </section>
+      </div>
+
+      <footer class="footnote">
+        Hit the pads on the device &middot; the number in each pad is the note it sends in the current bank &middot;
+        <a href="monitor.html">MIDI monitor</a> shows every raw message &middot; no pad events? On the device set MIDI
+        Port to USB and Pad MIDI Out to Always (Shift + Pad 8, MIDI Config)
+      </footer>
+    </main>
+    <script type="module" src="/apps/mpc-sample/main.js"></script>
+  </body>
+</html>
