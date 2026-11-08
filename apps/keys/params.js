@@ -13,8 +13,8 @@
 //
 // The order is the knob order: entry 0 is knob K1, entry 1 is K2, and so on.
 //
-// To add a parameter: give it a default in synth.js (DEFAULT_PARAMS), add the
-// markup (control and, for a range, readout), and add one entry here.
+// To add a parameter: give it a default in synth.js (DEFAULT_PARAMS) and add one
+// entry here. The page draws its control from the entry (synth-panel.js).
 
 import { exp, linear, squared } from "../../shared/scales.js";
 import { WAVES } from "./synth.js";
@@ -47,6 +47,21 @@ export const PARAMS = [
   { name: "resonance", group: "tone", ...linear(0, RESONANCE_MAX), format: (db) => `${db.toFixed(1)} dB` },
   { name: "volume", group: "tone", ...squared(), format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%` },
 ];
+
+// The sections the panel draws, in order: `id` matches a param's `group`.
+export const GROUPS = [
+  { id: "env", label: "Envelope", title: "Envelope \u00b7 ADSR" },
+  { id: "tone", label: "Tone", title: "Tone \u00b7 K5\u2013K8" },
+];
+
+const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+// What a control is called on the page.
+export const labelFor = (param) => capitalize(param.name);
+
+// What a choice is called in its select. Only the odd ones are listed.
+const CHOICE_LABELS = { sawtooth: "Saw" };
+export const choiceLabel = (choice) => CHOICE_LABELS[choice] ?? capitalize(choice);
 
 export const isChoice = (param) => Array.isArray(param.choices);
 
