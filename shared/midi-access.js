@@ -32,17 +32,23 @@ export function summarizeInputs(names) {
 
 export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex = false }) {
   let access = null;
-  let known = null; // input names at the last scan, to log what was plugged in or removed
+  let known = null; // the inputs at the last scan as id -> name, to log what was plugged in or removed
 
-  function logScan(names) {
+  // Two units of one model share a name, so inputs are told apart by the port's own id; the name
+  // is only for display. A port without an id falls back to its name.
+  const keyOf = (input) => input.id ?? input.name;
+
+  function logScan(inputs) {
     if (!onLog) return;
+    const names = inputs.map((i) => i.name);
     onLog(names.length ? `Inputs (${names.length}): ${names.join(", ")}` : "No MIDI inputs");
+    const now = new Map(inputs.map((i) => [keyOf(i), i.name]));
     // The first scan only lists them: calling each one "connected" would repeat that list.
     if (known) {
-      for (const name of names) if (!known.includes(name)) onLog(`Connected: ${name}`);
-      for (const name of known) if (!names.includes(name)) onLog(`Disconnected: ${name}`, "warn");
+      for (const [key, name] of now) if (!known.has(key)) onLog(`Connected: ${name}`);
+      for (const [key, name] of known) if (!now.has(key)) onLog(`Disconnected: ${name}`, "warn");
     }
-    known = names;
+    known = now;
   }
 
   function rescan() {
@@ -52,7 +58,7 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
     });
     const names = inputs.map((i) => i.name);
     onStatus(summarizeInputs(names));
-    logScan(names);
+    logScan(inputs);
     onChange?.(access, inputs);
   }
 
