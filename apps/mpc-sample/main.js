@@ -20,7 +20,8 @@ import { createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
-import { SOUNDS, playSound } from "../../shared/sounds.js";
+import { createPadSound } from "./pad-sound.js";
+import { SOUNDS } from "../../shared/sounds.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { createTransport, normalizeSequence, toggleAction } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
@@ -34,7 +35,6 @@ const header = createAppHeader($("header"), {
 });
 
 const SOUND_VOLUME = 0.8; // the sampler's default volume
-const MIDI_VELOCITY_MAX = 127;
 
 const SEQUENCE_STORE_KEY = "mpc-sample.sequence";
 const barsInput = $("seq-bars");
@@ -155,10 +155,10 @@ setInterval(() => {
   if (transport.expire(performance.now())) schedule();
 }, STALE_CHECK_MS);
 
-// Every bank plays the same 16 sounds: a pad is the same pad whichever bank it is in.
+const padSound = createPadSound({ audio, sounds: SOUNDS, isOn: () => soundOn });
 function playPad(event) {
   applyToBoard(event);
-  if (soundOn) playSound(audio, SOUNDS[event.index], event.velocity / MIDI_VELOCITY_MAX);
+  padSound.hit(event);
 }
 
 const handlers = {
