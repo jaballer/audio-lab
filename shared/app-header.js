@@ -6,10 +6,9 @@
 //   const header = createAppHeader(element, {
 //     brand: { name: "PAD", accent: "16" },   // `accent` is drawn highlighted, after `name`
 //     sub: "Digital Sampler & Sequencer",
-//     powerLed: true,                         // optional: the sampler's red power light
-//     audioStatus: true,                      // optional: a text slot for the audio state
+//     onPower: () => {},                      // optional: draws the POWER switch and calls this when it is pressed
 //   });
-//   header.setAudioStatus(text)  // only with `audioStatus: true`
+//   header.setPowered(true)                   // lights (or darkens) the switch's LED; the page decides when
 
 function element(tag, className, text) {
   const el = document.createElement(tag);
@@ -18,31 +17,30 @@ function element(tag, className, text) {
   return el;
 }
 
-export function createAppHeader(root, { brand, sub, powerLed = false, audioStatus = false }) {
+export function createAppHeader(root, { brand, sub, onPower = null }) {
   const name = element("span", "brand-name", brand.name);
   if (brand.accent) name.append(element("b", "", brand.accent));
 
   const power = element("div", "power");
 
-  const audio = audioStatus ? element("span", "small-label", "") : null;
-  if (audio) {
-    audio.id = "audio-status";
-    audio.setAttribute("role", "status");
-    power.append(audio);
-  }
-
-  if (powerLed) {
+  let powerSwitch = null;
+  if (onPower) {
+    powerSwitch = element("button", "power-switch");
+    powerSwitch.type = "button";
+    powerSwitch.setAttribute("aria-pressed", "false");
     const led = element("span", "power-led");
     led.setAttribute("aria-hidden", "true");
-    power.append(led, element("span", "small-label", "Power"));
+    powerSwitch.append(led, element("span", "small-label", "Power"));
+    powerSwitch.addEventListener("click", onPower);
+    power.append(powerSwitch);
   }
 
   root.append(element("div", "brand"), power);
   root.firstElementChild.append(name, element("span", "brand-sub", sub));
 
   return {
-    setAudioStatus: (text) => {
-      if (audio) audio.textContent = text;
+    setPowered(on) {
+      powerSwitch?.setAttribute("aria-pressed", String(on));
     },
   };
 }

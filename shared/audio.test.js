@@ -14,6 +14,9 @@ function installAudioContext() {
       this.resume = vi.fn(() => {
         this.state = "running";
       });
+      this.suspend = vi.fn(() => {
+        this.state = "suspended";
+      });
       instances.push(this);
     }
 
@@ -139,6 +142,118 @@ describe("createAudioEngine", () => {
       ctx.onstatechange = () => {};
       ctx.changeState("suspended");
       expect(onStateChange).toHaveBeenLastCalledWith("suspended");
+    });
+  });
+
+  describe("power", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("starts on, and turning it off fades the sound out before the context is suspended", () => {
+      vi.useFakeTimers();
+      installAudioContext();
+      const audio = createAudioEngine({ volume: 0.5 });
+      const ctx = audio.ensure();
+      expect(audio.powered).toBe(true);
+
+      audio.powerOff();
+      expect(audio.powered).toBe(false);
+      // Faded first: suspending a sounding context would cut it off with a click.
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, ctx.currentTime, expect.any(Number));
+      expect(ctx.suspend).not.toHaveBeenCalled();
+      vi.runAllTimers();
+      expect(ctx.suspend).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports "off" while it is off, whatever the context does', () => {
+      vi.useFakeTimers();
+      installAudioContext();
+      const onStateChange = vi.fn();
+      const audio = createAudioEngine({ onStateChange });
+      const ctx = audio.ensure();
+      audio.powerOff();
+      expect(onStateChange).toHaveBeenLastCalledWith("off");
+      vi.runAllTimers();
+      ctx.changeState("suspended");
+      expect(onStateChange).toHaveBeenLastCalledWith("off");
+    });
+
+    it("stays silent while off: a press or a note does not wake the context", () => {
+      vi.useFakeTimers();
+      installAudioContext();
+      const audio = createAudioEngine();
+      const target = fakeTarget();
+      audio.unlockOnInteraction(target);
+      const ctx = audio.ensure();
+      audio.powerOff();
+      vi.runAllTimers();
+      ctx.resume.mockClear();
+
+      target.listeners.find((l) => l.type === "pointerdown").handler();
+      audio.ensure();
+      expect(ctx.resume).not.toHaveBeenCalled();
+      expect(audio.running).toBe(false);
+    });
+
+    it("suspends a context that a gesture just started while it is off", () => {
+      installAudioContext();
+      const audio = createAudioEngine();
+      audio.powerOff(); // before any context exists
+      const ctx = audio.ensure();
+      ctx.changeState("running"); // a browser starts a context built during a gesture
+      audio.ensure();
+      expect(ctx.suspend).toHaveBeenCalled();
+      expect(audio.running).toBe(false);
+    });
+
+    it("turns back on: the sound returns at the volume it had and the state is reported", () => {
+      vi.useFakeTimers();
+      installAudioContext();
+      const onStateChange = vi.fn();
+      const audio = createAudioEngine({ volume: 0.5, onStateChange });
+      const ctx = audio.ensure();
+      audio.powerOff();
+      vi.runAllTimers();
+
+      audio.powerOn();
+      expect(audio.powered).toBe(true);
+      expect(ctx.resume).toHaveBeenCalledTimes(2);
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, ctx.currentTime, expect.any(Number));
+      expect(onStateChange).toHaveBeenLastCalledWith("running");
+    });
+
+    it("turning on with no context yet builds one and starts it, as a press would", () => {
+      const instances = installAudioContext();
+      const audio = createAudioEngine();
+      audio.powerOff();
+      audio.powerOn();
+      expect(instances).toHaveLength(1);
+      expect(audio.running).toBe(true);
+    });
+
+    it("does not suspend if the power came back before the fade finished", () => {
+      vi.useFakeTimers();
+      installAudioContext();
+      const audio = createAudioEngine();
+      const ctx = audio.ensure();
+      audio.powerOff();
+      audio.powerOn();
+      vi.runAllTimers();
+      expect(ctx.suspend).not.toHaveBeenCalled();
+    });
+
+    it("keeps a volume change made while off from bringing the sound back", () => {
+      vi.useFakeTimers();
+      installAudioContext();
+      const audio = createAudioEngine({ volume: 0.5 });
+      const ctx = audio.ensure();
+      audio.powerOff();
+      vi.runAllTimers();
+      audio.master.gain.setTargetAtTime.mockClear();
+
+      audio.setVolume(0.9);
+      expect(audio.master.gain.setTargetAtTime).not.toHaveBeenCalled();
+      audio.powerOn();
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.9, ctx.currentTime, expect.any(Number));
     });
   });
 

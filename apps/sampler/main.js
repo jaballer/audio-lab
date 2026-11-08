@@ -5,6 +5,8 @@
 import "../../shared/base.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
+import { createAudioNotice } from "../../shared/audio-notice.js";
+import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
@@ -23,10 +25,10 @@ import { BPM_MAX, BPM_MIN } from "./tempo.js";
 const $ = (id) => document.getElementById(id);
 
 const site = createSiteHeader($("site-header"), { current: "sampler" });
-createAppHeader($("header"), {
+const header = createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
   sub: "Digital Sampler & Sequencer",
-  powerLed: true,
+  onPower: () => togglePower(audio),
 });
 
 const volInput = $("vol");
@@ -47,7 +49,16 @@ const saver = createSongSaver({
 window.addEventListener("pagehide", () => saver.flush());
 
 // ---------- Audio and sequencer ----------
-const audio = createAudioEngine({ volume: (song ? song.volume : DEFAULT_VOLUME) / 100 });
+// The notice comes first: the engine reports its state as soon as it is told to
+// listen, and that first report is what shows the notice on a fresh load.
+const audioNotice = createAudioNotice($("audio-notice"));
+const audio = createAudioEngine({
+  volume: (song ? song.volume : DEFAULT_VOLUME) / 100,
+  onStateChange: (state) => {
+    audioNotice.update(state);
+    header.setPowered(state === "running");
+  },
+});
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
 
 // The callbacks below use the views and `midi`, which are built after this. That
@@ -146,6 +157,12 @@ window.addEventListener("keydown", (e) => {
 // ---------- MIDI ----------
 const midi = createMidi({
   ...sampler,
+  triggerPad(idx, velocity) {
+    // Only MIDI comes through here: a click or key press has already unlocked
+    // audio (unlockOnInteraction), so this is the hit that would be silent.
+    if (!audio.running) audioNotice.nudge();
+    sampler.triggerPad(idx, velocity);
+  },
   padCount: PAD_COUNT,
   steps: STEPS,
   onStatus: site.setMidiStatus,
