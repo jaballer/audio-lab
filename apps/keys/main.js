@@ -125,8 +125,9 @@ const panel = createSynthPanel($("synth"), {
 });
 
 // ---------- MIDI ----------
-// MIDI cannot unlock audio (only a click or key press does), so a hit that arrives
-// while sound is still off makes no sound: point at the notice.
+// MIDI cannot unlock audio (only a click or key press does), so a note that arrives
+// while sound is still off makes no sound: point at the notice. (Not for a pad: those
+// are only shown here, they never play.)
 const nudgeIfSilent = () => {
   if (!audio.running) audioNotice.nudge();
 };
@@ -148,7 +149,6 @@ const handlers = {
     keys.applyKnob(e.index, e.value);
   },
   pad: (e) => {
-    nudgeIfSilent();
     const slot = padLearner.slotFor(e.note);
     if (slot >= 0) padGrid.hit(slot, e.note, e.velocity);
     keys.showPad({ note: e.note, velocity: e.velocity, channel: e.channel });

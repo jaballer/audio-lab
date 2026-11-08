@@ -27,6 +27,7 @@ export function createAppHeader(root, { brand, sub, onPower = null }) {
   if (onPower) {
     powerSwitch = element("button", "power-switch");
     powerSwitch.type = "button";
+    powerSwitch.dataset.powerSwitch = ""; // audio.js leaves a press on it out of the unlock
     powerSwitch.setAttribute("aria-pressed", "false");
     const led = element("span", "power-led");
     led.setAttribute("aria-hidden", "true");

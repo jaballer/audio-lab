@@ -33,6 +33,7 @@ function fakeAudio() {
   };
   return {
     ctx,
+    powered: true,
     ensure: () => ctx,
     master: node({}),
     setVolume: vi.fn(),
@@ -42,6 +43,12 @@ function fakeAudio() {
 }
 
 describe("createSynth", () => {
+  it("starts no note while the power is off", () => {
+    const audio = { ...fakeAudio(), powered: false };
+    createSynth(audio).noteOn(69, 1);
+    expect(audio.oscillators).toHaveLength(0);
+  });
+
   it("starts with the default parameters", () => {
     expect(createSynth(fakeAudio()).params).toEqual(DEFAULT_PARAMS);
   });

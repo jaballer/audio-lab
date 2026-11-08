@@ -232,6 +232,8 @@ const MIN_GAIN = 0.05;
 // Plays one sound now through the shared audio engine. `velocity` is 0-1; a quieter hit plays
 // through its own gain stage, which a full-velocity hit skips.
 export function playSound(audio, sound, velocity = 1) {
+  // Dropped while the power is off: the context is suspended, so it would sound at power on.
+  if (!audio.powered) return;
   const ctx = audio.ensure();
   let out = audio.master;
   if (velocity < 1) {

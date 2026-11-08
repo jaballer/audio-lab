@@ -13,6 +13,7 @@ import "./mpc-sample.css";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
+import { createAudioNotice } from "../../shared/audio-notice.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { isMpcSample } from "../../shared/mpc-sample.js";
@@ -52,17 +53,28 @@ function showSequence() {
 }
 showSequence();
 
-// The page may be opened with the device already plugged in, and a MIDI hit does not count as
-// the click a browser needs before it lets audio start, so unlock on the first click or key.
-const audio = createAudioEngine({ volume: SOUND_VOLUME });
-audio.unlockOnInteraction();
-
 const SOUND_STORE_KEY = "mpc-sample.sound";
 const soundButton = $("sound-btn");
 let soundOn = loadJson(SOUND_STORE_KEY) !== false; // on unless it was turned off
+const audioNotice = createAudioNotice($("audio-notice"));
+let audioState = "closed";
+// With the page's Sound button off nothing here makes a sound, so there is nothing to explain.
+const showAudioNotice = () => audioNotice.update(soundOn ? audioState : "running");
+// The page may be opened with the device already plugged in, and a MIDI hit does not count as
+// the click a browser needs before it lets audio start, so unlock on the first click or key.
+const audio = createAudioEngine({
+  volume: SOUND_VOLUME,
+  onStateChange: (state) => {
+    audioState = state;
+    showAudioNotice();
+  },
+});
+audio.unlockOnInteraction();
+
 function showSound() {
   soundButton.setAttribute("aria-pressed", String(soundOn));
   soundButton.textContent = soundOn ? "On" : "Off";
+  showAudioNotice();
 }
 showSound();
 soundButton.addEventListener("click", () => {
@@ -159,7 +171,8 @@ setInterval(() => {
 const padSound = createPadSound({ audio, sounds: SOUNDS, isOn: () => soundOn });
 function playPad(event) {
   applyToBoard(event);
-  padSound.hit(event);
+  // A hit while audio is still locked is dropped (see pad-sound.js): point at the notice.
+  if (!padSound.hit(event) && soundOn && !audio.running) audioNotice.nudge();
 }
 
 const handlers = {

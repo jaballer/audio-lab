@@ -75,6 +75,7 @@ export function createSynth(audio) {
   }
 
   function noteOn(note, velocity) {
+    if (!audio.powered) return; // see playSound in shared/sounds.js
     sustained.delete(note);
     startVoice(note, velocity);
   }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAudioEngine } from "./audio.js";
+import { POWER_SWITCH, createAudioEngine } from "./audio.js";
 
 // An AudioContext that starts suspended, as browsers make it until a user
 // gesture, and remembers every instance so a test can tell whether one was built.
@@ -91,6 +91,16 @@ describe("createAudioEngine", () => {
     const ctx = audio.ensure();
     expect(ctx.resume).toHaveBeenCalledTimes(1);
     expect(audio.running).toBe(true);
+    audio.ensure();
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it("also resumes a context Safari has marked interrupted, after a call or a locked screen", () => {
+    installAudioContext();
+    const audio = createAudioEngine();
+    const ctx = audio.ensure();
+    ctx.changeState("interrupted");
+    ctx.resume.mockClear();
     audio.ensure();
     expect(ctx.resume).toHaveBeenCalledTimes(1);
   });
@@ -264,6 +274,21 @@ describe("createAudioEngine", () => {
       createAudioEngine().unlockOnInteraction(target);
       expect(target.listeners.map((l) => l.type).sort()).toEqual(["keydown", "pointerdown"]);
       for (const { options } of target.listeners) expect(options).toEqual({ capture: true });
+    });
+
+    it("leaves a press on the POWER switch out, so the press that turns sound on finds it off", () => {
+      const instances = installAudioContext();
+      const audio = createAudioEngine();
+      const target = fakeTarget();
+      audio.unlockOnInteraction(target);
+      const onSwitch = { target: { closest: (selector) => (selector === POWER_SWITCH ? {} : null) } };
+      const elsewhere = { target: { closest: () => null } };
+
+      for (const type of ["pointerdown", "keydown"]) target.listeners.find((l) => l.type === type).handler(onSwitch);
+      expect(instances).toHaveLength(0);
+
+      target.listeners.find((l) => l.type === "pointerdown").handler(elsewhere);
+      expect(instances).toHaveLength(1);
     });
 
     it("starts audio when the first interaction happens, not before", () => {

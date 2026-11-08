@@ -14,7 +14,7 @@ function fakeAudio() {
     currentTime: 0,
     createGain: vi.fn(() => ({ gain: { value: 1 }, connect: vi.fn() })),
   };
-  return { ctx, master, ensure: vi.fn(() => ctx), setVolume: vi.fn() };
+  return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn() };
 }
 
 function setup({ song = null, bpm } = {}) {

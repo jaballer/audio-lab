@@ -103,6 +103,7 @@ const holds = createHolds();
 const keyButtons = new Map(); // note -> its button, to light it however it was played
 
 function press(note, source) {
+  if (!audio.powered) return; // a note played now would sound at power on
   if (!holds.press(note, source)) return; // already sounding, held by another source or this one
   keyButtons.get(note).classList.add("is-down");
   ensureVoice().synth.triggerAttack(noteName(note));

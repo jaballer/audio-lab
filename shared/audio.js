@@ -10,12 +10,17 @@
 //   audio.setVolume(0.8);          // safe to call before the context exists
 //   audio.unlockOnInteraction();   // see below
 //   audio.powerOff(); audio.powerOn();   // the device's power switch: off is silent until turned on
+//   audio.powered                  // false while off: a page should not start sounds then, they
+//                                  // would queue on the suspended context and play at power on
 //
 // The context is created lazily, so nothing is built until it is needed.
 //
 // `createContext` is for a library that insists on owning the context. Tone.js builds its own
 // wrapped one, which also fills in Web Audio features Firefox lacks (the listener's position
 // params). Handing Tone a plain AudioContext instead makes its setup throw in Firefox.
+
+// What the header marks its POWER button with (app-header.js).
+export const POWER_SWITCH = "[data-power-switch]";
 
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
 const FADE_MS = 80; // long enough for the fade to reach silence (about 8 time constants)
@@ -48,7 +53,8 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
       notify();
       return ctx;
     }
-    if (ctx.state === "suspended") ctx.resume();
+    // "interrupted" is Safari after a phone call or a locked screen; resume() ends it too.
+    if (ctx.state === "suspended" || ctx.state === "interrupted") ctx.resume();
     notify();
     return ctx;
   }
@@ -86,7 +92,12 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
   // MIDI message doesn't count. So unlock it on the first real interaction,
   // ahead of the first sound: otherwise a MIDI controller can play silently.
   function unlockOnInteraction(target = window) {
-    for (const type of ["pointerdown", "keydown"]) target.addEventListener(type, ensure, { capture: true });
+    // Not for the POWER switch: the press that turns sound on must find it still off, or the
+    // page would start audio on pointerdown and the click would then switch it straight off.
+    const unlock = (e) => {
+      if (!e?.target?.closest?.(POWER_SWITCH)) ensure();
+    };
+    for (const type of ["pointerdown", "keydown"]) target.addEventListener(type, unlock, { capture: true });
     notify();
   }
 
