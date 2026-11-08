@@ -18,32 +18,3 @@
   align-items: center;
   gap: 8px;
 }
-
-.tone-keys {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
-  gap: 8px;
-}
-
-.tone-key {
-  min-height: 84px;
-  user-select: none;
-  touch-action: none; /* a held key must not turn into a scroll or zoom */
-}
-
-.tone-key {
-  position: relative;
-}
-
-.tone-key.is-down {
-  transform: translateY(1px); /* the same as a press with the mouse, whichever way the key was played */
-  filter: brightness(0.9);
-}
-
-.tone-key-letter {
-  position: absolute;
-  right: 6px;
-  bottom: 4px;
-  font-size: 10px;
-  opacity: 0.55;
-}

@@ -8,6 +8,7 @@
 
 import "../../shared/base.css";
 import "./keys.css";
+import "../../shared/piano.css";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
@@ -24,7 +25,7 @@ import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { createPadLearner } from "./pad-learner.js";
 import { GROUPS, PARAMS, choiceLabel, knobForChoice, positionKnob } from "./params.js";
-import { createPiano } from "./piano.js";
+import { createPiano } from "../../shared/piano.js";
 import { createStick } from "./stick.js";
 import { createSynthPanel } from "./synth-panel.js";
 import { DEFAULT_PARAMS, createSynth } from "./synth.js";
