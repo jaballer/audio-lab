@@ -1,0 +1,84 @@
+/* The loading overlay. Linked from each page's <head>, ahead of the scripts, so it covers the
+   page from the first paint: base.css arrives with the scripts, and until it does the page is
+   unstyled and then jumps into place. Colours are written out here for the same reason: the
+   variables in base.css are not there yet. */
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100; /* above the site bar and the console drawer */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #1d1b19;
+  color: #d9d6c8;
+  font-family: system-ui, sans-serif;
+  transition: opacity 0.25s ease;
+  /* The last resort, in CSS so nothing can stop it: if the script that lifts the overlay never
+     arrives (or never runs), the overlay still fades itself out and stops blocking the page. */
+  animation: loading-give-up 0.25s ease 6s forwards;
+}
+.loading-screen.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+.loading-name {
+  font-size: 1.4rem;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f1eee6;
+}
+.loading-name b {
+  margin-left: 2px;
+  color: #ff7a45;
+}
+.loading-bar {
+  position: relative;
+  width: 140px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #34302b;
+}
+.loading-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 2px;
+  background: #ff7a45;
+  animation: loading-slide 1s ease-in-out infinite alternate;
+}
+.loading-text {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a9a597;
+}
+@keyframes loading-give-up {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+@keyframes loading-slide {
+  to {
+    left: 60%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen {
+    transition: none;
+  }
+  .loading-bar::after {
+    animation: none;
+    width: 100%;
+  }
+}
