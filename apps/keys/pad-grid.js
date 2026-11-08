@@ -14,7 +14,7 @@ export function createPadGrid(element, { notes }) {
 
   for (const idx of ROW_ORDER) {
     const el = document.createElement("div");
-    el.className = "pad";
+    el.className = "keys-pad";
     el.innerHTML = `<span class="lbl">${idx + 1}</span><span class="nt">${notes[idx] ?? ""}</span>`;
     element.appendChild(el);
     padEls[idx] = el;

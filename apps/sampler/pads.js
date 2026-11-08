@@ -35,7 +35,7 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       const key = KEY_ROWS[row][col];
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "pad";
+      btn.className = "sampler-pad";
       btn.setAttribute("aria-label", `Pad ${idx + 1}, ${sounds[idx].name}, key ${key.toUpperCase()}`);
       btn.innerHTML =
         `<span class="num">${idx + 1}</span>` +
