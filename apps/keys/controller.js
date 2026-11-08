@@ -23,7 +23,7 @@
 //   keys.syncParams()                // show the synth's current values on the controls
 //   keys.getState()                  // what formatLcd and the joystick draw
 
-import { createHolds } from "./holds.js";
+import { createHolds } from "../../shared/holds.js";
 import { isChoice, knobChoice, knobPosition } from "./params.js";
 
 const noop = () => {};

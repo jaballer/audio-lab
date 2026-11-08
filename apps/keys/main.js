@@ -14,7 +14,7 @@ import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
-import { createComputerKeys } from "./computer-keys.js";
+import { createComputerKeys } from "../../shared/computer-keys.js";
 import { createKeysController } from "./controller.js";
 import { PROFILES, mpkMini } from "./devices.js";
 import { createKnobDials } from "./knob-dials.js";

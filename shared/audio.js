@@ -2,7 +2,8 @@
 //
 //   const audio = createAudioEngine({
 //     volume: 0.5,                 // master gain, 0-1
-//     onStateChange: (state) => {} // "suspended" | "running" | ...
+//     onStateChange: (state) => {}, // "suspended" | "running" | ...
+//     createContext: () => ctx      // optional: build the context some other way (see below)
 //   });
 //   const ctx = audio.ensure();    // create/resume on demand, returns the context
 //   audio.master                   // GainNode every sound should connect to
@@ -10,8 +11,12 @@
 //   audio.unlockOnInteraction();   // see below
 //
 // The context is created lazily, so nothing is built until it is needed.
+//
+// `createContext` is for a library that insists on owning the context. Tone.js builds its own
+// wrapped one, which also fills in Web Audio features Firefox lacks (the listener's position
+// params). Handing Tone a plain AudioContext instead makes its setup throw in Firefox.
 
-export function createAudioEngine({ volume = 1, onStateChange } = {}) {
+export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
   let master = null;
   let level = volume;
@@ -20,8 +25,10 @@ export function createAudioEngine({ volume = 1, onStateChange } = {}) {
 
   function ensure() {
     if (!ctx) {
-      ctx = new AudioContext();
-      ctx.onstatechange = notify;
+      ctx = createContext();
+      // A listener, not `onstatechange`: Tone.js assigns that property on the context it uses,
+      // which would replace ours and leave the status stuck on "suspended".
+      ctx.addEventListener("statechange", notify);
       master = ctx.createGain();
       master.gain.value = level;
       master.connect(ctx.destination);

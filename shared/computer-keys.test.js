@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createComputerKeys } from "./computer-keys.js";
 
-function setup({ base = 48 } = {}) {
+function setup({ base = 48, ignore } = {}) {
   const target = new EventTarget();
   const onNoteOn = vi.fn();
   const onNoteOff = vi.fn();
   let currentBase = base;
-  const keys = createComputerKeys({ target, getBase: () => currentBase, onNoteOn, onNoteOff });
+  const keys = createComputerKeys({ target, getBase: () => currentBase, onNoteOn, onNoteOff, ignore });
   const send = (type, key, extra = {}) => {
     const event = Object.assign(new Event(type), { key, code: `Key${key.toUpperCase()}`, repeat: false, ...extra });
     target.dispatchEvent(event);
@@ -59,5 +59,13 @@ describe("createComputerKeys", () => {
     keys.reset();
     send("keydown", "a");
     expect(onNoteOn).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips a key the page says is not for the piano, such as one typed into a menu", () => {
+    const { send, onNoteOn } = setup({ ignore: (e) => e.inMenu });
+    send("keydown", "a", { inMenu: true });
+    expect(onNoteOn).not.toHaveBeenCalled();
+    send("keydown", "a");
+    expect(onNoteOn).toHaveBeenCalledWith(60);
   });
 });
