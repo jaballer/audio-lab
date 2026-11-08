@@ -7,11 +7,12 @@
 //   { type: "padPressure", index, bank, note, pressure }   poly aftertouch on a held pad
 //   { type: "transportStart" } / { type: "transportContinue" } / { type: "transportStop" }
 //   { type: "clock" }                                      one of 24 ticks per beat
+//   { type: "songPosition", position }                     where it plays from, in sixteenth notes
 //
-// Captured from the device: Play sends Start (with a song position and MMC SysEx beside it)
-// and then a clock stream, Stop sends Stop and the clock ends. Start, Stop and clock are
-// single real-time bytes, which the browser delivers without the SysEx permission, so the
-// MMC copies are left unread.
+// Captured from the device: Play sends Start, position 0, MMC SysEx and then a clock stream.
+// Shift + Play (Continue) sends Continue and the position it resumes from. Stop sends Stop
+// and the clock ends. These are real-time bytes, which the browser delivers without the SysEx
+// permission, so the MMC copies are left unread.
 //
 // `messages` are what the page's own buttons send to the device's output port.
 //
@@ -22,6 +23,8 @@ import { isMpcSample, padFromNote } from "../../shared/mpc-sample.js";
 
 const KINDS = { noteOn: "padDown", noteOff: "padUp", polyAftertouch: "padPressure" };
 
+const SONG_POSITION = 0xf2; // 14 bits, low seven first, in sixteenth notes (six clock ticks each)
+
 const REALTIME = { 0xf8: "clock", 0xfa: "transportStart", 0xfb: "transportContinue", 0xfc: "transportStop" };
 
 export const mpcSample = {
@@ -31,6 +34,7 @@ export const mpcSample = {
 
   translate(msg) {
     if (msg.type === "other") {
+      if (msg.status === SONG_POSITION) return [{ type: "songPosition", position: msg.data1 | (msg.data2 << 7) }];
       const type = REALTIME[msg.status];
       return type ? [{ type }] : [];
     }

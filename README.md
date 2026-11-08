@@ -85,7 +85,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame
   - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop buttons send
   - `board.js` — what the pads are doing in every bank, and which bank to show; no DOM
-  - `transport.js` — whether the device is playing, and its tempo read from the MIDI clock; no DOM
+  - `transport.js` — whether the device is playing, its tempo and bar and beat read from the MIDI clock (a device already playing when the page connects, or one whose clock goes quiet, is noticed); no DOM
   - `pad-grid.js`, `bank-strip.js`, `transport-lights.js`, `lcd.js` — the on-screen views (`lcd.js` also has the pure text formatter)
   - `mpc-sample.css` — page-only styles
 - `tone-demo.html` + `apps/tone-demo/` — a small synth built with [Tone.js](https://tonejs.github.io/), the only page that uses it (a feedback delay on the shared audio engine)

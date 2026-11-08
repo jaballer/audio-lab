@@ -46,6 +46,19 @@ describe("formatTransport", () => {
     expect(formatTransport({ state: "stopped", bpm: 120.4 })).toBe("STOPPED  BPM 120.4");
   });
 
+  it("adds the bar and beat when the page knows where the song is", () => {
+    expect(formatTransport({ state: "playing", bpm: 93, position: { bar: 3, beat: 2 } })).toBe(
+      "PLAYING  BPM 93.0  BAR 3.2",
+    );
+    expect(formatTransport({ state: "stopped", bpm: 93, position: { bar: 1, beat: 4 } })).toBe(
+      "STOPPED  BPM 93.0  BAR 1.4",
+    );
+  });
+
+  it("leaves the position out when it is not known", () => {
+    expect(formatTransport({ state: "playing", bpm: 93, position: null })).toBe("PLAYING  BPM 93.0");
+  });
+
   it("says the tempo is not known yet while playing", () => {
     expect(formatTransport({ state: "playing", bpm: null })).toBe("PLAYING  BPM --");
   });

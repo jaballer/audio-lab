@@ -53,7 +53,6 @@ describe("mpcSample.translate", () => {
   it("ignores every other kind of message", () => {
     expect(mpcSample.translate(parseMidi([0xb0, 7, 64]))).toEqual([]);
     expect(mpcSample.translate(parseMidi([0xfe]))).toEqual([]); // active sensing
-    expect(mpcSample.translate(parseMidi([0xf2, 0, 0]))).toEqual([]); // song position: Play sends it with Start
   });
 });
 
@@ -68,6 +67,14 @@ describe("mpcSample.translate: transport", () => {
 
   it("reports each clock tick", () => {
     expect(mpcSample.translate(parseMidi([0xf8]))).toEqual([{ type: "clock" }]);
+  });
+
+  // Captured: Play sends position 0 and Shift + Play (Continue) sends the place it resumes
+  // from (10 sixteenths, about 2.5 beats in). It is a 14-bit value, low seven bits first.
+  it("reports the song position, in sixteenth notes", () => {
+    expect(mpcSample.translate(parseMidi([0xf2, 0, 0]))).toEqual([{ type: "songPosition", position: 0 }]);
+    expect(mpcSample.translate(parseMidi([0xf2, 10, 0]))).toEqual([{ type: "songPosition", position: 10 }]);
+    expect(mpcSample.translate(parseMidi([0xf2, 0x7f, 0x01]))).toEqual([{ type: "songPosition", position: 255 }]);
   });
 });
 

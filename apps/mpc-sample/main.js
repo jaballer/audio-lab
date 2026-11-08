@@ -15,7 +15,7 @@ import { createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
-import { createTransport } from "./transport.js";
+import { createTransport, toggleAction } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
 
 const $ = (id) => document.getElementById(id);
@@ -74,12 +74,28 @@ function send(message) {
 playButton.addEventListener("click", () => send(mpcSample.messages.play));
 stopButton.addEventListener("click", () => send(mpcSample.messages.stop));
 
+// Space plays or stops, as on the sampler page. A focused button or field keeps its own Space.
+window.addEventListener("keydown", (event) => {
+  const inControl = event.target instanceof Element && event.target.closest("button, a, input, select, textarea");
+  if (event.code !== "Space" || event.repeat || inControl) return;
+  event.preventDefault();
+  send(mpcSample.messages[toggleAction(transport.snapshot().state)]);
+});
+
+// The clock ends when the device stops, so now and then ask whether it went quiet. This only
+// redraws; nothing is scheduled by it.
+const STALE_CHECK_MS = 250;
+setInterval(() => {
+  if (transport.expire(performance.now())) schedule();
+}, STALE_CHECK_MS);
+
 const handlers = {
   padDown: applyToBoard,
   padUp: applyToBoard,
   padPressure: applyToBoard,
   transportStart: applyToTransport,
   transportContinue: applyToTransport,
+  songPosition: applyToTransport,
   transportStop: applyToTransport,
   // The tick's own arrival time, not when this runs, so a busy page does not skew the tempo.
   clock: (event, _input, time) => applyToTransport({ ...event, time }),

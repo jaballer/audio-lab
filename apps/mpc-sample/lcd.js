@@ -2,7 +2,7 @@
 // transport.
 //
 //   formatLcd({ connected, last })     // three lines of text; `last` is board.snapshot().last
-//   formatTransport({ state, bpm })    // one line; transport.snapshot()
+//   formatTransport({ state, bpm, position })   // one line; transport.snapshot()
 //   const lcd = createLcd([lineEl, lineEl, lineEl, lineEl]);
 //   lcd.render({ connected, last, transport });
 
@@ -22,8 +22,9 @@ export function formatLcd({ connected, last }) {
 
 const STATE_LABELS = { playing: "PLAYING", stopped: "STOPPED", unknown: "TRANSPORT --" };
 
-export function formatTransport({ state, bpm }) {
-  return `${STATE_LABELS[state]}  BPM ${bpm === null ? "--" : bpm.toFixed(1)}`;
+export function formatTransport({ state, bpm, position }) {
+  const text = `${STATE_LABELS[state]}  BPM ${bpm === null ? "--" : bpm.toFixed(1)}`;
+  return position ? `${text}  BAR ${position.bar}.${position.beat}` : text;
 }
 
 export function createLcd(lines) {
