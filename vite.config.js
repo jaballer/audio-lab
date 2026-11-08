@@ -1,7 +1,23 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
+// The license asks anyone who gets a copy of any part of the software to get its terms too, and
+// the site and the Docker image only carry `dist/`. Emitting the root LICENSE there keeps one
+// source for the text.
+const emitLicense = {
+  name: "emit-license",
+  generateBundle() {
+    this.emitFile({
+      type: "asset",
+      fileName: "LICENSE",
+      source: readFileSync(resolve(import.meta.dirname, "LICENSE"), "utf8"),
+    });
+  },
+};
+
 export default defineConfig({
+  plugins: [emitLicense],
   // Relative asset paths so the build works from any subpath,
   // such as https://<user>.github.io/audio-lab/.
   base: "./",
