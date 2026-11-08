@@ -20,7 +20,17 @@ export const CLOCKS_PER_BEAT = 24; // MIDI clock is 24 ticks per quarter note
 export const BEATS_PER_BAR = 4; // assumed: the device's time signature is not sent
 export const STALE_MS = 1000; // a clock this quiet while playing means the device stopped
 const CLOCKS_PER_SIXTEENTH = CLOCKS_PER_BEAT / 4; // song position counts sixteenth notes
-const WINDOW = 2 * CLOCKS_PER_BEAT; // gaps averaged: two beats, enough to smooth USB timing jitter
+// Ticks reach the page about a millisecond off their true time, and the estimate is the span
+// of the window over its tick count, so a longer window shrinks the error: four beats keep it
+// under a tenth of a BPM at normal tempos.
+const WINDOW = 4 * CLOCKS_PER_BEAT; // gaps averaged
+// A real tempo change shows when the latest beat disagrees with the window by more than jitter
+// can explain (about 0.4% over one beat); the older ticks are then dropped so it is followed in
+// about a beat instead of four.
+const CHANGE_RATIO = 0.03;
+// The shown value only moves when the estimate has moved by this much, so what is left of the
+// jitter does not flip the last digit.
+const DEAD_BAND = 0.2;
 const TENTH = 10; // the tempo is reported to a tenth of a BPM
 const MS_PER_MINUTE = 60000;
 
@@ -45,10 +55,15 @@ export function createTransport() {
   // the song yet.
   const clocksIn = () => base + Math.max(0, since - 1);
 
+  const gapOf = (span) => (span.at(-1) - span[0]) / (span.length - 1);
+
   function estimate() {
     if (times.length <= CLOCKS_PER_BEAT) return; // not a full beat of gaps yet
-    const gap = (times.at(-1) - times[0]) / (times.length - 1);
-    bpm = Math.round((MS_PER_MINUTE / (gap * CLOCKS_PER_BEAT)) * TENTH) / TENTH;
+    const recent = gapOf(times.slice(-(CLOCKS_PER_BEAT + 1)));
+    if (Math.abs(recent - gapOf(times)) > recent * CHANGE_RATIO) times = times.slice(-(CLOCKS_PER_BEAT + 1));
+    const gap = gapOf(times);
+    const next = Math.round((MS_PER_MINUTE / (gap * CLOCKS_PER_BEAT)) * TENTH) / TENTH;
+    if (bpm === null || Math.abs(next - bpm) >= DEAD_BAND) bpm = next;
   }
 
   function position() {

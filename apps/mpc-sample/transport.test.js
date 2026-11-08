@@ -262,6 +262,53 @@ describe("tempo from clock", () => {
   });
 });
 
+// Seen on the device: at 98 then 120 BPM the tenths digit jumped around. Ticks reach the page on a
+// clock only about a millisecond precise, so each tick's time is a little off and the estimate
+// wobbles with it. This feeds ticks that are up to a millisecond early or late, in a fixed pattern.
+describe("a steady tempo", () => {
+  const JITTER_MS = 1;
+
+  // A seeded generator, so the "random" jitter is the same on every run.
+  function jitterSource(seed) {
+    let state = seed;
+    return () => {
+      state = (state * 1664525 + 1013904223) % 2 ** 32;
+      return (state / 2 ** 32) * 2 * JITTER_MS - JITTER_MS; // -1 to +1 ms
+    };
+  }
+  const jitter = jitterSource(42);
+
+  // Feeds `count` jittery ticks and returns the tempo shown after each one.
+  function readings(transport, bpm, count, from = 0) {
+    const interval = 60000 / bpm / CLOCKS_PER_BEAT;
+    const shown = [];
+    for (let i = 0; i < count; i++) {
+      transport.apply({ type: "clock", time: from + i * interval + jitter() });
+      shown.push(transport.snapshot().bpm);
+    }
+    return shown;
+  }
+
+  it("does not flicker between values once it has settled", () => {
+    const transport = createTransport();
+    transport.apply(start);
+    const settled = readings(transport, 98, 600)
+      .slice(150)
+      .filter((bpm) => bpm !== null);
+    expect(new Set(settled).size).toBeLessThanOrEqual(2);
+    for (const bpm of settled) expect(Math.abs(bpm - 98)).toBeLessThan(0.3);
+  });
+
+  it("follows a real change of tempo within about a beat", () => {
+    const transport = createTransport();
+    transport.apply(start);
+    const end = 600 * (60000 / 98 / CLOCKS_PER_BEAT);
+    readings(transport, 98, 600);
+    readings(transport, 120, CLOCKS_PER_BEAT + 6, end);
+    expect(Math.abs(transport.snapshot().bpm - 120)).toBeLessThan(1);
+  });
+});
+
 describe("reset", () => {
   it("forgets everything, as when the device is unplugged mid-play", () => {
     const transport = createTransport();
