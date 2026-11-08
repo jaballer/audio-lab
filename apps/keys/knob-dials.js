@@ -47,11 +47,16 @@ export function createKnobDials(element, { ccs, labels, onChange = () => {} }) {
       drag = { y: e.clientY, value: values[index] };
     });
     dial.addEventListener("pointermove", (e) => {
+      // No button down means the release was missed (a pointerup lost to Alt-Tab or
+      // a tab switch), so the drag is over, not paused.
+      if (drag && e.buttons === 0) drag = null;
       if (drag) move(clampKnob(drag.value + (drag.y - e.clientY) * DRAG_PER_PX));
     });
     const endDrag = () => (drag = null);
     dial.addEventListener("pointerup", endDrag);
     dial.addEventListener("pointercancel", endDrag);
+    // Also fires when the browser takes the capture away without either event above.
+    dial.addEventListener("lostpointercapture", endDrag);
 
     dial.addEventListener(
       "wheel",
