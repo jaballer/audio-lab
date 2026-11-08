@@ -44,6 +44,7 @@ wireMidiButton(
   createMidiAccess({
     onMessage: handleMidi,
     onStatus: header.setMidiStatus,
+    onLog: header.log,
     sysex: true, // the monitor shows SysEx, which the browser only delivers when asked for
   }),
 );

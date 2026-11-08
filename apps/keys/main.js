@@ -145,6 +145,7 @@ wireMidiButton(
     onMessage: createMidiRouter(PROFILES, handlers),
     onChange: handleMidiChange,
     onStatus: header.setMidiStatus,
+    onLog: header.log,
   }),
 );
 

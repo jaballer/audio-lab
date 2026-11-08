@@ -212,3 +212,86 @@ a:focus-visible {
     font-size: 1.4rem;
   }
 }
+
+/* ---------- Header status and console drawer ---------- */
+/* Whatever the status says, it stays on one line; the full text is its tooltip and the console. */
+#midi-status {
+  max-width: 36ch; /* wide enough for "permission denied" in the label font */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 0 14px 10px;
+  background: #14130f;
+  border-top: 3px solid var(--chassis-edge);
+  color: #d9d6c8;
+  font: 0.78rem/1.5 var(--mono);
+}
+.console-drawer[hidden] {
+  display: none;
+}
+.console-bar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  background: #14130f;
+}
+.console-title {
+  margin-right: auto;
+  font:
+    800 0.66rem system-ui,
+    sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9b978a;
+}
+.console-action {
+  padding: 3px 9px;
+  border: 1px solid #55524a;
+  border-radius: 4px;
+  background: transparent;
+  color: #d9d6c8;
+  font:
+    700 0.66rem system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.console-action:hover {
+  background: #2a2823;
+}
+.console-empty {
+  margin: 4px 0;
+  color: #7d7a6f;
+}
+.console-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-line {
+  display: flex;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.console-time {
+  flex: none;
+  color: #7d7a6f;
+}
+.console-line.warn {
+  color: #f0c24b;
+}
+.console-line.error {
+  color: #ff7a6e;
+}

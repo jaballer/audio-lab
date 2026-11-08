@@ -8,10 +8,18 @@
 //     back: { href: "./", label: "Sampler" }, // optional "back" link (not on the sampler itself)
 //     powerLed: true,                         // optional: the sampler's red power light
 //     audioStatus: true,                      // optional: a text slot for the audio state
+//     console: false,                         // optional: leave out the Console button and drawer
 //   });
 //   header.midiButton            // pass to wireMidiButton()
 //   header.setMidiStatus(text)   // pass as createMidiAccess's onStatus
 //   header.setAudioStatus(text)  // only with `audioStatus: true`
+//   header.log(text, level)      // pass as createMidiAccess's onLog; level "info" | "warn" | "error"
+//
+// The header holds the short status; whatever is long or only useful when something is wrong
+// goes to the console drawer, opened from the Console button.
+
+import { createConsoleDrawer } from "./console-drawer.js";
+import { createConsoleLog } from "./console-log.js";
 
 function element(tag, className, text) {
   const el = document.createElement(tag);
@@ -27,7 +35,10 @@ function statusSlot(id, text) {
   return slot;
 }
 
-export function createAppHeader(root, { brand, sub, back, powerLed = false, audioStatus = false }) {
+export function createAppHeader(
+  root,
+  { brand, sub, back, powerLed = false, audioStatus = false, console: withConsole = true },
+) {
   const name = element("span", "brand-name", brand.name);
   if (brand.accent) name.append(element("b", "", brand.accent));
 
@@ -45,6 +56,25 @@ export function createAppHeader(root, { brand, sub, back, powerLed = false, audi
   const midiStatus = statusSlot("midi-status", "MIDI: off");
   power.append(midiButton, midiStatus);
 
+  // Messages sent before the drawer is open are kept, so it shows them when it is.
+  let drawer = null;
+  const log = createConsoleLog({ onChange: () => drawer?.render() });
+  if (withConsole) {
+    const consoleButton = element("button", "btn btn-small", "Console");
+    consoleButton.type = "button";
+    consoleButton.setAttribute("aria-expanded", "false");
+    const drawerEl = element("section");
+    drawerEl.id = "console-drawer";
+    consoleButton.setAttribute("aria-controls", drawerEl.id);
+    drawer = createConsoleDrawer(drawerEl, {
+      log,
+      onToggle: (open) => consoleButton.setAttribute("aria-expanded", String(open)),
+    });
+    consoleButton.addEventListener("click", () => drawer.toggle());
+    root.ownerDocument.body.append(drawerEl);
+    power.append(consoleButton);
+  }
+
   const audio = audioStatus ? statusSlot("audio-status", "") : null;
   if (audio) power.append(audio);
 
@@ -59,7 +89,11 @@ export function createAppHeader(root, { brand, sub, back, powerLed = false, audi
 
   return {
     midiButton,
-    setMidiStatus: (text) => (midiStatus.textContent = text),
+    setMidiStatus(text) {
+      midiStatus.textContent = text;
+      midiStatus.title = text; // the whole text, for when the slot cuts it short
+    },
+    log: (text, level) => log.add(text, level),
     setAudioStatus: (text) => {
       if (audio) audio.textContent = text;
     },

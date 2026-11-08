@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMidiAccess, wireMidiButton } from "./midi-access.js";
+import { createMidiAccess, summarizeInputs, wireMidiButton } from "./midi-access.js";
 
 const port = (name, state = "connected") => ({ name, state, onmidimessage: null });
 
@@ -114,6 +114,13 @@ describe("createMidiAccess.connect", () => {
     expect(await midi.connect()).toBe(true);
   });
 
+  it("keeps the header status short however many ports the browser lists", async () => {
+    const inputs = Array.from({ length: 31 }, (_, i) => port(`WebMIDI output:Output connection ${i}:0`));
+    const { midi, handlers } = setup({ access: fakeAccess({ inputs }) });
+    await midi.connect();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: 31 inputs");
+  });
+
   it("scans again when a device is plugged in", async () => {
     const access = fakeAccess({ inputs: [port("MPK mini")] });
     const { midi, handlers } = setup({ access });
@@ -143,6 +150,67 @@ describe("createMidiAccess.connect", () => {
     access.onstatechange();
     expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: no device");
     expect(handlers.onChange).toHaveBeenLastCalledWith(access, []);
+  });
+});
+
+describe("summarizeInputs", () => {
+  it("names one or two inputs, and counts more than that", () => {
+    expect(summarizeInputs([])).toBe("MIDI: no device");
+    expect(summarizeInputs(["MPK mini"])).toBe("MIDI: MPK mini");
+    expect(summarizeInputs(["MPK mini", "Launchpad"])).toBe("MIDI: MPK mini, Launchpad");
+    expect(summarizeInputs(["a", "b", "c"])).toBe("MIDI: 3 inputs");
+  });
+});
+
+describe("createMidiAccess onLog", () => {
+  const withLog = async (access) => {
+    stubNavigator({ requestMIDIAccess: vi.fn(async () => access) });
+    const onLog = vi.fn();
+    const midi = createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn(), onLog });
+    await midi.connect();
+    return { onLog, access };
+  };
+
+  it("lists every input in full on the first scan, without calling each one newly connected", async () => {
+    const { onLog } = await withLog(fakeAccess({ inputs: [port("MPK mini"), port("Launchpad")] }));
+    expect(onLog.mock.calls).toEqual([["Inputs (2): MPK mini, Launchpad"]]);
+  });
+
+  it("says when there are no inputs", async () => {
+    const { onLog } = await withLog(fakeAccess());
+    expect(onLog).toHaveBeenCalledWith("No MIDI inputs");
+  });
+
+  it("logs a device plugged in or removed later, the removal as a warning", async () => {
+    const { onLog, access } = await withLog(fakeAccess({ inputs: [port("MPK mini")] }));
+    onLog.mockClear();
+
+    access.inputs.set("in1", port("Launchpad"));
+    access.onstatechange();
+    expect(onLog).toHaveBeenCalledWith("Connected: Launchpad");
+
+    onLog.mockClear();
+    access.inputs.delete("in0");
+    access.onstatechange();
+    expect(onLog).toHaveBeenCalledWith("Disconnected: MPK mini", "warn");
+  });
+
+  it("logs a refused permission prompt as an error, with the browser's reason", async () => {
+    stubNavigator({
+      requestMIDIAccess: vi.fn(async () => {
+        throw Object.assign(new Error("blocked"), { name: "NotAllowedError" });
+      }),
+    });
+    const onLog = vi.fn();
+    await createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn(), onLog }).connect();
+    expect(onLog).toHaveBeenCalledWith("MIDI access refused: NotAllowedError (blocked)", "error");
+  });
+
+  it("logs a browser with no Web MIDI as an error", async () => {
+    stubNavigator({});
+    const onLog = vi.fn();
+    await createMidiAccess({ onMessage: vi.fn(), onStatus: vi.fn(), onLog }).connect();
+    expect(onLog).toHaveBeenCalledWith(expect.stringMatching(/no Web MIDI/), "error");
   });
 });
 

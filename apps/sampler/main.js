@@ -147,6 +147,7 @@ const midi = createMidi({
   padCount: PAD_COUNT,
   steps: STEPS,
   onStatus: header.setMidiStatus,
+  onLog: header.log,
 });
 
 wireMidiButton(header.midiButton, midi);

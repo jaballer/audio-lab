@@ -178,6 +178,7 @@ wireMidiButton(
   createMidiAccess({
     onMessage: createMidiRouter(PROFILES, handlers),
     onStatus: header.setMidiStatus,
+    onLog: header.log,
     onChange(access, inputs) {
       const wasConnected = connected;
       connected = inputs.some((input) => isMpcSample(input.name));

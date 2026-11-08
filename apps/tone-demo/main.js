@@ -27,6 +27,7 @@ const header = createAppHeader($("header"), {
   sub: "Tone.js on the shared audio engine",
   back: { href: "./", label: "Sampler" },
   audioStatus: true,
+  console: false, // no MIDI here, so nothing to log
 });
 // This page has no MIDI input: hide the shared header's MIDI controls.
 header.midiButton.hidden = true;
