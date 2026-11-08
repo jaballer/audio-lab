@@ -1,10 +1,10 @@
 // The sequencer's clock: a lookahead scheduler. No DOM. Shared by every page that runs a step
 // sequencer; the sampler's runs on the audio clock.
 //
-//   const scheduler = createScheduler({ clock, steps: 16, onStep });
+//   const scheduler = createScheduler({ clock, steps: 16, onStep });   // also bpm, bpmRange: { min, max }
 //   scheduler.start();      // false if it was already playing
 //   scheduler.stop();
-//   scheduler.setBpm(120);  // returns the tempo actually set (clamped)
+//   scheduler.setBpm(120);  // returns the tempo actually set (clamped to bpmRange, 40-240 by default)
 //   scheduler.poll();       // call every animation frame; true when the playhead moved
 //
 //   scheduler.playing, scheduler.bpm, scheduler.playheadStep, scheduler.playheadTime
@@ -18,7 +18,7 @@
 // (the audio engine creates its context only after a user gesture).
 //
 // Timers drift and stall, the audio clock does not. So a timer wakes every
-// LOOKAHEAD_MS and schedules every step that falls within the next
+// SCHEDULER_TICK_MS and schedules every step that falls within the next
 // SCHEDULE_AHEAD_S of clock time: `onStep(step, time)` is told when (in the
 // clock's time) to play that step's sounds. The visible playhead follows
 // separately: each scheduled step is queued, and `poll()` moves the playhead
@@ -32,14 +32,16 @@
 
 import { clampBpm, stepSeconds } from "./tempo.js";
 
-export const LOOKAHEAD_MS = 25; // how often the scheduler wakes up
+// Not the same as the MIDI clock master's lookahead (apps/mpc-sample/clock-master.js): that is how far
+// ahead it queues ticks, this is how often the scheduler wakes.
+export const SCHEDULER_TICK_MS = 25;
 export const SCHEDULE_AHEAD_S = 0.12; // how far ahead of the clock it schedules
 const START_DELAY_S = 0.05; // a short run-up so the first step is not already late
 // How late a step may be and still play: a little over one scheduler tick. At the
 // fastest tempo a step is longer than this, so at most one step is ever this late.
 const MAX_LATE_S = 0.03;
 
-export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100 }) {
+export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100, bpmRange }) {
   let bpm = initialBpm;
   let playing = false;
   let timer = null;
@@ -126,7 +128,7 @@ export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100 })
     nextStep = 0;
     nextTime = clock.now() + START_DELAY_S;
     playheadStep = -1;
-    timer = setInterval(schedule, LOOKAHEAD_MS);
+    timer = setInterval(schedule, SCHEDULER_TICK_MS);
     return true;
   }
 
@@ -139,6 +141,9 @@ export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100 })
   }
 
   function poll() {
+    // Stopped means nothing to move to, and a clock that needs prepare() (the audio context) may not
+    // be ready to read yet.
+    if (!playing) return false;
     const now = clock.now();
     let moved = false;
     while (visualQueue.length && visualQueue[0].time <= now) {
@@ -151,7 +156,7 @@ export function createScheduler({ clock, steps, onStep, bpm: initialBpm = 100 })
   }
 
   function setBpm(value) {
-    bpm = clampBpm(value);
+    bpm = clampBpm(value, bpmRange);
     return bpm;
   }
 

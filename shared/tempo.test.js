@@ -8,6 +8,14 @@ describe("clampBpm", () => {
     expect(clampBpm(100)).toBe(100);
   });
 
+  it("takes another page's range", () => {
+    const range = { min: 30, max: 300 };
+    expect(clampBpm(35, range)).toBe(35);
+    expect(clampBpm(250, range)).toBe(250);
+    expect(clampBpm(10, range)).toBe(30);
+    expect(clampBpm(999, range)).toBe(300);
+  });
+
   it("rounds to one decimal place", () => {
     expect(clampBpm(120.04)).toBe(120);
     expect(clampBpm(120.06)).toBe(120.1);

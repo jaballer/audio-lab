@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LOOKAHEAD_MS, createScheduler } from "./scheduler.js";
+import { SCHEDULER_TICK_MS, createScheduler } from "./scheduler.js";
 
 // A clock that is whatever the test says it is. `time` is where "now" is, in seconds.
 function fakeClock(time = 0) {
@@ -14,11 +14,11 @@ function setup({ steps = 16, bpm = 120 } = {}) {
   // Move the clock forward and let the scheduler wake up.
   const advance = (seconds) => {
     clock.time += seconds;
-    vi.advanceTimersByTime(LOOKAHEAD_MS);
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
   };
   // Move the clock forward in scheduler ticks, as it moves when nothing stalls.
   const run = (seconds) => {
-    for (let t = 0; t < seconds; t += LOOKAHEAD_MS / 1000) advance(LOOKAHEAD_MS / 1000);
+    for (let t = 0; t < seconds; t += SCHEDULER_TICK_MS / 1000) advance(SCHEDULER_TICK_MS / 1000);
   };
   return { clock, scheduler, played, advance, run };
 }
@@ -42,6 +42,42 @@ describe("createScheduler", () => {
     expect(scheduler.start()).toBe(false);
   });
 
+  it("prepares the clock before it reads the time", () => {
+    // Like the audio engine's context, which does not exist until it is prepared.
+    let ready = false;
+    const clock = {
+      prepare: () => (ready = true),
+      now: () => {
+        if (!ready) throw new Error("clock read before prepare");
+        return 0;
+      },
+    };
+    const scheduler = createScheduler({ clock, steps: 16, onStep: () => {} });
+    expect(() => scheduler.start()).not.toThrow();
+  });
+
+  it("poll does not read the clock while stopped", () => {
+    const clock = {
+      now: () => {
+        throw new Error("clock read while stopped");
+      },
+    };
+    const scheduler = createScheduler({ clock, steps: 16, onStep: () => {} });
+    expect(scheduler.poll()).toBe(false);
+  });
+
+  it("clamps the tempo to the range it was given", () => {
+    const scheduler = createScheduler({
+      clock: fakeClock(),
+      steps: 16,
+      onStep: () => {},
+      bpmRange: { min: 30, max: 300 },
+    });
+    expect(scheduler.setBpm(250)).toBe(250);
+    expect(scheduler.setBpm(10)).toBe(30);
+    expect(scheduler.setBpm(999)).toBe(300);
+  });
+
   it("reports step times in the clock's own domain, and needs no prepare", () => {
     // A clock that starts far from zero, as performance.now() / 1000 does, with no prepare().
     const clock = { time: 5000, now: () => clock.time };
@@ -53,9 +89,9 @@ describe("createScheduler", () => {
       onStep: (step, time) => played.push([step, time]),
     });
     scheduler.start();
-    vi.advanceTimersByTime(LOOKAHEAD_MS); // the first step, after the short run-up
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS); // the first step, after the short run-up
     clock.time += 0.2;
-    vi.advanceTimersByTime(LOOKAHEAD_MS);
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
     expect(played.map(([step]) => step)).toEqual([0, 1, 2]);
     expect(played[0][1]).toBeCloseTo(5000.05);
     expect(played[1][1]).toBeCloseTo(5000.175);
@@ -259,9 +295,9 @@ describe("markHeard", () => {
       },
     });
     const run = (seconds) => {
-      for (let t = 0; t < seconds; t += LOOKAHEAD_MS / 1000) {
-        clock.time += LOOKAHEAD_MS / 1000;
-        vi.advanceTimersByTime(LOOKAHEAD_MS);
+      for (let t = 0; t < seconds; t += SCHEDULER_TICK_MS / 1000) {
+        clock.time += SCHEDULER_TICK_MS / 1000;
+        vi.advanceTimersByTime(SCHEDULER_TICK_MS);
       }
     };
     return { clock, pattern, sounded, scheduler, run };
@@ -331,7 +367,7 @@ describe("markHeard", () => {
     scheduler.markHeard(0, 1);
 
     clock.time += 12; // two whole trips round the steps go by in a stall
-    vi.advanceTimersByTime(LOOKAHEAD_MS);
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
     run(0.2);
     // Step 1 comes round again, and this is a fresh pass: the note plays.
     const plays = soundedAt(sounded, 0, 1);

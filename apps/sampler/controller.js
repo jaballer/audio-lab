@@ -92,7 +92,7 @@ export function createSampler({
   // Live recording: quantize the hit to the nearest 16th step.
   function recordHit(index) {
     const step = nearestStep({
-      now: audio.ctx.currentTime,
+      now: clock.now(),
       playheadTime: scheduler.playheadTime,
       playheadStep: scheduler.playheadStep,
       bpm: scheduler.bpm,
