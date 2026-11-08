@@ -14,12 +14,14 @@ import { createAudioEngine } from "../../shared/audio.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
+import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
 
 const $ = (id) => document.getElementById(id);
 
 const WAVES = ["sine", "triangle", "square", "sawtooth"];
 const FIRST_NOTE = 60; // middle C
-const NOTE_COUNT = 13; // one octave plus the top C
+const NOTE_COUNT = COMPUTER_KEYS.length; // one octave plus the top C, one note per computer key
+const OCTAVE = 12;
 const DELAY_TIME = "8n";
 const DELAY_FEEDBACK = 0.4;
 
@@ -87,14 +89,18 @@ $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.val
 // Enter / Space. `held` keeps a lost pointer-up from leaving a note stuck.
 const held = new Set();
 
+const keyButtons = new Map(); // note -> its button, to light it however it was played
+
 function press(note) {
   if (held.has(note)) return;
   held.add(note);
+  keyButtons.get(note).classList.add("is-down");
   ensureVoice().synth.triggerAttack(noteName(note));
 }
 
 function release(note) {
   if (!held.delete(note)) return;
+  keyButtons.get(note).classList.remove("is-down");
   voice.synth.triggerRelease(noteName(note));
 }
 
@@ -103,6 +109,11 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
   key.type = "button";
   key.className = "btn tone-key";
   key.textContent = noteName(note);
+  const letter = document.createElement("span");
+  letter.className = "tone-key-letter";
+  letter.textContent = COMPUTER_KEYS[note - FIRST_NOTE].toUpperCase();
+  key.append(letter);
+  keyButtons.set(note, key);
 
   key.addEventListener("pointerdown", (e) => {
     key.setPointerCapture(e.pointerId); // so the pointer-up arrives even if it slid off the key
@@ -124,12 +135,23 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
   $("keys").append(key);
 }
 
+// The computer keyboard plays the same keys: A W S E D F T G Y H U J K, as on the keys page.
+// A letter typed while a menu or slider has focus is for that control, not for a note.
+const computerKeys = createComputerKeys({
+  target: window,
+  getBase: () => FIRST_NOTE - OCTAVE, // the keys play the octave above the base
+  onNoteOn: press,
+  onNoteOff: release,
+  ignore: (e) => e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement,
+});
+
 // A key held while the page goes to the background (Alt-Tab, a notification,
 // another tab) never sends its keyup / pointerup, so its note would sound until
 // the same key was pressed again. Let go of everything when the page loses focus
 // or is hidden, as the keys page does.
 function releaseAll() {
   for (const note of [...held]) release(note);
+  computerKeys.reset(); // so the same letter can be pressed again, its keyup never having come
 }
 window.addEventListener("blur", releaseAll);
 document.addEventListener("visibilitychange", () => {

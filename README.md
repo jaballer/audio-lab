@@ -63,7 +63,6 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `keyboard.html` + `apps/keys/` — MIDI keyboard test page (notes, velocity, pitch bend, mod, sustain, CCs, pads)
   - `main.js` — wires the page: connects MIDI and the computer keyboard to the synth, the page's state and the views
   - `controller.js` — the page's state (held notes, pedal, joystick, CC and pad readouts) and every parameter change, in one place; no DOM
-  - `computer-keys.js` — the computer keyboard as a one-octave piano (takes its events from a target, so it is testable); no DOM of its own
   - `synth.js` — the polyphonic synth (voices, sustain pedal, pitch bend, parameters); no DOM
   - `envelope.js` — ADSR scheduling on a Web Audio `AudioParam`
   - `params.js` — every synth parameter in one table (scale, display, knob order, labels); adding one is one entry
@@ -105,6 +104,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/console-drawer.js` — the drawer along the bottom of the window that shows that list, with Copy and Clear
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects
 - `shared/flash.js` — light an element for a moment (a pad hit), restarting the time on a repeat hit
+- `shared/computer-keys.js` — the computer keyboard as a one-octave piano (takes its events from a target, so it is testable); no DOM of its own; played by the keys page and the Tone.js demo
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
 - `shared/storage.js` — JSON in `localStorage` that never throws
