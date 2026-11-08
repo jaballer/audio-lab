@@ -17,6 +17,8 @@
 //   transport.setSignature(numerator, denominator);      // the project's time signature, e.g. 3, 4
 //   transport.reset();                                   // the device went away
 
+import { DEFAULT_BPM, MAX_BPM, MIN_BPM } from "./clock-master.js";
+
 export const CLOCKS_PER_BEAT = 24; // MIDI clock is 24 ticks per quarter note
 export const BEATS_PER_BAR = 4; // the default time signature is 4/4: it is not sent, so the page is told
 export const MAX_LOOP_BARS = 128; // the longest sequence the device has
@@ -43,8 +45,9 @@ const MS_PER_MINUTE = 60000;
 const isLoopBars = (bars) => Number.isInteger(bars) && bars >= 1 && bars <= MAX_LOOP_BARS;
 const isNumerator = (n) => Number.isInteger(n) && n >= 1 && n <= MAX_BEATS_PER_BAR;
 const isNoteValue = (d) => NOTE_VALUES.includes(d);
+const isBpm = (bpm) => Number.isFinite(bpm) && bpm >= MIN_BPM && bpm <= MAX_BPM;
 
-const DEFAULT_SEQUENCE = { bars: 1, numerator: BEATS_PER_BAR, denominator: DEFAULT_NOTE_VALUE };
+const DEFAULT_SEQUENCE = { bars: 1, numerator: BEATS_PER_BAR, denominator: DEFAULT_NOTE_VALUE, bpm: DEFAULT_BPM };
 
 // What the sequence settings are, from whatever was saved or typed: each field that is not valid
 // falls back to the one in `fallback` (one bar of 4/4 unless given), so a stale or hand-edited
@@ -55,6 +58,7 @@ export function normalizeSequence(saved, fallback = DEFAULT_SEQUENCE) {
     bars: isLoopBars(value.bars) ? value.bars : fallback.bars,
     numerator: isNumerator(value.numerator) ? value.numerator : fallback.numerator,
     denominator: isNoteValue(value.denominator) ? value.denominator : fallback.denominator,
+    bpm: isBpm(value.bpm) ? Math.round(value.bpm * TENTH) / TENTH : fallback.bpm,
   };
 }
 

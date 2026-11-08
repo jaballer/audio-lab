@@ -301,34 +301,43 @@ describe("a time signature", () => {
 });
 
 describe("normalizeSequence", () => {
-  it("keeps good settings and falls back to 1 bar of 4/4 for anything else", () => {
-    expect(normalizeSequence({ bars: 16, numerator: 7, denominator: 8 })).toEqual({
+  it("keeps good settings and falls back to 1 bar of 4/4 at 120 BPM for anything else", () => {
+    expect(normalizeSequence({ bars: 16, numerator: 7, denominator: 8, bpm: 95.5 })).toEqual({
       bars: 16,
       numerator: 7,
       denominator: 8,
+      bpm: 95.5,
     });
-    expect(normalizeSequence(null)).toEqual({ bars: 1, numerator: 4, denominator: 4 });
-    expect(normalizeSequence("x")).toEqual({ bars: 1, numerator: 4, denominator: 4 });
-    expect(normalizeSequence({ bars: 0, numerator: 99, denominator: 5 })).toEqual({
-      bars: 1,
-      numerator: 4,
-      denominator: 4,
-    });
-    expect(normalizeSequence({ bars: 8 })).toEqual({ bars: 8, numerator: 4, denominator: 4 });
+    const fresh = { bars: 1, numerator: 4, denominator: 4, bpm: 120 };
+    expect(normalizeSequence(null)).toEqual(fresh);
+    expect(normalizeSequence("x")).toEqual(fresh);
+    expect(normalizeSequence({ bars: 0, numerator: 99, denominator: 5, bpm: 5 })).toEqual(fresh);
+    expect(normalizeSequence({ bars: 8 })).toEqual({ ...fresh, bars: 8 });
+  });
+
+  it("keeps the tempo within the device's range, to a tenth of a BPM", () => {
+    expect(normalizeSequence({ bpm: 30 }).bpm).toBe(30);
+    expect(normalizeSequence({ bpm: 300 }).bpm).toBe(300);
+    expect(normalizeSequence({ bpm: 29.9 }).bpm).toBe(120);
+    expect(normalizeSequence({ bpm: 301 }).bpm).toBe(120);
+    expect(normalizeSequence({ bpm: Number.NaN }).bpm).toBe(120);
+    expect(normalizeSequence({ bpm: 100.04 }).bpm).toBe(100);
   });
 
   // Typing a bad value into one field should leave that field as it was, not reset it.
   it("falls back to the settings it is given, field by field", () => {
-    const current = { bars: 16, numerator: 7, denominator: 8 };
-    expect(normalizeSequence({ bars: 500, numerator: 3, denominator: 4 }, current)).toEqual({
+    const current = { bars: 16, numerator: 7, denominator: 8, bpm: 90 };
+    expect(normalizeSequence({ bars: 500, numerator: 3, denominator: 4, bpm: 140 }, current)).toEqual({
       bars: 16,
       numerator: 3,
       denominator: 4,
+      bpm: 140,
     });
-    expect(normalizeSequence({ bars: 2, numerator: 0, denominator: 5 }, current)).toEqual({
+    expect(normalizeSequence({ bars: 2, numerator: 0, denominator: 5, bpm: 0 }, current)).toEqual({
       bars: 2,
       numerator: 7,
       denominator: 8,
+      bpm: 90,
     });
   });
 });
