@@ -22,7 +22,8 @@ Numbers link to the pull request.
   screens appears only then ([#60](https://github.com/jaballer/audio-lab/pull/60)).
 - MPC Sample page: the Stop and Play lamps are the buttons (Stop first, as on the device). Play starts the device by
   sending Start and a steady clock, so the device follows the page's tempo while it plays. The separate Play and
-  Stop buttons, the Space shortcut and the Sound button are gone: the pads always play the sampler's sounds.
+  Stop buttons, the Space shortcut and the Sound button are gone: the pads always play the sampler's sounds
+  ([#61](https://github.com/jaballer/audio-lab/pull/61)).
 
 ## 2026-11-08
 
