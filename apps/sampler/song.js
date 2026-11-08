@@ -11,9 +11,14 @@ import { clampBpm } from "./tempo.js";
 
 export const SONG_KEY = "pad-sampler:song";
 
-// Bump this when the saved shape changes; a song with any other version is
-// ignored, so an old page never misreads a newer song (or the other way round).
+// Bump this when the saved shape changes, and add a migration from the old
+// version (below) so beats saved by an older page still load. A song newer than
+// this page is ignored, so an old page never misreads a newer song.
 export const SONG_VERSION = 1;
+
+// { [version]: (song) => the same song in the next version's shape }. The version
+// field itself is set by upgradeSong. Empty while version 1 is the only one.
+const MIGRATIONS = {};
 
 const VOLUME_MAX = 100;
 
@@ -37,11 +42,26 @@ function cleanPattern(pattern, { rows, steps }) {
   return clean;
 }
 
+// Bring a stored song up to SONG_VERSION by applying one migration after another,
+// or give back null when it cannot be brought there (a version from the future,
+// or an old one with no migration). `migrations` is a parameter for the tests.
+export function upgradeSong(raw, migrations = MIGRATIONS) {
+  if (!isObject(raw) || !Number.isInteger(raw.version) || raw.version > SONG_VERSION) return null;
+  let song = raw;
+  while (song.version < SONG_VERSION) {
+    const migrate = migrations[song.version];
+    if (!migrate) return null;
+    song = { ...migrate(song), version: song.version + 1 };
+  }
+  return song;
+}
+
 // Turn whatever was in storage into a song, or null when it is not one we can
-// trust (missing, corrupt, from another version). Values that are the right
+// trust (missing, corrupt, from a version it cannot upgrade). Values that are the right
 // kind but out of range are brought back into range rather than rejected.
-export function parseSong(raw, { rows, steps }) {
-  if (!isObject(raw) || raw.version !== SONG_VERSION) return null;
+export function parseSong(stored, { rows, steps }) {
+  const raw = upgradeSong(stored);
+  if (!raw) return null;
   if (!Number.isFinite(raw.bpm) || !Number.isFinite(raw.volume) || !isObject(raw.pattern)) return null;
 
   return {

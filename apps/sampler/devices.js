@@ -14,6 +14,8 @@
 // app, and `reset` is the message that turns every LED off. `match` is used for
 // the controller's output port as well as its input.
 
+import { PAD_COLUMNS, PAD_ROWS, STEPS, padColumn, padIndex, padRow } from "./layout.js";
+
 // What the transport and edit buttons can ask for.
 export const CONTROLS = ["start", "stop", "record", "clearPad", "clearAll", "tap", "tempoDown", "tempoUp"];
 
@@ -44,10 +46,16 @@ const TOP_BUTTONS = [
 ];
 
 // The original Launchpad's grid is 8x8 and a note is `row * 16 + column`, with
-// row 0 at the top. The bottom-left 4x4 block plays the pads (pad 1 in the
-// bottom-left corner) and the top two rows are the 16 step keys.
-const padNote = (index) => (7 - (index >> 2)) * 16 + (index & 3);
-const stepNote = (index) => (index >> 3) * 16 + (index & 7);
+// row 0 at the top. The bottom-left block (the app's pad grid, pad 1 in the
+// bottom-left corner) plays the pads and the top rows are the step keys.
+const GRID_SIZE = 8;
+const ROW_STRIDE = 16;
+const FIRST_PAD_ROW = GRID_SIZE - PAD_ROWS;
+const STEP_ROWS = Math.ceil(STEPS / GRID_SIZE);
+
+const gridNote = (row, column) => row * ROW_STRIDE + column;
+const padNote = (index) => gridNote(FIRST_PAD_ROW + padRow(index), padColumn(index));
+const stepNote = (index) => gridNote(Math.floor(index / GRID_SIZE), index % GRID_SIZE);
 
 // The profile is for the original-layout Launchpads: plain, S and Mini (optionally
 // MK1/MK2). ALSA also appends an instance number to the name ("Launchpad Mini 9", and
@@ -70,11 +78,11 @@ export const launchpad = {
 
   translate(msg) {
     if (msg.type === "noteOn") {
-      const row = msg.note >> 4;
-      const col = msg.note & 15;
-      if (row >= 4 && row <= 7 && col <= 3)
-        return [{ type: "pad", index: (7 - row) * 4 + col, velocity: msg.velocity }];
-      if (row <= 1 && col <= 7) return [{ type: "step", index: row * 8 + col }];
+      const row = Math.floor(msg.note / ROW_STRIDE);
+      const col = msg.note % ROW_STRIDE;
+      if (row >= FIRST_PAD_ROW && row < GRID_SIZE && col < PAD_COLUMNS)
+        return [{ type: "pad", index: padIndex(row - FIRST_PAD_ROW, col), velocity: msg.velocity }];
+      if (row < STEP_ROWS && col < GRID_SIZE) return [{ type: "step", index: row * GRID_SIZE + col }];
       return [];
     }
     // The button's release sends value 0; only the press counts.

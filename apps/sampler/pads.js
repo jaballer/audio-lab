@@ -5,14 +5,16 @@
 //   grid.select(0);   // mark the selected pad
 //   padForKey("q")    // which pad a key plays (8), or -1
 
+import { PAD_COLUMNS, PAD_ROWS, padIndex } from "./layout.js";
+
 // Keyboard rows mirror the pad grid: top row of keys = top row of pads.
 export const KEY_ROWS = ["1234", "qwer", "asdf", "zxcv"];
 
 // Pad 1 sits bottom-left, so the top key row plays the top pad row (pads 13-16).
 export function padForKey(key) {
-  for (let row = 0; row < 4; row++) {
+  for (let row = 0; row < PAD_ROWS; row++) {
     const col = KEY_ROWS[row].indexOf(key);
-    if (col !== -1) return (3 - row) * 4 + col;
+    if (col !== -1) return padIndex(row, col);
   }
   return -1;
 }
@@ -23,10 +25,11 @@ const FLASH_MS = 110;
 // press or a keyboard activation (Enter/Space on a focused pad).
 export function createPadGrid(element, { sounds, onTrigger }) {
   const padEls = [];
+  element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
 
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 4; col++) {
-      const idx = (3 - row) * 4 + col;
+  for (let row = 0; row < PAD_ROWS; row++) {
+    for (let col = 0; col < PAD_COLUMNS; col++) {
+      const idx = padIndex(row, col);
       const key = KEY_ROWS[row][col];
       const btn = document.createElement("button");
       btn.type = "button";

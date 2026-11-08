@@ -10,6 +10,7 @@ import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createLcd } from "./lcd.js";
+import { PAD_COUNT, STEPS } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
@@ -17,9 +18,6 @@ import { SOUNDS } from "./sounds.js";
 import { createStepKeys } from "./steps.js";
 import { createTempoKnob } from "./tempo-knob.js";
 import { BPM_MAX, BPM_MIN } from "./tempo.js";
-
-const STEPS = 16;
-const PAD_COUNT = SOUNDS.length; // 16 pads in a 4x4 grid
 
 const $ = (id) => document.getElementById(id);
 
