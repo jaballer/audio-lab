@@ -20,15 +20,13 @@ import { noteName } from "../../shared/notes.js";
 import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
 import { createHolds } from "../../shared/holds.js";
 import { createPiano } from "../../shared/piano.js";
-import { PARAMS } from "./params.js";
+import { DEFAULT_ECHO_TIME, ECHO_TIMES, PARAMS } from "./params.js";
 
 const $ = (id) => document.getElementById(id);
 
 const WAVES = ["sine", "triangle", "square", "sawtooth"];
 const FIRST_NOTE = 60; // middle C
 const OCTAVE = 12;
-const DELAY_TIME = "8n";
-const DELAY_FEEDBACK = 0.4;
 
 createSiteHeader($("site-header"), { current: "tone-demo", midi: false }); // no MIDI on this page
 const header = createAppHeader($("header"), {
@@ -52,14 +50,20 @@ audio.unlockOnInteraction();
 
 // The page's settings. Every change goes through setWave / setDelay, whether it
 // comes from the controls or from the defaults, so the sound and the controls agree.
-const settings = { wave: "triangle", delay: PARAMS.delay.value };
+const settings = {
+  wave: "triangle",
+  delay: PARAMS.delay.value,
+  echoTime: DEFAULT_ECHO_TIME,
+  feedback: PARAMS.feedback.value,
+  release: PARAMS.release.toValue(PARAMS.release.value),
+};
 let voice = null; // { synth, delay }, built on the first note
 
 // Built on first use, after the first interaction has started the context.
 function ensureVoice() {
   if (voice) return voice;
   audio.ensure();
-  const delay = new Tone.FeedbackDelay(DELAY_TIME, DELAY_FEEDBACK).connect(audio.master);
+  const delay = new Tone.FeedbackDelay(settings.echoTime, settings.feedback).connect(audio.master);
   const synth = new Tone.PolySynth(Tone.Synth).connect(delay);
   voice = { synth, delay };
   applySettings();
@@ -68,8 +72,10 @@ function ensureVoice() {
 
 function applySettings() {
   if (!voice) return;
-  voice.synth.set({ oscillator: { type: settings.wave } });
+  voice.synth.set({ oscillator: { type: settings.wave }, envelope: { release: settings.release } });
   voice.delay.wet.value = settings.delay;
+  voice.delay.delayTime.value = settings.echoTime;
+  voice.delay.feedback.value = settings.feedback;
 }
 
 function setWave(wave) {
@@ -82,12 +88,31 @@ function setDelay(amount) {
   applySettings();
 }
 
+function setEchoTime(time) {
+  settings.echoTime = time;
+  applySettings();
+}
+
+function setFeedback(amount) {
+  settings.feedback = amount;
+  applySettings();
+}
+
+function setRelease(seconds) {
+  settings.release = seconds;
+  applySettings();
+}
+
 // ---------- Controls ----------
 for (const wave of WAVES) {
   const option = new Option(wave, wave, false, wave === settings.wave);
   $("wave").append(option);
 }
 $("wave").addEventListener("change", (e) => setWave(e.target.value));
+for (const { value, label } of ECHO_TIMES) {
+  $("echo-time").append(new Option(label, value, false, value === settings.echoTime));
+}
+$("echo-time").addEventListener("change", (e) => setEchoTime(e.target.value));
 
 // Whether the menu got its focus from the mouse or touch. A pointer user picking a wave expects
 // the keys to play next, but the menu keeps focus (even when the same option is picked again, so
@@ -128,14 +153,17 @@ function bindSlider(id, onChange) {
   const param = PARAMS[id];
   const input = $(id);
   Object.assign(input, { min: param.min, max: param.max, step: param.step, value: param.value });
-  const show = () => ($(`${id}-value`).textContent = param.format(Number(input.value)));
+  const read = () => (param.toValue ? param.toValue(Number(input.value)) : Number(input.value));
+  const show = () => ($(`${id}-value`).textContent = param.format(read()));
   input.addEventListener("input", () => {
-    onChange(Number(input.value));
+    onChange(read());
     show();
   });
   show();
 }
 bindSlider("delay", setDelay);
+bindSlider("feedback", setFeedback);
+bindSlider("release", setRelease);
 bindSlider("volume", (v) => audio.setVolume(v));
 
 // ---------- Keys ----------
