@@ -114,27 +114,30 @@ for (const { value, label } of ECHO_TIMES) {
 }
 $("echo-time").addEventListener("change", (e) => setEchoTime(e.target.value));
 
-// Whether the menu got its focus from the mouse or touch. A pointer user picking a wave expects
+// Whether a menu got its focus from the mouse or touch. A pointer user picking an option expects
 // the keys to play next, but the menu keeps focus (even when the same option is picked again, so
 // there is no `change` to blur on). A keyboard user who tabbed to it is using it. Judge by the last
-// input device: clicking the label focuses the menu without a pointerdown on the menu itself.
+// input device: clicking a label focuses its menu without a pointerdown on the menu itself.
 let lastInputWasPointer = false;
-const waveControl = $("wave").closest("label");
+let pointerMenu = null; // the menu focused by pointer, if any
 window.addEventListener(
   "pointerdown",
   (e) => {
     lastInputWasPointer = true;
-    // Clicking a menu that already has focus (tabbed to) sends no new `focus` event.
-    if (waveControl.contains(e.target) || document.activeElement === $("wave")) {
-      menuFocusedByPointer = true;
-    }
+    // A menu that already has focus (tabbed to) sends no new `focus` event when it is clicked.
+    const clicked = e.target.closest?.(".tone-control")?.querySelector("select");
+    const focused = document.activeElement instanceof HTMLSelectElement && document.activeElement;
+    pointerMenu = clicked || focused || pointerMenu;
   },
   true,
 );
 window.addEventListener("keydown", () => (lastInputWasPointer = false), true);
-let menuFocusedByPointer = false;
-$("wave").addEventListener("focus", () => (menuFocusedByPointer = lastInputWasPointer));
-$("wave").addEventListener("blur", () => (menuFocusedByPointer = false));
+document.addEventListener("focusin", (e) => {
+  if (e.target instanceof HTMLSelectElement) pointerMenu = lastInputWasPointer ? e.target : null;
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target === pointerMenu) pointerMenu = null;
+});
 
 // A pointer-focused menu gives its focus to the first note key, and the key must not also run the
 // menu's own type-ahead (which could change the wave).
@@ -142,7 +145,7 @@ function menuClaimsKey(e) {
   if (!(e.target instanceof HTMLSelectElement)) return false;
   // Arrows, Enter and Escape are not note keys: they always belong to the menu.
   const isNoteKey = e.key.length === 1 && COMPUTER_KEYS.includes(e.key.toLowerCase());
-  if (!menuFocusedByPointer || !isNoteKey) return true;
+  if (e.target !== pointerMenu || !isNoteKey) return true;
   e.preventDefault();
   e.target.blur();
   return false;
