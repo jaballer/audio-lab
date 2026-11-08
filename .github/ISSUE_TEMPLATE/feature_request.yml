@@ -1,0 +1,40 @@
+name: Feature or task
+description: A new capability or a larger piece of work, small enough to break down later.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should it do, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: fit
+    attributes:
+      label: How it fits the current design
+      description: >-
+        Which existing modules or seams it builds on (see the Architecture rules in CLAUDE.md), and anything it would
+        have to change.
+  - type: textarea
+    id: plan
+    attributes:
+      label: Plan
+      description: >-
+        One pull request per change that could be reverted on its own. A checklist works well, and can be split into
+        separate issues later.
+      placeholder: |
+        ### 1. First change
+        - [ ] ...
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Open decisions
+      description: Choices that need an answer before or during the work, each with a suggestion if you have one.
+  - type: textarea
+    id: verification
+    attributes:
+      label: What can only be checked by ear, by eye or with hardware
+      description: >-
+        Sound, layout or controller behaviour that tests cannot judge, so the pull requests say so rather than
+        claiming it was verified.

@@ -1,0 +1,54 @@
+name: Bug report
+description: Something sounds, looks or behaves wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw or heard, and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: page
+    attributes:
+      label: Page
+      options:
+        - Sampler (index.html)
+        - Keys (keyboard.html)
+        - MIDI monitor (monitor.html)
+        - Not page-specific
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the sampler
+        2. Press pad 3
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      description: Web Audio and Web MIDI differ between browsers, so the version matters.
+      placeholder: Firefox 150 on Linux
+    validations:
+      required: true
+  - type: textarea
+    id: midi
+    attributes:
+      label: MIDI controller and port name
+      description: >-
+        Only if a controller is involved. Copy the input name exactly as the MIDI monitor page (monitor.html) shows it,
+        because device profiles match on that string.
+      placeholder: Launchpad Mini 9 MIDI 1
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Any errors from the browser console. Leave empty if there are none.
+      render: text
