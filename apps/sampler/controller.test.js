@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
-import { STARTER_BEAT } from "./pattern.js";
-import { LOOKAHEAD_MS } from "./transport.js";
+import { SCHEDULER_TICK_MS } from "../../shared/scheduler.js";
+import { STARTER_BEAT } from "./starter-beat.js";
 
 const STEPS = 16;
 const PADS = 4;
@@ -36,7 +36,7 @@ function setup({ song = null, bpm } = {}) {
   // Move the audio clock forward and let the scheduler wake up.
   const advance = (seconds) => {
     audio.ctx.currentTime += seconds;
-    vi.advanceTimersByTime(LOOKAHEAD_MS);
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
   };
   const tapAt = (ms) => {
     clock = ms;

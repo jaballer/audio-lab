@@ -6,15 +6,22 @@ decision behind it. The phases and their status are tracked in the GitHub epic
 
 ## Decision: extract the generic pieces, do not build one global sequencer
 
-Most of the sampler's sequencer is already generic and only lives under `apps/sampler/`:
+The sampler's sequencer was mostly generic, so its pieces now live in `shared/` (done in epic #63, phase 1):
 
-- `pattern.js`: a pure rows × steps grid. Only `STARTER_BEAT` is sampler-specific.
-- `tempo.js`: BPM clamp, step length, tap tempo, `nearestStep`.
-- `transport.js`: the lookahead scheduler. Generic apart from `markHeard`, which only live recording uses.
-- `steps.js`: the step-key view. Its classes (`.cell`, `.step`, `.led`, `.step-group`) are not page-prefixed, so
-  sharing it means renaming them (see "Class names are scoped to the page" in `CLAUDE.md`).
-- `song.js`: persistence, tied to the sampler's storage key and volume field. Stays app-specific until it is
-  generalised on its own.
+- `shared/pattern.js`: a pure rows × steps grid. The sampler's starter beat stayed behind in
+  `apps/sampler/starter-beat.js`.
+- `shared/tempo.js`: BPM clamp, step length, tap tempo, `nearestStep`.
+- `shared/scheduler.js`: the lookahead scheduler, renamed from `transport.js`. It takes a `clock`
+  (`{ now(), prepare?() }`) instead of the audio engine, so it can run in audio time or in MIDI time.
+  `markHeard` stayed in it: it is tied to which step is next and to steps skipped after a stall, and any page that
+  records live pad hits needs it.
+
+Still to be shared when the second page needs it:
+
+- `apps/sampler/steps.js`: the step-key view. Its classes (`.cell`, `.step`, `.led`, `.step-group`) are not
+  page-prefixed, so sharing it means renaming them (see "Class names are scoped to the page" in `CLAUDE.md`).
+- `apps/sampler/song.js`: persistence, tied to the sampler's storage key and volume field. Stays app-specific until
+  it is generalised on its own.
 
 One module that owns pattern, clock, sounds, recording and saving would be the sampler's `controller.js`, which is
 mixed in with pad selection, LCD messages and Launchpad lights. Each app keeps its own controller; they share the
@@ -23,7 +30,7 @@ parts underneath. The view is shared when the second page needs it, so its API c
 ## Why the MPC page cannot just reuse the sampler's transport
 
 1. **Name clash.** `apps/mpc-sample/transport.js` follows the device's state from its MIDI clock; the sampler's
-   `transport.js` is a scheduler. The scheduler is renamed `scheduler.js` when it moves to `shared/`.
+   `transport.js` is a scheduler. The shared one is called `scheduler.js`.
 2. **Different clocks.** The sampler schedules in `AudioContext` time. The MPC page's `clock-master.js` queues MIDI
    ticks in `performance.now()` time. The shared scheduler takes an injected clock, and `onStep(step, time)` is the
    seam between the scheduler and whatever plays the step (the device over MIDI, the browser's sounds, or both).

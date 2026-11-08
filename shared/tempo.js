@@ -3,8 +3,10 @@
 export const BPM_MIN = 40;
 export const BPM_MAX = 240;
 
-// Keep a tempo in range, to one decimal place.
-export const clampBpm = (value) => Math.round(Math.min(BPM_MAX, Math.max(BPM_MIN, value)) * 10) / 10;
+// Keep a tempo in range, to one decimal place. The range is the sampler's unless a page passes
+// its own: the MPC Sample runs from 30 to 300.
+export const clampBpm = (value, { min = BPM_MIN, max = BPM_MAX } = {}) =>
+  Math.round(Math.min(max, Math.max(min, value)) * 10) / 10;
 
 // Seconds in one step. The sequencer's steps are 16th notes, four to a beat.
 export const stepSeconds = (bpm) => 60 / bpm / 4;

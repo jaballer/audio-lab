@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STARTER_BEAT, createPattern } from "./pattern.js";
+import { createPattern } from "./pattern.js";
 
 describe("createPattern", () => {
   it("starts empty", () => {
@@ -56,7 +56,7 @@ describe("snapshot", () => {
   });
 
   it("is the shape createPattern starts from, so a pattern can be rebuilt from it", () => {
-    const pattern = createPattern(16, 16, STARTER_BEAT);
+    const pattern = createPattern(16, 16, { 0: [0, 4, 8, 12], 1: [4, 12] });
     pattern.toggle(5, 3);
     const copy = createPattern(16, 16, pattern.snapshot());
     for (let row = 0; row < 16; row++) expect(copy.row(row)).toEqual(pattern.row(row));
@@ -102,16 +102,5 @@ describe("onChange", () => {
     const pattern = createPattern(1, 4, {}, { onChange: () => seen.push(pattern.isOn(0, 2)) });
     pattern.toggle(0, 2);
     expect(seen).toEqual([true]);
-  });
-});
-
-describe("STARTER_BEAT", () => {
-  it("is a kick on the beat, a snare on 2 and 4, and eighth-note closed hats", () => {
-    const pattern = createPattern(16, 16, STARTER_BEAT);
-    const on = (row) => pattern.row(row).flatMap((v, i) => (v ? [i] : []));
-    expect(on(0)).toEqual([0, 4, 8, 12]);
-    expect(on(1)).toEqual([4, 12]);
-    expect(on(2)).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
-    expect(on(3)).toEqual([]);
   });
 });
