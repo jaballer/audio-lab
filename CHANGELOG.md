@@ -10,6 +10,8 @@ Numbers link to the pull request.
 
 ### Added
 
+- Keys page: the K1–K8 dials can be turned with the mouse (drag, scroll or arrow keys), and they follow the sliders
+  ([#57](https://github.com/jaballer/audio-lab/pull/57)).
 - A POWER switch on the sampler, keys and tone pages: it turns sound on and off, and off stays off until it is pressed
   again ([#60](https://github.com/jaballer/audio-lab/pull/60)).
 

@@ -23,7 +23,7 @@ import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { createPadLearner } from "./pad-learner.js";
-import { GROUPS, PARAMS } from "./params.js";
+import { GROUPS, PARAMS, choiceLabel, knobForChoice, positionKnob } from "./params.js";
 import { createPiano } from "./piano.js";
 import { createStick } from "./stick.js";
 import { createSynthPanel } from "./synth-panel.js";
@@ -68,8 +68,18 @@ const keys = createKeysController({
   onChange: render,
   onNoteDown: (note) => piano.press(note),
   onNoteUp: (note) => piano.release(note),
-  onSlider: (param, position, text) => panel.showSlider(param, position, text),
-  onChoice: (param, choice) => panel.showChoice(param, choice),
+  onSlider: (param, position, text) => {
+    panel.showSlider(param, position, text);
+    knobDials.turn(PARAMS.indexOf(param), positionKnob(position), text);
+  },
+  onChoice: (param, choice) => {
+    panel.showChoice(param, choice);
+    const index = PARAMS.indexOf(param);
+    // A dial already inside this choice's part of the travel stays where it is, so
+    // it keeps following the hand instead of snapping to the middle. The text is set
+    // every time: the dial moves itself while dragged, without knowing the choice's name.
+    knobDials.turn(index, knobForChoice(knobDials.value(index), choice, param.choices), choiceLabel(choice));
+  },
 });
 
 // ---------- Views ----------
@@ -100,7 +110,12 @@ const padLearner = createPadLearner({
   save: (data) => saveJson(PAD_STORE_KEY, data),
 });
 const padGrid = createPadGrid($("pads"), { notes: padLearner.notes });
-const knobDials = createKnobDials($("knobs"), { ccs: mpkMini.knobCcs, labels: PARAMS.map((p) => p.name) });
+// A dial dragged with the mouse takes the same road as a hardware knob.
+const knobDials = createKnobDials($("knobs"), {
+  ccs: mpkMini.knobCcs,
+  labels: PARAMS.map((p) => p.name),
+  onChange: (index, value) => keys.applyKnob(index, value),
+});
 
 const panel = createSynthPanel($("synth"), {
   params: PARAMS,
@@ -127,6 +142,7 @@ const handlers = {
   sustain: (e) => keys.setSustain(e.on),
   mod: (e) => keys.setMod(e.value),
   knob: (e) => {
+    // The dial shows the knob's own position, even where a choice knob stays on one choice.
     knobDials.turn(e.index, e.value);
     // The on-screen controls jump to the knob's position as soon as it is turned.
     keys.applyKnob(e.index, e.value);
