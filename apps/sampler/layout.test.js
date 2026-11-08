@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PAD_COLUMNS, PAD_COUNT, PAD_ROWS, STEPS, STEP_GROUP, padColumn, padIndex, padRow } from "./layout.js";
 import { KEY_ROWS } from "./pads.js";
-import { SOUNDS } from "./sounds.js";
+import { SOUNDS } from "../../shared/sounds.js";
 
 describe("layout", () => {
   it("has a pad for every sound and a sound for every pad", () => {

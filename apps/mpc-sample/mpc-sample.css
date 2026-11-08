@@ -158,6 +158,7 @@
 }
 .mpc-lamps,
 .mpc-buttons,
+.mpc-sound,
 .mpc-loop {
   display: flex;
   align-items: center;
@@ -219,4 +220,11 @@
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Lit while the pads are making sound in the browser. */
+.mpc-sound-btn[aria-pressed="true"] {
+  background: var(--led-green);
+  border-color: #2c7a24;
+  color: #0e2b0b;
 }

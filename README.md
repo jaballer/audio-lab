@@ -56,8 +56,6 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `song.js` — what is kept between visits (pattern, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `transport.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from; no DOM
   - `tempo.js` — BPM limits, step length, tap tempo and snapping a live hit to the nearest step; no DOM
-  - `sounds.js` — the 16 drum sounds and the kit that lists them in pad order
-  - `dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
   - `pads.js`, `steps.js`, `tempo-knob.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `lcd.js` has the pure text formatter)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
@@ -82,7 +80,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `view.js` — the on-screen message list and notes table
   - `monitor.css` — monitor-only styles
 - `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo; its Play and Stop buttons ask the device to start or stop
-  - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame
+  - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame, and plays the sampler's sounds when a pad is hit (the Sound button turns that off)
   - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the Play and Stop buttons send
   - `board.js` — what the pads are doing in every bank, and which bank to show; no DOM
   - `transport.js` — whether the device is playing, its tempo and bar and beat read from the MIDI clock (a device already playing when the page connects, or one whose clock goes quiet, is noticed); no DOM
@@ -91,7 +89,9 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `tone-demo.html` + `apps/tone-demo/` — a small synth built with [Tone.js](https://tonejs.github.io/), the only page that uses it (a feedback delay on the shared audio engine)
   - `main.js` — wires the page: points Tone at the shared `AudioContext`, builds the synth and delay, draws the keys and controls
   - `tone-demo.css` — demo-only styles
-- `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by both apps
+- `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler and the MPC Sample page
+- `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
+- `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by every app
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
 - `shared/mpc-sample.js` — what is known about the Akai MPC Sample's MIDI: how to recognise its port and which pad and bank a note belongs to

@@ -2,11 +2,16 @@
 // velocity, pressure, bank, play/stop, tempo) so you can check it is talking to the browser,
 // and has Play and Stop buttons that ask the device to start or stop.
 //
+// The pads also play the sampler's 16 sounds through the browser, so they can be tried without
+// a sampler or a synth plugged in; the Sound button turns that off (the device has its own
+// sound, which would double up).
+//
 // This file only wires the pieces together: MIDI in and out, the state, and the views.
 
 import "../../shared/base.css";
 import "./mpc-sample.css";
 import { createAppHeader } from "../../shared/app-header.js";
+import { createAudioEngine } from "../../shared/audio.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { isMpcSample } from "../../shared/mpc-sample.js";
@@ -15,6 +20,7 @@ import { createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
+import { SOUNDS, playSound } from "../../shared/sounds.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { createTransport, normalizeSequence, toggleAction } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
@@ -26,6 +32,9 @@ const header = createAppHeader($("header"), {
   sub: "Companion",
   back: { href: "./", label: "Sampler" },
 });
+
+const SOUND_VOLUME = 0.8; // the sampler's default volume
+const MIDI_VELOCITY_MAX = 127;
 
 const SEQUENCE_STORE_KEY = "mpc-sample.sequence";
 const barsInput = $("seq-bars");
@@ -41,6 +50,25 @@ function showSequence() {
   noteSelect.value = String(sequence.denominator);
 }
 showSequence();
+
+// The page may be opened with the device already plugged in, and a MIDI hit does not count as
+// the click a browser needs before it lets audio start, so unlock on the first click or key.
+const audio = createAudioEngine({ volume: SOUND_VOLUME });
+audio.unlockOnInteraction();
+
+const SOUND_STORE_KEY = "mpc-sample.sound";
+const soundButton = $("sound-btn");
+let soundOn = loadJson(SOUND_STORE_KEY) !== false; // on unless it was turned off
+function showSound() {
+  soundButton.setAttribute("aria-pressed", String(soundOn));
+  soundButton.textContent = soundOn ? "On" : "Off";
+}
+showSound();
+soundButton.addEventListener("click", () => {
+  soundOn = !soundOn;
+  showSound();
+  saveJson(SOUND_STORE_KEY, soundOn);
+});
 
 const board = createBoard();
 const transport = createTransport({
@@ -127,8 +155,14 @@ setInterval(() => {
   if (transport.expire(performance.now())) schedule();
 }, STALE_CHECK_MS);
 
+// Every bank plays the same 16 sounds: a pad is the same pad whichever bank it is in.
+function playPad(event) {
+  applyToBoard(event);
+  if (soundOn) playSound(audio, SOUNDS[event.index], event.velocity / MIDI_VELOCITY_MAX);
+}
+
 const handlers = {
-  padDown: applyToBoard,
+  padDown: playPad,
   padUp: applyToBoard,
   padPressure: applyToBoard,
   transportStart: applyToTransport,
