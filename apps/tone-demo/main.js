@@ -17,7 +17,7 @@ import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
-import { createComputerKeys } from "../../shared/computer-keys.js";
+import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
 import { createHolds } from "../../shared/holds.js";
 import { createPiano } from "../../shared/piano.js";
 
@@ -87,6 +87,40 @@ for (const wave of WAVES) {
   $("wave").append(option);
 }
 $("wave").addEventListener("change", (e) => setWave(e.target.value));
+
+// Whether the menu got its focus from the mouse or touch. A pointer user picking a wave expects
+// the keys to play next, but the menu keeps focus (even when the same option is picked again, so
+// there is no `change` to blur on). A keyboard user who tabbed to it is using it. Judge by the last
+// input device: clicking the label focuses the menu without a pointerdown on the menu itself.
+let lastInputWasPointer = false;
+const waveControl = $("wave").closest("label");
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    lastInputWasPointer = true;
+    // Clicking a menu that already has focus (tabbed to) sends no new `focus` event.
+    if (waveControl.contains(e.target) || document.activeElement === $("wave")) {
+      menuFocusedByPointer = true;
+    }
+  },
+  true,
+);
+window.addEventListener("keydown", () => (lastInputWasPointer = false), true);
+let menuFocusedByPointer = false;
+$("wave").addEventListener("focus", () => (menuFocusedByPointer = lastInputWasPointer));
+$("wave").addEventListener("blur", () => (menuFocusedByPointer = false));
+
+// A pointer-focused menu gives its focus to the first note key, and the key must not also run the
+// menu's own type-ahead (which could change the wave).
+function menuClaimsKey(e) {
+  if (!(e.target instanceof HTMLSelectElement)) return false;
+  // Arrows, Enter and Escape are not note keys: they always belong to the menu.
+  const isNoteKey = e.key.length === 1 && COMPUTER_KEYS.includes(e.key.toLowerCase());
+  if (!menuFocusedByPointer || !isNoteKey) return true;
+  e.preventDefault();
+  e.target.blur();
+  return false;
+}
 $("delay").addEventListener("input", (e) => setDelay(Number(e.target.value)));
 $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.value)));
 
@@ -126,13 +160,14 @@ const piano = createPiano($("keys"), {
 });
 
 // The computer keyboard plays the same keys: A W S E D F T G Y H U J K, as on the keys page.
-// A letter typed while a menu or slider has focus is for that control, not for a note.
+// A letter typed in the menu after tabbing to it is for the menu (type-ahead), not for a note. A
+// slider takes no letters, so it never blocks the keys: clicking one must not silence the keyboard.
 const computerKeys = createComputerKeys({
   target: window,
   getBase: () => FIRST_NOTE - OCTAVE, // the keys play the octave above the base
   onNoteOn: (note) => press(note, COMPUTER),
   onNoteOff: (note) => release(note, COMPUTER),
-  ignore: (e) => e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement,
+  ignore: menuClaimsKey,
 });
 
 // A key held while the page goes to the background (Alt-Tab, a notification,
