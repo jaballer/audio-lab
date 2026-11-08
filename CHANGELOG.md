@@ -16,6 +16,10 @@ Numbers link to the pull request.
   again ([#60](https://github.com/jaballer/audio-lab/pull/60)).
 - MPC Sample page: the same POWER switch, so the pads' sound can be turned off
   ([#62](https://github.com/jaballer/audio-lab/pull/62)).
+- MPC Sample page: a step sequencer. Click a pad to pick it, turn its step keys on, and Play starts the device and
+  sends it a note for each step, so it plays its own sounds in time with the page's clock. It follows the sequence's
+  bars and time signature (16 steps shown at a time), covers every pad of every bank, and has its own Tempo field.
+  The steps are not saved between visits yet.
 
 ### Changed
 
