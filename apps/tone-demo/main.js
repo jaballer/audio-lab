@@ -90,7 +90,8 @@ $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.val
 // the focused key, or by the computer keyboard. The same note can be held from more than one of
 // those at once (two fingers on one key count separately), so it sounds until the last lets go:
 // each holds it under its own source.
-const FOCUSED_KEY = "focused key";
+const FOCUSED_SOURCES = ["focused Enter", "focused Space"]; // Enter and Space can be held together
+const focusedSource = (e) => FOCUSED_SOURCES[e.key === " " ? 1 : 0];
 const COMPUTER = "computer keyboard";
 const pointerSource = (e) => `pointer ${e.pointerId}`;
 const pointerSources = new Set(); // the pointers now down, to let go of them when the page is left
@@ -142,12 +143,12 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
   key.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
-    press(note, FOCUSED_KEY);
+    press(note, focusedSource(e));
   });
   key.addEventListener("keyup", (e) => {
-    if (e.key === "Enter" || e.key === " ") release(note, FOCUSED_KEY);
+    if (e.key === "Enter" || e.key === " ") release(note, focusedSource(e));
   });
-  key.addEventListener("blur", () => release(note, FOCUSED_KEY));
+  key.addEventListener("blur", () => FOCUSED_SOURCES.forEach((source) => release(note, source)));
 
   $("keys").append(key);
 }
@@ -167,7 +168,7 @@ const computerKeys = createComputerKeys({
 // the same key was pressed again. Let go of everything when the page loses focus
 // or is hidden, as the keys page does.
 function releaseAll() {
-  for (const source of [FOCUSED_KEY, COMPUTER, ...pointerSources]) releaseSource(source);
+  for (const source of [...FOCUSED_SOURCES, COMPUTER, ...pointerSources]) releaseSource(source);
   pointerSources.clear();
   computerKeys.reset(); // so the same letter can be pressed again, its keyup never having come
 }
