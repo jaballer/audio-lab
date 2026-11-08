@@ -158,7 +158,7 @@ describe("playSound", () => {
         return gain;
       },
     };
-    return { audio: { ensure: () => ctx, master }, ctx, master, gains };
+    return { audio: { ensure: () => ctx, master, powered: true }, ctx, master, gains };
   }
   const probe = () => ({ play: vi.fn() });
 
@@ -178,6 +178,14 @@ describe("playSound", () => {
     expect(gains[0].gain.value).toBe(0.4);
     expect(gains[0].connect).toHaveBeenCalledWith(master);
     expect(sound.play.mock.calls[0][1]).toBe(gains[0]);
+  });
+
+  it("drops a hit while the power is off, so it cannot queue up and sound at power on", () => {
+    const { audio } = fakeEngine();
+    audio.powered = false;
+    const sound = probe();
+    playSound(audio, sound);
+    expect(sound.play).not.toHaveBeenCalled();
   });
 
   it("never lets a hit go fully silent", () => {

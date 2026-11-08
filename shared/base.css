@@ -118,10 +118,34 @@ kbd {
   border-bottom-width: 3px;
 }
 
+/* The POWER switch: a button around the LED and its label. The LED is lit while sound is on. */
+.power-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.power-switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 .power-led {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  background: #5c2a26;
+  box-shadow: 0 0 0 2px #7a1f19;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.power-switch[aria-pressed="true"] .power-led {
   background: var(--led-red);
   box-shadow:
     0 0 8px 2px rgba(255, 59, 47, 0.6),
@@ -392,4 +416,52 @@ a:focus-visible {
 /* The shared <kbd> has a light background, so its text must stay dark here. */
 .help-panel kbd {
   color: var(--ink);
+}
+
+/* ---------- Audio notice ---------- */
+/* Shown while the browser is holding audio silent; see audio-notice.js. It sits
+   between the site bar and the machine on every page. */
+.audio-notice {
+  max-width: 560px;
+  padding: 9px 14px;
+  border: 1px solid #b08a1f;
+  border-radius: 8px;
+  background: #f6e7a8;
+  color: #4a3a05;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+}
+.audio-notice[hidden] {
+  display: none;
+}
+.audio-notice.nudge {
+  animation: audio-notice-nudge 0.5s ease-out;
+}
+@keyframes audio-notice-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .audio-notice.nudge {
+    animation: none;
+    outline: 3px solid #b08a1f;
+  }
+}
+/* A touch screen unlocks audio with the first tap, so there is nothing to tell, unless a MIDI
+   controller is played first: that cannot unlock audio, and the page nudges the notice then. */
+@media (hover: none) and (pointer: coarse) {
+  .audio-notice:not(.nudge) {
+    display: none;
+  }
 }

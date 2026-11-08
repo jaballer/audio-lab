@@ -2,13 +2,21 @@
 //
 //   const audio = createAudioEngine({
 //     volume: 0.5,                 // master gain, 0-1
-//     onStateChange: (state) => {}, // "suspended" | "running" | ...
+//     onStateChange: (state) => {}, // "closed" | "suspended" | "running" | ... | "off" (power off)
 //     createContext: () => ctx      // optional: build the context some other way (see below)
 //   });
 //   const ctx = audio.ensure();    // create/resume on demand, returns the context
 //   audio.master                   // GainNode every sound should connect to
 //   audio.setVolume(0.8);          // safe to call before the context exists
 //   audio.unlockOnInteraction();   // see below
+//   audio.powerOff(); audio.powerOn();   // the device's power switch: off is silent until turned on
+//   audio.powered                  // false while off: a page should not start sounds then (they are
+//                                  // inaudible, but a held note would be heard again at power on)
+//   audio.running                  // true only while sound can be heard: powered, and the context running
+//
+// Power off mutes the master gain and leaves the context running. Suspending it would freeze
+// every sounding note and its release against a stopped clock, and a power cycle would bring
+// them back; running muted lets them play out, unheard, on the clock as usual.
 //
 // The context is created lazily, so nothing is built until it is needed.
 //
@@ -16,12 +24,20 @@
 // wrapped one, which also fills in Web Audio features Firefox lacks (the listener's position
 // params). Handing Tone a plain AudioContext instead makes its setup throw in Firefox.
 
+// What the header marks its POWER button with (app-header.js).
+export const POWER_SWITCH = "[data-power-switch]";
+
+const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
+
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
   let master = null;
   let level = volume;
 
-  const notify = () => onStateChange?.(ctx ? ctx.state : "closed");
+  let powered = true;
+
+  // While the power is off the engine says so, whatever the context's own state is.
+  const notify = () => onStateChange?.(!powered ? "off" : ctx ? ctx.state : "closed");
 
   function ensure() {
     if (!ctx) {
@@ -30,25 +46,47 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
       // which would replace ours and leave the status stuck on "suspended".
       ctx.addEventListener("statechange", notify);
       master = ctx.createGain();
-      master.gain.value = level;
+      master.gain.value = powered ? level : 0;
       master.connect(ctx.destination);
     }
-    if (ctx.state === "suspended") ctx.resume();
+    // "interrupted" is Safari after a phone call or a locked screen; resume() ends it too.
+    // Off stays off: a click, a key or a note must not wake a context the browser holds suspended.
+    if (powered && (ctx.state === "suspended" || ctx.state === "interrupted")) ctx.resume();
     notify();
     return ctx;
+  }
+
+  // Muting is a fade, so sound already playing stops without a click.
+  function powerOff() {
+    powered = false;
+    if (ctx) master.gain.setTargetAtTime(0, ctx.currentTime, FADE_TIME_CONSTANT);
+    notify();
+  }
+
+  function powerOn() {
+    powered = true;
+    // Builds the context if there is none yet and resumes it: this runs from a click,
+    // which is the gesture browsers want.
+    ensure();
+    master.gain.setTargetAtTime(level, ctx.currentTime, FADE_TIME_CONSTANT);
   }
 
   // Smoothed over a few milliseconds: a jump in gain would click.
   function setVolume(value) {
     level = value;
-    if (master) master.gain.setTargetAtTime(level, ctx.currentTime, 0.01);
+    if (master && powered) master.gain.setTargetAtTime(level, ctx.currentTime, FADE_TIME_CONSTANT);
   }
 
   // Browsers only start audio after a click or key press on the page, and a
   // MIDI message doesn't count. So unlock it on the first real interaction,
   // ahead of the first sound: otherwise a MIDI controller can play silently.
   function unlockOnInteraction(target = window) {
-    for (const type of ["pointerdown", "keydown"]) target.addEventListener(type, ensure, { capture: true });
+    // Not for the POWER switch: the press that turns sound on must find it still off, or the
+    // page would start audio on pointerdown and the click would then switch it straight off.
+    const unlock = (e) => {
+      if (!e?.target?.closest?.(POWER_SWITCH)) ensure();
+    };
+    for (const type of ["pointerdown", "keydown"]) target.addEventListener(type, unlock, { capture: true });
     notify();
   }
 
@@ -62,8 +100,13 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
     get master() {
       return master;
     },
+    powerOff,
+    powerOn,
+    get powered() {
+      return powered;
+    },
     get running() {
-      return ctx?.state === "running";
+      return powered && ctx?.state === "running";
     },
   };
 }

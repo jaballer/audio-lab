@@ -11,6 +11,8 @@ import "./keys.css";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
+import { createAudioNotice } from "../../shared/audio-notice.js";
+import { togglePower } from "../../shared/power.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
@@ -36,14 +38,16 @@ const site = createSiteHeader($("site-header"), { current: "keys" });
 const header = createAppHeader($("header"), {
   brand: { name: "KEYS" },
   sub: "MIDI keyboard test",
-  audioStatus: true,
+  onPower: () => togglePower(audio),
 });
 
 // ---------- Audio ----------
+const audioNotice = createAudioNotice($("audio-notice"));
 const audio = createAudioEngine({
   volume: DEFAULT_PARAMS.volume,
   onStateChange: (state) => {
-    header.setAudioStatus(state === "running" ? "Audio: on" : "Audio: click the page to enable");
+    audioNotice.update(state);
+    header.setPowered(state === "running");
   },
 });
 audio.unlockOnInteraction(); // a MIDI message alone can't start audio
@@ -121,9 +125,19 @@ const panel = createSynthPanel($("synth"), {
 });
 
 // ---------- MIDI ----------
+// MIDI cannot unlock audio (only a click or key press does), so a note that arrives
+// while sound is still off makes no sound: point at the notice. (Not for a pad: those
+// are only shown here, they never play.)
+const nudgeIfSilent = () => {
+  if (!audio.running) audioNotice.nudge();
+};
+
 // What to do for each event a device profile (devices.js) can produce.
 const handlers = {
-  noteOn: (e, input) => keys.noteOn(e.note, e.velocity, midiSource(input)),
+  noteOn: (e, input) => {
+    nudgeIfSilent();
+    keys.noteOn(e.note, e.velocity, midiSource(input));
+  },
   noteOff: (e, input) => keys.noteOff(e.note, midiSource(input)),
   bend: (e) => keys.setBend(e.value),
   sustain: (e) => keys.setSustain(e.on),

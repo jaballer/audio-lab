@@ -90,7 +90,9 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `tone-demo.css` — demo-only styles
 - `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler and the MPC Sample page
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
-- `shared/audio.js` — the `AudioContext`, master volume and first-interaction unlock, used by every app
+- `shared/audio.js` — the `AudioContext`, master volume, power on/off and first-interaction unlock, used by every app
+- `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone, MPC Sample) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
+- `shared/power.js` — what pressing a device's POWER switch does to its audio (on goes off, anything else comes on)
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
 - `shared/mpc-sample.js` — what is known about the Akai MPC Sample's MIDI: how to recognise its port and which pad and bank a note belongs to
@@ -98,7 +100,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/page-ready.js` — resolves when the page has settled (load event, fonts, two drawn frames) or after a timeout; no DOM
 - `shared/site-header.js` — the bar above the machine, the same on every page: the site name, a link to each page, and Connect MIDI, its short status and the Console button
 - `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test)
-- `shared/app-header.js` — the machine's own header: its name and tagline, the audio status and the power light
+- `shared/app-header.js` — the machine's own header: its name and tagline and the POWER switch
 - `shared/console-log.js` — the bounded list of messages the device's header leaves out (every MIDI port the browser lists, plug and unplug, errors); no DOM
 - `shared/console-drawer.js` — the drawer along the bottom of the window that shows that list, with Copy and Clear
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects

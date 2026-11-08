@@ -12,6 +12,14 @@ Numbers link to the pull request.
 
 - Keys page: the K1–K8 dials can be turned with the mouse (drag, scroll or arrow keys), and they follow the sliders
   ([#57](https://github.com/jaballer/audio-lab/pull/57)).
+- A POWER switch on the sampler, keys and tone pages: it turns sound on and off, and off stays off until it is pressed
+  again ([#60](https://github.com/jaballer/audio-lab/pull/60)).
+
+### Changed
+
+- Every page shows the same "sound is off" banner until the first click or key press (it replaces the sampler's own
+  banner and the keys and tone pages' header line), shakes when a MIDI hit arrives while sound is off, and on touch
+  screens appears only then ([#60](https://github.com/jaballer/audio-lab/pull/60)).
 
 ## 2026-11-08
 

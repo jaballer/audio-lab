@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createAudioEngine } from "./audio.js";
+import { POWER_SWITCH, createAudioEngine } from "./audio.js";
 
 // An AudioContext that starts suspended, as browsers make it until a user
 // gesture, and remembers every instance so a test can tell whether one was built.
@@ -13,6 +13,9 @@ function installAudioContext() {
       this.listeners = [];
       this.resume = vi.fn(() => {
         this.state = "running";
+      });
+      this.suspend = vi.fn(() => {
+        this.state = "suspended";
       });
       instances.push(this);
     }
@@ -92,6 +95,16 @@ describe("createAudioEngine", () => {
     expect(ctx.resume).toHaveBeenCalledTimes(1);
   });
 
+  it("also resumes a context Safari has marked interrupted, after a call or a locked screen", () => {
+    installAudioContext();
+    const audio = createAudioEngine();
+    const ctx = audio.ensure();
+    ctx.changeState("interrupted");
+    ctx.resume.mockClear();
+    audio.ensure();
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+  });
+
   it("takes a volume set before the context exists", () => {
     installAudioContext();
     const audio = createAudioEngine({ volume: 1 });
@@ -142,6 +155,119 @@ describe("createAudioEngine", () => {
     });
   });
 
+  describe("power", () => {
+    it("starts on, and turning it off fades the sound out but leaves the context running", () => {
+      installAudioContext();
+      const audio = createAudioEngine({ volume: 0.5 });
+      const ctx = audio.ensure();
+      expect(audio.powered).toBe(true);
+
+      audio.powerOff();
+      expect(audio.powered).toBe(false);
+      // Faded, not suspended: a suspended context freezes sounding notes, and a power cycle revives them.
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, ctx.currentTime, expect.any(Number));
+      expect(ctx.suspend).not.toHaveBeenCalled();
+      expect(ctx.state).toBe("running");
+    });
+
+    it("is not running while off, even though the context is, so pages see no sound", () => {
+      installAudioContext();
+      const audio = createAudioEngine();
+      audio.ensure();
+      expect(audio.running).toBe(true);
+      audio.powerOff();
+      expect(audio.running).toBe(false);
+      audio.powerOn();
+      expect(audio.running).toBe(true);
+    });
+
+    it('reports "off" while it is off, whatever the context does', () => {
+      installAudioContext();
+      const onStateChange = vi.fn();
+      const audio = createAudioEngine({ onStateChange });
+      const ctx = audio.ensure();
+      audio.powerOff();
+      expect(onStateChange).toHaveBeenLastCalledWith("off");
+      ctx.changeState("suspended");
+      expect(onStateChange).toHaveBeenLastCalledWith("off");
+    });
+
+    it("stays silent while off: a press or a note does not wake a suspended context", () => {
+      installAudioContext();
+      const audio = createAudioEngine();
+      const target = fakeTarget();
+      audio.unlockOnInteraction(target);
+      const ctx = audio.ensure();
+      audio.powerOff();
+      ctx.changeState("suspended"); // the browser holds it
+      ctx.resume.mockClear();
+
+      target.listeners.find((l) => l.type === "pointerdown").handler();
+      audio.ensure();
+      expect(ctx.resume).not.toHaveBeenCalled();
+      expect(audio.running).toBe(false);
+    });
+
+    it("builds a context made while off muted, so a gesture that starts it makes no sound", () => {
+      installAudioContext();
+      const audio = createAudioEngine({ volume: 0.5 });
+      audio.powerOff(); // before any context exists
+      audio.ensure();
+      expect(audio.master.gain.value).toBe(0);
+      audio.powerOn();
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, expect.any(Number), expect.any(Number));
+    });
+
+    it("turns back on: the sound returns at the volume it had and the state is reported", () => {
+      installAudioContext();
+      const onStateChange = vi.fn();
+      const audio = createAudioEngine({ volume: 0.5, onStateChange });
+      const ctx = audio.ensure();
+      audio.powerOff();
+      ctx.changeState("suspended"); // the browser stopped it meanwhile
+
+      audio.powerOn();
+      expect(audio.powered).toBe(true);
+      expect(ctx.resume).toHaveBeenCalledTimes(2);
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, ctx.currentTime, expect.any(Number));
+      expect(onStateChange).toHaveBeenLastCalledWith("running");
+    });
+
+    it("turning on with no context yet builds one and starts it, as a press would", () => {
+      const instances = installAudioContext();
+      const audio = createAudioEngine();
+      audio.powerOff();
+      audio.powerOn();
+      expect(instances).toHaveLength(1);
+      expect(audio.running).toBe(true);
+    });
+
+    it("never suspends the context, so a press during a fade has no suspension to race", () => {
+      installAudioContext();
+      const audio = createAudioEngine();
+      const ctx = audio.ensure();
+      audio.powerOff();
+      audio.powerOn();
+      audio.powerOff();
+      audio.powerOn();
+      expect(ctx.suspend).not.toHaveBeenCalled();
+      expect(audio.running).toBe(true);
+    });
+
+    it("keeps a volume change made while off from bringing the sound back", () => {
+      installAudioContext();
+      const audio = createAudioEngine({ volume: 0.5 });
+      const ctx = audio.ensure();
+      audio.powerOff();
+      audio.master.gain.setTargetAtTime.mockClear();
+
+      audio.setVolume(0.9);
+      expect(audio.master.gain.setTargetAtTime).not.toHaveBeenCalled();
+      audio.powerOn();
+      expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.9, ctx.currentTime, expect.any(Number));
+    });
+  });
+
   describe("unlockOnInteraction", () => {
     it("listens for a press or key in the capture phase, so no handler can stop it", () => {
       installAudioContext();
@@ -149,6 +275,21 @@ describe("createAudioEngine", () => {
       createAudioEngine().unlockOnInteraction(target);
       expect(target.listeners.map((l) => l.type).sort()).toEqual(["keydown", "pointerdown"]);
       for (const { options } of target.listeners) expect(options).toEqual({ capture: true });
+    });
+
+    it("leaves a press on the POWER switch out, so the press that turns sound on finds it off", () => {
+      const instances = installAudioContext();
+      const audio = createAudioEngine();
+      const target = fakeTarget();
+      audio.unlockOnInteraction(target);
+      const onSwitch = { target: { closest: (selector) => (selector === POWER_SWITCH ? {} : null) } };
+      const elsewhere = { target: { closest: () => null } };
+
+      for (const type of ["pointerdown", "keydown"]) target.listeners.find((l) => l.type === type).handler(onSwitch);
+      expect(instances).toHaveLength(0);
+
+      target.listeners.find((l) => l.type === "pointerdown").handler(elsewhere);
+      expect(instances).toHaveLength(1);
     });
 
     it("starts audio when the first interaction happens, not before", () => {

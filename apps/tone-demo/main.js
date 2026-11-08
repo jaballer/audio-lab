@@ -11,6 +11,8 @@ import * as Tone from "tone";
 import "../../shared/base.css";
 import "./tone-demo.css";
 import { createAudioEngine } from "../../shared/audio.js";
+import { createAudioNotice } from "../../shared/audio-notice.js";
+import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
@@ -30,16 +32,18 @@ createSiteHeader($("site-header"), { current: "tone-demo", midi: false }); // no
 const header = createAppHeader($("header"), {
   brand: { name: "TONE", accent: "DEMO" },
   sub: "Tone.js on the shared audio engine",
-  audioStatus: true,
+  onPower: () => togglePower(audio),
 });
 
 // ---------- Audio ----------
+const audioNotice = createAudioNotice($("audio-notice"));
 const audio = createAudioEngine({
   volume: Number($("volume").value),
   // Not a plain AudioContext handed to Tone: Tone's setup throws on one in Firefox, see audio.js.
   createContext: () => Tone.getContext().rawContext,
   onStateChange: (state) => {
-    header.setAudioStatus(state === "running" ? "Audio: on" : "Audio: click the page to enable");
+    audioNotice.update(state);
+    header.setPowered(state === "running");
   },
 });
 audio.unlockOnInteraction();
@@ -99,6 +103,7 @@ const holds = createHolds();
 const keyButtons = new Map(); // note -> its button, to light it however it was played
 
 function press(note, source) {
+  if (!audio.powered) return; // muted now, but a held note would be heard at power on
   if (!holds.press(note, source)) return; // already sounding, held by another source or this one
   keyButtons.get(note).classList.add("is-down");
   ensureVoice().synth.triggerAttack(noteName(note));
