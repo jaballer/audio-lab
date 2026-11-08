@@ -20,13 +20,14 @@
 body {
   margin: 0;
   min-height: 100vh;
-  /* The site bar above, the machine below, the pair centred in the window. */
+  /* The machine centred in the window, below the fixed site bar. */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 18px;
-  padding: 24px 12px;
+  /* Room for the fixed site bar, whose height site-header.js keeps in --site-bar-height. */
+  padding: calc(var(--site-bar-height, 56px) + 24px) 12px 24px;
   background: radial-gradient(ellipse at 50% 0%, #34302b 0%, var(--desk) 70%);
   color: var(--ink);
   font-family:
@@ -297,12 +298,19 @@ a:focus-visible {
 
 /* ---------- Site bar (above the machine, same on every page) ---------- */
 .site-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px 22px;
-  width: min(980px, 100%);
-  padding: 0 4px;
+  /* Full width so the page never shows through, but the content lines up with the machine. */
+  padding: 10px max(16px, calc((100% - 980px) / 2 + 4px));
+  background: #141311;
+  border-bottom: 1px solid #34302b;
   color: #d9d6c8;
 }
 .site-bar .small-label {

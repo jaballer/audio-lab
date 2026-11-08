@@ -1,4 +1,4 @@
-// The bar above the machine, the same on every page: the site's name, a link to each page,
+// The bar fixed to the top of the window, above the machine and the same on every page: the site's name, a link to each page,
 // and the things that belong to the page rather than to the device (Connect MIDI, its status,
 // the Console). It draws into the <header> it is handed and decides nothing.
 //
@@ -36,6 +36,15 @@ function buildNav(current) {
   return nav;
 }
 
+// The bar is fixed to the top, so the page leaves room for it. Its height changes when its
+// controls wrap on a narrow window, so it is measured rather than assumed.
+function reserveSpace(root) {
+  if (typeof ResizeObserver === "undefined") return;
+  const set = () => root.ownerDocument.documentElement.style.setProperty("--site-bar-height", `${root.offsetHeight}px`);
+  new ResizeObserver(set).observe(root);
+  set();
+}
+
 export function createSiteHeader(root, { current, midi = true }) {
   root.classList.add("site-bar");
 
@@ -45,6 +54,7 @@ export function createSiteHeader(root, { current, midi = true }) {
   root.append(name, buildNav(current));
 
   if (!midi) {
+    reserveSpace(root);
     return { midiButton: null, setMidiStatus() {}, log() {} };
   }
 
@@ -75,6 +85,7 @@ export function createSiteHeader(root, { current, midi = true }) {
   const tools = element("div", "site-tools");
   tools.append(midiButton, midiStatus, consoleButton);
   root.append(tools);
+  reserveSpace(root); // last, so the first measurement includes everything in the bar
 
   return {
     midiButton,
