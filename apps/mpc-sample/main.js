@@ -15,6 +15,7 @@ import { createAudioNotice } from "../../shared/audio-notice.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
 import { isMpcSample } from "../../shared/mpc-sample.js";
+import { togglePower } from "../../shared/power.js";
 import { createBankStrip } from "./bank-strip.js";
 import { CLOCK_TICK_MS, DEFAULT_BPM, createClockMaster } from "./clock-master.js";
 import { createBoard } from "./board.js";
@@ -30,9 +31,10 @@ import { createTransportLights } from "./transport-lights.js";
 const $ = (id) => document.getElementById(id);
 
 const site = createSiteHeader($("site-header"), { current: "mpc-sample" });
-createAppHeader($("header"), {
+const header = createAppHeader($("header"), {
   brand: { name: "MPC ", accent: "SAMPLE" },
   sub: "Companion",
+  onPower: () => togglePower(audio),
 });
 
 const SOUND_VOLUME = 0.8; // the sampler's default volume
@@ -57,7 +59,10 @@ const audioNotice = createAudioNotice($("audio-notice"));
 // the click a browser needs before it lets audio start, so unlock on the first click or key.
 const audio = createAudioEngine({
   volume: SOUND_VOLUME,
-  onStateChange: (state) => audioNotice.update(state),
+  onStateChange: (state) => {
+    audioNotice.update(state);
+    header.setPowered(state === "running");
+  },
 });
 audio.unlockOnInteraction();
 
