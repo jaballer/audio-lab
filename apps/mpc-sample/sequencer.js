@@ -28,7 +28,7 @@ import { BANK_COUNT, PADS_PER_BANK, noteForPad } from "../../shared/mpc-sample.j
 import { createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { stepSeconds } from "../../shared/tempo.js";
-import { MAX_BPM, MIN_BPM } from "./clock-master.js";
+import { CLOCKS_PER_BEAT, MAX_BPM, MIN_BPM } from "./clock-master.js";
 import { createEchoGuard } from "./echo-guard.js";
 
 export const PAD_COUNT = BANK_COUNT * PADS_PER_BANK; // a row of the pattern per pad of every bank
@@ -38,6 +38,7 @@ export const NOTE_VELOCITY = 100; // every step is as hard as this until a step 
 export const GATE_RATIO = 0.8;
 const MS = 1000;
 const SIXTEENTHS_PER_WHOLE = 16;
+const TICKS_PER_STEP = CLOCKS_PER_BEAT / 4; // a step is a 16th note
 
 export const rowFor = (bank, index) => bank * PADS_PER_BANK + index;
 export const padOf = (row) => ({ index: row % PADS_PER_BANK, bank: Math.floor(row / PADS_PER_BANK) });
@@ -52,8 +53,18 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
   let queuedUntil = 0; // the latest time (ms) anything was queued for, so Stop can release after it
   const guard = createEchoGuard();
 
-  function onStep(step, time) {
-    const length = stepSeconds(scheduler.bpm);
+  // Following the device's own clock (it was started from its Play button): the steps come from its
+  // ticks, so the pattern keeps the device's tempo and cannot drift from it.
+  let following = false;
+  let ticks = 0; // ticks since the device's Start, or from the place it was set to
+  let stoppedAt = 0; // where `ticks` was when following ended, for a Continue
+  let followStep = -1;
+  let polledStep = -1;
+
+  const onStep = (step, time) => playStep(step, time, scheduler.bpm);
+
+  function playStep(step, time, bpm) {
+    const length = stepSeconds(bpm);
     for (let row = 0; row < PAD_COUNT; row++) {
       if (!pattern.isOn(row, step)) continue;
       const { index, bank } = padOf(row);
@@ -77,7 +88,38 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     // Chrome 157 has MIDIOutput.clear), so a second release is sent at the time of the last queued note-off:
     // the notes that still arrive play their normal gate, and none can be left held. The guard keeps what it
     // waits for, for the same reason: their echoes are still coming.
+    // The device started itself and sends the clock: step 0 plays on its first tick.
+    // `from` is where in the song: "continue" resumes where it stopped, anything else is the start.
+    follow(from) {
+      if (following || scheduler.playing) return false;
+      following = true;
+      ticks = from === "continue" ? stoppedAt : 0;
+      followStep = -1;
+      polledStep = -1;
+      return true;
+    },
+
+    // One tick of the device's clock, `bpm` being its tempo. A note goes out at once: the tick has
+    // only just arrived, so there is no later time to queue it for.
+    tick(_time, bpm) {
+      if (!following) return;
+      if (ticks % TICKS_PER_STEP === 0) {
+        followStep = (ticks / TICKS_PER_STEP) % steps;
+        playStep(followStep, clock.now(), bpm);
+      }
+      ticks++;
+    },
+
+    // The device said where it is, in sixteenth notes (its song position).
+    seek(position) {
+      ticks = position * TICKS_PER_STEP;
+    },
+
     stop() {
+      if (following) stoppedAt = Math.ceil(ticks / TICKS_PER_STEP) * TICKS_PER_STEP; // the next step, not a half one
+      following = false;
+      followStep = -1;
+      polledStep = -1;
       scheduler.stop();
       clear?.();
       const after = Math.max(queuedUntil, clock.now() * MS);
@@ -99,7 +141,12 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
     },
 
     setBpm: (value) => scheduler.setBpm(value),
-    poll: () => scheduler.poll(),
+    poll() {
+      if (!following) return scheduler.poll();
+      const moved = followStep !== polledStep;
+      polledStep = followStep;
+      return moved;
+    },
     isOn: (row, step) => pattern.isOn(row, step),
     toggle: (row, step) => pattern.toggle(row, step),
     clearRow: (row) => pattern.clearRow(row),
@@ -112,13 +159,16 @@ export function createSequencer({ clock, send, clear, messages, steps: initialSt
       return steps;
     },
     get playing() {
-      return scheduler.playing;
+      return following || scheduler.playing;
+    },
+    get following() {
+      return following;
     },
     get bpm() {
       return scheduler.bpm;
     },
     get playheadStep() {
-      return scheduler.playheadStep;
+      return following ? followStep : scheduler.playheadStep;
     },
   };
 }
