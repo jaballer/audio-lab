@@ -5,6 +5,7 @@
 //   grid.select(0);   // mark the selected pad
 //   padForKey("q")    // which pad a key plays (8), or -1
 
+import { createFlasher } from "../../shared/flash.js";
 import { PAD_COLUMNS, PAD_ROWS, padIndex } from "./layout.js";
 
 // Keyboard rows mirror the pad grid: top row of keys = top row of pads.
@@ -25,6 +26,7 @@ const FLASH_MS = 110;
 // press or a keyboard activation (Enter/Space on a focused pad).
 export function createPadGrid(element, { sounds, onTrigger }) {
   const padEls = [];
+  const flash = createFlasher("hit", FLASH_MS);
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
 
   for (let row = 0; row < PAD_ROWS; row++) {
@@ -33,7 +35,7 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       const key = KEY_ROWS[row][col];
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "pad";
+      btn.className = "sampler-pad";
       btn.setAttribute("aria-label", `Pad ${idx + 1}, ${sounds[idx].name}, key ${key.toUpperCase()}`);
       btn.innerHTML =
         `<span class="num">${idx + 1}</span>` +
@@ -54,9 +56,7 @@ export function createPadGrid(element, { sounds, onTrigger }) {
 
   return {
     flash(idx) {
-      const el = padEls[idx];
-      el.classList.add("hit");
-      setTimeout(() => el.classList.remove("hit"), FLASH_MS);
+      flash(padEls[idx]);
     },
 
     select(idx) {

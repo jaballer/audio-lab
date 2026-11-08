@@ -46,11 +46,6 @@
   background: linear-gradient(180deg, #47474e, #2d2d32);
 }
 
-.nav-link {
-  text-decoration: none;
-  display: inline-block;
-}
-
 /* ---------- Deck: joystick, pads, knobs ---------- */
 .deck {
   display: grid;
@@ -106,7 +101,7 @@
 }
 
 /* Pads: 4 x 2, pads 1-4 on the bottom row like the hardware. */
-.pads {
+.keys-pads {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 9px;
@@ -117,7 +112,7 @@
     inset 0 2px 8px #000,
     0 1px 0 #4b4b53;
 }
-.pad {
+.keys-pad {
   --v: 0; /* hit strength 0-1, set from MIDI velocity */
   position: relative;
   aspect-ratio: 1.1;
@@ -132,7 +127,7 @@
     background 0.3s,
     box-shadow 0.3s;
 }
-.pad.hit {
+.keys-pad.hit {
   transition: none;
   background: radial-gradient(
     circle at 50% 45%,
@@ -143,23 +138,23 @@
     inset 0 0 0 2px rgba(255, 190, 170, 0.5),
     0 0 calc(8px + 22px * var(--v)) rgba(var(--glow), 0.85);
 }
-.pad .lbl,
-.pad .nt {
+.keys-pad .lbl,
+.keys-pad .nt {
   position: absolute;
   font: 700 0.6rem var(--mono);
   color: #8b887f;
   pointer-events: none;
 }
-.pad .lbl {
+.keys-pad .lbl {
   top: 5px;
   left: 7px;
 }
-.pad .nt {
+.keys-pad .nt {
   bottom: 5px;
   right: 7px;
 }
-.pad.hit .lbl,
-.pad.hit .nt {
+.keys-pad.hit .lbl,
+.keys-pad.hit .nt {
   color: #ffe9e0;
 }
 
@@ -384,7 +379,7 @@
 @media (prefers-reduced-motion: reduce) {
   .stick-ball,
   .dial,
-  .pad {
+  .keys-pad {
     transition: none;
   }
 }

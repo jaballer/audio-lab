@@ -6,11 +6,6 @@
   gap: 14px;
 }
 
-.nav-link {
-  text-decoration: none;
-  display: inline-block;
-}
-
 .toolbar {
   display: flex;
   align-items: center;
