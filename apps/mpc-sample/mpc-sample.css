@@ -157,10 +157,26 @@
   gap: 10px;
 }
 .mpc-lamps,
-.mpc-buttons {
+.mpc-buttons,
+.mpc-loop {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.mpc-select {
+  padding: 5px 6px;
+  border: 1px solid #77736a;
+  border-radius: 5px;
+  background: #cfcbbe;
+  color: var(--ink-soft);
+  font:
+    700 0.78rem system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.mpc-select:focus-visible {
+  outline: 3px solid #6aa8ff;
+  outline-offset: 2px;
 }
 /* The lamps show the device's state; the buttons below only ask it. */
 .mpc-lamp {

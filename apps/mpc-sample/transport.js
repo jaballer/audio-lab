@@ -14,6 +14,7 @@
 //   transport.apply({ type: "clock", time: timeStamp }); // every tick, with its arrival time (ms)
 //   transport.expire(now);                               // call now and then; true if it changed state
 //   transport.snapshot();                                // { state, bpm, position }
+//   transport.setLoopBars(n);                            // the sequence is n bars long: the bar count wraps
 //   transport.reset();                                   // the device went away
 
 export const CLOCKS_PER_BEAT = 24; // MIDI clock is 24 ticks per quarter note
@@ -37,7 +38,10 @@ const MS_PER_MINUTE = 60000;
 // What a toggle (the Space key) asks the device for.
 export const toggleAction = (state) => (state === "playing" ? "stop" : "play");
 
-export function createTransport() {
+// `loopBars` is how long the device's sequence is. It is not sent, so the page is told; the
+// default counts on without end.
+export function createTransport({ loopBars: initialLoopBars = Infinity } = {}) {
+  let loopBars = initialLoopBars;
   let state = "unknown"; // "unknown" until the device sends Start, Continue or Stop, or a clock
   let bpm = null;
   let times = []; // arrival time of the most recent clock ticks
@@ -68,7 +72,7 @@ export function createTransport() {
 
   function position() {
     if (base === null) return null;
-    const beats = Math.floor(clocksIn() / CLOCKS_PER_BEAT);
+    const beats = Math.floor(clocksIn() / CLOCKS_PER_BEAT) % (loopBars * BEATS_PER_BAR);
     return { bar: Math.floor(beats / BEATS_PER_BAR) + 1, beat: (beats % BEATS_PER_BAR) + 1 };
   }
 
@@ -116,6 +120,10 @@ export function createTransport() {
       state = "stopped";
       forgetTicks();
       return true;
+    },
+
+    setLoopBars(bars) {
+      if (Number.isInteger(bars) && bars > 0) loopBars = bars;
     },
 
     reset() {

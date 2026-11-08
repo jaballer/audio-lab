@@ -140,6 +140,57 @@ describe("bar and beat", () => {
   });
 });
 
+// The device loops its sequence without saying how long it is, so the page is told: the bar
+// count wraps at that length, as the device's own display does.
+describe("a looping sequence", () => {
+  const beatsIn = (transport, beats) => tick(transport, 120, 1 + beats * CLOCKS_PER_BEAT);
+
+  it("goes back to bar 1 after the sequence's length, so a 1-bar loop never shows bar 2", () => {
+    const transport = createTransport({ loopBars: 1 });
+    transport.apply(start);
+    beatsIn(transport, 3);
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 4 });
+    tick(transport, 120, CLOCKS_PER_BEAT, 10_000);
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 1 });
+    tick(transport, 120, 2 * CLOCKS_PER_BEAT, 20_000);
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 3 });
+  });
+
+  it("counts through a longer sequence before it wraps", () => {
+    const transport = createTransport({ loopBars: 2 });
+    transport.apply(start);
+    beatsIn(transport, 5);
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 2 });
+    tick(transport, 120, 3 * CLOCKS_PER_BEAT, 10_000);
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 1 });
+  });
+
+  it("can be changed while playing, keeping the place in the song", () => {
+    const transport = createTransport();
+    transport.apply(start);
+    beatsIn(transport, 9); // bar 3, beat 2 with no loop
+    expect(transport.snapshot().position).toEqual({ bar: 3, beat: 2 });
+    transport.setLoopBars(2);
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 2 });
+    transport.setLoopBars(4);
+    expect(transport.snapshot().position).toEqual({ bar: 3, beat: 2 });
+  });
+
+  it("wraps a position the device gave as well", () => {
+    const transport = createTransport({ loopBars: 1 });
+    transport.apply({ type: "songPosition", position: 4 * 6 }); // 6 beats in
+    expect(transport.snapshot().position).toEqual({ bar: 1, beat: 3 });
+  });
+
+  it("ignores a length that is not a whole number of bars", () => {
+    const transport = createTransport({ loopBars: 2 });
+    for (const bad of [0, -1, 1.5, NaN, "4", null]) transport.setLoopBars(bad);
+    transport.apply(start);
+    beatsIn(transport, 5);
+    expect(transport.snapshot().position).toEqual({ bar: 2, beat: 2 });
+  });
+});
+
 // Captured: Play sends Start and position 0; Shift + Play sends Continue and the position it
 // resumes from (10 sixteenths). The device's position beats counting ticks from a guess.
 describe("song position", () => {

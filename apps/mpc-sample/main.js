@@ -15,6 +15,7 @@ import { createBoard } from "./board.js";
 import { PROFILES, mpcSample } from "./devices.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
+import { loadJson, saveJson } from "../../shared/storage.js";
 import { createTransport, toggleAction } from "./transport.js";
 import { createTransportLights } from "./transport-lights.js";
 
@@ -26,8 +27,18 @@ const header = createAppHeader($("header"), {
   back: { href: "./", label: "Sampler" },
 });
 
+const LOOP_STORE_KEY = "mpc-sample.loop-bars";
+const DEFAULT_LOOP_BARS = 1;
+const loopSelect = $("loop-bars");
+
+// The device does not say how long its sequence is, so it is a setting, kept between visits.
+// A saved value the list no longer has falls back to the default.
+const savedLoop = loadJson(LOOP_STORE_KEY, DEFAULT_LOOP_BARS);
+loopSelect.value = String(savedLoop);
+if (loopSelect.value !== String(savedLoop)) loopSelect.value = String(DEFAULT_LOOP_BARS);
+
 const board = createBoard();
-const transport = createTransport();
+const transport = createTransport({ loopBars: Number(loopSelect.value) });
 const grid = createPadGrid($("pads"));
 const strip = createBankStrip($("banks"));
 const lights = createTransportLights({ play: $("lamp-play"), stop: $("lamp-stop") });
@@ -73,6 +84,13 @@ function send(message) {
 }
 playButton.addEventListener("click", () => send(mpcSample.messages.play));
 stopButton.addEventListener("click", () => send(mpcSample.messages.stop));
+
+loopSelect.addEventListener("change", () => {
+  const bars = Number(loopSelect.value);
+  transport.setLoopBars(bars);
+  saveJson(LOOP_STORE_KEY, bars);
+  schedule();
+});
 
 // Space plays or stops, as on the sampler page. A focused button or field keeps its own Space.
 window.addEventListener("keydown", (event) => {
