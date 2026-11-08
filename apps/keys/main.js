@@ -2,8 +2,9 @@
 // simple synth from a MIDI keyboard (or the computer keyboard) and shows notes,
 // velocity, joystick (pitch bend / mod), sustain pedal, pads and knobs.
 //
-// This file only wires the pieces together: the synth, the on-screen views
-// (piano, LCD, pads, knobs) and the inputs (MIDI, computer keyboard).
+// This file only wires the pieces together: the synth, the page's state
+// (controller.js), the on-screen views (piano, LCD, pads, knobs, joystick,
+// synth controls) and the inputs (MIDI, computer keyboard).
 
 import "../../shared/base.css";
 import "./keys.css";
@@ -12,26 +13,23 @@ import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { selectProfile } from "../../shared/midi-devices.js";
 import { parseMidi } from "../../shared/midi-messages.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
+import { createComputerKeys } from "./computer-keys.js";
+import { createKeysController } from "./controller.js";
 import { PROFILES, mpkMini } from "./devices.js";
-import { createHolds } from "./holds.js";
 import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
 import { createPadGrid } from "./pad-grid.js";
 import { createPadLearner } from "./pad-learner.js";
-import { PARAMS, isChoice, knobChoice, knobPosition } from "./params.js";
+import { GROUPS, PARAMS } from "./params.js";
 import { createPiano } from "./piano.js";
+import { createStick } from "./stick.js";
+import { createSynthPanel } from "./synth-panel.js";
 import { DEFAULT_PARAMS, createSynth } from "./synth.js";
 
 const $ = (id) => document.getElementById(id);
 
-const COMPUTER_KEYS = "awsedftgyhuj" + "k"; // C .. C one octave up
 const KEYBOARD_SOURCE = "keyboard";
-
-// ---------- State ----------
-let mod = 0;
-let last = null; // { note, velocity }
-let lastCc = null;
-let lastPad = null; // { note, velocity, channel }
+const KEYBOARD_VELOCITY = 100; // a computer key has no velocity of its own
 
 // ---------- Audio ----------
 const audioStatus = $("audio-status");
@@ -46,44 +44,23 @@ audio.unlockOnInteraction(); // a MIDI message alone can't start audio
 
 const synth = createSynth(audio);
 
-// ---------- Synth controls ----------
-// Every slider, the waveform select and the hardware knobs are wired from the
-// PARAMS table in params.js. These two setters are the one place a parameter
-// changes, whether it came from the page, a knob or the defaults. Envelope and
-// waveform changes apply to notes played after the change; cutoff, resonance
-// and volume also move notes that are already sounding.
-const controlEl = (p) => $(`${p.group}-${p.name}`);
-
-// `position` is the slider position, 0-100.
-function setSlider(p, position) {
-  const value = p.toValue(position);
-  synth.set(p.name, value);
-  controlEl(p).value = position;
-  $(`out-${p.name}`).textContent = p.format(value);
-}
-
-function setChoice(p, choice) {
-  synth.set(p.name, choice);
-  controlEl(p).value = choice;
-}
-
-for (const p of PARAMS) {
-  const el = controlEl(p);
-  if (isChoice(p)) {
-    setChoice(p, synth.params[p.name]);
-    el.addEventListener("change", () => setChoice(p, el.value));
-  } else {
-    setSlider(p, p.toSlider(synth.params[p.name]));
-    el.addEventListener("input", () => setSlider(p, Number(el.value)));
-  }
-}
-
-function applyKnob(index, midiValue) {
-  const p = PARAMS[index];
-  if (!p) return; // more knobs than parameters
-  if (isChoice(p)) setChoice(p, knobChoice(midiValue, p.choices));
-  else setSlider(p, knobPosition(midiValue));
-}
+// ---------- State ----------
+// Envelope and waveform changes apply to notes played after the change; cutoff,
+// resonance and volume also move notes that are already sounding. Every
+// parameter change goes through the controller, whether it came from a slider,
+// a hardware knob or the defaults.
+//
+// The callbacks use the views below, which are built after this: that is fine
+// because the controller reports nothing until something happens.
+const keys = createKeysController({
+  synth,
+  params: PARAMS,
+  onChange: render,
+  onNoteDown: (note) => piano.press(note),
+  onNoteUp: (note) => piano.release(note),
+  onSlider: (param, position, text) => panel.showSlider(param, position, text),
+  onChoice: (param, choice) => panel.showChoice(param, choice),
+});
 
 // ---------- Views ----------
 const lcd = createLcd({
@@ -94,11 +71,18 @@ const lcd = createLcd({
   pad: $("lcd-pad"),
 });
 
-function renderLcd() {
-  lcd.render({ last, bend: synth.bend, mod, sustain: synth.sustain, lastCc, lastPad });
+const stick = createStick($("stick-ball"));
+
+function render() {
+  const state = keys.getState();
+  lcd.render(state);
+  stick.render(state);
 }
 
-const piano = createPiano($("piano"), { onNoteOn: noteOn, onNoteOff: noteOff });
+const piano = createPiano($("piano"), {
+  onNoteOn: (note, velocity, source) => keys.noteOn(note, velocity, source),
+  onNoteOff: (note, source) => keys.noteOff(note, source),
+});
 
 const PAD_STORE_KEY = "keys.learned";
 const padLearner = createPadLearner({
@@ -108,53 +92,12 @@ const padLearner = createPadLearner({
 const padGrid = createPadGrid($("pads"), { notes: padLearner.notes });
 const knobDials = createKnobDials($("knobs"), { ccs: mpkMini.knobCcs, labels: PARAMS.map((p) => p.name) });
 
-// The joystick ball follows pitch bend (left/right) and mod (up).
-const stickBall = $("stick-ball");
-const STICK_TRAVEL = 30; // px
-
-function renderStick() {
-  stickBall.style.transform = `translate(${synth.bend * STICK_TRAVEL}px, ${-(mod / 127) * STICK_TRAVEL}px)`;
-}
-
-// ---------- Note handling ----------
-// A note can be held from the MIDI keyboard, the computer keyboard and each finger
-// on the piano at once, and sounds until the last of them lets go. `source` says
-// which one this is.
-const holds = createHolds();
-
-function noteOn(note, velocity, source) {
-  holds.press(note, source);
-  last = { note, velocity };
-  piano.press(note);
-  synth.noteOn(note, velocity / 127);
-  renderLcd();
-}
-
-function noteOff(note, source) {
-  if (!holds.release(note, source)) return; // not held by this source, or others still hold it
-  piano.release(note);
-  synth.noteOff(note);
-}
-
-// A source that goes away without letting go (a window that lost focus, a MIDI
-// device that was unplugged) ends all its notes at once.
-function releaseSource(source) {
-  for (const note of holds.releaseAll(source)) {
-    piano.release(note);
-    synth.noteOff(note);
-  }
-}
-
-function setSustain(on) {
-  synth.setSustain(on);
-  renderLcd();
-}
-
-function setBend(value) {
-  synth.setBend(value);
-  renderStick();
-  renderLcd();
-}
+const panel = createSynthPanel($("synth"), {
+  params: PARAMS,
+  groups: GROUPS,
+  onSlider: (param, position) => keys.setSlider(param, position),
+  onChoice: (param, choice) => keys.setChoice(param, choice),
+});
 
 // ---------- MIDI ----------
 const midiBtn = $("midi-btn");
@@ -162,29 +105,22 @@ const midiStatus = $("midi-status");
 
 // What to do for each event a device profile (devices.js) can produce.
 const handlers = {
-  noteOn: (e, input) => noteOn(e.note, e.velocity, midiSource(input)),
-  noteOff: (e, input) => noteOff(e.note, midiSource(input)),
-  bend: (e) => setBend(e.value),
-  sustain: (e) => setSustain(e.on),
-  mod: (e) => {
-    mod = e.value;
-    renderStick();
-  },
+  noteOn: (e, input) => keys.noteOn(e.note, e.velocity, midiSource(input)),
+  noteOff: (e, input) => keys.noteOff(e.note, midiSource(input)),
+  bend: (e) => keys.setBend(e.value),
+  sustain: (e) => keys.setSustain(e.on),
+  mod: (e) => keys.setMod(e.value),
   knob: (e) => {
     knobDials.turn(e.index, e.value);
     // The on-screen controls jump to the knob's position as soon as it is turned.
-    applyKnob(e.index, e.value);
+    keys.applyKnob(e.index, e.value);
   },
   pad: (e) => {
     const slot = padLearner.slotFor(e.note);
     if (slot >= 0) padGrid.hit(slot, e.note, e.velocity);
-    lastPad = { note: e.note, velocity: e.velocity, channel: e.channel };
-    renderLcd();
+    keys.showPad({ note: e.note, velocity: e.velocity, channel: e.channel });
   },
-  cc: (e) => {
-    lastCc = { cc: e.controller, value: e.value };
-    renderLcd();
-  },
+  cc: (e) => keys.showCc(e.controller, e.value),
 };
 
 // Each connected device is its own note holder: with two keyboards holding the
@@ -197,7 +133,7 @@ let midiSources = new Set(); // the holders of the inputs connected at the last 
 // the page was reloaded, and no other device could end them.
 function handleMidiChange(_access, inputs) {
   const connected = new Set(inputs.map(midiSource));
-  for (const source of midiSources) if (!connected.has(source)) releaseSource(source);
+  for (const source of midiSources) if (!connected.has(source)) keys.releaseSource(source);
   midiSources = connected;
 }
 
@@ -216,22 +152,11 @@ wireMidiButton(
 );
 
 // ---------- Computer keyboard ----------
-const keyDown = new Map(); // event.code -> note
-
-window.addEventListener("keydown", (e) => {
-  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-  const i = COMPUTER_KEYS.indexOf(e.key.toLowerCase());
-  if (i < 0 || keyDown.has(e.code)) return;
-  const note = piano.base + 12 + i;
-  keyDown.set(e.code, note);
-  noteOn(note, 100, KEYBOARD_SOURCE);
-});
-
-window.addEventListener("keyup", (e) => {
-  const note = keyDown.get(e.code);
-  if (note === undefined) return;
-  keyDown.delete(e.code);
-  noteOff(note, KEYBOARD_SOURCE);
+const computerKeys = createComputerKeys({
+  target: window,
+  getBase: () => piano.base,
+  onNoteOn: (note) => keys.noteOn(note, KEYBOARD_VELOCITY, KEYBOARD_SOURCE),
+  onNoteOff: (note) => keys.noteOff(note, KEYBOARD_SOURCE),
 });
 
 // Keys and fingers let go while the page is in the background never send their
@@ -239,8 +164,8 @@ window.addEventListener("keyup", (e) => {
 // would sound until the same key was pressed again. When the page loses focus or
 // is hidden, let go of everything held from the computer keyboard or the piano.
 function releaseHeld() {
-  releaseSource(KEYBOARD_SOURCE);
-  keyDown.clear();
+  keys.releaseSource(KEYBOARD_SOURCE);
+  computerKeys.reset();
   piano.releasePointers();
 }
 window.addEventListener("blur", releaseHeld);
@@ -248,5 +173,6 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") releaseHeld();
 });
 
-renderLcd();
-renderStick();
+// ---------- Init ----------
+keys.syncParams();
+render();

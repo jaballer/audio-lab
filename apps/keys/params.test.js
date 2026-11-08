@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PARAMS, isChoice, knobChoice, knobPosition } from "./params.js";
+import { GROUPS, PARAMS, choiceLabel, isChoice, knobChoice, knobPosition, labelFor } from "./params.js";
 import { DEFAULT_PARAMS, WAVES } from "./synth.js";
 
 const byName = (name) => PARAMS.find((p) => p.name === name);
@@ -74,5 +74,23 @@ describe("knobChoice", () => {
     expect(knobChoice(64, WAVES)).toBe("square");
     expect(knobChoice(96, WAVES)).toBe("sawtooth");
     expect(knobChoice(127, WAVES)).toBe("sawtooth");
+  });
+});
+
+describe("labels", () => {
+  it("names a control after its parameter", () => {
+    expect(labelFor(byName("attack"))).toBe("Attack");
+    expect(labelFor(byName("resonance"))).toBe("Resonance");
+  });
+
+  it("names a waveform, with the saw shortened", () => {
+    expect(WAVES.map(choiceLabel)).toEqual(["Sine", "Triangle", "Square", "Saw"]);
+  });
+});
+
+describe("GROUPS", () => {
+  it("has a section for every group a parameter uses, and no empty ones", () => {
+    const used = new Set(PARAMS.map((p) => p.group));
+    expect(new Set(GROUPS.map((g) => g.id))).toEqual(used);
   });
 });
