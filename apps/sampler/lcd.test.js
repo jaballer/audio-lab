@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLcd, pad2 } from "./lcd.js";
+import { formatLcd } from "./lcd.js";
 
 const stopped = {
   playing: false,
@@ -11,13 +11,6 @@ const stopped = {
   steps: 16,
   stepsOn: new Array(16).fill(false),
 };
-
-describe("pad2", () => {
-  it("zero-pads to two digits", () => {
-    expect(pad2(3)).toBe("03");
-    expect(pad2(16)).toBe("16");
-  });
-});
 
 describe("formatLcd", () => {
   it("shows the stopped state with no playhead", () => {

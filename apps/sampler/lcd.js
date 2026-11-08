@@ -6,7 +6,7 @@
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 
-export const pad2 = (n) => String(n).padStart(2, "0");
+import { pad2 } from "./format.js";
 
 const MESSAGE_MS = 1600;
 
