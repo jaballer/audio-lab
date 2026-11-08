@@ -110,6 +110,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
 - `CHANGELOG.md` — what changed on the live site, by day, newest first
+- `LICENSE` — the PolyForm Noncommercial License 1.0.0 (see License below)
 - `.claude/skills/dependabot/` — a Claude Code skill for triaging, verifying and merging Dependabot PRs
 
 Tests sit next to the code as `*.test.js`. Conventions and architecture rules are in [CLAUDE.md](CLAUDE.md).
@@ -122,3 +123,9 @@ npm test         # tests only
 npm run coverage # tests with a coverage table
 npm run format   # apply Prettier
 ```
+
+## License
+
+Copyright 2026 Jabal Torres. Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE): you can use, modify and share this code for any noncommercial purpose, including personal projects, study and hobby use. Selling it, or using it commercially, needs separate permission.
+
+The Tone demo page uses [Tone.js](https://tonejs.github.io/), which is MIT-licensed and keeps its own license.
