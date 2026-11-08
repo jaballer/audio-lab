@@ -84,6 +84,7 @@ let output = null; // its MIDI output port, for the Play and Stop lamps
 // The device only plays while it is sent clock (see clock-master.js), so Play starts one.
 const clockMaster = createClockMaster({
   send: (bytes, time) => output?.send(bytes, time),
+  clear: () => output?.clear?.(),
   startMessage: mpcSample.messages.play,
 });
 
@@ -115,6 +116,18 @@ function applyToTransport(event) {
   schedule();
 }
 
+// The timer runs only while the page is sending clock, so an idle page wakes nothing.
+let clockTimer = null;
+function startClock(bpm) {
+  clockMaster.start(bpm, performance.now());
+  clockTimer ??= setInterval(() => clockMaster.tick(performance.now()), CLOCK_TICK_MS);
+}
+function haltClock() {
+  clockMaster.halt();
+  clearInterval(clockTimer);
+  clockTimer = null;
+}
+
 // The lamps follow what the device reports, not these clicks, so the page never claims a
 // state the device did not confirm.
 // A device already playing (started from its own button) is left alone: a second Start would
@@ -122,13 +135,12 @@ function applyToTransport(event) {
 playLamp.addEventListener("click", () => {
   const { state, bpm } = transport.snapshot();
   if (!output || state === "playing") return;
-  clockMaster.start(bpm ?? DEFAULT_BPM, performance.now());
+  startClock(bpm ?? DEFAULT_BPM);
 });
 stopLamp.addEventListener("click", () => {
-  clockMaster.halt();
+  haltClock();
   output?.send(mpcSample.messages.stop);
 });
-setInterval(() => clockMaster.tick(performance.now()), CLOCK_TICK_MS);
 
 // A field left empty or out of range goes back to the last good value instead of being used.
 function changeSequence() {
@@ -171,7 +183,7 @@ const handlers = {
   songPosition: applyToTransport,
   // However it stopped (a button on the device, or its clock running out), the ticks end too.
   transportStop: (event) => {
-    clockMaster.halt();
+    haltClock();
     applyToTransport(event);
   },
   // The tick's own arrival time, not when this runs, so a busy page does not skew the tempo.
@@ -194,7 +206,7 @@ wireMidiButton(
       }
       output = [...access.outputs.values()].find((p) => p.state !== "disconnected" && isMpcSample(p.name)) ?? null;
       playLamp.disabled = stopLamp.disabled = !output;
-      if (!output) clockMaster.halt();
+      if (!output) haltClock();
       schedule();
     },
   }),
