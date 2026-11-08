@@ -83,7 +83,8 @@ What this shows:
   handle that, for example by ignoring hits that arrive just after a note the page sent.
 - The channel rewrite means this is not MIDI Thru (which would keep channel 2) and that MIDI In Channel accepts at
   least channels 1 and 2 (probably All). Its value was not read from the device.
-- **Velocity changes the loudness.** The owner heard the velocity 25 note as quieter than the velocity 127 ones.
+- **Velocity changes the loudness.** The owner heard the velocity 25 note as quieter than the velocity 127 ones, and
+  heard it again in a repeat with samples assigned to pads 1 to 4 (see the third run below).
 
 A second run, from Chrome on macOS with Web MIDI instead of ALSA, repeated the six notes and added note 36 on
 channels 3, 9 and 16. The device played and echoed all of them on channel 1, which makes MIDI In Channel = All very
@@ -93,11 +94,36 @@ within about 3 ms of what was sent. That is nine notes on an otherwise quiet dev
 sequence. A steady lag of about 10 ms may include USB and driver delay, so a sequencer could send that much early.
 Chrome on macOS names the port plain `MPC Sample`, for both the input and the output.
 
-Not confirmed: whether a short note-off cuts the sample short or the pad plays out as a one-shot. The owner could not
-hear a difference between the 50 ms and the 1 s note, which says more about the short samples loaded than about the
-device, so try it with a long, sustained sample. The owner could not tell the banks' sounds apart, so a different
-sample per bank is also unconfirmed. Not tried: whether sending Start and clock at the same time changes any of
-this, and what happens while the device is also playing its own sequence.
+A third run, from Chrome again, with samples assigned to pads 1 to 4, looked at three more things:
+
+- **Note length.** A 50 ms note and a 1 s note on pad 1 sounded the same: the owner described the pads as one-shots.
+  So for one-shot pads the note-off does not shorten the sound, and a sequencer can send any note length. Not
+  tried: a pad set to hold or gate, where the note-off may stop the sample.
+- **Start and clock sent together with notes.** Start and 383 clock ticks at 120 BPM, with three notes during them:
+  the notes came back as before (9 to 11 ms late, note-off gaps within 1 ms of what was sent). The same 383 to 384
+  ticks, one Start and one Stop came back, which fits the device being slaved to our clock (see the transport
+  section) and does not show that it repeats a clock it was not slaved to.
+- **The device playing its own sequence.** Started from its Play button with nothing sent, the device sent its own
+  clock at about 128 BPM (665 ticks in 13 s). Three notes sent over it were echoed with the same 10 ms lag and exact
+  lengths, and the owner heard them play cleanly. Nothing from the device's own sequence appeared as notes on the
+  port. This also shows the device sends its own clock when started from its hardware button, which the transport
+  section left untried.
+
+What the device's own buttons send, with nothing sent to it:
+
+| Pressed | Sent by the device                                                                   |
+| ------- | ------------------------------------------------------------------------------------ |
+| Play    | Start (`FA`), song position 0 (`F2 00 00`), CC 7 = 90 (`B0 07 5A`), then clock ticks |
+| Stop    | Stop (`FC`), then CC 64 = 0 (`B0 40 00`); the clock ends                             |
+
+**A Stop, or a Stop and Start, from the device turns off held notes**, including notes the page sent: a note held for
+500 ms was ended about 140 ms in by a restart, with its note-off echoed at that moment, and a Stop sends note-offs for notes
+that had already ended. A sequencer should not expect a note to sound for its full length across a transport change on
+the device. The meaning of CC 7 = 90 and CC 64 = 0 was not looked up; they arrive with every Play and Stop.
+
+Not confirmed: whether a different sample per bank sounds different (the owner has samples on pads 1 to 4 of one bank
+only), and whether the page's own Play behaves the same while the device was started from its hardware button.
+Not tried: Continue with clock, and MIDI Sync In set to Off or MTC.
 
 ## What the device sends, captured
 
