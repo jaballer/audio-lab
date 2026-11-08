@@ -88,11 +88,12 @@ $("volume").addEventListener("input", (e) => audio.setVolume(Number(e.target.val
 // ---------- Keys ----------
 // A key sounds from the moment it goes down until it is let go, by pointer, by Enter / Space on
 // the focused key, or by the computer keyboard. The same note can be held from more than one of
-// those at once; it sounds until the last lets go, so each holds it under its own source.
-const POINTER = "pointer";
+// those at once (two fingers on one key count separately), so it sounds until the last lets go:
+// each holds it under its own source.
 const FOCUSED_KEY = "focused key";
 const COMPUTER = "computer keyboard";
-const SOURCES = [POINTER, FOCUSED_KEY, COMPUTER];
+const pointerSource = (e) => `pointer ${e.pointerId}`;
+const pointerSources = new Set(); // the pointers now down, to let go of them when the page is left
 const holds = createHolds();
 const keyButtons = new Map(); // note -> its button, to light it however it was played
 
@@ -129,10 +130,14 @@ for (let note = FIRST_NOTE; note < FIRST_NOTE + NOTE_COUNT; note++) {
 
   key.addEventListener("pointerdown", (e) => {
     key.setPointerCapture(e.pointerId); // so the pointer-up arrives even if it slid off the key
-    press(note, POINTER);
+    pointerSources.add(pointerSource(e));
+    press(note, pointerSource(e));
   });
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
-    key.addEventListener(type, () => release(note, POINTER));
+    key.addEventListener(type, (e) => {
+      release(note, pointerSource(e));
+      pointerSources.delete(pointerSource(e));
+    });
   }
   key.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
@@ -162,7 +167,8 @@ const computerKeys = createComputerKeys({
 // the same key was pressed again. Let go of everything when the page loses focus
 // or is hidden, as the keys page does.
 function releaseAll() {
-  for (const source of SOURCES) releaseSource(source);
+  for (const source of [FOCUSED_KEY, COMPUTER, ...pointerSources]) releaseSource(source);
+  pointerSources.clear();
   computerKeys.reset(); // so the same letter can be pressed again, its keyup never having come
 }
 window.addEventListener("blur", releaseAll);
