@@ -55,6 +55,50 @@ going only while ticks keep arriving, at the tempo of those ticks.** A Play butt
 Start and then a steady clock for as long as it plays (and so sets the device's tempo); `apps/mpc-sample/clock-master.js` does that. Ticks sent after a Stop do not restart it. Not tried: Continue with
 clock, MIDI Sync In set to Off or MTC, and the page's own Play while the device was started from its hardware button.
 
+## Measured: what the device does with notes sent to it
+
+Tried on 2026-11-08 over USB with Pad MIDI In = On and Pad MIDI Out = Always (both confirmed by the owner), twice
+with the same results. Six single notes, two and a half seconds apart, sent to the device's ALSA sequencer port as a
+Standard MIDI File with `aplaymidi -p 28:0`, while `aseqdump -p 28:0` recorded what the device sent back. Writing to
+the raw port (`amidi -p hw:3,0,0`) fails with "Device or resource busy" whenever a browser has MIDI open, so send
+through the sequencer.
+
+| Sent                                    | Heard (owner) | Sent back by the device                                |
+| --------------------------------------- | ------------- | ------------------------------------------------------ |
+| note 36, velocity 127, off after 1 s    | played        | note on 36 / 127, then note off after 1.0 s            |
+| note 36, velocity 25, off after 1 s     | played        | note on 36 / 25, then note off after 1.0 s             |
+| note 36, velocity 127, off after 50 ms  | played        | note on 36 / 127, then note off after 50 ms            |
+| note 36 on **channel 2**, off after 1 s | played        | note on 36 on **channel 1**, then note off after 1.0 s |
+| note 52 (bank B, pad 1), off after 1 s  | played        | note on 52, then note off after 1.0 s                  |
+| note 36, velocity 127, off after 300 ms | played        | note on 36 / 127, then note off after 300 ms           |
+
+What this shows:
+
+- **The device plays notes it is sent**, on a channel other than 1 as well, and on a note outside bank A. Notes map
+  to pads as in `shared/mpc-sample.js` (`noteForPad`).
+- **It echoes them back.** Every note arrives on its input as a note on and a note off with the velocity and the
+  note kept, the channel rewritten to its MIDI Out Channel (1), and our timing kept. A page that sends the
+  device notes therefore also receives each one as a pad hit: `padDown` events, the pad grid lighting up, and the
+  page's own browser sound for the pad playing on top of the device's. Whatever plays notes from the page has to
+  handle that, for example by ignoring hits that arrive just after a note the page sent.
+- The channel rewrite means this is not MIDI Thru (which would keep channel 2) and that MIDI In Channel accepts at
+  least channels 1 and 2 (probably All). Its value was not read from the device.
+- **Velocity changes the loudness.** The owner heard the velocity 25 note as quieter than the velocity 127 ones.
+
+A second run, from Chrome on macOS with Web MIDI instead of ALSA, repeated the six notes and added note 36 on
+channels 3, 9 and 16. The device played and echoed all of them on channel 1, which makes MIDI In Channel = All very
+likely (the setting itself was still not read). Each note was scheduled with `output.send(bytes, t)` and the echo's
+`timeStamp` compared with `t`: the note on came back 9.2 to 10.9 ms late every time, and the echoed note-off gaps were
+within about 3 ms of what was sent. That is nine notes on an otherwise quiet device, so it says nothing about a busy
+sequence. A steady lag of about 10 ms may include USB and driver delay, so a sequencer could send that much early.
+Chrome on macOS names the port plain `MPC Sample`, for both the input and the output.
+
+Not confirmed: whether a short note-off cuts the sample short or the pad plays out as a one-shot. The owner could not
+hear a difference between the 50 ms and the 1 s note, which says more about the short samples loaded than about the
+device, so try it with a long, sustained sample. The owner could not tell the banks' sounds apart, so a different
+sample per bank is also unconfirmed. Not tried: whether sending Start and clock at the same time changes any of
+this, and what happens while the device is also playing its own sequence.
+
 ## What the device sends, captured
 
 From `apps/mpc-sample/devices.js` (captured from a real device):
