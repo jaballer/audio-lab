@@ -127,6 +127,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `CHANGELOG.md` — what changed on the live site, by day, newest first
 - `LICENSE` — the PolyForm Noncommercial License 1.0.0 (see License below)
 - `.claude/skills/dependabot/` — a Claude Code skill for triaging, verifying and merging Dependabot PRs
+- `.claude/skills/` (the rest) — how work is shipped here, as Claude Code skills: `ship-pr` (branch to open PR, bundled), `pre-pr-review` (an independent read-only review before a PR), `try-in-page` (drive the change in the running page), `handle-review-events` (Codex and CI events), `land-prs` (merge in order, sync main, clean up)
 
 Tests sit next to the code as `*.test.js`. Conventions and architecture rules are in [CLAUDE.md](CLAUDE.md).
 
