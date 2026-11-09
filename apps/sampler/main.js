@@ -14,7 +14,7 @@ import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
-import { createExportAction, exportSequence } from "./export-wav.js";
+import { createExportAction, exportLabel, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -357,17 +357,35 @@ const redoBtn = $("redo");
 undoBtn.addEventListener("click", sampler.undo);
 redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
-// Export WAV: the sequence showing, rendered offline and saved as a file (export-wav.js decides when it may run).
+// Export WAV: the sequence showing, rendered offline and saved as a file (export-wav.js decides when it may run). While
+// it renders the button shows how far it has got, and pressing it again cancels. The percentage is on the button only:
+// the LCD's message is a live region, and a report every few per cent would be read out each time. The button keeps
+// one accessible name (aria-label) while the visible text counts up, for the same reason.
 const exportBtn = $("export");
+const exportIdleTitle = exportBtn.getAttribute("title") ?? "";
+const showExport = (label) => setText(exportBtn, label);
 exportBtn.addEventListener(
   "click",
   createExportAction({
     ready: () => restoring,
-    run: () => exportSequence({ song: sampler.getSong(), kit, stepsPerBar: STEPS, onMessage: say, save: saveBlob }),
+    run: ({ signal, onProgress }) =>
+      exportSequence({
+        song: sampler.getSong(),
+        kit,
+        stepsPerBar: STEPS,
+        onMessage: say,
+        save: saveBlob,
+        signal,
+        onProgress,
+      }),
     onMessage: say,
+    onProgress: (fraction) => showExport(exportLabel(fraction)),
+    onCancel: () => showExport("Cancelling…"), // a browser that cannot pause the render finishes it first
     onBusy(busy) {
-      setText(exportBtn, busy ? "Exporting…" : "Export WAV");
+      showExport(busy ? "Cancel export" : "Export WAV"); // no per cent until the render reports: it may be waiting for samples
+      setAttr(exportBtn, "aria-label", busy ? "Cancel export" : "Export WAV");
       setAttr(exportBtn, "aria-busy", String(busy));
+      setAttr(exportBtn, "title", busy ? "Press again to cancel" : exportIdleTitle);
     },
   }),
 );

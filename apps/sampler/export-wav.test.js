@@ -2,14 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LEAD_SECONDS,
   MAX_WARM_UP_PASSES,
+  PROGRESS_PAUSES,
   READY_WAIT_MS,
   createExportAction,
   encodeWav,
+  exportLabel,
   exportName,
   exportSequence,
   hasSteps,
   hitsOf,
+  pauseFrames,
   renderSequence,
+  wasCancelled,
 } from "./export-wav.js";
 import { createKit } from "./kit.js";
 
@@ -64,8 +68,12 @@ describe("hasSteps", () => {
 });
 
 // An offline context that records what is done to it and hands back a render with a marker in every frame.
-function fakeOffline() {
+// With `pausable`, it pauses the way a real one does: suspend(time) returns a promise that settles when the render
+// reaches that time, and the render stays paused until resume() is called (so one never resumed never finishes).
+function fakeOffline({ pausable = false } = {}) {
   const nodes = [];
+  const pauses = [];
+  const resumes = { count: 0 };
   const made = { frames: 0, rate: 0 };
   const destination = { id: "destination" };
   const ctx = {
@@ -80,13 +88,26 @@ function fakeOffline() {
       nodes.push(node);
       return node;
     },
-    startRendering: async () => ({
-      numberOfChannels: 2,
-      sampleRate: made.rate,
-      getChannelData: (channel) => Float32Array.from({ length: made.frames }, (_, i) => i + channel * 1000),
-    }),
+    startRendering: async () => {
+      for (const pause of [...pauses].sort((a, b) => a.time - b.time)) {
+        const before = resumes.count;
+        pause.reach();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (resumes.count === before) await new Promise(() => {}); // paused for good
+      }
+      return {
+        numberOfChannels: 2,
+        sampleRate: made.rate,
+        getChannelData: (channel) => Float32Array.from({ length: made.frames }, (_, i) => i + channel * 1000),
+      };
+    },
   };
+  if (pausable) {
+    ctx.suspend = vi.fn((time) => new Promise((reach) => pauses.push({ time, reach })));
+    ctx.resume = vi.fn(async () => void resumes.count++);
+  }
   return {
+    ctx,
     nodes,
     made,
     destination,
@@ -361,7 +382,7 @@ describe("exportSequence", () => {
   it("renders the song, saves it as a wav under its name, and says so", async () => {
     const { done, onMessage, save } = run(songOf(sequence({ 0: [0] })));
     expect(await done).toBe(true);
-    expect(render).toHaveBeenCalledWith({ song: expect.anything(), kit, stepsPerBar: 16 });
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ song: expect.anything(), kit, stepsPerBar: 16 }));
     const [blob, name] = save.mock.calls[0];
     expect(name).toBe("pad16-seq-01-120bpm.wav");
     expect(blob.type).toBe("audio/wav");
@@ -397,7 +418,253 @@ describe("exportSequence", () => {
   });
 });
 
+describe("exportSequence, cancelled and with progress", () => {
+  const kit = createKit([sound("a")]);
+  const song = songOf(sequence({ 0: [0] }));
+  const cancelledError = () => new DOMException("stop", "AbortError");
+
+  it("says it was cancelled, and saves nothing, when the render is cancelled; that is not a failure", async () => {
+    const onMessage = vi.fn();
+    const save = vi.fn();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const render = async () => {
+      throw cancelledError();
+    };
+    const done = await exportSequence({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true });
+    expect(done).toBe(false);
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
+    expect(save).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("hands the render its signal and its progress callback", async () => {
+    const render = vi.fn(async () => ({ sampleRate: 8000, channels: [Float32Array.of(0)] }));
+    const signal = new AbortController().signal;
+    const onProgress = vi.fn();
+    await exportSequence({
+      song,
+      kit,
+      stepsPerBar: 16,
+      onMessage() {},
+      save() {},
+      render,
+      supported: true,
+      signal,
+      onProgress,
+    });
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ signal, onProgress }));
+  });
+});
+
+describe("wasCancelled and exportLabel", () => {
+  it("wasCancelled is whether an error is an abort", () => {
+    expect(wasCancelled(new DOMException("x", "AbortError"))).toBe(true);
+    expect(wasCancelled(new Error("x"))).toBe(false);
+    expect(wasCancelled(undefined)).toBe(false);
+  });
+
+  it("exportLabel says it cancels, and the whole per cent, kept within 0 to 100", () => {
+    expect(exportLabel(0)).toBe("Cancel export 0%");
+    expect(exportLabel(0.404)).toBe("Cancel export 40%");
+    expect(exportLabel(1)).toBe("Cancel export 100%");
+    expect(exportLabel(1.5)).toBe("Cancel export 100%");
+    expect(exportLabel(-1)).toBe("Cancel export 0%");
+  });
+});
+
+describe("pauseFrames", () => {
+  it("spreads the pauses over the render, on whole blocks of 128 frames, none at the start or the end", () => {
+    const total = 1_000_000;
+    const frames = pauseFrames(total);
+    expect(frames).toHaveLength(PROGRESS_PAUSES);
+    expect(frames.every((frame) => frame % 128 === 0 && frame > 0 && frame < total)).toBe(true);
+    expect(frames).toEqual([...frames].sort((a, b) => a - b));
+    expect(frames[0]).toBeLessThan(total / 10);
+    expect(frames.at(-1)).toBeGreaterThan(total * 0.9);
+  });
+
+  it("never pauses twice in one block, so a short render has fewer pauses", () => {
+    const frames = pauseFrames(1000);
+    expect(new Set(frames).size).toBe(frames.length);
+    expect(frames.length).toBeLessThan(PROGRESS_PAUSES);
+    expect(pauseFrames(100)).toEqual([]);
+  });
+});
+
+describe("renderSequence, progress and cancel", () => {
+  const render = (extra = {}, offlineOptions = { pausable: true }) => {
+    const offline = fakeOffline(offlineOptions);
+    const done = renderSequence({
+      song: songOf(sequence({ 0: [0] }, {}, 2)),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 44100,
+      createContext: (frames, rate) => offline.createContext(frames, rate),
+      ...extra,
+    });
+    return { done, offline };
+  };
+
+  it("reports how far it has got, rising, at each pause, and ends on 1", async () => {
+    const reports = [];
+    const { done, offline } = render({ onProgress: (fraction) => reports.push(fraction) });
+    await done;
+    expect(reports.length).toBeGreaterThan(5);
+    expect(reports).toEqual([...reports].sort((a, b) => a - b));
+    expect(reports.at(-1)).toBe(1);
+    expect(reports.slice(0, -1).every((fraction) => fraction > 0 && fraction < 1)).toBe(true);
+    expect(offline.ctx.resume).toHaveBeenCalledTimes(reports.length - 1);
+  });
+
+  it("sets each pause a little before a block edge in seconds, all inside the render", async () => {
+    const { done, offline } = render();
+    await done;
+    const times = offline.ctx.suspend.mock.calls.map((call) => call[0]);
+    const frames = pauseFrames(offline.made.frames);
+    expect(times).toHaveLength(frames.length);
+    times.forEach((time, i) => {
+      expect(time * 44100).toBeGreaterThan(frames[i] - 128);
+      expect(time * 44100).toBeLessThan(frames[i]);
+    });
+  });
+
+  it("stops at the next pause when cancelled: rejects as cancelled, and never resumes the render", async () => {
+    const controller = new AbortController();
+    const reports = [];
+    const { done, offline } = render({
+      signal: controller.signal,
+      onProgress: (fraction) => {
+        reports.push(fraction);
+        if (reports.length === 2) controller.abort();
+      },
+    });
+    // the abort comes from the report, so the render is cancelled between the second report and the next
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    expect(reports).toHaveLength(2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reports).toHaveLength(2); // nothing is reported after it
+    expect(offline.ctx.resume).toHaveBeenCalledTimes(2);
+  });
+
+  it("when cancelled between pauses, is not over until the render has stopped at the next one", async () => {
+    const offline = fakeOffline({ pausable: true });
+    const reaches = [];
+    // the pauses are driven by hand, and the render never ends by itself: it is only ever at a pause or running
+    offline.ctx.suspend.mockImplementation(() => new Promise((reach) => reaches.push(reach)));
+    offline.ctx.startRendering = () => new Promise(() => {});
+    const controller = new AbortController();
+    let settled = false;
+    const done = renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      signal: controller.signal,
+    });
+    done.catch(() => {}).then(() => (settled = true));
+    reaches[0](); // the first pause is reached and resumed
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(offline.ctx.resume).toHaveBeenCalledTimes(1);
+    controller.abort(); // cancelled while it renders towards the second
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(settled).toBe(false); // still rendering, so still busy: another export may not start beside it
+    reaches[1](); // the second pause is reached
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    expect(offline.ctx.resume).toHaveBeenCalledTimes(1); // and not resumed
+  });
+
+  it("does not start when it is already cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { done, offline } = render({ signal: controller.signal });
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    expect(offline.ctx.suspend).not.toHaveBeenCalled();
+  });
+
+  it("renders in one go, reporting only the end, in a browser that cannot pause an offline context", async () => {
+    const reports = [];
+    const { done } = render({ onProgress: (fraction) => reports.push(fraction) }, { pausable: false });
+    await done;
+    expect(reports).toEqual([1]);
+  });
+
+  it("without a pause to stop at, a cancel waits for the render to end, then throws it away", async () => {
+    const offline = fakeOffline();
+    const render = offline.ctx.startRendering;
+    let finish;
+    offline.ctx.startRendering = () => new Promise((resolve) => (finish = resolve)).then(render);
+    const controller = new AbortController();
+    let settled = false;
+    const done = renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      signal: controller.signal,
+    });
+    done.catch(() => {}).then(() => (settled = true));
+    controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).toBe(false); // still rendering, so still busy: no second render may start beside it
+    finish();
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("fails with the error, rather than hang paused, when a pause cannot be resumed", async () => {
+    const { done, offline } = render();
+    offline.ctx.resume = vi.fn(async () => {
+      throw new Error("cannot resume");
+    });
+    await expect(done).rejects.toThrow("cannot resume");
+  });
+
+  it("goes on rendering when reporting the progress throws: the report is only for the eye", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { done } = render({
+      onProgress: () => {
+        throw new Error("the button is gone");
+      },
+    });
+    const audio = await done;
+    expect(audio.channels).toHaveLength(2);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("goes on rendering, without that report, when a pause could not be set", async () => {
+    const reports = [];
+    const offline = fakeOffline({ pausable: true });
+    const set = offline.ctx.suspend.getMockImplementation();
+    let calls = 0;
+    // the pauses are set as the render starts, so the failing one is in place before it does
+    offline.ctx.suspend.mockImplementation((time) =>
+      calls++ === 2 ? Promise.reject(new Error("too late")) : set(time),
+    );
+    const audio = await renderSequence({
+      song: songOf(sequence({ 0: [0] }, {}, 2)),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 44100,
+      createContext: offline.createContext,
+      onProgress: (fraction) => reports.push(fraction),
+    });
+    expect(audio.channels).toHaveLength(2);
+    expect(reports.at(-1)).toBe(1);
+    expect(reports).toHaveLength(pauseFrames(offline.made.frames).length); // one pause fewer, and the end
+  });
+
+  it("works with no progress callback and no signal", async () => {
+    const { done } = render();
+    const audio = await done;
+    expect(audio.channels).toHaveLength(2);
+  });
+});
+
 describe("createExportAction", () => {
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
   const setup = (extra = {}) => {
     const onMessage = vi.fn();
     const onBusy = vi.fn();
@@ -457,17 +724,87 @@ describe("createExportAction", () => {
     expect(await press()).toBe(true);
   });
 
-  it("says it is already exporting when pressed while it works, and does not start a second", async () => {
+  it("cancels when pressed while it works: the run's signal aborts, a second press does not start another", async () => {
+    let signal;
+    let finish;
+    const run = vi.fn((options) => {
+      signal = options.signal;
+      return new Promise((resolve) => (finish = resolve));
+    });
+    const { press, onBusy } = setup({ run });
+    const first = press();
+    await flush();
+    expect(signal.aborted).toBe(false);
+    expect(await press()).toBe(false);
+    expect(signal.aborted).toBe(true);
+    expect(await press()).toBe(false); // while it is stopping: nothing more
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(onBusy).toHaveBeenCalledTimes(1); // still busy until the run has ended
+    finish(false);
+    await first;
+    expect(onBusy.mock.calls.map((call) => call[0])).toEqual([true, false]);
+  });
+
+  it("tells the button it was asked to cancel, once, however often it is pressed", async () => {
     let finish;
     const run = vi.fn(() => new Promise((resolve) => (finish = resolve)));
-    const { press, onMessage } = setup({ run });
+    const onCancel = vi.fn();
+    const { press } = setup({ run, onCancel });
+    const first = press();
+    await flush();
+    expect(onCancel).not.toHaveBeenCalled();
+    await press();
+    await press();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    finish(false);
+    await first;
+    const second = press();
+    await flush();
+    await press();
+    expect(onCancel).toHaveBeenCalledTimes(2); // a new export is cancelled afresh
+    finish(false);
+    await second;
+  });
+
+  it("can be pressed again after a cancel, and the new export is not already cancelled", async () => {
+    const signals = [];
+    let finish;
+    const run = vi.fn(({ signal }) => {
+      signals.push(signal);
+      return new Promise((resolve) => (finish = resolve));
+    });
+    const { press } = setup({ run });
+    const first = press();
+    await flush();
+    await press();
+    finish(false);
+    await first;
+    const second = press();
+    await flush();
+    expect(signals[1].aborted).toBe(false);
+    finish(true);
+    expect(await second).toBe(true);
+  });
+
+  it("cancels while it waits for the samples: says so and renders nothing", async () => {
+    const { press, run, onMessage, onBusy } = setup({ ready: () => new Promise(() => {}) });
     const first = press();
     await Promise.resolve();
-    await Promise.resolve();
-    expect(await press()).toBe(false);
-    expect(onMessage).toHaveBeenCalledWith("ALREADY EXPORTING");
-    finish(true);
-    await first;
-    expect(run).toHaveBeenCalledTimes(1);
+    await press();
+    expect(await first).toBe(false);
+    expect(onMessage).toHaveBeenCalledWith("EXPORT CANCELLED");
+    expect(run).not.toHaveBeenCalled();
+    expect(onBusy).toHaveBeenLastCalledWith(false);
+  });
+
+  it("hands the run a way to report progress, and passes it on", async () => {
+    const onProgress = vi.fn();
+    const run = vi.fn(async (options) => {
+      options.onProgress(0.5);
+      return true;
+    });
+    const { press } = setup({ run, onProgress });
+    await press();
+    expect(onProgress).toHaveBeenCalledWith(0.5);
   });
 });

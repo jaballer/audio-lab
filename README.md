@@ -59,7 +59,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing, and so do the other pads in its choke group (a fade on the audio clock), live, in the sequence or in the export; no DOM
   - `pad-envelope.js` — the shape of a pad's amplitude envelope (attack, decay, sustain, release) as the points a gain is ramped through, laid over the time a sample is heard for; no DOM
   - `pad-colors.js` — the fixed set of colours a pad can be given (with names for a screen reader); no DOM
-  - `export-wav.js` — exports the sequence showing as a WAV file: plays it into an offline audio context with the page's sounds, velocities, pad settings, retrigger cuts, volume and clipper, over two passes so the file (exactly the length of the bars) loops, then encodes 16-bit PCM; no DOM
+  - `export-wav.js` — exports the sequence showing as a WAV file: plays it into an offline audio context with the page's sounds, velocities, pad settings, retrigger cuts, volume and clipper, over two passes so the file (exactly the length of the bars) loops, then encodes 16-bit PCM; the render pauses along the way to report progress and can be cancelled (pressing the button again); no DOM
   - `trim.js` — which part of a sample plays: a start and an end as fractions of its length, kept possible (inside the sample, never shorter than 5 ms), and which handle a press would move; no DOM
   - `waveform.js` — a sample's outline for drawing, the lowest and highest value of each slice; no DOM
   - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the choke group, the text, and reading them back from a saved song; no DOM
