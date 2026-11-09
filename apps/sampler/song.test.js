@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STARTER_BEAT } from "./starter-beat.js";
-import { SONG_VERSION, createSongSaver, parseSong, serializeSong, upgradeSong } from "./song.js";
+import {
+  SONG_BACKUP_KEY,
+  SONG_KEY,
+  SONG_VERSION,
+  createSongSaver,
+  needsBackup,
+  parseSong,
+  serializeSong,
+  upgradeSong,
+} from "./song.js";
 
 const SHAPE = { rows: 16, steps: 16, maxBars: 8, sequenceCount: 4 };
 const empty = { bars: 1, pattern: {}, velocities: {} };
@@ -351,5 +360,29 @@ describe("songs saved by version 1", () => {
   it("are still refused when the pattern is not one", () => {
     expect(parse({ ...v1, pattern: null })).toBeNull();
     expect(parse({ version: 1, bpm: 120, volume: 70 })).toBeNull();
+  });
+});
+
+describe("needsBackup", () => {
+  it("is for what is in storage and could not be used", () => {
+    expect(needsBackup({ version: 99 }, false)).toBe(true);
+    expect(needsBackup("garbage", false)).toBe(true);
+    expect(needsBackup([], false)).toBe(true);
+  });
+
+  it("is not for nothing in storage (a first visit), or for what was used", () => {
+    expect(needsBackup(null, false)).toBe(false);
+    expect(needsBackup(undefined, false)).toBe(false);
+    expect(needsBackup({ version: SONG_VERSION }, true)).toBe(false);
+  });
+
+  it("matches what parseSong does with a song from a newer page or a damaged one", () => {
+    const newer = { ...serializeSong(song), version: SONG_VERSION + 1 };
+    expect(needsBackup(newer, parse(newer) !== null)).toBe(true);
+    expect(needsBackup(serializeSong(song), parse(serializeSong(song)) !== null)).toBe(false);
+  });
+
+  it("has a key of its own, beside the song's", () => {
+    expect(SONG_BACKUP_KEY).toBe(`${SONG_KEY}:backup`);
   });
 });

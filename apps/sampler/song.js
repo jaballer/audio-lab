@@ -84,6 +84,11 @@ function cleanVelocities(velocities, pattern) {
   return clean;
 }
 
+// What is saved when the page finds something it cannot use (a song from a newer page, one that is corrupt), so
+// the first edit does not write over it for good. `raw` is what was in storage, `usable` whether it could be used.
+export const SONG_BACKUP_KEY = `${SONG_KEY}:backup`;
+export const needsBackup = (raw, usable) => raw !== null && raw !== undefined && !usable;
+
 // Bring a stored song up to SONG_VERSION by applying one migration after another,
 // or give back null when it cannot be brought there (a version from the future,
 // or an old one with no migration). `migrations` is a parameter for the tests.

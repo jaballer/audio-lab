@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FULL_VELOCITY, MIN_VELOCITY, createPattern } from "./pattern.js";
+import { FULL_VELOCITY, MIN_VELOCITY, createPattern, firstDifference } from "./pattern.js";
 
 describe("createPattern", () => {
   it("starts empty", () => {
@@ -258,5 +258,40 @@ describe("onChange", () => {
     const pattern = createPattern(1, 4, {}, { onChange: () => seen.push(pattern.isOn(0, 2)) });
     pattern.toggle(0, 2);
     expect(seen).toEqual([true]);
+  });
+});
+
+describe("firstDifference", () => {
+  const state = (pattern = {}, velocities = {}) => ({ pattern, velocities });
+
+  it("is null for two states that are the same", () => {
+    expect(firstDifference(state({ 0: [1, 2] }, { 0: { 2: 40 } }), state({ 0: [1, 2] }, { 0: { 2: 40 } }))).toBeNull();
+    expect(firstDifference(state(), state())).toBeNull();
+  });
+
+  it("is the first step whose on or off is not the same", () => {
+    expect(firstDifference(state({ 0: [1, 5] }), state({ 0: [1, 5, 9] }))).toEqual({ row: 0, step: 9 });
+    expect(firstDifference(state({ 0: [1, 5] }), state({ 0: [5] }))).toEqual({ row: 0, step: 1 });
+  });
+
+  it("is the first step whose velocity is not the same, a step with none being at full", () => {
+    expect(firstDifference(state({ 2: [3] }, { 2: { 3: 40 } }), state({ 2: [3] }, { 2: { 3: 90 } }))).toEqual({
+      row: 2,
+      step: 3,
+    });
+    expect(firstDifference(state({ 2: [3] }), state({ 2: [3] }, { 2: { 3: 90 } }))).toEqual({ row: 2, step: 3 });
+    expect(firstDifference(state({ 2: [3] }), state({ 2: [3] }, { 2: { 3: FULL_VELOCITY } }))).toBeNull();
+  });
+
+  it("goes by the lowest pad first, then the earliest step, whatever order the keys come in", () => {
+    const a = state({ 5: [2], 1: [8, 3] });
+    const b = state({ 5: [], 1: [8] });
+    expect(firstDifference(a, b)).toEqual({ row: 1, step: 3 });
+    expect(firstDifference(state({ 10: [1], 9: [1] }), state({}))).toEqual({ row: 9, step: 1 });
+  });
+
+  it("works for pads that are in only one of the states", () => {
+    expect(firstDifference(state({ 4: [7] }), state({}))).toEqual({ row: 4, step: 7 });
+    expect(firstDifference(state({}), state({ 4: [7] }))).toEqual({ row: 4, step: 7 });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createKit } from "./kit.js";
-import { MAX_TOTAL_BYTES, MEMORY_FULL, SAMPLES_VERSION, createSamples, parseSamples } from "./samples.js";
+import { MAX_TOTAL_BYTES, MEMORY_FULL, SAMPLES_VERSION, createSamples, isSamplesMap, parseSamples } from "./samples.js";
 import { REASONS } from "./sample-voice.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
@@ -41,7 +41,7 @@ function setup({
     store,
     decode,
     probe,
-    readMap: () => stored,
+    readMap: () => writes.at(-1) ?? stored,
     writeMap: (map) => {
       writes.push(structuredClone(map));
       return !failMap;
@@ -262,53 +262,89 @@ describe("what counts toward the total when requests overlap", () => {
   const ok = () => ({ ok: true, buffer: {} });
   const bad = () => ({ ok: false, reason: REASONS.notAudio });
 
-  it("counts nothing for a pad when the newer file fails after the older one was overtaken", async () => {
+  it("keeps the older sample, and counts it, when the newer file fails after the older one has finished", async () => {
     const { decode, pending } = controlledDecode();
-    const { samples, messages } = setup({ decode, maxTotalBytes: 100 });
+    const { samples, kit, messages, writes } = setup({ decode, maxTotalBytes: 100 });
     const older = samples.load(0, file("a.wav", 80));
     await vi.waitFor(() => expect(pending).toHaveLength(1));
     const newer = samples.load(0, file("b.txt", 10));
     await vi.waitFor(() => expect(pending).toHaveLength(2));
-    pending[0].resolve(ok()); // the older finishes first, and has been overtaken
-    expect(await older).toBe(false);
-    pending[1].resolve(bad()); // the newer then fails
+    pending[0].resolve(ok()); // the older finishes first: nothing newer has installed, so it stands
+    expect(await older).toBe(true);
+    pending[1].resolve(bad()); // the newer then fails, and leaves the pad as it is
     expect(await newer).toBe(false);
     await flush();
-    // nothing is on pad 0, so a 95 byte file fits on pad 1 (a leftover count for pad 0 would push it over 100)
+    expect(kit.get(0).name).toBe("a"); // the pad plays the older file
+    expect(writes.at(-1).pads[0]).toEqual({ name: "a", bytes: 80 }); // and it is kept, so it is there next visit
+    // and it counts: 80 of 100 is taken, so 30 more does not fit and 20 does
     pending.length = 0;
-    const third = samples.load(1, file("c.wav", 95));
+    expect(await samples.load(1, file("c.wav", 30))).toBe(false);
+    expect(messages.at(-1)).toBe(MEMORY_FULL);
+    const fits = samples.load(1, file("d.wav", 20));
     await vi.waitFor(() => expect(pending).toHaveLength(1));
     pending[0].resolve(ok());
-    expect(await third).toBe(true);
-    expect(messages).not.toContain(MEMORY_FULL);
+    expect(await fits).toBe(true);
   });
 
-  it("falls back to what the pad already held when the newer file fails", async () => {
+  it("falls back to what the pad already held when both new files fail", async () => {
     const { decode, pending } = controlledDecode();
-    const { samples, messages } = setup({ decode, maxTotalBytes: 100 });
+    const { samples, kit, messages } = setup({ decode, maxTotalBytes: 100 });
     const first = samples.load(0, file("x.wav", 60)); // the pad holds 60 bytes
     await vi.waitFor(() => expect(pending).toHaveLength(1));
     pending[0].resolve(ok());
     await first;
     pending.length = 0;
 
-    const older = samples.load(0, file("a.wav", 80));
+    const a = samples.load(0, file("a.txt", 80));
     await vi.waitFor(() => expect(pending).toHaveLength(1));
-    const newer = samples.load(0, file("b.txt", 10));
+    const b = samples.load(0, file("b.txt", 10));
     await vi.waitFor(() => expect(pending).toHaveLength(2));
-    pending[0].resolve(ok());
-    await older;
+    pending[0].resolve(bad());
     pending[1].resolve(bad());
-    await newer;
-    await flush();
+    await Promise.all([a, b]);
+    expect(kit.get(0).name).toBe("x");
 
     pending.length = 0;
-    expect(await Promise.race([samples.load(1, file("c.wav", 50)), flush().then(() => "pending")])).toBe(false); // 60 + 50 > 100
+    expect(await samples.load(1, file("c.wav", 50))).toBe(false); // 60 + 50 > 100
     expect(messages.at(-1)).toBe(MEMORY_FULL);
     const fits = samples.load(1, file("d.wav", 30)); // 60 + 30 fits
     await vi.waitFor(() => expect(pending).toHaveLength(1));
     pending[0].resolve(ok());
     expect(await fits).toBe(true);
+  });
+
+  it("lets the newer file win when it installs first, and drops the older one that finishes after it", async () => {
+    const { decode, pending } = controlledDecode();
+    const { samples, kit, writes } = setup({ decode });
+    const older = samples.load(0, file("old.wav", 50));
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const newer = samples.load(0, file("new.wav", 70));
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    pending[1].resolve(ok()); // the newer finishes first and installs
+    expect(await newer).toBe(true);
+    pending[0].resolve(ok()); // the older arrives after it, and gives way
+    expect(await older).toBe(false);
+    expect(kit.get(0).name).toBe("new");
+    expect(writes.at(-1).pads[0]).toEqual({ name: "new", bytes: 70 });
+  });
+
+  it("counts the biggest of the loads in flight on a pad, never less, and lets go of each one as it ends", async () => {
+    const { decode, pending } = controlledDecode();
+    const { samples } = setup({ decode, maxTotalBytes: 100 });
+    const a = samples.load(0, file("a.wav", 30));
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const b = samples.load(0, file("b.wav", 60));
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    // pad 0 may end up holding 60: 50 more on pad 1 does not fit, 40 does
+    expect(await samples.load(1, file("c.wav", 50))).toBe(false);
+    pending[0].resolve(bad());
+    pending[1].resolve(bad());
+    await Promise.all([a, b]);
+    pending.length = 0;
+    const d = samples.load(1, file("d.wav", 100)); // everything is let go: the whole cap is free again
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    pending[0].resolve(ok());
+    expect(await d).toBe(true);
   });
 });
 
@@ -601,6 +637,89 @@ describe("trimming a sample that is not kept, or is still being saved", () => {
   });
 });
 
+describe("two tabs sharing the saved map", () => {
+  // One storage that both tabs read and write, as localStorage is. A tab's map is read when it starts and again
+  // whenever it writes.
+  function sharedStorage(initial = null) {
+    const box = { map: initial };
+    return { box, readMap: () => box.map, writeMap: (map) => ((box.map = structuredClone(map)), true) };
+  }
+  const entry = (name, bytes = 100) => ({ name, bytes });
+
+  it("keeps a sample another tab saved since this one started, when this one saves its own", async () => {
+    const storage = sharedStorage({ version: SAMPLES_VERSION, pads: {} });
+    const { samples } = setup({ readMap: storage.readMap, writeMap: storage.writeMap });
+    // the other tab saves a sample on pad 2
+    storage.box.map = { version: SAMPLES_VERSION, pads: { 2: entry("other") } };
+    await samples.load(1, file("mine.wav", 200));
+    expect(storage.box.map.pads).toEqual({ 1: { name: "mine", bytes: 200 }, 2: entry("other") });
+  });
+
+  it("changes only its own pad when it resets one, and leaves the other tab's samples", async () => {
+    const storage = sharedStorage({ version: SAMPLES_VERSION, pads: { 0: entry("mine") } });
+    const { samples } = setup({ readMap: storage.readMap, writeMap: storage.writeMap });
+    storage.box.map = { version: SAMPLES_VERSION, pads: { 0: entry("mine"), 2: entry("other") } };
+    await samples.reset(0);
+    expect(storage.box.map.pads).toEqual({ 2: entry("other") });
+  });
+
+  it("writes a trim into the map without dropping another tab's pad", async () => {
+    const storage = sharedStorage({ version: SAMPLES_VERSION, pads: {} });
+    const longBuffer = { ok: true, buffer: { duration: 2, numberOfChannels: 1, length: 88200 } };
+    const { samples } = setup({
+      readMap: storage.readMap,
+      writeMap: storage.writeMap,
+      decode: vi.fn(async () => longBuffer),
+    });
+    await samples.load(0, file("a.wav", 300));
+    storage.box.map = { version: SAMPLES_VERSION, pads: { ...storage.box.map.pads, 2: entry("other") } };
+    samples.setTrim(0, { start: 0.2, end: 0.6 });
+    expect(storage.box.map.pads[2]).toEqual(entry("other"));
+    expect(storage.box.map.pads[0].trim).toEqual({ start: 0.2, end: 0.6 });
+  });
+});
+
+describe("what a restored entry counts as", () => {
+  const stored = (...bytes) => ({
+    version: SAMPLES_VERSION,
+    pads: Object.fromEntries(bytes.map((size, pad) => [pad, { name: `s${pad}`, bytes: size }])),
+  });
+
+  it("is the size of the bytes that were read, not what the map says", async () => {
+    const { samples } = setup({
+      stored: stored(10), // the map says 10 bytes
+      store: fakeStore({ initial: { "sample-0": new ArrayBuffer(900) } }), // there are 900
+      maxTotalBytes: 1000,
+    });
+    await samples.restore();
+    expect(await samples.load(1, file("more.wav", 200))).toBe(false); // 900 + 200 does not fit
+    expect(await samples.load(1, file("less.wav", 100))).toBe(true);
+  });
+
+  it("is nothing for an entry whose bytes are not there, so it cannot fill the cap on its own", async () => {
+    const { samples, kit } = setup({ stored: stored(300, 300), maxTotalBytes: 1000 }); // the store is empty
+    await samples.restore();
+    expect(kit.isDefault(0)).toBe(true);
+    expect(samples.isKept(0)).toBe(true); // the entry is left, in case storage is only away for this visit
+    expect(await samples.load(2, file("big.wav", 900))).toBe(true); // all of the room is free
+  });
+});
+
+describe("parseSamples and the size an entry claims", () => {
+  const withBytes = (bytes) => ({ version: SAMPLES_VERSION, pads: { 0: { name: "a", bytes } } });
+
+  it("keeps a whole number of bytes up to what a file may be", () => {
+    expect(parseSamples(withBytes(0), 4)[0]).toEqual({ name: "a", bytes: 0 });
+    expect(parseSamples(withBytes(5 * 1024 * 1024), 4)[0].bytes).toBe(5 * 1024 * 1024);
+  });
+
+  it("drops an entry that cannot be a stored file: negative, fractional, bigger than a file may be, or not a number", () => {
+    for (const bytes of [-1, 1.5, 5 * 1024 * 1024 + 1, 1e300, Infinity, NaN, "10", null, undefined]) {
+      expect(parseSamples(withBytes(bytes), 4)).toEqual({});
+    }
+  });
+});
+
 describe("parseSamples and a trim", () => {
   const entry = (trim) => ({ version: SAMPLES_VERSION, pads: { 0: { name: "a", bytes: 5, trim } } });
 
@@ -781,5 +900,26 @@ describe("restore", () => {
     await samples.restore();
     expect(store.get).not.toHaveBeenCalled();
     expect(kit.isDefault(0)).toBe(true);
+  });
+});
+
+describe("isSamplesMap", () => {
+  it("is true for a map of this version, even an empty one", () => {
+    expect(isSamplesMap({ version: SAMPLES_VERSION, pads: {} })).toBe(true);
+  });
+
+  it("is false for what this page cannot read: another version, no pads, or not an object", () => {
+    for (const stored of [
+      null,
+      undefined,
+      "x",
+      [],
+      {},
+      { version: 99, pads: {} },
+      { version: SAMPLES_VERSION },
+      { version: SAMPLES_VERSION, pads: [] },
+    ]) {
+      expect(isSamplesMap(stored)).toBe(false);
+    }
   });
 });

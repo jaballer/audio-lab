@@ -43,15 +43,21 @@ const keyFor = (pad) => `sample-${pad}`;
 const entryFor = (name, bytes, trim) => (isFullTrim(trim) ? { name, bytes } : { name, bytes, trim });
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
+// Is this a samples map this page can read? (The same test for a backup of what it cannot.)
+export const isSamplesMap = (stored) => isObject(stored) && stored.version === SAMPLES_VERSION && isObject(stored.pads);
+
 // What was stored, as { pad: { name, bytes, trim? } } for the pads that exist; anything unusable is left out.
 // `trim` (trim.js) is only there for a sample that has been trimmed.
 export function parseSamples(stored, padCount) {
   const pads = {};
-  if (!isObject(stored) || stored.version !== SAMPLES_VERSION || !isObject(stored.pads)) return pads;
+  if (!isSamplesMap(stored)) return pads;
   for (const [key, info] of Object.entries(stored.pads)) {
     const pad = Number(key);
     if (!Number.isInteger(pad) || String(pad) !== key || pad < 0 || pad >= padCount) continue;
-    if (!isObject(info) || typeof info.name !== "string" || !Number.isFinite(info.bytes) || info.bytes < 0) continue;
+    // A real entry is a whole number of bytes no bigger than a file may be: anything else (negative, fractional,
+    // absurd) cannot be one, and would throw off the count of what is stored.
+    if (!isObject(info) || typeof info.name !== "string") continue;
+    if (!Number.isInteger(info.bytes) || info.bytes < 0 || info.bytes > MAX_SAMPLE_BYTES) continue;
     pads[pad] = entryFor(info.name, info.bytes, parseTrim(info.trim));
   }
   return pads;
@@ -75,28 +81,37 @@ export function createSamples({
   // The sound each pad's saved entry describes. A trim is written only to an entry that is its own sound's: while a
   // new sample is still being saved the pad already plays it, but the entry is still the old sample's.
   const owners = new Map();
-  // Order of the requests on each pad. Every load and reset is numbered when it is made (`requested`), and the
-  // newest one to be accepted is the one that stands (`accepted`): an older request that is accepted after a
-  // newer one, or overtaken while it works, gives way to it. A load that is refused is never accepted, so it
-  // changes nothing and does not cancel an earlier load that is still working.
+  // Order of the requests on each pad. Every load and reset is numbered when it is made (`requested`), and what a
+  // pad plays is decided when one INSTALLS (`installed` is the number of the newest to have done so, a reset
+  // counting as one): a request that finishes after a newer one has installed gives way to it, but one whose newer
+  // rival fails, or is refused, still stands. So two loads on a pad in quick succession end with the newer file if
+  // it works and the older one if it does not, and never with neither.
   const requested = new Array(kit.length).fill(0);
-  const accepted = new Array(kit.length).fill(0);
+  const installed = new Array(kit.length).fill(0);
   let restored = false;
   let persistAsked = false; // the browser is asked once per visit to keep the samples
 
   // What counts toward the total cap, kept in two parts so it can always be put right: `held` is what each pad
-  // has now (a sample that is playing in this visit, or kept from an earlier one), and `reserved` is a load that
-  // has been accepted but has not finished, which counts instead of what the pad holds while it works. A load
-  // that fails or is overtaken only drops its own reservation, so the count falls back to what the pad holds.
+  // has now (a sample that is playing in this visit, or kept from an earlier one, as far as it has been seen), and
+  // `reservations` are the loads on a pad that are accepted but have not finished, by request number. A pad counts
+  // as the biggest of those, which is more than it will hold once they are done but never less, so loads that
+  // overlap cannot together get past the cap. A load that ends any way at all drops its own reservation.
   // Not the same as `pads`, which is what was kept.
   const held = Object.fromEntries(Object.entries(pads).map(([pad, info]) => [pad, info.bytes]));
-  const reserved = {};
-  const countFor = (pad) => reserved[pad] ?? held[pad] ?? 0;
+  const reservations = Array.from({ length: kit.length }, () => new Map());
+  const countFor = (pad) => Math.max(held[pad] ?? 0, ...reservations[pad].values());
   const countedTotal = () => Array.from({ length: kit.length }, (_, pad) => countFor(pad)).reduce((a, b) => a + b, 0);
   const bytesElsewhere = (pad) => countedTotal() - countFor(pad);
 
-  // Whether the map was written: the localStorage write can fail (blocked, full) when the files' bytes did not.
-  const persist = () => Boolean(writeMap({ version: SAMPLES_VERSION, pads }));
+  // Writes the map, with this pad's entry as this tab has it. The map is read again first and only this pad's entry
+  // is changed in it, so a sample another tab kept since this one started is not lost. Whether it was written: the
+  // localStorage write can fail (blocked, full) when the files' bytes did not.
+  function persist(pad) {
+    const latest = parseSamples(readMap(), kit.length);
+    if (pads[pad]) latest[pad] = pads[pad];
+    else delete latest[pad];
+    return Boolean(writeMap({ version: SAMPLES_VERSION, pads: latest }));
+  }
 
   function fail(pad, reason) {
     onMessage(reason === MEMORY_FULL ? reason : `PAD ${pad2(pad + 1)} ${reason}`);
@@ -125,60 +140,53 @@ export function createSamples({
       return fail(pad, REASONS.notAudio);
     }
     // The most the samples may take: the cap, or less when the browser's quota is small. Nothing between this
-    // check and counting the file below is awaited, so loads that overlap cannot together get past it.
+    // check and reserving the file below is awaited, so loads that overlap cannot together get past it.
     const limit = await budget.limit(maxTotalBytes);
     if (bytesElsewhere(pad) + bytes.byteLength > limit) return fail(pad, MEMORY_FULL);
 
-    // From here the file is accepted: it takes the pad over from an earlier request still in progress, unless
-    // a newer one has been accepted already (the quota lookup above can finish out of order). It is counted,
-    // so loads that overlap cannot together go over the cap.
-    if (request < accepted[pad]) return false;
-    const previous = accepted[pad];
-    accepted[pad] = request;
-    reserved[pad] = bytes.byteLength;
-    const result = await decode(audio.ensure(), bytes);
-    if (accepted[pad] !== request) return false; // a newer file or a reset has taken the pad, and has its own count
-    if (!result.ok) {
-      // It did not work out, so it leaves the pad as it found it, and an earlier request still working may stand.
-      delete reserved[pad];
-      accepted[pad] = previous;
-      return fail(pad, result.reason);
-    }
+    // From here the file is accepted and counted. It is counted until it ends, whichever way it ends.
+    reservations[pad].set(request, bytes.byteLength);
+    try {
+      const result = await decode(audio.ensure(), bytes);
+      if (request < installed[pad]) return false; // a newer one has installed, or a reset has come since: it stands
+      if (!result.ok) return fail(pad, result.reason); // the pad is as it was, and an earlier load may still stand
 
-    const name = sampleName(file.name);
-    const sound = createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength });
-    kit.set(pad, sound);
-    kit.setSetting(pad, "pitch", 0); // pitch tunes a sample, so a new one starts at its own pitch (gain is the pad's)
-    touched.add(pad);
-    held[pad] = bytes.byteLength;
-    delete reserved[pad];
+      const name = sampleName(file.name);
+      const sound = createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength });
+      installed[pad] = request;
+      kit.set(pad, sound);
+      kit.setSetting(pad, "pitch", 0); // pitch tunes a sample, so a new one starts at its own pitch (gain is the pad's)
+      touched.add(pad);
+      held[pad] = bytes.byteLength;
 
-    const bytesKept = await store.set(keyFor(pad), bytes);
-    if (accepted[pad] !== request) return true; // it played, but something newer has taken the pad since
-    // Made from the sound as it is now: it may have been trimmed while it was being saved.
-    pads[pad] = entryFor(name, bytes.byteLength, sound.trim);
-    owners.set(pad, sound);
-    if (bytesKept && persist()) {
-      onMessage(`PAD ${pad2(pad + 1)} LOADED ${formatSpace(countedTotal(), limit)}`);
-    } else {
-      // Not kept, in the files or in the map, so what was kept before for this pad is not what the pad plays
-      // any more, and bytes with no map entry would only take up room.
-      delete pads[pad];
-      persist();
-      store.delete(keyFor(pad));
-      onMessage(`PAD ${pad2(pad + 1)} LOADED, NOT SAVED`);
+      const bytesKept = await store.set(keyFor(pad), bytes);
+      if (installed[pad] !== request) return true; // it played, but something newer has taken the pad since
+      // Made from the sound as it is now: it may have been trimmed while it was being saved.
+      pads[pad] = entryFor(name, bytes.byteLength, sound.trim);
+      owners.set(pad, sound);
+      if (bytesKept && persist(pad)) {
+        onMessage(`PAD ${pad2(pad + 1)} LOADED ${formatSpace(countedTotal(), limit)}`);
+      } else {
+        // Not kept, in the files or in the map, so what was kept before for this pad is not what the pad plays
+        // any more, and bytes with no map entry would only take up room.
+        delete pads[pad];
+        persist(pad);
+        store.delete(keyFor(pad));
+        onMessage(`PAD ${pad2(pad + 1)} LOADED, NOT SAVED`);
+      }
+      return true;
+    } finally {
+      reservations[pad].delete(request);
     }
-    return true;
   }
 
   async function reset(pad) {
-    accepted[pad] = ++requested[pad]; // a reset is always accepted: it overtakes any load made before it
+    installed[pad] = ++requested[pad]; // a reset counts as an install: it overtakes every load made before it
     touched.add(pad);
     delete pads[pad];
     delete held[pad];
-    delete reserved[pad];
     owners.delete(pad);
-    persist();
+    persist(pad);
     kit.reset(pad);
     kit.setSetting(pad, "pitch", 0); // the built-in sound cannot be pitched, so no pitch is left behind to reappear
     await store.delete(keyFor(pad));
@@ -197,9 +205,15 @@ export function createSamples({
       Object.entries(pads).map(async ([key, info]) => {
         const pad = Number(key);
         if (touched.has(pad)) return;
-        // A missing file leaves the entry alone: storage may only be unavailable for this visit.
+        // A missing file leaves the entry alone (storage may only be unavailable for this visit) but it takes no
+        // room that can be seen, so it does not count against the cap: the entry's own claim of its size is not
+        // to be trusted over the bytes themselves.
         const bytes = await store.get(keyFor(pad));
-        if (!bytes) return;
+        if (!bytes) {
+          if (!touched.has(pad)) held[pad] = 0;
+          return;
+        }
+        held[pad] = bytes.byteLength;
         const result = await decode(ctx, bytes);
         if (!result.ok || touched.has(pad)) return;
         const sound = createSampleSound({
@@ -224,7 +238,7 @@ export function createSamples({
     const next = sound.setTrim(trim, moved);
     if (pads[pad] && owners.get(pad) === sound) {
       pads[pad] = entryFor(pads[pad].name, pads[pad].bytes, next);
-      persist();
+      persist(pad);
     }
     return next;
   }
