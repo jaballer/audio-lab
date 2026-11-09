@@ -10,6 +10,23 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: a velocity for every step. Bars under the step keys show how hard each step plays; drag along them (or
+  use the keyboard) to set it. It is saved with the song, and a step recorded live keeps the velocity of the hit
+  ([#94](https://github.com/jaballer/audio-lab/pull/94)).
+- Sampler: Undo and Redo for the steps (also Ctrl/Cmd + Z), and Copy Steps and Paste Steps, which copy the bar
+  showing for the selected pad onto another bar, pad or sequence
+  ([#95](https://github.com/jaballer/audio-lab/pull/95), [#98](https://github.com/jaballer/audio-lab/pull/98)).
+- Sampler: drop an audio file on a pad (up to 10 seconds and 5 MB) to play it there. It is kept in this browser
+  between visits ([#97](https://github.com/jaballer/audio-lab/pull/97)). The page asks the browser to keep it, sizes
+  the total cap from the browser's quota, and shows the space used
+  ([#99](https://github.com/jaballer/audio-lab/pull/99)).
+- Sampler: a pad editor beside the pads (Edit Pad) with Load Sample, Default Sound, and a Gain and a Pitch slider
+  for the selected pad ([#101](https://github.com/jaballer/audio-lab/pull/101),
+  [#102](https://github.com/jaballer/audio-lab/pull/102)), and the waveform of a loaded sample with a Start and an
+  End to trim it ([#104](https://github.com/jaballer/audio-lab/pull/104)).
+- Tone page: the keys as a piano, value readouts, and Release, Echo time and Feedback controls
+  ([#78](https://github.com/jaballer/audio-lab/pull/78), [#82](https://github.com/jaballer/audio-lab/pull/82)).
+
 - Keys page: the K1–K8 dials can be turned with the mouse (drag, scroll or arrow keys), and they follow the sliders
   ([#57](https://github.com/jaballer/audio-lab/pull/57)).
 - A POWER switch on the sampler, keys and tone pages: it turns sound on and off, and off stays off until it is pressed
@@ -23,6 +40,12 @@ Numbers link to the pull request.
 
 ### Changed
 
+- Keys page: laid out like a controller, and the knobs' values show on the LCD
+  ([#103](https://github.com/jaballer/audio-lab/pull/103)).
+- MPC Sample page: the device's own Play and Continue drive the sequencer, the page follows the device's clock
+  instead of sending one, and the page no longer plays browser sounds: the device is the sound source
+  ([#81](https://github.com/jaballer/audio-lab/pull/81), [#84](https://github.com/jaballer/audio-lab/pull/84),
+  [#85](https://github.com/jaballer/audio-lab/pull/85)).
 - MPC Sample page: Play starts the device at the Tempo field's tempo (120 BPM until it is changed), not at the
   tempo last heard from the device.
 - Every page shows the same "sound is off" banner until the first click or key press (it replaces the sampler's own
@@ -32,6 +55,18 @@ Numbers link to the pull request.
   sending Start and a steady clock, so the device follows the page's tempo while it plays. The separate Play and
   Stop buttons, the Space shortcut and the Sound button are gone: the pads always play the sampler's sounds
   ([#61](https://github.com/jaballer/audio-lab/pull/61)).
+
+### Fixed
+
+- Sampler: the LCD is no longer a live region, so screen readers stop announcing every step
+  ([#96](https://github.com/jaballer/audio-lab/pull/96)).
+- Tone page: the computer keys keep playing after using a slider or menu
+  ([#79](https://github.com/jaballer/audio-lab/pull/79)).
+
+### Maintenance
+
+- Project skills for shipping work here, in `.claude/skills/`
+  ([#100](https://github.com/jaballer/audio-lab/pull/100)).
 
 ## 2026-11-08
 

@@ -569,6 +569,37 @@ describe("undo and redo", () => {
     expect(sampler.getState().canUndo).toBe(false);
   });
 
+  it("keeps a toggle made right after a velocity change as an undo of its own, and does not merge a later change into the earlier one", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0, 1] } }) });
+    setClock(1000);
+    sampler.setStepVelocity(0, 40);
+    setClock(1100);
+    sampler.toggleStep(1); // a toggle is never part of a drag
+    setClock(1200);
+    sampler.setStepVelocity(0, 60); // the toggle ended the stream, so this does not join the first change
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(40);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[1]).toBe(true); // the toggle is undone on its own
+    expect(sampler.getState().stepVelocities[0]).toBe(40);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(127);
+    expect(sampler.getState().canUndo).toBe(false);
+  });
+
+  it("makes a velocity change right after a toggle its own undo", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    setClock(1000);
+    sampler.toggleStep(1);
+    setClock(1100);
+    sampler.setStepVelocity(1, 30);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[1]).toBe(true); // only the velocity went
+    expect(sampler.getState().stepVelocities[1]).toBe(127);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[1]).toBe(false);
+  });
+
   it("does not let an undone velocity change swallow the next one into its undo", () => {
     const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
     setClock(1000);
@@ -930,6 +961,8 @@ describe("sequences", () => {
     const queued = sounds[0].play.mock.calls[2][1];
     sampler.setSequence(1);
     expect(queued.disconnect).toHaveBeenCalledTimes(1); // the old sequence's hit on step 2 will not sound
+    const started = sounds[0].play.mock.calls.slice(0, 2).map((call) => call[1]);
+    for (const bus of started) expect(bus.disconnect).not.toHaveBeenCalled(); // those already sounding ring out
     expect(sounds[1].play).not.toHaveBeenCalled();
     for (let i = 0; i < 3; i++) advance(0.05);
     expect(sounds[0].play).toHaveBeenCalledTimes(3); // nothing more from the old sequence

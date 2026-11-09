@@ -22,6 +22,17 @@ describe("createHistory", () => {
     expect(history.canRedo).toBe(false);
   });
 
+  it("can undo again after a redo, back to where it was", () => {
+    const history = createHistory();
+    history.push("a");
+    expect(history.undo("b")).toBe("a");
+    expect(history.redo("a")).toBe("b");
+    expect(history.canUndo).toBe(true);
+    expect(history.canRedo).toBe(false);
+    expect(history.undo("b")).toBe("a");
+    expect(history.canRedo).toBe(true);
+  });
+
   it("ends the redo line when something new is pushed", () => {
     const history = createHistory();
     history.push("a");

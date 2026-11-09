@@ -137,6 +137,60 @@ describe("createScheduler", () => {
     expect(played.slice(0, 3).map(([step]) => step)).toEqual([2, 3, 4]);
   });
 
+  it("wraps the steps already queued for the playhead into the new length", () => {
+    const { scheduler, run } = setup({ steps: 16, bpm: 120 });
+    scheduler.start();
+    run(1.6); // steps up to about 12 are queued, and the playhead has not been polled
+    scheduler.setSteps(4);
+    scheduler.poll();
+    expect(scheduler.playheadStep).toBeGreaterThanOrEqual(0);
+    expect(scheduler.playheadStep).toBeLessThan(4);
+  });
+
+  it("forgets a live hit marked on a step the shorter loop no longer has, so it does not silence that step when the loop grows again", () => {
+    const clock = fakeClock();
+    const heards = [];
+    const scheduler = createScheduler({
+      clock,
+      steps: 16,
+      bpm: 120,
+      onStep: (step, _time, heard) => heards.push([step, [...heard]]),
+    });
+    const run = (seconds) => {
+      for (let t = 0; t < seconds; t += SCHEDULER_TICK_MS / 1000) {
+        clock.time += SCHEDULER_TICK_MS / 1000;
+        vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+      }
+    };
+    scheduler.start();
+    while (!heards.some(([step]) => step === 12)) run(0.01);
+    const next = heards.at(-1)[0] + 1; // the step the scheduler will hand out next: 13 or so
+    scheduler.markHeard(5, next); // a live hit on pad 5 was written into it
+    scheduler.setSteps(4); // the step is gone
+    scheduler.setSteps(16); // and back again
+    heards.length = 0;
+    run(3);
+    const second = heards.find(([step]) => step === next);
+    expect(second).toBeDefined();
+    expect(second[1]).toEqual([]); // nothing is held back on it
+  });
+
+  it("starts with an empty queue after Stop and Start, so the playhead does not jump to an old step", () => {
+    const { scheduler, played, run, clock } = setup({ steps: 16, bpm: 120 });
+    scheduler.start();
+    run(1);
+    scheduler.stop();
+    expect(scheduler.pendingSteps).toBe(0);
+    clock.time += 5;
+    scheduler.start();
+    expect(scheduler.pendingSteps).toBe(0);
+    expect(scheduler.poll()).toBe(false);
+    expect(scheduler.playheadStep).toBe(-1);
+    played.length = 0;
+    run(0.2);
+    expect(played[0][0]).toBe(0); // and it begins again at the first step
+  });
+
   it("moves the playhead into the new length at once when the loop is made shorter", () => {
     const { scheduler, run } = setup({ steps: 16, bpm: 120 });
     scheduler.start();

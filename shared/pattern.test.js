@@ -157,6 +157,21 @@ describe("rows and state", () => {
     expect(pattern.rowState(0)).toEqual({ length: 4, on: [1], velocities: { 1: 30 } });
   });
 
+  it("ignores a negative step, which would otherwise turn on a step before the stretch pasted over", () => {
+    const pattern = createPattern(2, 8, { 0: [4] });
+    pattern.replaceRow(0, { length: 4, on: [-1, 0] }, 4); // steps 4-7: step 3 is outside them
+    expect(pattern.isOn(0, 3)).toBe(false);
+    expect(pattern.isOn(0, 4)).toBe(true);
+  });
+
+  it("ignores a negative velocity key, which would otherwise change a step before the stretch pasted over", () => {
+    const pattern = createPattern(2, 8, { 0: [3, 4] });
+    pattern.replaceRow(0, { length: 4, on: [0], velocities: { "-1": 40, 0: 50 } }, 4);
+    expect(pattern.isOn(0, 3)).toBe(true);
+    expect(pattern.velocity(0, 3)).toBe(127);
+    expect(pattern.velocity(0, 4)).toBe(50);
+  });
+
   it("copies a stretch of a row and puts it on another stretch, the rest of the row left alone", () => {
     const pattern = createPattern(2, 8, { 0: [0, 2, 5], 1: [6] }, { velocities: { 0: { 2: 40 } } });
     const bar = pattern.rowState(0, 0, 4); // steps 0-3 of pad 0
