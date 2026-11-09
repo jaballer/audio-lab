@@ -137,11 +137,15 @@ const sampleLoader = createSampleLoader({
   loadButton: $("load-sample"),
   resetButton: $("reset-sound"),
   getSelected: () => sampler.getState().selected,
-  onFile: async (index, file) => {
-    // The pad it went to is the one to show and to hit next.
-    if (await samples.load(index, file)) sampler.selectPad(index);
+  onFile: (index, file) => {
+    // The pad it was meant for is the one to show and to hit next, chosen now: loads can finish in any order.
+    sampler.selectPad(index);
+    return samples.load(index, file);
   },
-  onReset: (index) => samples.reset(index),
+  onReset: async (index) => {
+    await samples.reset(index);
+    render(); // Default Sound goes dim, even when the pad was already playing its built-in sound
+  },
 });
 const stepKeys = createStepKeys($("steps"), {
   steps: STEPS,
@@ -188,7 +192,8 @@ function render() {
   const state = sampler.getState();
   const soundName = kit.get(state.selected).name;
   padGrid.select(state.selected);
-  sampleLoader.setResetEnabled(!kit.isDefault(state.selected));
+  // A sample that is kept but could not be restored this visit can still be removed.
+  sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
   undoBtn.disabled = !state.canUndo;
   redoBtn.disabled = !state.canRedo;

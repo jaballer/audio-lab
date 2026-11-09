@@ -23,7 +23,13 @@ function fakeStore({ failWrites = false, initial = {} } = {}) {
   };
 }
 
-function setup({ stored = null, store = fakeStore(), decode = vi.fn(async () => decoded()), ...options } = {}) {
+function setup({
+  stored = null,
+  store = fakeStore(),
+  decode = vi.fn(async () => decoded()),
+  failMap = false,
+  ...options
+} = {}) {
   const kit = createKit(defaults);
   const audio = { ensure: vi.fn(() => ({ name: "ctx" })) };
   const writes = [];
@@ -34,7 +40,10 @@ function setup({ stored = null, store = fakeStore(), decode = vi.fn(async () => 
     store,
     decode,
     readMap: () => stored,
-    writeMap: (map) => writes.push(structuredClone(map)),
+    writeMap: (map) => {
+      writes.push(structuredClone(map));
+      return !failMap;
+    },
     onMessage: (text) => messages.push(text),
     ...options,
   });
@@ -151,7 +160,63 @@ describe("load", () => {
   });
 });
 
+describe("load, when storage fails in part or the cap is close", () => {
+  it("is not saved when the bytes were kept but the map could not be written", async () => {
+    const { kit, samples, store, messages } = setup({ failMap: true });
+    expect(await samples.load(0, file("a.wav"))).toBe(true);
+    expect(kit.get(0).name).toBe("a"); // it plays this visit
+    expect(messages.at(-1)).toBe("PAD 01 LOADED, NOT SAVED");
+    expect(store.delete).toHaveBeenCalledWith("sample-0"); // no orphaned bytes
+    expect(samples.isKept(0)).toBe(false);
+  });
+
+  it("still counts a sample that plays but was not saved toward the total", async () => {
+    const { samples, messages } = setup({ maxTotalBytes: 100, store: fakeStore({ failWrites: true }) });
+    expect(await samples.load(0, file("a.wav", 60))).toBe(true);
+    expect(await samples.load(1, file("b.wav", 60))).toBe(false);
+    expect(messages.at(-1)).toBe(MEMORY_FULL);
+  });
+
+  it("counts loads that overlap together, so they cannot go over the total", async () => {
+    let finish;
+    const decode = vi.fn(() => new Promise((resolve) => (finish = resolve)));
+    const { samples, messages } = setup({ maxTotalBytes: 100, decode });
+    const first = samples.load(0, file("a.wav", 60));
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    expect(await samples.load(1, file("b.wav", 60))).toBe(false);
+    expect(messages.at(-1)).toBe(MEMORY_FULL);
+    finish(decoded());
+    expect(await first).toBe(true);
+  });
+
+  it("stops counting a file that could not be decoded", async () => {
+    const decode = vi.fn().mockResolvedValueOnce({ ok: false, reason: REASONS.notAudio }).mockResolvedValue(decoded());
+    const { samples } = setup({ maxTotalBytes: 100, decode });
+    expect(await samples.load(0, file("bad.txt", 80))).toBe(false);
+    expect(await samples.load(1, file("b.wav", 80))).toBe(true);
+  });
+});
+
 describe("reset", () => {
+  it("frees the pad's share of the total", async () => {
+    const { samples } = setup({ maxTotalBytes: 100 });
+    await samples.load(0, file("a.wav", 80));
+    await samples.reset(0);
+    expect(await samples.load(1, file("b.wav", 80))).toBe(true);
+  });
+
+  it("removes a sample that is kept but was not restored, so it does not come back", async () => {
+    const stored = { version: SAMPLES_VERSION, pads: { 0: { name: "Kept", bytes: 10 } } };
+    const { kit, samples, store, writes } = setup({ stored }); // the store has no file: a failed restore
+    await samples.restore();
+    expect(kit.isDefault(0)).toBe(true);
+    expect(samples.isKept(0)).toBe(true);
+    await samples.reset(0);
+    expect(samples.isKept(0)).toBe(false);
+    expect(writes.at(-1).pads).toEqual({});
+    expect(store.delete).toHaveBeenCalledWith("sample-0");
+  });
+
   it("puts the built-in sound back, and forgets the sample", async () => {
     const { kit, samples, store, writes, messages } = setup();
     await samples.load(0, file("a.wav"));

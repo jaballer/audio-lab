@@ -58,9 +58,14 @@ export function createSamples({
   const latest = new Array(kit.length).fill(0); // a later load or reset of the same pad wins over an earlier one
   let restored = false;
 
-  const persist = () => writeMap({ version: SAMPLES_VERSION, pads });
+  // What counts toward the total cap: every pad that has a sample, kept or only playing in this visit, and
+  // a load that has been accepted but not finished. Not the same as `pads`, which is what was kept.
+  const counted = Object.fromEntries(Object.entries(pads).map(([pad, info]) => [pad, info.bytes]));
   const bytesElsewhere = (pad) =>
-    Object.entries(pads).reduce((sum, [key, info]) => (Number(key) === pad ? sum : sum + info.bytes), 0);
+    Object.entries(counted).reduce((sum, [key, bytes]) => (Number(key) === pad ? sum : sum + bytes), 0);
+
+  // Whether the map was written: the localStorage write can fail (blocked, full) when the files' bytes did not.
+  const persist = () => Boolean(writeMap({ version: SAMPLES_VERSION, pads }));
 
   function fail(pad, reason) {
     onMessage(reason === MEMORY_FULL ? reason : `PAD ${pad2(pad + 1)} ${reason}`);
@@ -78,22 +83,29 @@ export function createSamples({
     }
     if (bytesElsewhere(pad) + bytes.byteLength > maxTotalBytes) return fail(pad, MEMORY_FULL);
 
+    // Counted from here, so loads that overlap cannot together go over the cap.
+    const before = counted[pad];
+    counted[pad] = bytes.byteLength;
     const result = await decode(audio.ensure(), bytes);
-    if (ticket !== latest[pad]) return false; // another file or a reset came after this one
-    if (!result.ok) return fail(pad, result.reason);
+    if (ticket !== latest[pad]) return false; // another file or a reset came after this one, and has its own count
+    if (!result.ok) {
+      if (before === undefined) delete counted[pad];
+      else counted[pad] = before;
+      return fail(pad, result.reason);
+    }
 
     const name = sampleName(file.name);
     kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer }));
     touched.add(pad);
 
-    const kept = await store.set(keyFor(pad), bytes);
+    const bytesKept = await store.set(keyFor(pad), bytes);
     if (ticket !== latest[pad]) return true; // it played, but something newer has taken the pad since
-    if (kept) {
-      pads[pad] = { name, bytes: bytes.byteLength };
-      persist();
+    pads[pad] = { name, bytes: bytes.byteLength };
+    if (bytesKept && persist()) {
       onMessage(`PAD ${pad2(pad + 1)} SAMPLE LOADED`);
     } else {
-      // Not kept, so what was kept before for this pad is not what the pad plays any more.
+      // Not kept, in the files or in the map, so what was kept before for this pad is not what the pad plays
+      // any more, and bytes with no map entry would only take up room.
       delete pads[pad];
       persist();
       store.delete(keyFor(pad));
@@ -105,9 +117,10 @@ export function createSamples({
   async function reset(pad) {
     latest[pad]++;
     touched.add(pad);
-    kit.reset(pad);
     delete pads[pad];
+    delete counted[pad];
     persist();
+    kit.reset(pad);
     await store.delete(keyFor(pad));
     onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
   }
@@ -131,5 +144,8 @@ export function createSamples({
     }
   }
 
-  return { load, reset, restore };
+  // Is there a sample kept for this pad, whether or not it is playing (a restore that failed leaves the entry)?
+  const isKept = (pad) => pad in pads;
+
+  return { load, reset, restore, isKept };
 }
