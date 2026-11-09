@@ -29,12 +29,16 @@ export const LEAD_SECONDS = 0.01;
 const BUILT_IN_TAIL_SECONDS = 1.5; // the longest of the built-in sounds is the crash, at about 1.25 s
 export const MAX_TAIL_SECONDS = 15; // a 10 s sample played an octave down is 20 s: long enough is enough
 
-// The steps that are on, as { step, row, velocity }, in the order they sound (and per step by pad).
-export function hitsOf(sequence) {
+// The steps that are on, as { step, row, velocity }, in the order they sound (and per step by pad). Only the steps of
+// the bars the sequence has: a sequence made shorter keeps the steps of the bars it dropped (for when they come
+// back), and the page does not play them.
+export function hitsOf(sequence, stepsPerBar) {
   const hits = [];
+  const length = sequence.bars * stepsPerBar;
   for (const [rowKey, on] of Object.entries(sequence.pattern)) {
     const row = Number(rowKey);
     for (const step of on) {
+      if (step >= length) continue;
       hits.push({ step, row, velocity: sequence.velocities?.[rowKey]?.[step] ?? FULL_VELOCITY });
     }
   }
@@ -64,7 +68,7 @@ export async function renderSequence({
   createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
 }) {
   const sequence = song.sequences[song.current];
-  const hits = hitsOf(sequence);
+  const hits = hitsOf(sequence, stepsPerBar);
   const stepLength = stepSeconds(song.bpm);
   const playing = sequence.bars * stepsPerBar * stepLength;
   const frames = Math.ceil((LEAD_SECONDS + playing + tailSeconds(hits, kit)) * sampleRate);
@@ -127,8 +131,8 @@ export function encodeWav(channels, sampleRate) {
 
 export const exportName = (song) => `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm.wav`;
 
-// Is there anything in the sequence showing to export?
-export const hasSteps = (song) => Object.values(song.sequences[song.current].pattern).some((on) => on.length > 0);
+// Is there anything in the sequence showing to export (in the bars it has)?
+export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.current], stepsPerBar).length > 0;
 
 // What the Export button does: checks there is something to export, renders it, and hands the file to `save`
 // (shared/download.js). Says how it went on the LCD through `onMessage`. Whether a file was saved.
@@ -145,7 +149,7 @@ export async function exportSequence({
     onMessage("EXPORT NOT SUPPORTED");
     return false;
   }
-  if (!hasSteps(song)) {
+  if (!hasSteps(song, stepsPerBar)) {
     onMessage("NOTHING TO EXPORT");
     return false;
   }
@@ -156,7 +160,8 @@ export async function exportSequence({
     save(new Blob([encodeWav(audio.channels, audio.sampleRate)], { type: "audio/wav" }), name);
     onMessage(`EXPORTED ${name}`);
     return true;
-  } catch {
+  } catch (error) {
+    console.error("Export failed:", error);
     onMessage("EXPORT FAILED");
     return false;
   }

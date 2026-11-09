@@ -29,7 +29,7 @@ const songOf = (seq, extra = {}) => ({ bpm: 120, volume: 80, current: 0, sequenc
 
 describe("hitsOf", () => {
   it("lists the steps that are on, in the order they sound, pads in order within a step, with their velocity", () => {
-    const hits = hitsOf(sequence({ 2: [4, 0], 0: [4] }, { 2: { 4: 50 } }));
+    const hits = hitsOf(sequence({ 2: [4, 0], 0: [4] }, { 2: { 4: 50 } }), 16);
     expect(hits).toEqual([
       { step: 0, row: 2, velocity: 127 },
       { step: 4, row: 0, velocity: 127 },
@@ -37,19 +37,29 @@ describe("hitsOf", () => {
     ]);
   });
 
+  it("leaves out the steps of bars the sequence no longer has, which it keeps for when they come back", () => {
+    const shortened = sequence({ 0: [3, 20, 40], 1: [16] }, {}, 1); // one bar of 16 steps
+    expect(hitsOf(shortened, 16).map((hit) => hit.step)).toEqual([3]);
+    expect(hitsOf({ ...shortened, bars: 2 }, 16).map((hit) => hit.step)).toEqual([3, 16, 20]);
+  });
+
   it("is empty for an empty sequence", () => {
-    expect(hitsOf(sequence({}))).toEqual([]);
+    expect(hitsOf(sequence({}), 16)).toEqual([]);
   });
 });
 
 describe("hasSteps", () => {
   it("is whether the sequence showing has anything on", () => {
-    expect(hasSteps(songOf(sequence({})))).toBe(false);
-    expect(hasSteps(songOf(sequence({ 0: [] })))).toBe(false);
-    expect(hasSteps(songOf(sequence({ 0: [3] })))).toBe(true);
-    expect(hasSteps({ ...songOf(sequence({})), sequences: [sequence({}), sequence({ 1: [0] })], current: 1 })).toBe(
-      true,
-    );
+    expect(hasSteps(songOf(sequence({})), 16)).toBe(false);
+    expect(hasSteps(songOf(sequence({ 0: [] })), 16)).toBe(false);
+    expect(hasSteps(songOf(sequence({ 0: [3] })), 16)).toBe(true);
+    const second = { ...songOf(sequence({})), sequences: [sequence({}), sequence({ 1: [0] })], current: 1 };
+    expect(hasSteps(second, 16)).toBe(true);
+  });
+
+  it("does not count steps in bars the sequence does not have", () => {
+    expect(hasSteps(songOf(sequence({ 0: [20] }, {}, 1)), 16)).toBe(false);
+    expect(hasSteps(songOf(sequence({ 0: [20] }, {}, 2)), 16)).toBe(true);
   });
 });
 
@@ -149,6 +159,34 @@ describe("renderSequence", () => {
     const master = offline.nodes[0];
     expect(master.gain.value).toBe(0.5);
     expect(master.connect).toHaveBeenCalledWith(offline.destination); // no waveshaper in the stand-in: straight out
+  });
+
+  it("runs the master through the clipper, and the clipper to the speakers, when the context can make one", async () => {
+    const { kit, offline } = setup(sequence({ 0: [0] }));
+    const base = offline.createContext;
+    const shaper = { curve: null, oversample: "2x", connect: vi.fn() };
+    const render = () =>
+      renderSequence({
+        song: songOf(sequence({ 0: [0] })),
+        kit,
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: () => shaper }),
+      });
+    await render();
+    const [master, half] = offline.nodes;
+    expect(master.connect).toHaveBeenCalledWith(half);
+    expect(half.connect).toHaveBeenCalledWith(shaper);
+    expect(shaper.connect).toHaveBeenCalledWith(offline.destination);
+    expect(master.connect).not.toHaveBeenCalledWith(offline.destination);
+  });
+
+  it("does not play steps in bars the sequence does not have, and the tail ignores pads used only there", async () => {
+    const sounds = [sound("a"), sample(9)];
+    const { offline, render } = setup(sequence({ 0: [0], 1: [20] }, {}, 1), {}, sounds);
+    await render();
+    expect(sounds[1].play).not.toHaveBeenCalled();
+    expect(offline.made.frames).toBe(Math.ceil((LEAD_SECONDS + 2 + 1.5) * 1000)); // 2 s of steps and the built-in tail
   });
 
   it("gives a quieter step a gain stage in front of its pad's voice", async () => {
