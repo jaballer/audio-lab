@@ -21,6 +21,7 @@
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
+//   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
 //   sampler.start()              // from the first step, even if it is already playing
@@ -29,16 +30,16 @@
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn }
+//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
-//   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern }] }: what song.js saves
+//   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern, velocities }] }: what song.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
 
-import { playSound } from "../../shared/sounds.js";
+import { playSound, withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
-import { createPattern } from "../../shared/pattern.js";
+import { FULL_VELOCITY, createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { createTapTempo, nearestStep } from "../../shared/tempo.js";
 import { STARTER_BEAT } from "./starter-beat.js";
@@ -77,7 +78,10 @@ export function createSampler({
     const initial = saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {};
     return {
       bars: Math.min(maxBars, saved?.bars ?? 1),
-      pattern: createPattern(sounds.length, steps * maxBars, initial, { onChange: onSongChange }),
+      pattern: createPattern(sounds.length, steps * maxBars, initial, {
+        onChange: onSongChange,
+        velocities: saved?.velocities,
+      }),
     };
   });
   let pattern = slots[current].pattern;
@@ -101,7 +105,7 @@ export function createSampler({
       bus.connect(master);
       sounds.forEach((sound, row) => {
         if (pattern.isOn(row, step) && !heard.has(row)) {
-          sound.play(ctx, bus, time);
+          sound.play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
           rows.push(row);
         }
       });
@@ -124,12 +128,12 @@ export function createSampler({
   function triggerPad(index, velocity = 1) {
     playSound(audio, sounds[index], velocity);
     onPadHit(index);
-    if (recording && scheduler.playing) recordHit(index);
+    if (recording && scheduler.playing) recordHit(index, velocity);
     selectPad(index);
   }
 
   // Live recording: quantize the hit to the nearest 16th step.
-  function recordHit(index) {
+  function recordHit(index, velocity) {
     const step = nearestStep({
       now: clock.now(),
       playheadTime: scheduler.playheadTime,
@@ -138,7 +142,7 @@ export function createSampler({
       steps: totalSteps(),
     });
     if (step < 0) return;
-    pattern.set(index, step, true);
+    pattern.set(index, step, true, Math.round(velocity * FULL_VELOCITY)); // a hit played again over a step replaces its velocity
     scheduler.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
   }
 
@@ -164,6 +168,15 @@ export function createSampler({
 
   function toggleStep(step) {
     pattern.toggle(selected, page * steps + step);
+    onChange();
+  }
+
+  // The one place a step's velocity (1-127) is set from outside the pattern. Nothing happens for a step that is off.
+  function setStepVelocity(step, value) {
+    const index = page * steps + step;
+    if (!pattern.isOn(selected, index)) return;
+    pattern.setVelocity(selected, index, value);
+    onMessage(`VEL ${pattern.velocity(selected, index)}`);
     onChange();
   }
 
@@ -293,6 +306,7 @@ export function createSampler({
     selectPad,
     triggerPad,
     toggleStep,
+    setStepVelocity,
     setPage,
     setBars,
     setSequence,
@@ -325,13 +339,19 @@ export function createSampler({
       // The step number in the whole sequence, for the LCD.
       playheadPosition: scheduler.playheadStep,
       stepsOn: pattern.row(selected).slice(page * steps, (page + 1) * steps),
+      // Their velocities, 1-127 (a step that is off reads as full).
+      stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
     }),
 
     getSong: () => ({
       bpm: scheduler.bpm,
       volume,
       current,
-      sequences: slots.map((slot) => ({ bars: slot.bars, pattern: slot.pattern.snapshot() })),
+      sequences: slots.map((slot) => ({
+        bars: slot.bars,
+        pattern: slot.pattern.snapshot(),
+        velocities: slot.pattern.velocitySnapshot(),
+      })),
     }),
   };
 }

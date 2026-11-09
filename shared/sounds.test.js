@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SOUNDS, playSound } from "./sounds.js";
+import { SOUNDS, playSound, withVelocity } from "./sounds.js";
 
 // How a sound sounds can only be judged by ear. What can be checked here is that
 // each one schedules cleanly: starts nothing before its time, stops everything
@@ -142,6 +142,38 @@ describe("SOUNDS", () => {
     snare.play(second.ctx, second.out, WHEN);
     expect(second.ctx.createBuffer).toHaveBeenCalledTimes(1);
     expect(second.ctx.createBuffer.mock.calls[0][2]).toBe(22050);
+  });
+});
+
+describe("withVelocity", () => {
+  const ctxWithGains = () => {
+    const gains = [];
+    const ctx = {
+      createGain: () => {
+        const gain = { gain: { value: 1 }, connect: vi.fn() };
+        gains.push(gain);
+        return gain;
+      },
+    };
+    return { ctx, gains };
+  };
+
+  it("hands back the output itself at full velocity, with no extra node", () => {
+    const { ctx, gains } = ctxWithGains();
+    const out = { name: "out" };
+    expect(withVelocity(ctx, out)).toBe(out);
+    expect(withVelocity(ctx, out, 1)).toBe(out);
+    expect(gains).toHaveLength(0);
+  });
+
+  it("puts a gain stage in front of the output for a softer hit, and never goes fully silent", () => {
+    const { ctx, gains } = ctxWithGains();
+    const out = { name: "out" };
+    const stage = withVelocity(ctx, out, 0.25);
+    expect(stage).toBe(gains[0]);
+    expect(stage.gain.value).toBe(0.25);
+    expect(stage.connect).toHaveBeenCalledWith(out);
+    expect(withVelocity(ctx, out, 0).gain.value).toBe(0.05);
   });
 });
 

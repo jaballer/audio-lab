@@ -7,6 +7,7 @@
 //   saver.schedule();   // something changed: save once things settle
 //   saver.flush();      // about to leave the page: save now if a change is waiting
 
+import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
 import { clampBpm } from "../../shared/tempo.js";
 
 // Still named after the project's old name: changing it would orphan every beat
@@ -16,7 +17,7 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 2;
+export const SONG_VERSION = 3;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
 // field itself is set by upgradeSong.
@@ -24,12 +25,15 @@ const MIGRATIONS = {
   // Version 1 had one pattern; version 2 has a list of sequences, each with its own pattern and length.
   // (`bars` is read only so a pattern longer than one bar is not lost; the page did not save it at first.)
   1: ({ bars, pattern, ...rest }) => ({ ...rest, current: 0, sequences: [{ bars, pattern }] }),
+  // Version 3 adds `velocities` to each sequence. A version 2 song has none, which reads as every step at full velocity.
+  2: (song) => song,
 };
 
 const VOLUME_MAX = 100;
 
-// `sequences` is a list of { bars, pattern }, where `pattern` is pattern.snapshot():
-// { pad row: [steps that are on] }. `current` is the index of the one that was showing.
+// `sequences` is a list of { bars, pattern, velocities }, where `pattern` is pattern.snapshot():
+// { pad row: [steps that are on] }, and `velocities` is pattern.velocitySnapshot(): { pad row: { step: 1-127 } }
+// for the steps that are not at full velocity. `current` is the index of the one that was showing.
 export const serializeSong = ({ bpm, volume, current, sequences }) => ({
   version: SONG_VERSION,
   bpm,
@@ -51,6 +55,25 @@ function cleanPattern(pattern, { rows, steps }) {
     if (!isIndex(row, rows) || String(row) !== key || !Array.isArray(on)) continue;
     const valid = [...new Set(on.filter((step) => isIndex(step, steps)))].sort((a, b) => a - b);
     if (valid.length) clean[row] = valid;
+  }
+  return clean;
+}
+
+// Keep the velocities of steps that are on (in the cleaned `pattern`), as whole numbers from MIN_VELOCITY to
+// FULL_VELOCITY. Full is what a step has with no entry, so it is not kept.
+function cleanVelocities(velocities, pattern) {
+  const clean = {};
+  if (!isObject(velocities)) return clean;
+  for (const [rowKey, byStep] of Object.entries(velocities)) {
+    // An own row only: stored JSON can name a row `__proto__` or `constructor`, which `pattern[rowKey]` would find.
+    if (!isObject(byStep) || !Object.hasOwn(pattern, rowKey)) continue;
+    const kept = {};
+    for (const [stepKey, value] of Object.entries(byStep)) {
+      if (!pattern[rowKey].includes(Number(stepKey)) || !Number.isFinite(value)) continue;
+      const velocity = Math.min(FULL_VELOCITY, Math.max(MIN_VELOCITY, Math.round(value)));
+      if (velocity !== FULL_VELOCITY) kept[stepKey] = velocity;
+    }
+    if (Object.keys(kept).length) clean[rowKey] = kept;
   }
   return clean;
 }
@@ -81,11 +104,13 @@ export function parseSong(stored, { rows, steps, maxBars = 1, sequenceCount = 1 
   // Always `sequenceCount` of them: ones the song does not have are empty, and extra ones are dropped.
   const sequences = Array.from({ length: sequenceCount }, (_, i) => {
     const saved = raw.sequences[i];
-    if (!saved) return { bars: 1, pattern: {} };
+    if (!saved) return { bars: 1, pattern: {}, velocities: {} };
+    const pattern = cleanPattern(saved.pattern, { rows, steps: steps * maxBars });
     return {
       // Not every saved sequence says how long it is (a version 1 song did not): one bar, as it was.
       bars: Number.isInteger(saved.bars) ? Math.min(maxBars, Math.max(1, saved.bars)) : 1,
-      pattern: cleanPattern(saved.pattern, { rows, steps: steps * maxBars }),
+      pattern,
+      velocities: cleanVelocities(saved.velocities, pattern),
     };
   });
 

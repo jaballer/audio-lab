@@ -229,17 +229,20 @@ export const SOUNDS = [
 // A hit never goes fully silent: a velocity of 0 would otherwise do nothing at all.
 const MIN_GAIN = 0.05;
 
-// Plays one sound now through the shared audio engine. `velocity` is 0-1; a quieter hit plays
-// through its own gain stage, which a full-velocity hit skips.
+// Where a sound at `velocity` (0-1) should be connected so that it sounds that loud: `out` itself at full
+// velocity, otherwise a gain stage of its own in front of `out`. Live hits and sequenced steps share this.
+export function withVelocity(ctx, out, velocity = 1) {
+  if (velocity >= 1) return out;
+  const stage = ctx.createGain();
+  stage.gain.value = Math.max(velocity, MIN_GAIN);
+  stage.connect(out);
+  return stage;
+}
+
+// Plays one sound now through the shared audio engine. `velocity` is 0-1.
 export function playSound(audio, sound, velocity = 1) {
   // Dropped while the power is off: it would be muted, but a long tail would still be playing at power on.
   if (!audio.powered) return;
   const ctx = audio.ensure();
-  let out = audio.master;
-  if (velocity < 1) {
-    out = ctx.createGain();
-    out.gain.value = Math.max(velocity, MIN_GAIN);
-    out.connect(audio.master);
-  }
-  sound.play(ctx, out, ctx.currentTime);
+  sound.play(ctx, withVelocity(ctx, audio.master, velocity), ctx.currentTime);
 }

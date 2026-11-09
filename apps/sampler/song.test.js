@@ -3,12 +3,17 @@ import { STARTER_BEAT } from "./starter-beat.js";
 import { SONG_VERSION, createSongSaver, parseSong, serializeSong, upgradeSong } from "./song.js";
 
 const SHAPE = { rows: 16, steps: 16, maxBars: 8, sequenceCount: 4 };
-const empty = { bars: 1, pattern: {} };
+const empty = { bars: 1, pattern: {}, velocities: {} };
 const song = {
   bpm: 96.5,
   volume: 60,
   current: 1,
-  sequences: [{ bars: 2, pattern: { 0: [0, 4, 8, 12], 3: [2] } }, { bars: 4, pattern: { 5: [1] } }, empty, empty],
+  sequences: [
+    { bars: 2, pattern: { 0: [0, 4, 8, 12], 3: [2] }, velocities: { 0: { 4: 90, 12: 20 } } },
+    { bars: 4, pattern: { 5: [1] }, velocities: {} },
+    empty,
+    empty,
+  ],
 };
 
 // What storage does to a value: it goes out as JSON text and comes back as a copy.
@@ -249,6 +254,49 @@ describe("upgradeSong", () => {
   });
 });
 
+describe("velocities", () => {
+  const withVelocities = (velocities) => withFirst({ velocities });
+  const velocitiesOf = (raw) => parse(raw).sequences[0].velocities;
+
+  it("come back as they were saved", () => {
+    expect(velocitiesOf(serializeSong(song))).toEqual({ 0: { 4: 90, 12: 20 } });
+  });
+
+  it("are brought into 1-127 and rounded, and full ones are not kept", () => {
+    expect(velocitiesOf(withVelocities({ 0: { 0: 0, 4: 500, 8: 63.6, 12: 127 } }))).toEqual({ 0: { 0: 1, 8: 64 } });
+  });
+
+  it("are dropped for steps that are off, pads that are not there and values that are not numbers", () => {
+    const raw = withVelocities({ 0: { 1: 50, 4: "loud", 8: null }, 7: { 0: 50 }, x: { 0: 50 }, 3: 50, 4: [60] });
+    expect(velocitiesOf(raw)).toEqual({});
+  });
+
+  it("ignore a row named like an inherited property instead of throwing", () => {
+    // JSON.parse makes `__proto__` an own key, as stored data would have it.
+    const named = JSON.parse('{"__proto__": {"0": 50}, "constructor": {"0": 50}, "toString": {"0": 50}}');
+    expect(velocitiesOf(withVelocities(named))).toEqual({});
+  });
+
+  it("are empty when a sequence has none, or has them in the wrong shape", () => {
+    expect(velocitiesOf(withFirst({ velocities: undefined }))).toEqual({});
+    expect(velocitiesOf(withVelocities([1, 2]))).toEqual({});
+    expect(velocitiesOf(withVelocities("loud"))).toEqual({});
+  });
+});
+
+describe("songs saved by version 2", () => {
+  it("load with every step at full velocity", () => {
+    const v2 = {
+      version: 2,
+      bpm: 100,
+      volume: 50,
+      current: 0,
+      sequences: [{ bars: 2, pattern: { 0: [0, 4] } }],
+    };
+    expect(parse(v2).sequences[0]).toEqual({ bars: 2, pattern: { 0: [0, 4] }, velocities: {} });
+  });
+});
+
 describe("songs saved by version 1", () => {
   const v1 = { version: 1, bpm: 120, volume: 70, pattern: { 0: [0, 8], 2: [4] } };
 
@@ -257,7 +305,7 @@ describe("songs saved by version 1", () => {
       bpm: 120,
       volume: 70,
       current: 0,
-      sequences: [{ bars: 1, pattern: { 0: [0, 8], 2: [4] } }, empty, empty, empty],
+      sequences: [{ bars: 1, pattern: { 0: [0, 8], 2: [4] }, velocities: {} }, empty, empty, empty],
     });
   });
 
