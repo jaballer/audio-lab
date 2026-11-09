@@ -8,7 +8,7 @@
 // copy at a time. The decoded buffer is shared; each hit makes a source of its own (they are
 // single-use).
 
-import { envelopeShape } from "./envelope.js";
+import { envelopeShape } from "./pad-envelope.js";
 import { FULL_TRIM, clampTrim, isFullTrim, parseTrim, trimWindow } from "./trim.js";
 import { computePeaks } from "./waveform.js";
 
@@ -125,7 +125,7 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
       return peaks;
     },
     // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
-    // `options.envelope` is { attack, decay, sustain, release } (envelope.js): a gain stage of its own, ramped through
+    // `options.envelope` is { attack, decay, sustain, release } (pad-envelope.js): a gain stage of its own, ramped through
     // the shape over the time the sample is heard for, between the sample and `out`; left out, there is no such stage.
     play(ctx, out, t, { rate = 1, envelope = null } = {}) {
       const source = ctx.createBufferSource();

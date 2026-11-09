@@ -1092,3 +1092,44 @@ describe("when the saved map cannot be read at the time of a write", () => {
     expect(box.map.pads[0]).toEqual({ name: "a", bytes: 100, trim: { start: 0.1, end: 0.9 } });
   });
 });
+
+describe("a sample's envelope", () => {
+  const withEnvelope = (kit) => {
+    kit.setSetting(0, "attack", 30);
+    kit.setSetting(0, "decay", 20);
+    kit.setSetting(0, "sustain", 40);
+    kit.setSetting(0, "release", 60);
+  };
+  const flat = { attack: 0, decay: 0, sustain: 100, release: 0 };
+  const envelopeOf = (kit) => {
+    const { attack, decay, sustain, release } = kit.settings(0);
+    return { attack, decay, sustain, release };
+  };
+
+  it("starts flat when a sample is loaded, as the pitch does, and the pad's gain stays", async () => {
+    const { samples, kit } = setup();
+    kit.setSetting(0, "gain", -6);
+    withEnvelope(kit);
+    await samples.load(0, file("a.wav"));
+    expect(envelopeOf(kit)).toEqual(flat);
+    expect(kit.settings(0).gain).toBe(-6);
+  });
+
+  it("goes with the sample: Default Sound leaves none to come back with the next one", async () => {
+    const { samples, kit } = setup();
+    await samples.load(0, file("a.wav"));
+    withEnvelope(kit);
+    await samples.reset(0);
+    expect(envelopeOf(kit)).toEqual(flat);
+    await samples.load(0, file("b.wav"));
+    expect(envelopeOf(kit)).toEqual(flat);
+  });
+
+  it("is left alone when kept samples are restored at the start of a visit", async () => {
+    const stored = { version: SAMPLES_VERSION, pads: { 0: { name: "Kick", bytes: 10 } } };
+    const { samples, kit } = setup({ stored, store: fakeStore({ initial: { "sample-0": new ArrayBuffer(10) } }) });
+    withEnvelope(kit); // as saved with the song
+    await samples.restore();
+    expect(kit.settings(0)).toMatchObject({ attack: 30, decay: 20, sustain: 40, release: 60 });
+  });
+});

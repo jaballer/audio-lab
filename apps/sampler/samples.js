@@ -21,6 +21,7 @@
 // Whatever storage does, the sample plays in this visit: a failed save only means it is gone next time.
 
 import { formatSpace } from "../../shared/storage-budget.js";
+import { DEFAULT_SETTINGS, SAMPLE_SETTING_NAMES } from "./pad-settings.js";
 import { isFullTrim, parseTrim } from "./trim.js";
 import { pad2, sampleName } from "./format.js";
 import {
@@ -126,6 +127,11 @@ export function createSamples({
     return Boolean(writeMap({ version: SAMPLES_VERSION, pads: latest }));
   }
 
+  // The settings only a sample has (pad-settings.js: pitch and the envelope) go with the sample.
+  function resetSampleSettings(pad) {
+    for (const name of SAMPLE_SETTING_NAMES) kit.setSetting(pad, name, DEFAULT_SETTINGS[name]);
+  }
+
   function fail(pad, reason) {
     onMessage(reason === MEMORY_FULL ? reason : `PAD ${pad2(pad + 1)} ${reason}`);
     return false;
@@ -168,7 +174,7 @@ export function createSamples({
       const sound = createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength });
       installed[pad] = request;
       kit.set(pad, sound);
-      kit.setSetting(pad, "pitch", 0); // pitch tunes a sample, so a new one starts at its own pitch (gain is the pad's)
+      resetSampleSettings(pad); // pitch and envelope shape a sample, so a new one starts as it is (gain is the pad's)
       touched.add(pad);
       held[pad] = bytes.byteLength;
 
@@ -201,7 +207,7 @@ export function createSamples({
     owners.delete(pad);
     persist(pad);
     kit.reset(pad);
-    kit.setSetting(pad, "pitch", 0); // the built-in sound cannot be pitched, so no pitch is left behind to reappear
+    resetSampleSettings(pad); // the built-in sound has none of them, so none is left behind to reappear with the next sample
     await store.delete(keyFor(pad));
     onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
   }

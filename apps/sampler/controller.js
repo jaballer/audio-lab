@@ -22,7 +22,7 @@
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
-//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB) or pitch (semitones), saved with the song
+//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke or colour, saved with the song
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
@@ -222,7 +222,7 @@ export function createSampler({
     onChange();
   }
 
-  // The one place a pad's setting (gain, pitch, choke group, colour) changes: for the selected pad, saved with the song. The kit
+  // The one place a pad's setting (gain, pitch, envelope, choke group, colour) changes: for the selected pad, saved with the song. The kit
   // clamps the value and tells the views.
   function setPadSetting(name, value) {
     kit.setSetting(selected, name, value);
@@ -349,7 +349,7 @@ export function createSampler({
   }
 
   // The kit changed: `what` is "sound" (a sample was loaded, restored or removed) or "setting" (a pad's gain, pitch,
-  // choke group or colour). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
+  // envelope, choke group or colour). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
   // the ones that have not started are built again from the new ones. A setting does not rebuild them: the next
   // step built picks it up, at most the lookahead (about 120 ms) later, and rebuilding for every tick of a slider
   // made steps late. It is saved, though, for a setting changed from elsewhere (a sample's pitch cleared).
@@ -475,7 +475,7 @@ export function createSampler({
       canRedo: history.canRedo,
       // The velocities of the steps shown, 1-127 (a step that is off reads as full).
       stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
-      padSettings: kit.settings(selected), // { gain, pitch, choke, color } of the selected pad
+      padSettings: kit.settings(selected), // the selected pad's settings (pad-settings.js)
     }),
 
     getSong: () => ({

@@ -13,7 +13,8 @@
 //
 // A stage that is not set takes no time: no attack starts at full, no release leaves the end as it is, a sustain of 1
 // leaves nothing to decay to. Stages that run into each other are cut where the next begins (a release that starts
-// before the decay has finished cuts the decay short, from the level it had reached).
+// before the decay has finished cuts the decay short, from the level it had reached), except that the release never
+// begins before the attack has reached full, so a release as long as the sample still plays it, rising and falling.
 
 const MIN_DECAY = 0.001; // a decay of 0 with a sustain below 1 is a step down, which is a click; this is a fast ramp
 
@@ -36,7 +37,10 @@ export function envelopeShape({ attack = 0, decay = 0, sustain = 1, release = 0 
   if (sustain < 1) points.push([attack + Math.max(decay, MIN_DECAY), sustain]);
   points.push([Infinity, points.at(-1)[1]]); // the sustain level, held to wherever the shape is cut
 
-  const cutAt = release > 0 ? Math.max(0, length - release) : length;
+  // The release starts `release` before the end, but not before the attack has reached its peak (when the sample is
+  // long enough for that): otherwise a release as long as the sample would cut the attack at silence and play nothing.
+  const peakAt = attack > 0 && attack < length ? attack : 0;
+  const cutAt = release > 0 ? Math.max(length - release, peakAt) : length;
   const shape = [];
   for (const [time, level] of points) {
     if (time >= cutAt) break;

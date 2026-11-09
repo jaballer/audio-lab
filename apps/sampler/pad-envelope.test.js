@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { envelopeShape, isFlat } from "./envelope.js";
+import { envelopeShape, isFlat } from "./pad-envelope.js";
 
 const close = (shape) => shape.map(([t, v]) => [Number(t.toFixed(6)), Number(v.toFixed(6))]);
 
@@ -58,13 +58,8 @@ describe("envelopeShape", () => {
   });
 
   it("cuts the decay short where the release begins, from the level it had reached", () => {
-    // attack 1 s up, decay 1 s down to 0.2, but the release starts at 0.5 s (2 - 1.5): in the middle of the attack
-    expect(close(envelopeShape({ attack: 1, decay: 1, sustain: 0.2, release: 1.5 }, 2))).toEqual([
-      [0, 0],
-      [0.5, 0.5],
-      [2, 0],
-    ]);
-    // the release starts in the decay (at 1.5 s), when it has fallen a quarter of the way from 1 to 0.2
+    // the attack is 0.2 s and the decay 1 s down to 0.2; the release starts at 1.5 s (2 - 0.5), in the middle of the decay,
+    // a third of the way down from 1 to 0.2 (it has fallen 0.8 * 0.3 / 1 of the way)... which is the level at 1.5 s
     const shape = envelopeShape({ attack: 1, decay: 1, sustain: 0.2, release: 0.5 }, 2);
     expect(close(shape)).toEqual([
       [0, 0],
@@ -74,11 +69,39 @@ describe("envelopeShape", () => {
     ]);
   });
 
+  it("does not begin the release before the attack has reached full, when the sample is long enough for that", () => {
+    // a release of 1.5 s on 2 s would start at 0.5 s, in the middle of the 1 s attack: it starts at the peak instead
+    expect(close(envelopeShape({ attack: 1, decay: 1, sustain: 0.2, release: 1.5 }, 2))).toEqual([
+      [0, 0],
+      [1, 1],
+      [2, 0],
+    ]);
+  });
+
+  it("plays a sample as long as its release (or shorter) as a rise to full and a fall to silence, not as silence", () => {
+    const shape = envelopeShape({ attack: 0.1, release: 1 }, 0.5);
+    expect(close(shape)).toEqual([
+      [0, 0],
+      [0.1, 1],
+      [0.5, 0],
+    ]);
+    expect(Math.max(...shape.map(([, level]) => level))).toBe(1);
+  });
+
   it("ends a sample too short for its attack part-way up, without a release to finish it", () => {
     const shape = envelopeShape({ attack: 3 }, 2);
     expect(close(shape)).toEqual([
       [0, 0],
       [2, 0.666667],
+    ]);
+  });
+
+  it("still fades out at the end when the attack is longer than the sample, from where the attack had got to", () => {
+    // the attack would take 3 s on a 2 s sample: a release of 0.5 s starts at 1.5 s, when it is half way up
+    expect(close(envelopeShape({ attack: 3, release: 0.5 }, 2))).toEqual([
+      [0, 0],
+      [1.5, 0.5],
+      [2, 0],
     ]);
   });
 

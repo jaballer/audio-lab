@@ -26,9 +26,10 @@
 export const CHOKE_TIME_CONSTANT = 0.004; // seconds: fast, and still a fade
 const CLEAN_UP_AFTER_S = 0.1; // after the cut, once it is far below hearing
 
-// How fast a cut fades: the pad's release spread over a few time constants (so it is nearly silent by the end of it),
+// How fast a cut fades: the pad's release spread over seven time constants (so it is about 60 dB down at the end of it,
+// and the node is disconnected later still, with no step to hear),
 // and never faster than the short fade every cut has.
-const RELEASE_CONSTANTS = 4;
+const RELEASE_CONSTANTS = 7;
 const fadeConstant = (voice) => Math.max(CHOKE_TIME_CONSTANT, voice.release / RELEASE_CONSTANTS);
 
 const cutTime = (voice) => (voice.cuts.length ? Math.min(...voice.cuts.map((cut) => cut.time)) : undefined);

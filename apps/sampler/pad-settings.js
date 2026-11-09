@@ -19,7 +19,7 @@
 //   padEnvelope(settings)                // { attack, decay, sustain, release } in seconds and 0-1, or null when flat
 //   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke, color, attack, decay, sustain, release } } for the pads that differ from the default
 
-import { isFlat } from "./envelope.js";
+import { isFlat } from "./pad-envelope.js";
 import { COLOR_COUNT, padColorName } from "./pad-colors.js";
 
 export const SETTINGS = {
@@ -60,9 +60,16 @@ export const gainToLinear = (db) => 10 ** (db / 20);
 // Twelve semitones to the octave: each is a factor of the twelfth root of two.
 export const pitchToRate = (semitones) => 2 ** (semitones / 12);
 
+// Below a millisecond is no time: it is shown as 0 MS and is no envelope at all, so a pad with the slider just off its end
+// does not get a stage for nothing.
+const MIN_ENVELOPE_SECONDS = 0.001;
+
 // The time an envelope setting stands for, in seconds: 0 at position 0, then the cube of the position's share of the
 // way to the setting's longest time.
-export const envelopeSeconds = (name, position) => (position <= 0 ? 0 : SETTINGS[name].seconds * (position / 100) ** 3);
+export const envelopeSeconds = (name, position) => {
+  const seconds = position <= 0 ? 0 : SETTINGS[name].seconds * (position / 100) ** 3;
+  return seconds < MIN_ENVELOPE_SECONDS ? 0 : seconds;
+};
 
 // A time for the display: "5 MS", "250 MS", "1.20 S".
 const formatSeconds = (seconds) => (seconds < 1 ? `${Math.round(seconds * 1000)} MS` : `${seconds.toFixed(2)} S`);
@@ -91,7 +98,7 @@ export function formatSetting(name, value) {
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// What was stored, as { pad: { gain, pitch, choke, color } } for the pads that exist and have something other than the
+// What was stored, as { pad: { gain, pitch, envelope, choke, color } } for the pads that exist and have something other than the
 // defaults. Values are brought into range; anything unusable is left out.
 export function parsePadSettings(stored, padCount) {
   const pads = {};

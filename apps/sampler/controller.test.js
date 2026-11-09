@@ -1217,7 +1217,7 @@ describe("a pad's release", () => {
     const [, , , options] = sounds[0].play.mock.calls[0];
     expect(options.envelope.release).toBe(5);
     const firstVoice = audio.ctx.createGain.mock.results[0].value; // the first hit's voice
-    expect(firstVoice.gain.setTargetAtTime).toHaveBeenCalledWith(0, 2, 1.25); // 5 s over four time constants
+    expect(firstVoice.gain.setTargetAtTime).toHaveBeenCalledWith(0, 2, 5 / 7); // 5 s over seven time constants
   });
 
   it("is not used for a pad that plays a built-in sound: it keeps the short fade", () => {

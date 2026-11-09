@@ -180,6 +180,14 @@ describe("the envelope settings", () => {
     expect(envelopeSeconds("attack", 50)).toBeLessThan(envelopeSeconds("attack", 100) / 2);
   });
 
+  it("count anything under a millisecond as no time at all, so it is shown as 0 MS and is no envelope", () => {
+    expect(envelopeSeconds("attack", 1)).toBe(0); // 2 microseconds
+    expect(envelopeSeconds("attack", 7)).toBe(0); // 0.7 ms
+    expect(envelopeSeconds("attack", 8)).toBeGreaterThan(0.001);
+    expect(formatSetting("attack", 1)).toBe("0 MS");
+    expect(padEnvelope({ ...DEFAULT_SETTINGS, attack: 1 })).toBeNull();
+  });
+
   it("are shown as the time, not the position, and the sustain as a percentage", () => {
     expect(formatSetting("attack", 0)).toBe("0 MS");
     expect(formatSetting("attack", 10)).toBe("2 MS");
