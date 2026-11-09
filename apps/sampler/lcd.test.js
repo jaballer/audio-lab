@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLcd, lcdProgress } from "./lcd.js";
+import { formatLcd, lcdProgress, progressVars } from "./lcd.js";
 
 const stopped = {
   playing: false,
@@ -114,12 +114,52 @@ describe("lcdProgress", () => {
     expect(lcdProgress({ ...playing, page: -1, playheadPosition: 0 }).shown).toBe(0);
   });
 
-  it("is one bar for a one-bar sequence, filling across the whole width over the bar", () => {
+  it("is one bar for a one-bar sequence, filled to half at the middle step", () => {
     const result = lcdProgress({ playing: true, steps: 16, bars: 1, page: 0, playheadPosition: 7 });
     expect(result).toEqual({ bars: 1, shown: 0, fraction: 0.5 });
   });
 
   it("defaults to one bar and the first", () => {
     expect(lcdProgress({ playing: true, steps: 16, playheadPosition: 15 })).toEqual({ bars: 1, shown: 0, fraction: 1 });
+  });
+});
+
+describe("lcdProgress with nothing to go on", () => {
+  it("is empty when the steps or the bars are not there, and does not throw", () => {
+    expect(lcdProgress({ playing: true, playheadPosition: 3 }).fraction).toBe(0);
+    expect(lcdProgress({ playing: true, steps: 0, bars: 4, playheadPosition: 3 }).fraction).toBe(0);
+    expect(lcdProgress({ playing: true, steps: 16, bars: 0, playheadPosition: 3 }).fraction).toBe(0);
+  });
+});
+
+describe("progressVars", () => {
+  it("gives the values the CSS draws from, as text", () => {
+    expect(progressVars({ bars: 4, shown: 2, fraction: 0.5 })).toEqual({
+      "--progress": "0.5",
+      "--bars": "4",
+      "--shown": "2",
+      multi: true,
+    });
+  });
+
+  it("rounds the fraction to four decimals, so a step does not write a long number", () => {
+    expect(progressVars({ bars: 3, shown: 0, fraction: 1 / 3 })["--progress"]).toBe("0.3333");
+    expect(progressVars({ bars: 3, shown: 0, fraction: 41 / 64 })["--progress"]).toBe("0.6406");
+  });
+
+  it("writes the same text for the same step, so nothing is rewritten while it stays", () => {
+    const a = progressVars({ bars: 4, shown: 1, fraction: 0.25 });
+    const b = progressVars({ bars: 4, shown: 1, fraction: 0.25 });
+    expect(a).toEqual(b);
+  });
+
+  it("is not several bars for one bar: the line under the progress would be all of it", () => {
+    expect(progressVars({ bars: 1, shown: 0, fraction: 0 }).multi).toBe(false);
+    expect(progressVars({ bars: 2, shown: 0, fraction: 0 }).multi).toBe(true);
+  });
+
+  it("is empty at zero and full at one", () => {
+    expect(progressVars({ bars: 2, shown: 0, fraction: 0 })["--progress"]).toBe("0");
+    expect(progressVars({ bars: 2, shown: 0, fraction: 1 })["--progress"]).toBe("1");
   });
 });

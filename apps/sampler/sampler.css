@@ -9,18 +9,19 @@
 
 /* The progress bar along the top of the display: the whole sequence, where the ruler below shows one bar. Its shape comes
    from custom properties set by lcd.js: --progress (0 to 1), --bars, and --shown (the bar the step keys show). The bar
-   is the top 6px; with more than one bar a short line under it marks the bar the step keys show. */
+   is the top 6px; with more than one bar a short line under it marks the bar the step keys show (the space for it is
+   there with one bar too, so the display does not move when the number of bars changes). Bar lines are gaps of 2px, and
+   a bar is (width + 2px) / bars wide with its gap, so the last gap falls just outside and a full bar is full to its end. */
 .lcd-progress {
   --bar: 6px;
+  --gap: 2px;
   position: relative;
-  height: var(--bar);
-  margin: 0 0 12px;
+  height: calc(var(--bar) + 5px);
+  margin: 0 0 10px;
 }
 .lcd-progress.multi {
-  height: calc(var(--bar) + 5px);
-  margin-bottom: 10px;
   background: linear-gradient(var(--lcd-ink), var(--lcd-ink)) calc(var(--shown, 0) / (var(--bars, 2) - 1) * 100%) 100% /
-    calc(100% / var(--bars, 2)) 2px no-repeat;
+    calc((100% + var(--gap)) / var(--bars, 2) - var(--gap)) 2px no-repeat;
 }
 /* The track, with the fill over it as far as the playhead has got. */
 .lcd-progress::before {
@@ -31,19 +32,18 @@
   border-radius: 1px;
   background:
     linear-gradient(var(--lcd-ink), var(--lcd-ink)) left / calc(var(--progress, 0) * 100%) 100% no-repeat,
-    color-mix(in srgb, var(--lcd-ink) 16%, transparent);
+    rgba(var(--lcd-ink-rgb), 0.16);
 }
-/* A gap in the bar at each bar line, over the track and the fill both. The last one is just outside the bar, so a full
-   bar is full to its end. */
+/* A gap in the bar at each bar line, over the track and the fill both. */
 .lcd-progress::after {
   content: "";
   position: absolute;
-  inset: 0 -2px auto 0;
+  inset: 0 0 auto 0;
   height: var(--bar);
   background: repeating-linear-gradient(
     90deg,
-    transparent 0 calc(100% / var(--bars, 1) - 2px),
-    var(--lcd-bg) calc(100% / var(--bars, 1) - 2px) calc(100% / var(--bars, 1))
+    transparent 0 calc((100% + var(--gap)) / var(--bars, 1) - var(--gap)),
+    var(--lcd-bg) calc((100% + var(--gap)) / var(--bars, 1) - var(--gap)) calc((100% + var(--gap)) / var(--bars, 1))
   );
 }
 

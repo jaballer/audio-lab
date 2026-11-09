@@ -2,9 +2,10 @@
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, sequence, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, stepsOn }
+//   state = { playing, recording, sequence, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
 //     steps:     how many steps one bar has
 //     bars:      how many bars the sequence has
+//     page:      the 0-based bar the step keys show (the progress bar marks it)
 //     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
 //     sequence:  the current sequence, 0-based
 //     selected:  the selected pad, 0-based
@@ -59,15 +60,25 @@ export function lcdProgress({ playing, playheadPosition = -1, steps, bars = 1, p
 
 // `elements` is { lines: [el, el, el], message, ruler, progress }, and `steps` is how many cells the ruler has.
 // `progress` (optional) is the element the progress bar is drawn in: it is given its shape as CSS custom properties.
-// Written only when it changed: the display is drawn on every step while playing.
-function drawProgress(element, { bars, shown, fraction }) {
-  const set = (name, value) => {
-    if (element.style.getPropertyValue(name) !== value) element.style.setProperty(name, value);
+// The progress bar's values as the CSS custom properties that draw it (strings) and whether there is more than one bar. A
+// fraction to four decimals is a hundredth of a per cent of the bar: finer than a pixel on any screen.
+const PROGRESS_DECIMALS = 4;
+export function progressVars({ bars, shown, fraction }) {
+  return {
+    "--progress": String(Number(fraction.toFixed(PROGRESS_DECIMALS))),
+    "--bars": String(bars),
+    "--shown": String(shown),
+    multi: bars > 1, // with one bar the line under the progress would be all of it
   };
-  set("--progress", String(Number(fraction.toFixed(4))));
-  set("--bars", String(bars));
-  set("--shown", String(shown));
-  element.classList.toggle("multi", bars > 1); // with one bar the bar under the progress would be all of it
+}
+
+// Written only when it changed: the display is drawn on every step while playing.
+function drawProgress(element, result) {
+  const { multi, ...properties } = progressVars(result);
+  for (const [name, value] of Object.entries(properties)) {
+    if (element.style.getPropertyValue(name) !== value) element.style.setProperty(name, value);
+  }
+  element.classList.toggle("multi", multi);
 }
 
 export function createLcd({ lines, message, ruler, progress = null, steps }) {
