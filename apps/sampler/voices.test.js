@@ -351,3 +351,36 @@ describe("createVoices", () => {
     });
   });
 });
+
+describe("createVoices, in an offline render", () => {
+  // An offline context's clock stays at 0 until the render runs, so every hit is scheduled with `currentTime` at 0.
+  const plainContext = () => ({
+    currentTime: 0,
+    createGain: () => ({
+      gain: { cancelScheduledValues() {}, setValueAtTime() {}, setTargetAtTime() {} },
+      connect() {},
+      disconnect() {},
+    }),
+  });
+
+  it("still cuts the pad's last hit when the next comes, and forgets one cut long before", () => {
+    const ctx = plainContext();
+    const voices = createVoices(2, { cleanUp: false });
+    voices.start(ctx, 0, {}, 1);
+    expect(voices.start(ctx, 0, {}, 100).chokes).toHaveLength(1); // the hit at 1 is cut at 100
+    expect(voices.start(ctx, 0, {}, 200).chokes).toHaveLength(1); // only the one at 100: the one at 1 is long gone
+  });
+
+  it("does not slow down as passes are added: a hit looks at the voices still sounding, not at every one since the start", () => {
+    // Nine passes of a dense 8 bars on 16 pads in one choke group, as a long export with loops makes. Each hit used to
+    // look at every voice scheduled before it (about 15 s here); now only at those cut within the last moment.
+    vi.useRealTimers();
+    const ctx = plainContext();
+    const voices = createVoices(16, { cleanUp: false, groupOf: () => 1 });
+    const began = performance.now();
+    for (let pass = 0; pass < 9; pass++)
+      for (let step = 0; step < 128; step++)
+        for (let pad = 0; pad < 16; pad++) voices.start(ctx, pad, {}, 0.01 + (pass * 128 + step) * 0.125);
+    expect(performance.now() - began).toBeLessThan(3000);
+  }, 60000);
+});
