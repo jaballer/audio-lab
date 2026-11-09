@@ -58,13 +58,16 @@ describe("parsePadSettings", () => {
       3: { gain: 0, pitch: 0 },
       9: { gain: -1, pitch: 0 },
     };
-    expect(parsePadSettings(stored, 4)).toEqual({ 0: { gain: -6, pitch: 0 }, 2: { gain: 0, pitch: 5 } });
+    expect(parsePadSettings(stored, 4)).toEqual({
+      0: { gain: -6, pitch: 0, choke: 0 },
+      2: { gain: 0, pitch: 5, choke: 0 },
+    });
   });
 
   it("brings values into range and fills in what is missing", () => {
     expect(parsePadSettings({ 1: { gain: 100, pitch: -50 }, 2: { gain: -3 } }, 4)).toEqual({
-      1: { gain: 6, pitch: -12 },
-      2: { gain: -3, pitch: 0 },
+      1: { gain: 6, pitch: -12, choke: 0 },
+      2: { gain: -3, pitch: 0, choke: 0 },
     });
   });
 
@@ -78,6 +81,32 @@ describe("parsePadSettings", () => {
   });
 
   it("agrees with the defaults it is compared to", () => {
-    expect(DEFAULT_SETTINGS).toEqual({ gain: 0, pitch: 0 });
+    expect(DEFAULT_SETTINGS).toEqual({ gain: 0, pitch: 0, choke: 0 });
+  });
+});
+
+describe("the choke setting", () => {
+  it("is a whole number from 0 (no group) to 8", () => {
+    expect(SETTINGS.choke).toMatchObject({ min: 0, max: 8, default: 0 });
+    expect(clampSetting("choke", 3.4)).toBe(3);
+    expect(clampSetting("choke", -2)).toBe(0);
+    expect(clampSetting("choke", 99)).toBe(8);
+    expect(clampSetting("choke", "x")).toBe(0);
+  });
+
+  it("is shown as OFF or as the group", () => {
+    expect(formatSetting("choke", 0)).toBe("OFF");
+    expect(formatSetting("choke", 3)).toBe("GROUP 3");
+  });
+
+  it("makes a pad count as not at the defaults when it is the only thing set", () => {
+    expect(parsePadSettings({ 1: { choke: 2 } }, 4)).toEqual({ 1: { gain: 0, pitch: 0, choke: 2 } });
+  });
+
+  it("is brought into range, and filled in as no group when it is missing (a song saved before it existed)", () => {
+    expect(parsePadSettings({ 0: { gain: -3, choke: 50 }, 1: { gain: 2, pitch: 1 } }, 4)).toEqual({
+      0: { gain: -3, pitch: 0, choke: 8 },
+      1: { gain: 2, pitch: 1, choke: 0 },
+    });
   });
 });

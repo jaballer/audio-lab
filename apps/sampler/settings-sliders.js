@@ -1,8 +1,8 @@
-// The sliders for the selected pad's settings (gain, pitch), drawn into an element it is handed. It shows and
+// The sliders for the selected pad's settings (gain, pitch, choke group), drawn into an element it is handed. It shows and
 // reports; the sampler decides (setPadSetting). The ranges and the text come from pad-settings.js.
 //
 //   const sliders = createSettingsSliders(element, { onChange });   // onChange(name, value)
-//   sliders.refresh({ settings: { gain, pitch }, pitchEnabled });
+//   sliders.refresh({ settings: { gain, pitch, choke }, pitchEnabled });
 //
 // A slider is a native range input, so it works from the keyboard (arrows, Home, End); Delete or Backspace, or
 // a double-click, puts it back to its default. Pitch is for loaded samples, so while the pad plays a built-in

@@ -18,7 +18,7 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 4;
+export const SONG_VERSION = 5;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
 // field itself is set by upgradeSong.
@@ -30,6 +30,8 @@ const MIGRATIONS = {
   2: (song) => song,
   // Version 4 adds `padSettings` (each pad's gain and pitch). A version 3 song has none: every pad at its defaults.
   3: (song) => song,
+  // Version 5 adds each pad's `choke` group to `padSettings`. A version 4 entry has none, which reads as no group.
+  4: (song) => song,
 };
 
 const VOLUME_MAX = 100;
@@ -38,7 +40,7 @@ const VOLUME_MAX = 100;
 // { pad row: [steps that are on] }, and `velocities` is pattern.velocitySnapshot(): { pad row: { step: 1-127 } }
 // for the steps that are not at full velocity. `current` is the index of the one that was showing.
 //
-// `padSettings` is { pad: { gain, pitch } } for the pads that are not at the defaults (pad-settings.js).
+// `padSettings` is { pad: { gain, pitch, choke } } for the pads that are not at the defaults (pad-settings.js).
 export const serializeSong = ({ bpm, volume, current, sequences, padSettings = {} }) => ({
   version: SONG_VERSION,
   bpm,

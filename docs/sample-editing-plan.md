@@ -86,3 +86,13 @@ of it. Delete or a double-click puts a handle back.
 - **The waveform is made once per sample** (400 columns of the lowest and highest value, all channels) and drawn at
   whatever size the drawer has, again when that changes.
 - Built-in sounds are synthesized, so they have no waveform and the trim controls are hidden for them.
+
+## Choke groups
+
+A pad has a choke group, 0 (none) or 1 to 8, set with a Choke slider in the pad editor (#112). Pads in the same group cut each other off, as a closed hat cuts an open hat; a pad always cuts its own earlier hit, in a group or not (`apps/sampler/voices.js`).
+
+- **A setting like Gain and Pitch:** it is in `pad-settings.js`, kept in the kit, saved in the song's `padSettings` (song version 5; a version 4 song has no groups), shown on the LCD (`PAD 03 CHOKE GROUP 1`), and not part of the step undo history.
+- **Symmetric:** any pad in the group cuts the others; there is no "this pad cuts that one but not the reverse".
+- **Read when the hit starts:** the group a pad is in when a hit begins decides what it cuts, so moving a pad into a group takes effect from the next hit.
+- **Same machinery as the retrigger cut:** a fade on the audio clock, from the new hit's start time, with the earliest-cut bookkeeping and the undo for a queued step that is cancelled (Stop, a sequence switch). Live hits, the sequence and the WAV export all use it.
+- **Not decided here:** default groups for the built-in kit (the hats) are not set, so a fresh kit behaves as before; showing the group on the pad, and sharing swatches with pad colours (#122), are separate.

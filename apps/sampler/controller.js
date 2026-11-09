@@ -108,7 +108,7 @@ export function createSampler({
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
   const scheduledHits = []; // { time, step, rows, bus, chokes } for each step handed to the scheduler, until its light is shown
   // A pad plays one voice at a time: a hit cuts off what the pad was still playing (voices.js).
-  const voices = createVoices(kit.length);
+  const voices = createVoices(kit.length, { groupOf: (pad) => kit.settings(pad).choke });
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,

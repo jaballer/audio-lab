@@ -1,13 +1,17 @@
 // One voice at a time on each pad: a pad hit again cuts off what it was still playing, as a hardware sampler does,
-// instead of layering a second copy over the first (a long sample would play over itself). No DOM, and nothing is
-// built until a hit asks for it.
+// instead of layering a second copy over the first (a long sample would play over itself). And pads in the same choke
+// group cut each other off, as a closed hat cuts an open hat. No DOM, and nothing is built until a hit asks for it.
 //
-//   const voices = createVoices(16);          // { cleanUp: false } for an offline render, which has no use for the timers
+//   const voices = createVoices(16, { groupOf: (pad) => 0 });   // groupOf: a pad's choke group now, 0 for none
 //   const { out, chokes } = voices.start(ctx, pad, destination, time);
-//   //   `out` is a gain node to play the sound into; it is connected to `destination`. Whatever the pad was still
-//   //   playing from before `time` is faded out from `time`. `chokes` says which, for undo().
+//   //   `out` is a gain node to play the sound into; it is connected to `destination`. Whatever the pad (and the pads
+//   //   in its group) were still playing from before `time` is faded out from `time`. `chokes` says which, for undo().
 //   voices.undo(chokes);   // the hit was cancelled before it began (Stop, a sequence switch): what it was going to
 //                          // cut off carries on, unless another hit cuts it too
+//
+// (`cleanUp: false` is for an offline render, which has no use for the timers.) A pad always cuts its own earlier voices,
+// in a group or not. Another pad's voices are cut only when both are in the same group, which is looked at when the hit
+// starts, and group 0 is no group.
 //
 // A voice is a gain node of its own in front of the sound, so cutting it is a fade on the audio clock (a few
 // milliseconds, no click) and works for a sound scheduled ahead of time. A voice can be asked to be cut by more than
@@ -20,7 +24,7 @@ const CLEAN_UP_AFTER_S = 0.1; // after the cut, once it is far below hearing
 
 const cutTime = (voice) => (voice.cuts.length ? Math.min(...voice.cuts.map((cut) => cut.time)) : undefined);
 
-export function createVoices(pads, { cleanUp = true } = {}) {
+export function createVoices(pads, { cleanUp = true, groupOf = () => 0 } = {}) {
   const lists = Array.from({ length: pads }, () => []); // per pad, the voices that have not been cut off long ago
 
   // Makes the voice's gain and its clean-up match its cut requests: the earliest one is the cut.
@@ -41,22 +45,29 @@ export function createVoices(pads, { cleanUp = true } = {}) {
       out.connect(destination);
       const now = ctx.currentTime;
       const chokes = [];
-      // Voices cut long ago are forgotten here.
-      const list = lists[pad].filter((voice) => {
-        const at = cutTime(voice);
-        return at === undefined || at > now - CLEAN_UP_AFTER_S;
-      });
-      for (const voice of list) {
-        // Only what starts no later than this hit is cut by it: a hit already queued for after it is not. And a
-        // voice already cut at or before this hit needs nothing more.
-        if (voice.time > time) continue;
-        const at = cutTime(voice);
-        if (at !== undefined && at <= time) continue;
-        const cut = { time };
-        voice.cuts.push(cut);
-        apply(ctx, voice);
-        chokes.push({ voice, cut, ctx });
+      const group = groupOf(pad);
+      for (let other = 0; other < pads; other++) {
+        // Its own pad always; another pad only in the same group.
+        if (other !== pad && !(group > 0 && groupOf(other) === group)) continue;
+        // Voices cut long ago are forgotten here.
+        const list = lists[other].filter((voice) => {
+          const at = cutTime(voice);
+          return at === undefined || at > now - CLEAN_UP_AFTER_S;
+        });
+        for (const voice of list) {
+          // Only what starts no later than this hit is cut by it: a hit already queued for after it is not. And a
+          // voice already cut at or before this hit needs nothing more.
+          if (voice.time > time) continue;
+          const at = cutTime(voice);
+          if (at !== undefined && at <= time) continue;
+          const cut = { time };
+          voice.cuts.push(cut);
+          apply(ctx, voice);
+          chokes.push({ voice, cut, ctx });
+        }
+        lists[other] = list;
       }
+      const list = lists[pad];
       list.push({ out, time, cuts: [], timer: null });
       lists[pad] = list;
       return { out, chokes };
