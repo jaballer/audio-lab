@@ -124,7 +124,6 @@ kbd {
   min-height: 24px;
   padding: 6px 10px;
   font-size: 0.62rem;
-  border-bottom-width: 3px;
 }
 
 /* The POWER switch: a button around the LED and its label. The LED is lit while sound is on. */
@@ -214,9 +213,14 @@ kbd {
 .btn:hover {
   background: linear-gradient(180deg, #faf8f1, #d8d4c7);
 }
-.btn:active {
+/* The press: the face sinks 2px and the foot stays put. The thinner bottom edge would make the box 2px
+   shorter, and a box that changes height moves whatever is sized around it (the transport grid, the pad
+   panel, a centred dialog), so the margin gives back what the edge takes: the press is paint only.
+   A disabled button does not press (and so needs no rule to undo it). */
+.btn:active:not(:disabled) {
   transform: translateY(2px);
   border-bottom-width: 2px;
+  margin-bottom: 2px;
 }
 
 /* ---------- Focus ---------- */
