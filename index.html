@@ -88,6 +88,8 @@
             <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
             <div class="lcd" role="group" aria-label="Display">
               <div class="lcd-screen">
+                <!-- How far through the whole sequence the playhead is; the bar the step keys show is marked under it. -->
+                <div class="lcd-progress" id="lcd-progress" aria-hidden="true"></div>
                 <div class="lcd-line" id="lcd-1"></div>
                 <div class="lcd-line" id="lcd-2"></div>
                 <div class="lcd-line" id="lcd-3"></div>

@@ -1,10 +1,11 @@
-// The sampler's LCD: three text lines, a step ruler and a short-lived message.
+// The sampler's LCD: a progress bar along the top, three text lines, a step ruler and a short-lived message.
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, sequence, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, stepsOn }
+//   state = { playing, recording, sequence, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
 //     steps:     how many steps one bar has
 //     bars:      how many bars the sequence has
+//     page:      the 0-based bar the step keys show (the progress bar marks it)
 //     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
 //     sequence:  the current sequence, 0-based
 //     selected:  the selected pad, 0-based
@@ -39,9 +40,48 @@ export function formatLcd({
   };
 }
 
-// `elements` is { lines: [el, el, el], message, ruler }, and `steps` is how
-// many cells the ruler has.
-export function createLcd({ lines, message, ruler, steps }) {
+// The progress bar along the top of the display: how far the playhead is through the whole sequence (all its bars,
+// where the ruler shows only the bar the step keys show), how many bars it has, and which of them is showing.
+//
+//   lcdProgress({ playing, playheadPosition, steps, bars, page })   // { bars, shown, fraction }
+//
+// `fraction` (0 to 1) is the share of the sequence played up to and including the step the playhead is on, so it reaches 1
+// on the last step and starts the next loop at one step's worth; it is 0 while stopped. `shown` is the 0-based bar the
+// step keys are showing.
+export function lcdProgress({ playing, playheadPosition = -1, steps, bars = 1, page = 0 }) {
+  const total = steps * bars;
+  const located = playing && playheadPosition >= 0 && total > 0;
+  return {
+    bars,
+    shown: Math.max(0, Math.min(page, bars - 1)),
+    fraction: located ? Math.min(1, (playheadPosition + 1) / total) : 0,
+  };
+}
+
+// `elements` is { lines: [el, el, el], message, ruler, progress }, and `steps` is how many cells the ruler has.
+// `progress` (optional) is the element the progress bar is drawn in: it is given its shape as CSS custom properties.
+// The progress bar's values as the CSS custom properties that draw it (strings) and whether there is more than one bar. A
+// fraction to four decimals is a hundredth of a per cent of the bar: finer than a pixel on any screen.
+const PROGRESS_DECIMALS = 4;
+export function progressVars({ bars, shown, fraction }) {
+  return {
+    "--progress": String(Number(fraction.toFixed(PROGRESS_DECIMALS))),
+    "--bars": String(bars),
+    "--shown": String(shown),
+    multi: bars > 1, // with one bar the line under the progress would be all of it
+  };
+}
+
+// Written only when it changed: the display is drawn on every step while playing.
+function drawProgress(element, result) {
+  const { multi, ...properties } = progressVars(result);
+  for (const [name, value] of Object.entries(properties)) {
+    if (element.style.getPropertyValue(name) !== value) element.style.setProperty(name, value);
+  }
+  element.classList.toggle("multi", multi);
+}
+
+export function createLcd({ lines, message, ruler, progress = null, steps }) {
   const cells = [];
   for (let i = 0; i < steps; i++) {
     const cell = document.createElement("span");
@@ -61,6 +101,7 @@ export function createLcd({ lines, message, ruler, steps }) {
         cell.classList.toggle("on", text.ruler[i].on);
         cell.classList.toggle("now", text.ruler[i].now);
       });
+      if (progress) drawProgress(progress, lcdProgress(state));
     },
 
     // A short message on the fourth line, cleared after a moment.

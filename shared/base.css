@@ -7,6 +7,7 @@
   --ink-soft: #3a3832; /* 4.8:1 or better on the chassis and the drawer */
   --lcd-bg: #b4c496;
   --lcd-ink: #1c2916;
+  --lcd-ink-rgb: 28, 41, 22; /* the same colour as components, for the places that want it at some opacity */
   --led-red: #ff3b2f;
   --led-green: #58e04a;
   --focus: #0a58ca;

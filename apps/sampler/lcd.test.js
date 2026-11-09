@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLcd } from "./lcd.js";
+import { formatLcd, lcdProgress, progressVars } from "./lcd.js";
 
 const stopped = {
   playing: false,
@@ -66,5 +66,100 @@ describe("formatLcd", () => {
 
     const idle = formatLcd({ ...stopped, stepsOn, playheadStep: 4 }).ruler;
     expect(idle.some((c) => c.now)).toBe(false);
+  });
+});
+
+describe("lcdProgress", () => {
+  const playing = { playing: true, steps: 16, bars: 4, page: 0 };
+
+  it("is empty while stopped, however far the playhead was", () => {
+    expect(lcdProgress({ ...playing, playing: false, playheadPosition: 30 })).toEqual({
+      bars: 4,
+      shown: 0,
+      fraction: 0,
+    });
+  });
+
+  it("is empty before the first step has played", () => {
+    expect(lcdProgress({ ...playing, playheadPosition: -1 }).fraction).toBe(0);
+  });
+
+  it("is the share of the whole sequence played up to the step the playhead is on", () => {
+    expect(lcdProgress({ ...playing, playheadPosition: 0 }).fraction).toBeCloseTo(1 / 64);
+    expect(lcdProgress({ ...playing, playheadPosition: 15 }).fraction).toBeCloseTo(0.25); // the end of the first bar
+    expect(lcdProgress({ ...playing, playheadPosition: 31 }).fraction).toBeCloseTo(0.5);
+  });
+
+  it("is full on the last step of the last bar", () => {
+    expect(lcdProgress({ ...playing, playheadPosition: 63 }).fraction).toBe(1);
+  });
+
+  it("never goes past full, as when the sequence has just been made shorter than the playhead", () => {
+    expect(lcdProgress({ ...playing, playheadPosition: 70 }).fraction).toBe(1);
+  });
+
+  it("counts every bar of the sequence, not the bar the step keys show", () => {
+    const a = lcdProgress({ ...playing, playheadPosition: 40, page: 0 });
+    const b = lcdProgress({ ...playing, playheadPosition: 40, page: 3 });
+    expect(a.fraction).toBe(b.fraction);
+    expect(a.fraction).toBeCloseTo(41 / 64);
+  });
+
+  it("says which bar the step keys show, and how many bars there are", () => {
+    expect(lcdProgress({ ...playing, playheadPosition: 5, page: 2 })).toMatchObject({ bars: 4, shown: 2 });
+  });
+
+  it("keeps the bar shown within the bars there are", () => {
+    expect(lcdProgress({ ...playing, bars: 2, page: 5, playheadPosition: 0 }).shown).toBe(1);
+    expect(lcdProgress({ ...playing, page: -1, playheadPosition: 0 }).shown).toBe(0);
+  });
+
+  it("is one bar for a one-bar sequence, filled to half at the middle step", () => {
+    const result = lcdProgress({ playing: true, steps: 16, bars: 1, page: 0, playheadPosition: 7 });
+    expect(result).toEqual({ bars: 1, shown: 0, fraction: 0.5 });
+  });
+
+  it("defaults to one bar and the first", () => {
+    expect(lcdProgress({ playing: true, steps: 16, playheadPosition: 15 })).toEqual({ bars: 1, shown: 0, fraction: 1 });
+  });
+});
+
+describe("lcdProgress with nothing to go on", () => {
+  it("is empty when the steps or the bars are not there, and does not throw", () => {
+    expect(lcdProgress({ playing: true, playheadPosition: 3 }).fraction).toBe(0);
+    expect(lcdProgress({ playing: true, steps: 0, bars: 4, playheadPosition: 3 }).fraction).toBe(0);
+    expect(lcdProgress({ playing: true, steps: 16, bars: 0, playheadPosition: 3 }).fraction).toBe(0);
+  });
+});
+
+describe("progressVars", () => {
+  it("gives the values the CSS draws from, as text", () => {
+    expect(progressVars({ bars: 4, shown: 2, fraction: 0.5 })).toEqual({
+      "--progress": "0.5",
+      "--bars": "4",
+      "--shown": "2",
+      multi: true,
+    });
+  });
+
+  it("rounds the fraction to four decimals, so a step does not write a long number", () => {
+    expect(progressVars({ bars: 3, shown: 0, fraction: 1 / 3 })["--progress"]).toBe("0.3333");
+    expect(progressVars({ bars: 3, shown: 0, fraction: 41 / 64 })["--progress"]).toBe("0.6406");
+  });
+
+  it("writes the same text for the same step, so nothing is rewritten while it stays", () => {
+    const a = progressVars({ bars: 4, shown: 1, fraction: 0.25 });
+    const b = progressVars({ bars: 4, shown: 1, fraction: 0.25 });
+    expect(a).toEqual(b);
+  });
+
+  it("is not several bars for one bar: the line under the progress would be all of it", () => {
+    expect(progressVars({ bars: 1, shown: 0, fraction: 0 }).multi).toBe(false);
+    expect(progressVars({ bars: 2, shown: 0, fraction: 0 }).multi).toBe(true);
+  });
+
+  it("is empty at zero and full at one", () => {
+    expect(progressVars({ bars: 2, shown: 0, fraction: 0 })["--progress"]).toBe("0");
+    expect(progressVars({ bars: 2, shown: 0, fraction: 1 })["--progress"]).toBe("1");
   });
 });
