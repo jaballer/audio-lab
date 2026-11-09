@@ -422,6 +422,20 @@ createDisclosure({
   onToggle: (open) => saveJson(STEPS_KEY, open),
 });
 
+// The pad editor's Tune and Envelope sections can be hidden too, each remembered, and shown by default. The button is
+// the section's heading, and what it hides is the sliders.
+for (const [toggle, region, key] of [
+  ["tune-toggle", "pad-settings", "pad-sampler:tune"],
+  ["envelope-toggle", "pad-envelope", "pad-sampler:envelope"],
+]) {
+  createDisclosure({
+    toggle: $(toggle),
+    regions: [$(region)],
+    open: loadJson(key, true) !== false,
+    onToggle: (open) => saveJson(key, open),
+  });
+}
+
 // ---------- Where the pad editor goes ----------
 // Beside the machine when the window is wide enough, otherwise under the pads, where it takes the place the
 // Load Sample buttons used to have. The one element is moved, as the display is above. Both together want 1310px

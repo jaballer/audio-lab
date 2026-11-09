@@ -62,11 +62,19 @@
                 </div>
               </section>
               <section class="pad-drawer-section" aria-labelledby="pad-drawer-tune">
-                <h3 id="pad-drawer-tune" class="small-label">Tune</h3>
+                <h3 id="pad-drawer-tune" class="pad-drawer-heading">
+                  <button id="tune-toggle" class="small-label section-toggle" type="button" aria-expanded="true">
+                    Tune
+                  </button>
+                </h3>
                 <div id="pad-settings" role="group" aria-label="Gain, pitch and choke group of the selected pad"></div>
               </section>
               <section class="pad-drawer-section" aria-labelledby="pad-drawer-envelope">
-                <h3 id="pad-drawer-envelope" class="small-label">Envelope</h3>
+                <h3 id="pad-drawer-envelope" class="pad-drawer-heading">
+                  <button id="envelope-toggle" class="small-label section-toggle" type="button" aria-expanded="true">
+                    Envelope
+                  </button>
+                </h3>
                 <div id="pad-envelope" role="group" aria-label="Envelope of the selected pad's sample"></div>
               </section>
               <section class="pad-drawer-section" aria-labelledby="pad-drawer-color">
@@ -133,7 +141,7 @@
         <section class="step-panel" aria-label="Step keys for the selected pad">
           <div class="step-head">
             <!-- The heading is the button that hides the rest of the step editor, and says whether it is shown. -->
-            <button id="steps-toggle" class="small-label step-toggle" type="button" aria-expanded="true">
+            <button id="steps-toggle" class="small-label section-toggle" type="button" aria-expanded="true">
               Step keys &middot; selected pad
             </button>
             <div id="step-tools" class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
@@ -186,8 +194,9 @@
         </li>
         <li>
           The heading above the step keys hides or shows the step editor (the keys, the velocity bars, the bar arrows
-          and the edit tools), and the page remembers which. Drag along the velocity bars under the step keys to set how
-          hard each step plays; a step recorded live keeps the velocity of the hit
+          and the edit tools), and the page remembers which; Tune and Envelope in the pad editor hide and show the same
+          way. Drag along the velocity bars under the step keys to set how hard each step plays; a step recorded live
+          keeps the velocity of the hit
         </li>
         <li>
           Export WAV saves the sequence showing as a 16-bit stereo WAV file, exactly the length of its bars so that it

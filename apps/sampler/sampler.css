@@ -274,6 +274,10 @@
 .pad-drawer-section h3 {
   margin: 0;
 }
+/* The heading holds the toggle button, which has the label's look. */
+.pad-drawer-heading {
+  font-size: inherit;
+}
 .pad-drawer-msg {
   min-height: 1.2em; /* kept, so the message coming and going does not move what is under it */
   margin: 0;
@@ -681,8 +685,8 @@
   }
 }
 
-/* ---------- The step editor's heading: the button that hides the rest of it ---------- */
-.step-toggle {
+/* ---------- A heading that is the button that hides the rest of its section (the step editor, the pad editor's Tune and Envelope) ---------- */
+.section-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -696,7 +700,7 @@
   text-align: left;
 }
 /* A chevron, pointing down while the editor is shown and right while it is hidden. */
-.step-toggle::before {
+.section-toggle::before {
   content: "";
   flex: none;
   width: 7px;
@@ -706,25 +710,26 @@
   transform: translateY(-2px) rotate(45deg);
   transition: transform 0.12s;
 }
-.step-toggle[aria-expanded="false"]::before {
+.section-toggle[aria-expanded="false"]::before {
   transform: translateX(-2px) rotate(-45deg);
 }
-.step-toggle:focus-visible {
+.section-toggle:focus-visible {
   outline: 3px solid var(--focus-on-light);
   outline-offset: 2px;
 }
 /* Hidden parts of the header and the body stay hidden: the tools' and the bar arrows' own display rules would show
    them. Only these: a step key that is not a step (a shorter sequence) is hidden another way and keeps its place. */
 .step-head > [hidden],
-#step-body[hidden] {
+#step-body[hidden],
+.pad-drawer-section > [hidden] {
   display: none;
 }
 /* Hidden, the header is all there is: no room under it for what is not there. */
-.step-head:has(.step-toggle[aria-expanded="false"]) {
+.step-head:has(.section-toggle[aria-expanded="false"]) {
   margin-bottom: 0;
 }
 @media (prefers-reduced-motion: reduce) {
-  .step-toggle::before {
+  .section-toggle::before {
     transition: none;
   }
 }
