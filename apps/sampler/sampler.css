@@ -127,7 +127,7 @@
 .buttons {
   grid-area: buttons;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px 10px;
 }
 
@@ -313,7 +313,8 @@
   margin-top: 14px;
 }
 .step-head,
-.step-nav {
+.step-nav,
+.step-tools {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -331,12 +332,19 @@
 .seq-lengths .btn {
   min-width: 2.6em;
 }
+/* Edit tools for the steps below: undo and redo, copy and paste, clear. */
+.step-tools {
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .seq-bar .btn:disabled,
+.step-tools .btn:disabled,
 .step-nav .btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
 .seq-bar .btn:disabled:active,
+.step-tools .btn:disabled:active,
 .step-nav .btn:disabled:active {
   transform: none;
   border-bottom-width: 4px;
@@ -419,7 +427,7 @@
       "buttons buttons";
   }
   .buttons {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

@@ -74,12 +74,6 @@
               <button id="stop" class="btn btn-stop" type="button">Stop</button>
               <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
               <button id="tap" class="btn" type="button">Tap Tempo</button>
-              <button id="clear" class="btn" type="button">Clear Steps</button>
-              <button id="clear-all" class="btn" type="button">Clear All</button>
-              <button id="copy" class="btn" type="button">Copy Steps</button>
-              <button id="paste" class="btn" type="button">Paste Steps</button>
-              <button id="undo" class="btn" type="button" disabled>Undo</button>
-              <button id="redo" class="btn" type="button" disabled>Redo</button>
             </div>
           </div>
         </section>
@@ -88,6 +82,14 @@
       <section class="step-panel" aria-label="Step keys for the selected pad">
         <div class="step-head">
           <div class="small-label">Step keys &middot; selected pad</div>
+          <div class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
+            <button id="undo" class="btn btn-small" type="button" disabled>Undo</button>
+            <button id="redo" class="btn btn-small" type="button" disabled>Redo</button>
+            <button id="copy" class="btn btn-small" type="button">Copy Steps</button>
+            <button id="paste" class="btn btn-small" type="button">Paste Steps</button>
+            <button id="clear" class="btn btn-small" type="button">Clear Steps</button>
+            <button id="clear-all" class="btn btn-small" type="button">Clear All</button>
+          </div>
           <div class="step-nav" role="group" aria-label="Which bar is shown">
             <button id="steps-prev" class="btn btn-small" type="button" aria-label="Previous bar">&lt;</button>
             <span id="steps-range" class="small-label" aria-live="polite"></span>
