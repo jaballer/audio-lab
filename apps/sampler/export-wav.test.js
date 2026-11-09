@@ -676,6 +676,33 @@ describe("exportSequence, cancelled and with progress", () => {
   });
 });
 
+describe("exportSequence, a cancel while the file is encoded", () => {
+  it("is heard before the file is saved: encoding is one long task, so it gives the event loop a turn first", async () => {
+    const kit = createKit([sound("a")]);
+    const controller = new AbortController();
+    const onMessage = vi.fn();
+    const save = vi.fn();
+    // The press on Cancel arrives while the page is busy encoding: a task queued when the render ended.
+    const render = async () => {
+      setTimeout(() => controller.abort(), 0);
+      return { sampleRate: 8000, channels: [Float32Array.of(0.5)] };
+    };
+    const done = await exportSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit,
+      stepsPerBar: 16,
+      onMessage,
+      save,
+      render,
+      supported: true,
+      signal: controller.signal,
+    });
+    expect(done).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
+  });
+});
+
 describe("wasCancelled", () => {
   it("wasCancelled is whether an error is an abort", () => {
     expect(wasCancelled(new DOMException("x", "AbortError"))).toBe(true);
@@ -883,6 +910,28 @@ describe("createExportAction", () => {
     const press = createExportAction({ ready: () => Promise.resolve(), run, onMessage, onBusy, ...extra });
     return { press, run, onMessage, onBusy };
   };
+
+  it("takes its snapshot when it is pressed, before it waits for the samples, and hands the run that one", async () => {
+    let state = "as pressed";
+    let samplesBack;
+    const snapshot = vi.fn(() => state);
+    const { press, run } = setup({ snapshot, ready: () => new Promise((resolve) => (samplesBack = resolve)) });
+    const done = press();
+    state = "moved while it waited"; // a controller's tempo knob, say
+    samplesBack();
+    await done;
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ snapshot: "as pressed" }));
+  });
+
+  it("takes no snapshot for a press that only cancels", async () => {
+    const snapshot = vi.fn(() => "x");
+    const { press } = setup({ snapshot, ready: () => new Promise(() => {}) });
+    press();
+    await flush();
+    await press(); // while it works: cancels
+    expect(snapshot).toHaveBeenCalledTimes(1);
+  });
 
   it("runs the export once the samples are back, and shows it is busy only while it works", async () => {
     const { press, run, onBusy } = setup();

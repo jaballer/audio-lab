@@ -428,13 +428,14 @@ exportDialog = createExportDialog($("export-dialog"), {
 exportDialog.setOptions(exportOptions);
 
 const pressExport = createExportAction({
+  snapshot: () => ({ song: sampler.getSong(), options: exportOptions }),
   ready: () => restoring,
-  run: ({ signal, onProgress }) =>
+  run: ({ signal, onProgress, snapshot }) =>
     exportSequence({
-      song: sampler.getSong(),
+      song: snapshot.song,
       kit,
       stepsPerBar: STEPS,
-      options: exportOptions,
+      options: snapshot.options,
       onMessage: sayExport,
       save: saveBlob,
       signal,

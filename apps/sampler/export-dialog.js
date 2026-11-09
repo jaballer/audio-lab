@@ -80,6 +80,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
   function open() {
     if (!isOpen()) {
       setText(message, ""); // whatever the last export said is old news
+      changedAt = -Infinity; // and a press now is meant for what it shows now: nothing ran before it was opened
       if (typeof root.showModal === "function") root.showModal();
       else root.setAttribute("open", ""); // a browser without <dialog>: not modal, but the page ignores its keys while it is open
     }

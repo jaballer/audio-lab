@@ -262,7 +262,12 @@ export async function exportSequence({
   try {
     const audio = await render({ song, kit, stepsPerBar, loops, channels, onProgress, signal });
     const name = exportName(song, { loops, channels });
-    save(new Blob([encodeWav(audio.channels, audio.sampleRate)], { type: "audio/wav" }), name);
+    const wav = encodeWav(audio.channels, audio.sampleRate);
+    // Encoding is one long task (seconds, for a long file), in which a press on Cancel cannot be handled; it waits its
+    // turn at the end of it. So give the event loop one before the file is saved, and honour what it brings.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (signal?.aborted) throw cancelled();
+    save(new Blob([wav], { type: "audio/wav" }), name);
     onMessage(`EXPORTED ${name}`);
     return true;
   } catch (error) {
@@ -286,12 +291,14 @@ export const READY_WAIT_MS = 5000; // how long a click waits for the saved sampl
 // restore that never settles or fails is not something to render over. A cancel during that wait ends it too.
 //
 //   const press = createExportAction({
+//     snapshot: () => ({ song: getSong(), options }),     // taken as it is pressed, and handed to `run`
 //     ready: () => restoring,
-//     run: ({ signal, onProgress }) => exportSequence({ ..., signal, onProgress }),
+//     run: ({ signal, onProgress, snapshot }) => exportSequence({ song: snapshot.song, ..., signal, onProgress }),
 //     onMessage, onBusy, onProgress,
 //   });
 //   button.addEventListener("click", press);
 export function createExportAction({
+  snapshot = () => undefined,
   ready,
   run,
   onMessage,
@@ -315,6 +322,9 @@ export function createExportAction({
     }
     controller = new AbortController();
     const { signal } = controller;
+    // What is being exported is what there was when it was pressed: the wait for the samples can be long, and the song
+    // can move in it (a tempo knob on a controller), so it is not read again after.
+    const taken = snapshot();
     onBusy(true);
     try {
       let timer;
@@ -330,7 +340,7 @@ export function createExportAction({
         onMessage("EXPORT CANCELLED");
         return false;
       }
-      return await run({ signal, onProgress });
+      return await run({ signal, onProgress, snapshot: taken });
     } catch (error) {
       console.error("Export failed:", error);
       onMessage("EXPORT FAILED");
