@@ -27,6 +27,7 @@ function setup({
   stored = null,
   store = fakeStore(),
   decode = vi.fn(async () => decoded()),
+  probe = vi.fn(async () => null), // a length that cannot be told from the header, unless a test says
   failMap = false,
   ...options
 } = {}) {
@@ -39,6 +40,7 @@ function setup({
     audio,
     store,
     decode,
+    probe,
     readMap: () => stored,
     writeMap: (map) => {
       writes.push(structuredClone(map));
@@ -47,7 +49,7 @@ function setup({
     onMessage: (text) => messages.push(text),
     ...options,
   });
-  return { kit, audio, store, decode, samples, writes, messages };
+  return { kit, audio, store, decode, probe, samples, writes, messages };
 }
 
 describe("parseSamples", () => {
@@ -94,7 +96,7 @@ describe("load", () => {
     expect(kit.get(0)).toBe(defaults[0]);
     expect(store.data.get("sample-1")).toHaveProperty("byteLength", 50);
     expect(writes.at(-1)).toEqual({ version: SAMPLES_VERSION, pads: { 1: { name: "My Snare", bytes: 50 } } });
-    expect(messages.at(-1)).toBe("PAD 02 SAMPLE LOADED");
+    expect(messages.at(-1)).toBe("PAD 02 LOADED <0.1/32 MB");
   });
 
   it("decodes in the audio context, which it makes if there is none yet", async () => {
@@ -208,6 +210,228 @@ describe("load, when storage fails in part or the cap is close", () => {
     const { samples } = setup({ maxTotalBytes: 100, decode });
     expect(await samples.load(0, file("bad.txt", 80))).toBe(false);
     expect(await samples.load(1, file("b.wav", 80))).toBe(true);
+  });
+});
+
+describe("the browser's storage budget", () => {
+  const MB = 1024 * 1024;
+  const budget = (limit = 32 * MB) => ({
+    limit: vi.fn(async (maxBytes) => Math.min(limit, maxBytes)),
+    persist: vi.fn(async () => true),
+  });
+
+  it("takes the cap from the budget, so a small quota allows less than the fixed cap", async () => {
+    const { samples, messages, kit } = setup({ budget: budget(100), maxTotalBytes: MB });
+    expect(await samples.load(0, file("a.wav", 60))).toBe(true);
+    expect(await samples.load(1, file("b.wav", 60))).toBe(false); // 120 bytes against a limit of 100
+    expect(messages.at(-1)).toBe(MEMORY_FULL);
+    expect(kit.isDefault(1)).toBe(true);
+  });
+
+  it("asks the budget for room each time, and gives it the fixed cap", async () => {
+    const b = budget();
+    const { samples } = setup({ budget: b, maxTotalBytes: 5 * MB });
+    await samples.load(0, file("a.wav"));
+    await samples.load(1, file("b.wav"));
+    expect(b.limit).toHaveBeenCalledTimes(2);
+    expect(b.limit).toHaveBeenCalledWith(5 * MB);
+  });
+
+  it("says how much of the room the samples use when one is loaded", async () => {
+    const { samples, messages } = setup({ budget: budget(32 * MB) });
+    await samples.load(0, file("a.wav", 2 * MB));
+    expect(messages.at(-1)).toBe("PAD 01 LOADED 2/32 MB");
+    await samples.load(1, file("b.wav", 1.5 * MB));
+    expect(messages.at(-1)).toBe("PAD 02 LOADED 3.5/32 MB");
+  });
+
+  it("works with no budget given", async () => {
+    const { samples } = setup();
+    expect(await samples.load(0, file("a.wav"))).toBe(true);
+  });
+});
+
+describe("what counts toward the total when requests overlap", () => {
+  // decode calls that finish when the test says, in the order they were made
+  function controlledDecode() {
+    const pending = [];
+    const decode = vi.fn((_ctx, bytes) => new Promise((resolve) => pending.push({ size: bytes.byteLength, resolve })));
+    return { decode, pending };
+  }
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const ok = () => ({ ok: true, buffer: {} });
+  const bad = () => ({ ok: false, reason: REASONS.notAudio });
+
+  it("counts nothing for a pad when the newer file fails after the older one was overtaken", async () => {
+    const { decode, pending } = controlledDecode();
+    const { samples, messages } = setup({ decode, maxTotalBytes: 100 });
+    const older = samples.load(0, file("a.wav", 80));
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const newer = samples.load(0, file("b.txt", 10));
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    pending[0].resolve(ok()); // the older finishes first, and has been overtaken
+    expect(await older).toBe(false);
+    pending[1].resolve(bad()); // the newer then fails
+    expect(await newer).toBe(false);
+    await flush();
+    // nothing is on pad 0, so a 95 byte file fits on pad 1 (a leftover count for pad 0 would push it over 100)
+    pending.length = 0;
+    const third = samples.load(1, file("c.wav", 95));
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    pending[0].resolve(ok());
+    expect(await third).toBe(true);
+    expect(messages).not.toContain(MEMORY_FULL);
+  });
+
+  it("falls back to what the pad already held when the newer file fails", async () => {
+    const { decode, pending } = controlledDecode();
+    const { samples, messages } = setup({ decode, maxTotalBytes: 100 });
+    const first = samples.load(0, file("x.wav", 60)); // the pad holds 60 bytes
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    pending[0].resolve(ok());
+    await first;
+    pending.length = 0;
+
+    const older = samples.load(0, file("a.wav", 80));
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const newer = samples.load(0, file("b.txt", 10));
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    pending[0].resolve(ok());
+    await older;
+    pending[1].resolve(bad());
+    await newer;
+    await flush();
+
+    pending.length = 0;
+    expect(await Promise.race([samples.load(1, file("c.wav", 50)), flush().then(() => "pending")])).toBe(false); // 60 + 50 > 100
+    expect(messages.at(-1)).toBe(MEMORY_FULL);
+    const fits = samples.load(1, file("d.wav", 30)); // 60 + 30 fits
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    pending[0].resolve(ok());
+    expect(await fits).toBe(true);
+  });
+});
+
+describe("the order of requests on a pad", () => {
+  // A budget whose answers are given when the test says, so loads can be made to reach acceptance out of order.
+  function slowBudget() {
+    const waiting = [];
+    return {
+      waiting,
+      limit: vi.fn((maxBytes) => new Promise((resolve) => waiting.push(() => resolve(maxBytes)))),
+      persist: vi.fn(async () => true),
+    };
+  }
+  const settled = (n, b) => vi.waitFor(() => expect(b.waiting.length).toBe(n));
+
+  it("keeps the newer file when the older one's quota lookup finishes last", async () => {
+    const b = slowBudget();
+    const { samples, kit } = setup({ budget: b });
+    const older = samples.load(0, file("older.wav"));
+    const newer = samples.load(0, file("newer.wav"));
+    await settled(2, b);
+    b.waiting[1](); // the newer one is accepted first
+    await newer;
+    b.waiting[0](); // the older arrives after it
+    expect(await older).toBe(false);
+    expect(kit.get(0).name).toBe("newer");
+  });
+
+  it("keeps the newer file when the older one is accepted first and overtaken", async () => {
+    const b = slowBudget();
+    const { samples, kit } = setup({ budget: b });
+    const older = samples.load(0, file("older.wav"));
+    const newer = samples.load(0, file("newer.wav"));
+    await settled(2, b);
+    b.waiting[0]();
+    await older;
+    b.waiting[1]();
+    await newer;
+    expect(kit.get(0).name).toBe("newer");
+  });
+
+  it("does not let a load that was waiting on the quota undo a reset made meanwhile", async () => {
+    const b = slowBudget();
+    const { samples, kit } = setup({ budget: b });
+    const load = samples.load(0, file("late.wav"));
+    await settled(1, b);
+    await samples.reset(0);
+    b.waiting[0]();
+    expect(await load).toBe(false);
+    expect(kit.isDefault(0)).toBe(true);
+    expect(samples.isKept(0)).toBe(false);
+  });
+
+  it("lets an older load stand when the newer file turns out not to decode", async () => {
+    const decode = vi
+      .fn()
+      .mockImplementation(async (_ctx, bytes) =>
+        bytes.byteLength === 7 ? { ok: false, reason: REASONS.notAudio } : decoded(),
+      );
+    const b = slowBudget();
+    const { samples, kit } = setup({ budget: b, decode });
+    const older = samples.load(0, file("older.wav", 50));
+    const newer = samples.load(0, file("bad.txt", 7));
+    await settled(2, b);
+    b.waiting[1](); // the newer is accepted, and fails to decode
+    expect(await newer).toBe(false);
+    b.waiting[0](); // so the older, arriving after, still stands
+    expect(await older).toBe(true);
+    expect(kit.get(0).name).toBe("older");
+  });
+});
+
+describe("asking the browser to keep the samples", () => {
+  it("asks synchronously from the load, before anything is awaited, because Firefox wants a fresh gesture", () => {
+    const b = { limit: vi.fn(async (m) => m), persist: vi.fn(async () => true) };
+    const { samples } = setup({ budget: b });
+    samples.load(0, file("a.wav")); // not awaited
+    expect(b.persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks once per visit, not for a file refused for its size, and not again", async () => {
+    const b = { limit: vi.fn(async (m) => m), persist: vi.fn(async () => true) };
+    const { samples } = setup({ budget: b });
+    await samples.load(0, file("big.wav", 6 * 1024 * 1024));
+    expect(b.persist).not.toHaveBeenCalled();
+    await samples.load(0, file("a.wav"));
+    await samples.load(1, file("b.wav"));
+    expect(b.persist).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the length check before decoding", () => {
+  it("refuses a file whose header says it is far too long, without reading or decoding it", async () => {
+    const { samples, decode, messages, kit } = setup({ probe: vi.fn(async () => 25) });
+    const long = file("loop.mp3", 3000);
+    expect(await samples.load(0, long)).toBe(false);
+    expect(messages.at(-1)).toBe("PAD 01 OVER 10 SECONDS");
+    expect(long.arrayBuffer).not.toHaveBeenCalled();
+    expect(decode).not.toHaveBeenCalled();
+    expect(kit.isDefault(0)).toBe(true);
+  });
+
+  it("treats the header as a hint: a file a little over the limit goes on to be decoded, and decoding decides", async () => {
+    const decode = vi.fn(async () => ({ ok: false, reason: REASONS.seconds }));
+    const { samples, messages } = setup({ probe: vi.fn(async () => 14), decode });
+    expect(await samples.load(0, file("maybe.mp3"))).toBe(false);
+    expect(decode).toHaveBeenCalled();
+    expect(messages.at(-1)).toBe("PAD 01 OVER 10 SECONDS");
+    expect(await setup({ probe: vi.fn(async () => 14) }).samples.load(0, file("fine.mp3"))).toBe(true);
+  });
+
+  it("lets a short file through, and one whose length cannot be told (decoding checks that)", async () => {
+    expect(await setup({ probe: vi.fn(async () => 2.5) }).samples.load(0, file("a.wav"))).toBe(true);
+    expect(await setup({ probe: vi.fn(async () => 10) }).samples.load(0, file("a.wav"))).toBe(true);
+    const { samples, decode } = setup({ probe: vi.fn(async () => null) });
+    expect(await samples.load(0, file("a.wav"))).toBe(true);
+    expect(decode).toHaveBeenCalled();
+  });
+
+  it("does not probe a file that is too big already", async () => {
+    const { samples, probe } = setup();
+    await samples.load(0, file("big.wav", 6 * 1024 * 1024));
+    expect(probe).not.toHaveBeenCalled();
   });
 });
 

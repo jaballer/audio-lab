@@ -56,7 +56,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `kit.js` — the sound on each pad: the built-in one, or a sample loaded onto it, and putting the built-in one back; no DOM
   - `sample-voice.js` — a loaded sample as a pad sound, and decoding a file (with the length and size caps and the reason a file was refused); no DOM
-  - `samples.js` — loading a file onto a pad, resetting it, and keeping the samples between visits (the files' bytes in IndexedDB, which pad has which in localStorage), restored once audio is running; no DOM
+  - `samples.js` — loading a file onto a pad, resetting it, and keeping the samples between visits (the files' bytes in IndexedDB, which pad has which in localStorage), restored at the start of a visit; no DOM
   - `pads.js`, `tempo-knob.js`, `velocity-bars.js`, `sample-loader.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `lcd.js` has the pure text formatter)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
@@ -96,6 +96,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
 - `shared/pattern.js`, `shared/history.js` — the step grid (on/off, and a velocity per step) and undo/redo over any state that can be set aside as a value; no DOM
+- `shared/storage-budget.js` — how much room the browser gives the site (the sampler's total cap is a share of it), asking it to keep the data (`navigator.storage.persist()`), and the "4.2/32 MB" text; never throws, no DOM
 - `shared/blob-store.js` — bytes kept in IndexedDB that never throws (a failed read is `null`, a failed write is `false`), for what localStorage cannot hold: the sampler's samples
 - `shared/audio.js` — the `AudioContext`, master volume, power on/off and first-interaction unlock, used by every app
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)

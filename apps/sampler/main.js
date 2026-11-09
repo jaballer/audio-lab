@@ -23,6 +23,7 @@ import { SAMPLES_KEY, createSamples } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
+import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "../../shared/step-keys.js";
 import { createTempoKnob } from "./tempo-knob.js";
@@ -128,6 +129,7 @@ const samples = createSamples({
   audio,
   restoreContext: () => (decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure()),
   store: createBlobStore(),
+  budget: createStorageBudget(),
   readMap: () => loadJson(SAMPLES_KEY),
   writeMap: (map) => saveJson(SAMPLES_KEY, map),
   onMessage: (text) => lcd.showMessage(text),
