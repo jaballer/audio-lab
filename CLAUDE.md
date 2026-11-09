@@ -103,6 +103,10 @@ Beyond what they enforce:
 
 ## Workflow: branch and pull request
 
+Project skills in `.claude/skills/` carry this workflow out: `ship-pr` (start to open PR), `pre-pr-review` (an
+independent review before every PR; do not rely on Codex, which has a usage limit), `try-in-page`,
+`handle-review-events` and `land-prs`.
+
 `main` is protected: changes land through a pull request, and the `check` job must pass first. Pushing to
 `main` deploys to GitHub Pages, so merging is shipping.
 
