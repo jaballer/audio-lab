@@ -274,9 +274,11 @@
 .pad-drawer-section h3 {
   margin: 0;
 }
-/* The heading holds the toggle button, which has the label's look. */
+/* The heading holds the toggle button, which has the label's look: the heading takes the label's size too, so its row is
+   as tall as the Sound and Color headings (a heading at the drawer's own size would make it a few pixels taller). */
 .pad-drawer-heading {
-  font-size: inherit;
+  font-size: 0.66rem;
+  line-height: 1;
 }
 .pad-drawer-msg {
   min-height: 1.2em; /* kept, so the message coming and going does not move what is under it */
