@@ -14,6 +14,8 @@
 //                                     // or the pad plays a built-in sound
 //   kit.settingsSnapshot();           // { pad: { gain, pitch, ... } } for the pads that are not at the defaults
 //   kit.voice(3).play(ctx, out, t)    // what the sequencer and live hits call: the sound, with the pad's settings
+//   kit.snapshot();                   // a kit of its own, as this one is now: later changes do not reach it (an export that
+//                                     // renders for a while is made from the kit it started with)
 //
 // `onChange(index, what)` is called when a pad's sound ("sound") or a setting ("setting") actually changes, so views
 // can show it and the page can save it. The
@@ -92,5 +94,14 @@ export function createKit(defaults, { onChange, settings: initial = {} } = {}) {
       return out;
     },
     voice,
+    // A kit that is fixed as this one is now: the sounds (a sound that can be edited while it plays, a sample whose trim
+    // is dragged, gives a copy of itself: `snapshot()`) and a copy of each pad's settings. It is a kit like any other,
+    // and tells nobody when it changes, which nothing makes it do.
+    snapshot() {
+      const frozen = current.map((sound) => (typeof sound.snapshot === "function" ? sound.snapshot() : sound));
+      // createKit makes a settings object of its own for each pad out of these, so the snapshot shares none with this kit.
+      const starting = Object.fromEntries(settings.map((entry, index) => [index, entry]));
+      return createKit(frozen, { settings: starting });
+    },
   };
 }

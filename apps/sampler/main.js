@@ -441,7 +441,9 @@ const pressExport = createExportAction({
   run: ({ signal, onProgress, snapshot }) =>
     exportSequence({
       song: snapshot.song,
-      kit,
+      // Taken here, once the saved samples are back (`ready` has been waited for): a kit snapshot at the press could hold
+      // the built-in sound of a pad whose sample is still being restored.
+      kit: kit.snapshot(),
       stepsPerBar: STEPS,
       options: snapshot.options,
       onMessage: sayExport,

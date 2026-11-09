@@ -302,3 +302,75 @@ describe("a pad's envelope", () => {
     expect(kit.settingsSnapshot()).toEqual({});
   });
 });
+
+describe("kit.snapshot", () => {
+  it("is a kit of its own that plays the sounds and settings the kit had when it was taken", () => {
+    const kit = createKit(defaults);
+    kit.setSetting(0, "gain", -6);
+    const frozen = kit.snapshot();
+    expect(frozen.length).toBe(3);
+    expect(frozen.get(0)).toBe(defaults[0]);
+    expect(frozen.settings(0).gain).toBe(-6);
+  });
+
+  it("does not follow later changes: a sound swapped, or a setting moved, while a render goes on", () => {
+    const kit = createKit(defaults);
+    const frozen = kit.snapshot();
+    kit.set(1, sound("loaded"));
+    kit.setSetting(2, "choke", 3);
+    kit.setSetting(0, "gain", -12);
+    expect(frozen.get(1)).toBe(defaults[1]);
+    expect(frozen.settings(2).choke).toBe(0);
+    expect(frozen.settings(0).gain).toBe(0);
+  });
+
+  it("is not changed by a change to it either, and tells nobody", () => {
+    const onChange = vi.fn();
+    const kit = createKit(defaults, { onChange });
+    const frozen = kit.snapshot();
+    frozen.setSetting(0, "gain", -3);
+    frozen.set(1, sound("x"));
+    expect(kit.settings(0).gain).toBe(0);
+    expect(kit.get(1)).toBe(defaults[1]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("plays through the pad's settings as they were when it was taken, not as they are now", () => {
+    const kit = createKit(defaults);
+    kit.setSetting(0, "gain", -6);
+    const frozen = kit.snapshot();
+    kit.setSetting(0, "gain", 0); // moved after: the snapshot still plays at -6 dB
+    const stages = [];
+    const ctx = {
+      createGain: () => {
+        const stage = { gain: { value: 1 }, connect() {} };
+        stages.push(stage);
+        return stage;
+      },
+    };
+    frozen.voice(0).play(ctx, { connect() {} }, 0);
+    expect(defaults[0].play).toHaveBeenCalled();
+    expect(stages.some((stage) => Math.abs(stage.gain.value - 0.501) < 0.001)).toBe(true);
+  });
+
+  it("takes a sound's own snapshot when it has one (a sample's trim moves while it is edited), and shares it when not", () => {
+    const frozenSound = sound("frozen");
+    const editable = { ...sound("sample"), snapshot: vi.fn(() => frozenSound) };
+    const kit = createKit([editable, defaults[1], defaults[2]]);
+    const frozen = kit.snapshot();
+    expect(editable.snapshot).toHaveBeenCalledTimes(1);
+    expect(frozen.get(0)).toBe(frozenSound);
+    expect(frozen.get(1)).toBe(defaults[1]); // a built-in has nothing to freeze
+  });
+
+  it("keeps a loaded sample's envelope: the sound it takes of a sample is still a sample (it can be trimmed)", () => {
+    const frozenSample = { ...sound("sample"), setTrim() {} };
+    const sample = { ...sound("sample"), setTrim() {}, snapshot: () => frozenSample };
+    const kit = createKit([sample, defaults[1], defaults[2]]);
+    kit.setSetting(0, "release", 100);
+    const frozen = kit.snapshot();
+    expect(frozen.get(0)).toBe(frozenSample);
+    expect(frozen.envelope(0)).toEqual(kit.envelope(0));
+    expect(frozen.envelope(0)).not.toBeNull();
+  });
+});

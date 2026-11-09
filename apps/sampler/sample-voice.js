@@ -119,6 +119,11 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
       current = clampTrim(next, buffer.duration, moved);
       return current;
     },
+    // A copy of the sound as it is now, for a render that goes on while the pad is edited: the same decoded audio, and
+    // the trim it has at this moment, which dragging the handles afterwards does not move.
+    snapshot() {
+      return createSampleSound({ id, name, buffer, bytes, trim: current });
+    },
     // The sample's outline, for drawing: made the first time it is asked for.
     peaks() {
       peaks ??= computePeaks(buffer, PEAK_COLUMNS);
