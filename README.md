@@ -76,6 +76,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `monitor.css` — monitor-only styles
 - `docs/mpc-sample.md` — reference notes on the Akai MPC Sample's MIDI settings, with links to its user guide
 - `docs/sequencer-design.md` — which parts of the sequencer are shared between pages, and why the MPC Sample page does not reuse the sampler's transport as it is
+- `docs/sample-editing-plan.md` — the design for editing the sampler's steps (velocity first); the phases are tracked in epic #87
 - `mpc-sample.html` + `apps/mpc-sample/` — companion page for the Akai MPC Sample: shows the device's pads (hits, velocity, pressure), which bank is in play, the note each pad sends, whether it is playing or stopped and its tempo (the Play and Stop lamps only show what the device reports: the page sends no Start or clock, because the device distorted while following it), and a step sequencer that follows the device's clock and sends it a note for each step
   - `main.js` — wires the page: connects MIDI to the board and the views, drawing at most once per frame and runs the step keys and the Play and Stop lamps
   - `devices.js` — the page's device profile: pad hits, releases and pressure (with the bank and raw note), Start / Stop / Continue and clock, and the messages the sequencer sends to play a pad
