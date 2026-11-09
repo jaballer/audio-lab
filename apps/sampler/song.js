@@ -65,7 +65,8 @@ function cleanVelocities(velocities, pattern) {
   const clean = {};
   if (!isObject(velocities)) return clean;
   for (const [rowKey, byStep] of Object.entries(velocities)) {
-    if (!isObject(byStep) || !pattern[rowKey]) continue;
+    // An own row only: stored JSON can name a row `__proto__` or `constructor`, which `pattern[rowKey]` would find.
+    if (!isObject(byStep) || !Object.hasOwn(pattern, rowKey)) continue;
     const kept = {};
     for (const [stepKey, value] of Object.entries(byStep)) {
       if (!pattern[rowKey].includes(Number(stepKey)) || !Number.isFinite(value)) continue;

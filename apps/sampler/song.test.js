@@ -271,6 +271,12 @@ describe("velocities", () => {
     expect(velocitiesOf(raw)).toEqual({});
   });
 
+  it("ignore a row named like an inherited property instead of throwing", () => {
+    // JSON.parse makes `__proto__` an own key, as stored data would have it.
+    const named = JSON.parse('{"__proto__": {"0": 50}, "constructor": {"0": 50}, "toString": {"0": 50}}');
+    expect(velocitiesOf(withVelocities(named))).toEqual({});
+  });
+
   it("are empty when a sequence has none, or has them in the wrong shape", () => {
     expect(velocitiesOf(withFirst({ velocities: undefined }))).toEqual({});
     expect(velocitiesOf(withVelocities([1, 2]))).toEqual({});

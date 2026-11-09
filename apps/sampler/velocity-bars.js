@@ -38,6 +38,26 @@ export function velocityAfterKey(key, value) {
   return keyed === undefined ? null : Math.min(FULL_VELOCITY, Math.max(MIN_VELOCITY, keyed));
 }
 
+// The index of the bar the pointer is at, given every bar's rectangle ({ left, right, top, bottom }). The bars
+// wrap into rows on a narrow screen, so the row is chosen first (the bar whose top-to-bottom span is nearest the
+// pointer, 0 away when it is inside) and then the bar along that row nearest to it by its centre. That way a
+// drag keeps going over the gaps between bars, and a pointer above or below a bar still counts as that bar.
+export function nearestBar(rects, x, y) {
+  let nearest = -1;
+  let bestRow = Infinity;
+  let bestAcross = Infinity;
+  rects.forEach((rect, i) => {
+    const row = Math.max(rect.top - y, y - rect.bottom, 0);
+    const across = Math.abs(x - (rect.left + rect.right) / 2);
+    if (row < bestRow || (row === bestRow && across < bestAcross)) {
+      nearest = i;
+      bestRow = row;
+      bestAcross = across;
+    }
+  });
+  return nearest;
+}
+
 export function createVelocityBars(element, { steps, group: groupSize = 4, onChange }) {
   const bars = [];
   element.classList.add("sampler-velocity");
@@ -74,23 +94,16 @@ export function createVelocityBars(element, { steps, group: groupSize = 4, onCha
     bars.push({ bar, fill, on: false, value: FULL_VELOCITY });
   }
 
-  // The bar nearest the pointer across the row, so a drag keeps going over the gaps between bars.
-  function barAt(clientX) {
-    let nearest = -1;
-    let best = Infinity;
-    bars.forEach(({ bar }, i) => {
-      const rect = bar.getBoundingClientRect();
-      const distance = Math.abs(clientX - (rect.left + rect.width / 2));
-      if (distance < best) {
-        best = distance;
-        nearest = i;
-      }
-    });
-    return nearest;
+  function barAt(clientX, clientY) {
+    return nearestBar(
+      bars.map(({ bar }) => bar.getBoundingClientRect()),
+      clientX,
+      clientY,
+    );
   }
 
   function paint(e) {
-    const i = barAt(e.clientX);
+    const i = barAt(e.clientX, e.clientY);
     if (i < 0 || !bars[i].on) return;
     const rect = bars[i].bar.getBoundingClientRect();
     const value = velocityFromPosition(e.clientY - rect.top, rect.height);
@@ -100,7 +113,7 @@ export function createVelocityBars(element, { steps, group: groupSize = 4, onCha
   let dragging = false;
   element.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
-    const i = barAt(e.clientX);
+    const i = barAt(e.clientX, e.clientY);
     if (i < 0) return;
     dragging = true;
     element.setPointerCapture(e.pointerId);

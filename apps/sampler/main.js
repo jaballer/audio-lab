@@ -150,6 +150,7 @@ function render() {
     on: state.stepsOn,
     velocities: state.stepVelocities,
     soundName,
+    first: state.page * STEPS, // so the labels name the step of the sequence the keyboard changes
   });
   stepKeys.paintPlayhead(state.playing, state.playheadStep);
   knob.render(state.bpm);
