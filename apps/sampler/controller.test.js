@@ -1151,7 +1151,20 @@ describe("a pad plays one voice at a time", () => {
     const first = voiceOf(sounds[0], 0);
     expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1); // it was going to be cut off by the queued step
     sampler.stop();
-    expect(first.gain.cancelScheduledValues).toHaveBeenCalledTimes(1); // and now it is not
+    expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0); // and now it is not: the cut is taken back
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1); // and not set again
+  });
+
+  it("keeps a pad cut off by a live tap when the queued step that also cut it is cancelled", () => {
+    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 3] } }) });
+    sampler.start();
+    for (let i = 0; i < 7; i++) advance(0.05); // step 0 sounds; step 3 (at 0.425 s) is queued and will cut it
+    const first = voiceOf(sounds[0], 0);
+    audio.ctx.currentTime = 0.36;
+    sampler.triggerPad(0); // a tap before that
+    sampler.stop();
+    // the queued step is gone, but the tap still cuts the long hit, from its own moment
+    expect(first.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0.36, expect.any(Number));
   });
 
   it("does the same when the queued step is rebuilt because the sequence was switched", () => {
@@ -1162,7 +1175,8 @@ describe("a pad plays one voice at a time", () => {
     for (let i = 0; i < 7; i++) advance(0.05);
     const first = voiceOf(sounds[0], 0);
     sampler.setSequence(1);
-    expect(first.gain.cancelScheduledValues).toHaveBeenCalledTimes(1);
+    expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
   });
 });
 

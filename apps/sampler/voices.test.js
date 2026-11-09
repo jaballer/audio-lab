@@ -87,11 +87,64 @@ describe("createVoices", () => {
     const first = voices.start(ctx, 0, {}, 10);
     const second = voices.start(ctx, 0, {}, 10.5);
     voices.undo(second.chokes);
-    expect(first.out.gain.cancelScheduledValues).toHaveBeenCalledWith(10.5);
+    expect(first.out.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0);
     vi.advanceTimersByTime(5000);
     expect(first.out.disconnect).not.toHaveBeenCalled(); // and it is not cleaned up
     // and a later hit cuts it again
     voices.start(ctx, 0, {}, 11);
     expect(first.out.gain.setTargetAtTime).toHaveBeenCalledTimes(2);
+  });
+
+  it("cuts a voice at the earlier time when a hit comes before the cut a queued step asked for", () => {
+    const { ctx } = fakeContext(10);
+    const voices = createVoices(2);
+    const long = voices.start(ctx, 0, {}, 10);
+    voices.start(ctx, 0, {}, 10.425); // a queued step cuts it at 10.425
+    voices.start(ctx, 0, {}, 10.41); // a live tap before that
+    expect(long.out.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 10.41, CHOKE_TIME_CONSTANT);
+  });
+
+  it("keeps the earlier cut when the queued step that asked for the later one is cancelled", () => {
+    const { ctx } = fakeContext(10);
+    const voices = createVoices(2);
+    const long = voices.start(ctx, 0, {}, 10);
+    const queued = voices.start(ctx, 0, {}, 10.425);
+    voices.start(ctx, 0, {}, 10.41);
+    long.out.gain.setTargetAtTime.mockClear();
+    voices.undo(queued.chokes);
+    expect(long.out.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 10.41, CHOKE_TIME_CONSTANT); // still cut, by the tap
+  });
+
+  it("goes back to the queued step's cut when the tap that came before it is the one taken back", () => {
+    const { ctx } = fakeContext(10);
+    const voices = createVoices(2);
+    const long = voices.start(ctx, 0, {}, 10);
+    voices.start(ctx, 0, {}, 10.425);
+    const tap = voices.start(ctx, 0, {}, 10.41);
+    voices.undo(tap.chokes);
+    expect(long.out.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 10.425, CHOKE_TIME_CONSTANT);
+  });
+
+  it("gives back every voice when several queued hits on one pad are cancelled together", () => {
+    const { ctx } = fakeContext(10);
+    const voices = createVoices(2);
+    const first = voices.start(ctx, 0, {}, 10);
+    const a = voices.start(ctx, 0, {}, 10.1);
+    const b = voices.start(ctx, 0, {}, 10.2);
+    const c = voices.start(ctx, 0, {}, 10.3);
+    voices.undo([...c.chokes, ...b.chokes, ...a.chokes]);
+    vi.advanceTimersByTime(5000);
+    expect(first.out.disconnect).not.toHaveBeenCalled();
+    expect(a.out.disconnect).not.toHaveBeenCalled();
+    expect(b.out.disconnect).not.toHaveBeenCalled();
+    expect(first.out.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0); // no cut left on it
+  });
+
+  it("cuts a hit that comes at the same moment, as two hits within one render quantum do", () => {
+    const { ctx } = fakeContext(10);
+    const voices = createVoices(2);
+    const first = voices.start(ctx, 0, {}, 10);
+    voices.start(ctx, 0, {}, 10);
+    expect(first.out.gain.setTargetAtTime).toHaveBeenCalledWith(0, 10, CHOKE_TIME_CONSTANT);
   });
 });

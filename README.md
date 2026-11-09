@@ -96,7 +96,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `main.js` — wires the page: points Tone at the shared `AudioContext`, builds the synth and delay, draws the keys and controls
   - `params.js` — the controls' ranges, defaults and readout formats
   - `tone-demo.css` — demo-only styles
-- `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler
+- `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and the gain stages a hit goes through (`withVelocity`, `withGain`); played by the sampler
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
 - `shared/pattern.js`, `shared/history.js` — the step grid (on/off, and a velocity per step) and undo/redo over any state that can be set aside as a value; no DOM
 - `shared/storage-budget.js` — how much room the browser gives the site (the sampler's total cap is a share of it), asking it to keep the data (`navigator.storage.persist()`), and the "4.2/32 MB" text; never throws, no DOM

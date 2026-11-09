@@ -248,11 +248,3 @@ export function withGain(ctx, out, gain) {
   stage.connect(out);
   return stage;
 }
-
-// Plays one sound now through the shared audio engine. `velocity` is 0-1.
-export function playSound(audio, sound, velocity = 1) {
-  // Dropped while the power is off: it would be muted, but a long tail would still be playing at power on.
-  if (!audio.powered) return;
-  const ctx = audio.ensure();
-  sound.play(ctx, withVelocity(ctx, audio.master, velocity), ctx.currentTime);
-}

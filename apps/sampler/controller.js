@@ -160,7 +160,7 @@ export function createSampler({
   function triggerPad(index, velocity = 1) {
     playLive(index, velocity);
     onPadHit(index);
-    // A hit that was not heard (the power is off: playSound dropped it) is not written into the pattern either.
+    // A hit that was not heard (the power is off: playLive dropped it) is not written into the pattern either.
     if (recording && scheduler.playing && audio.powered) recordHit(index, velocity);
     selectPad(index);
   }
