@@ -55,6 +55,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
   - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's gain and pitch settings (`voice(i).play` is what the sequencer and live hits call); no DOM
+  - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing (a fade on the audio clock), live or in the sequence; no DOM
   - `trim.js` — which part of a sample plays: a start and an end as fractions of its length, kept possible (inside the sample, never shorter than 5 ms), and which handle a press would move; no DOM
   - `waveform.js` — a sample's outline for drawing, the lowest and highest value of each slice; no DOM
   - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the text, and reading them back from a saved song; no DOM

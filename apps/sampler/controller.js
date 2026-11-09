@@ -44,8 +44,9 @@
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
 
-import { playSound, withVelocity } from "../../shared/sounds.js";
+import { withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
+import { createVoices } from "./voices.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
 import { FULL_VELOCITY, createPattern, firstDifference } from "../../shared/pattern.js";
@@ -105,7 +106,9 @@ export function createSampler({
   const lastPage = () => bars - 1;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
-  const scheduledHits = []; // { time, step, rows, bus } for each step handed to the scheduler, until its light is shown
+  const scheduledHits = []; // { time, step, rows, bus, chokes } for each step handed to the scheduler, until its light is shown
+  // A pad plays one voice at a time: a hit cuts off what the pad was still playing (voices.js).
+  const voices = createVoices(kit.length);
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -114,6 +117,7 @@ export function createSampler({
     onStep(step, time, heard) {
       const { ctx, master } = audio;
       const rows = [];
+      const chokes = []; // the voices these hits cut off, so cancelling the step can give them back
       // The step's hits go through a gain of their own, so that if playback is restarted or
       // stopped before the step is reached, its sounds can be cut off (see cancelQueuedHits).
       const bus = ctx.createGain();
@@ -122,13 +126,15 @@ export function createSampler({
       // the power came on (a 10 second sample, every step) and be heard all at once. The beat goes on silently.
       for (let row = 0; row < kit.length && audio.powered; row++) {
         if (pattern.isOn(row, step) && !heard.has(row)) {
-          kit.voice(row).play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
+          const voice = voices.start(ctx, row, bus, time);
+          kit.voice(row).play(ctx, withVelocity(ctx, voice.out, pattern.velocity(row, step) / FULL_VELOCITY), time);
+          chokes.push(...voice.chokes);
           rows.push(row);
         }
       }
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
-      scheduledHits.push({ time, step, rows, bus });
+      scheduledHits.push({ time, step, rows, bus, chokes });
       if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
     },
   });
@@ -141,9 +147,18 @@ export function createSampler({
     onChange();
   }
 
+  // One hit now, through a voice of the pad's own (so it cuts off the pad's last hit). Dropped while the power is off:
+  // it would be muted, but a long tail would still be playing at power on.
+  function playLive(index, velocity) {
+    if (!audio.powered) return;
+    const ctx = audio.ensure();
+    const { out } = voices.start(ctx, index, audio.master, ctx.currentTime);
+    kit.voice(index).play(ctx, withVelocity(ctx, out, velocity), ctx.currentTime);
+  }
+
   // velocity is 0-1.
   function triggerPad(index, velocity = 1) {
-    playSound(audio, kit.voice(index), velocity);
+    playLive(index, velocity);
     onPadHit(index);
     // A hit that was not heard (the power is off: playSound dropped it) is not written into the pattern either.
     if (recording && scheduler.playing && audio.powered) recordHit(index, velocity);
@@ -326,7 +341,7 @@ export function createSampler({
     const first = scheduledHits.findIndex((hit) => hit.time > now);
     if (first === -1) return;
     const { step, time } = scheduledHits[first];
-    for (const hit of scheduledHits.splice(first)) hit.bus.disconnect();
+    for (const hit of scheduledHits.splice(first)) cancelHit(hit);
     scheduler.rewindTo(step, time);
   }
 
@@ -345,10 +360,16 @@ export function createSampler({
   // cannot take them back. Silence the ones that have not started yet, so a restart or Stop does
   // not let the old run sound after the new one has begun (or after Stop). Sounds already
   // playing are left to ring out.
+  // A step that has not started is cut off, and what it was going to cut off (the pad's earlier voices) carries on.
+  function cancelHit(hit) {
+    hit.bus.disconnect();
+    voices.undo(hit.chokes);
+  }
+
   function cancelQueuedHits() {
     if (scheduledHits.length) {
       const now = clock.now();
-      for (const hit of scheduledHits) if (hit.time > now) hit.bus.disconnect();
+      for (const hit of scheduledHits) if (hit.time > now) cancelHit(hit);
     }
     scheduledHits.length = 0;
   }
