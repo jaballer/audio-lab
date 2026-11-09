@@ -29,10 +29,10 @@ failing check blocks the deploy.
 ## Architecture rules
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
-  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `echo-guard.js`, `song.js`, `kit.js`, `pad-settings.js`, `trim.js`, `waveform.js`, `samples.js`, `sample-voice.js`, `blob-store.js`, `storage-budget.js`, `history.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
+  `notes.js`, `holds.js`, `pointer-notes.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `echo-guard.js`, `song.js`, `kit.js`, `pad-settings.js`, `trim.js`, `waveform.js`, `samples.js`, `sample-voice.js`, `blob-store.js`, `storage-budget.js`, `history.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
   `midi-messages.js`, `mpc-sample.js`, `board.js`, `storage.js`, `console-log.js`, `pages.js`, `page-ready.js` and `audio.js` only export functions, factories or plain data. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
-  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `trim-view.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `synth-panel.js`, `site-header.js`, `console-drawer.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
+  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `trim-view.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `site-header.js`, `console-drawer.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.
@@ -49,11 +49,11 @@ failing check blocks the deploy.
   another controller means adding a profile. Both pages do this (`apps/keys/devices.js`,
   `apps/sampler/devices.js`). A profile can also describe a controller's lights (the Launchpad's LEDs); the
   LED colours and note numbers stay in the profile too.
-- **Class names are scoped to the page that owns them.** A name two pages could both want (a pad, a knob) is prefixed with the page (`sampler-pad`, `keys-pad`), so a component can later be shared without its styles colliding. Styles used by every page (chassis, LCD, buttons, header) live in `shared/base.css`.
+- **Class names are scoped to the page that owns them.** A name two pages could both want (a pad, a knob) is prefixed with the page (`sampler-pad`, `mpc-pad`), so a component can later be shared without its styles colliding. Styles used by every page (chassis, LCD, buttons, header) live in `shared/base.css`.
 - **Slider-to-value mappings use `shared/scales.js`**, not hand-written formulas.
-- **One place changes each value.** A parameter that can be set from a slider, a MIDI knob or a default goes
-  through a single setter (see `setSlider` / `setChoice` in `keys/main.js` and `synth.set`), so the UI, the
-  audio graph and the display cannot disagree. Parameters are listed once, in `apps/keys/params.js`; the page draws their controls from that table.
+- **One place changes each value.** A parameter that can be set from an on-screen dial, a MIDI knob or a default goes
+  through a single setter (see `setSlider` / `setChoice` in `keys/controller.js` and `synth.set`), so the UI, the
+  audio graph and the display cannot disagree. Parameters are listed once, in `apps/keys/params.js`; the page labels its dials from that table.
 - Schedule sounds at `AudioContext` times (a lookahead scheduler, `AudioParam` events), never by starting them
   directly from `setTimeout`/`setInterval` callbacks. Timers drift and stall; the audio clock does not.
 

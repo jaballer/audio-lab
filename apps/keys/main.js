@@ -1,10 +1,9 @@
 // MIDI keyboard test page, laid out like a compact 25-key controller: plays a
 // simple synth from a MIDI keyboard (or the computer keyboard) and shows notes,
-// velocity, joystick (pitch bend / mod), sustain pedal, pads and knobs.
+// velocity, joystick (pitch bend / mod), sustain pedal and knobs.
 //
 // This file only wires the pieces together: the synth, the page's state
-// (controller.js), the on-screen views (piano, LCD, pads, knobs, joystick,
-// synth controls) and the inputs (MIDI, computer keyboard).
+// (controller.js), the on-screen views (piano, LCD, knobs, joystick) and the inputs (MIDI, computer keyboard).
 
 import "../../shared/base.css";
 import "./keys.css";
@@ -16,18 +15,14 @@ import { createAudioNotice } from "../../shared/audio-notice.js";
 import { togglePower } from "../../shared/power.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { createMidiRouter } from "../../shared/midi-devices.js";
-import { loadJson, saveJson } from "../../shared/storage.js";
 import { createComputerKeys } from "../../shared/computer-keys.js";
 import { createKeysController } from "./controller.js";
 import { PROFILES, mpkMini } from "./devices.js";
 import { createKnobDials } from "./knob-dials.js";
 import { createLcd } from "./lcd.js";
-import { createPadGrid } from "./pad-grid.js";
-import { createPadLearner } from "./pad-learner.js";
-import { GROUPS, PARAMS, choiceLabel, knobForChoice, positionKnob } from "./params.js";
+import { PARAMS, choiceLabel, knobForChoice, positionKnob } from "./params.js";
 import { createPiano } from "../../shared/piano.js";
 import { createStick } from "./stick.js";
-import { createSynthPanel } from "./synth-panel.js";
 import { DEFAULT_PARAMS, createSynth } from "./synth.js";
 
 const $ = (id) => document.getElementById(id);
@@ -58,7 +53,7 @@ const synth = createSynth(audio);
 // ---------- State ----------
 // Envelope and waveform changes apply to notes played after the change; cutoff,
 // resonance and volume also move notes that are already sounding. Every
-// parameter change goes through the controller, whether it came from a slider,
+// parameter change goes through the controller, whether it came from a dial,
 // a hardware knob or the defaults.
 //
 // The callbacks use the views below, which are built after this: that is fine
@@ -70,11 +65,9 @@ const keys = createKeysController({
   onNoteDown: (note) => piano.press(note),
   onNoteUp: (note) => piano.release(note),
   onSlider: (param, position, text) => {
-    panel.showSlider(param, position, text);
     knobDials.turn(PARAMS.indexOf(param), positionKnob(position), text);
   },
   onChoice: (param, choice) => {
-    panel.showChoice(param, choice);
     const index = PARAMS.indexOf(param);
     // A dial already inside this choice's part of the travel stays where it is, so
     // it keeps following the hand instead of snapping to the middle. The text is set
@@ -88,8 +81,8 @@ const lcd = createLcd({
   note: $("lcd-note"),
   vel: $("lcd-vel"),
   wheels: $("lcd-wheels"),
+  knob: $("lcd-knob"),
   cc: $("lcd-cc"),
-  pad: $("lcd-pad"),
 });
 
 const stick = createStick($("stick-ball"));
@@ -105,12 +98,6 @@ const piano = createPiano($("piano"), {
   onNoteOff: (note, source) => keys.noteOff(note, source),
 });
 
-const PAD_STORE_KEY = "keys.learned";
-const padLearner = createPadLearner({
-  load: () => loadJson(PAD_STORE_KEY),
-  save: (data) => saveJson(PAD_STORE_KEY, data),
-});
-const padGrid = createPadGrid($("pads"), { notes: padLearner.notes });
 // A dial dragged with the mouse takes the same road as a hardware knob.
 const knobDials = createKnobDials($("knobs"), {
   ccs: mpkMini.knobCcs,
@@ -118,17 +105,9 @@ const knobDials = createKnobDials($("knobs"), {
   onChange: (index, value) => keys.applyKnob(index, value),
 });
 
-const panel = createSynthPanel($("synth"), {
-  params: PARAMS,
-  groups: GROUPS,
-  onSlider: (param, position) => keys.setSlider(param, position),
-  onChoice: (param, choice) => keys.setChoice(param, choice),
-});
-
 // ---------- MIDI ----------
 // MIDI cannot unlock audio (only a click or key press does), so a note that arrives
-// while sound is still off makes no sound: point at the notice. (Not for a pad: those
-// are only shown here, they never play.)
+// while sound is still off makes no sound: point at the notice.
 const nudgeIfSilent = () => {
   if (!audio.running) audioNotice.nudge();
 };
@@ -146,14 +125,12 @@ const handlers = {
   knob: (e) => {
     // The dial shows the knob's own position, even where a choice knob stays on one choice.
     knobDials.turn(e.index, e.value);
-    // The on-screen controls jump to the knob's position as soon as it is turned.
+    // The synth and the LCD follow the knob as soon as it is turned.
     keys.applyKnob(e.index, e.value);
   },
-  pad: (e) => {
-    const slot = padLearner.slotFor(e.note);
-    if (slot >= 0) padGrid.hit(slot, e.note, e.velocity);
-    keys.showPad({ note: e.note, velocity: e.velocity, channel: e.channel });
-  },
+  // The page has no pads. The profile still claims the controller's channel-10 notes as
+  // pad events, so a hit is dropped here instead of playing the synth as a key.
+  pad: () => {},
   cc: (e) => keys.showCc(e.controller, e.value),
 };
 
