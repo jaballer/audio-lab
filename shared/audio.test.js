@@ -305,3 +305,69 @@ describe("createAudioEngine", () => {
     });
   });
 });
+
+describe("killSound", () => {
+  // The master gains the context made, in order, with the calls on each.
+  function withMasters() {
+    installAudioContext();
+    const made = [];
+    const audio = createAudioEngine({
+      volume: 0.6,
+      createContext: () => {
+        const ctx = new AudioContext();
+        ctx.currentTime = 2;
+        ctx.createGain = () => {
+          const gain = { gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() };
+          made.push(gain);
+          return gain;
+        };
+        return ctx;
+      },
+    });
+    return { audio, made };
+  }
+
+  it("does nothing before the context exists", () => {
+    const { audio, made } = withMasters();
+    expect(() => audio.killSound()).not.toThrow();
+    expect(made).toHaveLength(0);
+  });
+
+  it("fades the master that sounds are connected to and cuts it off once it is silent", () => {
+    vi.useFakeTimers();
+    const { audio, made } = withMasters();
+    audio.ensure();
+    const old = audio.master;
+    audio.killSound();
+    const [target, when, constant] = old.gain.setTargetAtTime.mock.calls.at(-1);
+    expect(target).toBe(0);
+    expect(when).toBe(2);
+    expect(constant).toBeLessThan(0.01); // faster than a power-off, and still a fade, so no click
+    expect(old.disconnect).not.toHaveBeenCalled(); // not before the fade has had time
+    vi.advanceTimersByTime(100);
+    expect(old.disconnect).toHaveBeenCalledTimes(1);
+    expect(made).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("gives sounds played afterwards a new master, at the level the volume is at, wired to the speakers", () => {
+    const { audio } = withMasters();
+    const ctx = audio.ensure();
+    const old = audio.master;
+    audio.setVolume(0.3);
+    audio.killSound();
+    expect(audio.master).not.toBe(old);
+    expect(audio.master.gain.value).toBe(0.3);
+    expect(audio.master.connect).toHaveBeenCalledWith(ctx.destination);
+    audio.setVolume(0.5); // the volume control works on the new one
+    expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.5, ctx.currentTime, expect.any(Number));
+  });
+
+  it("keeps the power off when it is killed while off", () => {
+    const { audio } = withMasters();
+    audio.ensure();
+    audio.powerOff();
+    audio.killSound();
+    expect(audio.master.gain.value).toBe(0);
+  });
+});

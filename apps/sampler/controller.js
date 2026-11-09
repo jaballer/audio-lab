@@ -27,7 +27,8 @@
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
 //   sampler.start()              // from the first step, even if it is already playing
-//   sampler.stop(); sampler.toggleRec()
+//   sampler.stop()               // stops the sequence; pressed again while stopped, it cuts off all sound (tails too)
+//   sampler.toggleRec()
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.copySteps(); sampler.pasteSteps()   // the steps and velocities of the bar showing for the selected pad,
 //                                               // over the bar showing for the selected pad (another bar, pad or sequence)
@@ -361,9 +362,16 @@ export function createSampler({
     onChange();
   }
 
+  // The first press stops the sequence and lets what is sounding ring out; a press when it is already stopped
+  // cuts off everything still sounding (a long tail, a sample), as a panic button does on hardware.
   function stop() {
+    const wasPlaying = scheduler.playing;
     scheduler.stop();
     cancelQueuedHits();
+    if (!wasPlaying) {
+      audio.killSound();
+      onMessage("ALL SOUND OFF");
+    }
     onChange();
   }
 
