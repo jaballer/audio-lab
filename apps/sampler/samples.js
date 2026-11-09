@@ -6,14 +6,16 @@
 //     store,                 // shared/blob-store.js: where the files' bytes are kept
 //     readMap, writeMap,     // () => stored map | null, and (map) => saved: which pads have a sample, by name
 //     onMessage,             // (text) a short note for the LCD
+//     restoreContext,        // () => an OfflineAudioContext to decode kept samples with, before any click
 //   });
 //   await samples.load(3, file);   // true when pad 3 plays the file now
 //   await samples.reset(3);        // the built-in sound again
-//   await samples.restore();       // once the audio context is running: put back what was kept
+//   await samples.restore();       // at the start of a visit: put back what was kept
 //
-// The file's original bytes are what is kept, not the decoded audio: they are smaller, and the page decodes
-// them again for whatever sample rate the audio context has. Nothing is decoded before the context exists
-// (it is made on the first click or key), so until then a pad with a kept sample plays its built-in sound.
+// The file's original bytes are what is kept, not the decoded audio: they are smaller. They are decoded again
+// at the start of each visit, with an offline context, because the real audio context only exists after the
+// first click or key and a pad must not play its built-in sound until then. A decoded buffer is not tied to
+// the context that made it, so the real one plays it (resampling to its own rate).
 // Whatever storage does, the sample plays in this visit: a failed save only means it is gone next time.
 
 import { pad2, sampleName } from "./format.js";
@@ -47,6 +49,7 @@ export function createSamples({
   readMap,
   writeMap,
   onMessage = () => {},
+  restoreContext = () => audio.ensure(),
   decode = decodeSample,
   maxTotalBytes = MAX_TOTAL_BYTES,
 }) {
@@ -109,11 +112,13 @@ export function createSamples({
     onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
   }
 
-  // Call when the audio context is running. Only once: it is for the start of a visit.
+  // Only once: it is for the start of a visit. Without a way to decode before the audio context exists, call it
+  // once the context is running instead.
   async function restore() {
     if (restored) return;
     restored = true;
-    const ctx = audio.ensure();
+    const ctx = restoreContext();
+    if (!ctx) return;
     for (const [key, info] of Object.entries(pads)) {
       const pad = Number(key);
       if (touched.has(pad)) continue;

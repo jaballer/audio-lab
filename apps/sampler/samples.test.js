@@ -185,6 +185,26 @@ describe("restore", () => {
     expect(decode).not.toHaveBeenCalled();
   });
 
+  it("decodes with the context it is given, without making the audio context", async () => {
+    const offline = { name: "offline" };
+    const { samples, audio, decode, kit } = setup({
+      stored,
+      store: fakeStore({ initial: kept() }),
+      restoreContext: () => offline,
+    });
+    await samples.restore();
+    expect(decode).toHaveBeenCalledWith(offline, expect.anything());
+    expect(audio.ensure).not.toHaveBeenCalled();
+    expect(kit.get(0).name).toBe("Kick 808");
+  });
+
+  it("does nothing when there is no context to decode with", async () => {
+    const { samples, store, kit } = setup({ stored, restoreContext: () => null });
+    await samples.restore();
+    expect(store.get).not.toHaveBeenCalled();
+    expect(kit.isDefault(0)).toBe(true);
+  });
+
   it("runs once", async () => {
     const { samples, decode } = setup({ stored, store: fakeStore({ initial: kept() }) });
     await samples.restore();

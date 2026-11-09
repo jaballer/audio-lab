@@ -31,6 +31,12 @@ import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
 
+// Kept samples are decoded at the start of the visit, with an offline context: the real one only exists after the
+// first click or key, and until then (or until it had decoded them) the pads would play their built-in sounds.
+// A browser without OfflineAudioContext waits for the real one.
+const decodesEarly = typeof OfflineAudioContext === "function";
+const RESTORE_SAMPLE_RATE = 48000; // a typical output rate; the real context resamples when it plays
+
 const site = createSiteHeader($("site-header"), { current: "sampler" });
 const header = createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
@@ -69,8 +75,8 @@ const audio = createAudioEngine({
   onStateChange: (state) => {
     audioNotice.update(state);
     header.setPowered(state === "running");
-    // Samples are decoded by the audio context, which only exists after the first click or key.
-    if (state === "running") samples.restore();
+    // Where kept samples cannot be decoded before the first click (see `samples` below), do it then.
+    if (state === "running" && !decodesEarly) samples.restore();
   },
 });
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
@@ -119,6 +125,7 @@ const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (index) =>
 const samples = createSamples({
   kit,
   audio,
+  restoreContext: () => (decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure()),
   store: createBlobStore(),
   readMap: () => loadJson(SAMPLES_KEY),
   writeMap: (map) => saveJson(SAMPLES_KEY, map),
@@ -301,4 +308,5 @@ placeConsole();
 narrow.addEventListener("change", placeConsole);
 
 // ---------- Init ----------
+if (decodesEarly) samples.restore(); // kept samples back on their pads, before the first click or key
 sampler.selectPad(0);
