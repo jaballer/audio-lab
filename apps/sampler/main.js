@@ -23,7 +23,7 @@ import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
-import { createPadGrid, padForKey } from "./pads.js";
+import { createPadGrid, padForKey, padPressAction } from "./pads.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { createSettingsSliders } from "./settings-sliders.js";
@@ -147,7 +147,17 @@ const lcd = createLcd({
   steps: STEPS,
 });
 
-const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (index) => sampler.triggerPad(index) });
+const padGrid = createPadGrid($("pads"), {
+  sounds: SOUNDS,
+  onTrigger(index, modifiers) {
+    if (padPressAction(modifiers) === "edit") {
+      sampler.selectPad(index);
+      padDrawer.open(); // opened by code, so focus stays on the pad
+    } else {
+      sampler.triggerPad(index);
+    }
+  },
+});
 // The colours saved with the song, on the pads from the start.
 for (let index = 0; index < kit.length; index++) padGrid.setColor(index, kit.settings(index).color);
 

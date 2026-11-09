@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEY_ROWS, padForKey, padLabel } from "./pads.js";
+import { KEY_ROWS, padForKey, padLabel, padPressAction } from "./pads.js";
 
 describe("padForKey", () => {
   it("maps the bottom key row to pads 1-4 (indexes 0-3)", () => {
@@ -36,5 +36,17 @@ describe("padLabel", () => {
     expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 5 })).toBe("Pad 3, C.Hat, key C, blue");
     expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 0 })).toBe("Pad 3, C.Hat, key C");
     expect(padLabel({ index: 2, name: "C.Hat", key: "c" })).toBe("Pad 3, C.Hat, key C");
+  });
+});
+
+describe("padPressAction", () => {
+  it("plays the pad on a plain press", () => {
+    expect(padPressAction({ shift: false })).toBe("play");
+    expect(padPressAction({})).toBe("play");
+    expect(padPressAction()).toBe("play"); // a caller that passes no modifiers
+  });
+
+  it("edits the pad, without playing it, when Shift is held", () => {
+    expect(padPressAction({ shift: true })).toBe("edit");
   });
 });

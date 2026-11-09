@@ -1,6 +1,6 @@
 // The 4 x 4 grid of pads, and the computer keys that mirror it.
 //
-//   const grid = createPadGrid(element, { sounds, onTrigger });
+//   const grid = createPadGrid(element, { sounds, onTrigger });   // onTrigger(index, { shift }) for a pointer press
 //   grid.flash(0);    // a pad was pressed: light it and push it down briefly
 //   grid.light(0);    // the sequence played a pad: light it, but it does not move
 //   grid.select(0);   // mark the selected pad (aria-current)
@@ -27,13 +27,19 @@ export function padForKey(key) {
 
 const FLASH_MS = 110;
 
+// What a pointer press on a pad does. A plain press plays it. Shift is for editing: it selects the pad and opens its
+// editor without a sound, so a pad can be set up in the middle of a live take without a hit landing in it. (The
+// computer keys that mirror the pads still play, Shift or not.) The Edit Pad button is the way to the editor for a
+// touch screen, a MIDI pad or the keyboard, which have no Shift press on a pad.
+export const padPressAction = ({ shift = false } = {}) => (shift ? "edit" : "play");
+
 // A pad's label for a screen reader: which pad, what it plays, its key, and its colour when it has one.
 export function padLabel({ index, name, key, color = 0 }) {
   return `Pad ${index + 1}, ${name}, key ${key.toUpperCase()}${color ? `, ${padColorName(color).toLowerCase()}` : ""}`;
 }
 
-// `sounds` is a list of { name }; `onTrigger(index)` is called for a pointer
-// press or a keyboard activation (Enter/Space on a focused pad).
+// `sounds` is a list of { name }; `onTrigger(index, { shift })` is called for a pointer press, with whether Shift was
+// held, and `onTrigger(index)` for a keyboard activation (Enter/Space on a focused pad).
 export function createPadGrid(element, { sounds, onTrigger }) {
   const padEls = [];
   const keys = []; // each pad's computer key, for its label
@@ -62,9 +68,10 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       btn.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return; // a right or middle press is not a hit (a right press opens the context menu)
         e.preventDefault();
-        onTrigger(idx);
+        onTrigger(idx, { shift: e.shiftKey });
       });
-      // Keyboard activation (Enter/Space on a focused pad) fires click with detail 0.
+      // Keyboard activation (Enter/Space on a focused pad) fires click with detail 0. It always plays: Shift is for the
+      // pointer, since the editor opens without moving focus into it; Edit Pad is the keyboard's way in.
       btn.addEventListener("click", (e) => {
         if (e.detail === 0) onTrigger(idx);
       });
