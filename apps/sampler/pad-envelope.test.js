@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { envelopeShape, isFlat } from "./pad-envelope.js";
+import { curveLevelAt, envelopeCurve, envelopeShape, isFlat } from "./pad-envelope.js";
 
 const close = (shape) => shape.map(([t, v]) => [Number(t.toFixed(6)), Number(v.toFixed(6))]);
 
@@ -132,5 +132,74 @@ describe("envelopeShape", () => {
       expect(time).toBeLessThanOrEqual(1.5);
     }
     expect(shape.at(-1)[0]).toBe(1.5);
+  });
+});
+
+describe("envelopeCurve", () => {
+  const envelope = { attack: 0.5, decay: 0, sustain: 1, release: 0.5 };
+
+  it("is the shape laid over the sample, as fractions of it: the whole sample from 0 to 1", () => {
+    expect(close(envelopeCurve(envelope, { trim: { start: 0, end: 1 }, duration: 4 }))).toEqual([
+      [0, 0],
+      [0.125, 1], // the attack, 0.5 s of 4 s
+      [0.875, 1], // the release begins 0.5 s before the end
+      [1, 0],
+    ]);
+  });
+
+  it("covers only the trimmed part, from where it starts to where it ends", () => {
+    const curve = envelopeCurve(envelope, { trim: { start: 0.25, end: 0.75 }, duration: 4 }); // 2 s of it
+    expect(close(curve)).toEqual([
+      [0.25, 0],
+      [0.375, 1],
+      [0.625, 1],
+      [0.75, 0],
+    ]);
+  });
+
+  it("is laid over the sample's own time when the pitch changes how long it is heard: the same end, a shorter attack in it", () => {
+    // an octave up: the 4 s sample is heard for 2 s, the attack's 0.5 s is 1 s of the sample, the release 1 s of it
+    const curve = envelopeCurve(envelope, { trim: { start: 0, end: 1 }, duration: 4, rate: 2 });
+    expect(close(curve)).toEqual([
+      [0, 0],
+      [0.25, 1],
+      [0.75, 1],
+      [1, 0],
+    ]);
+    expect(curve[0][0]).toBe(0);
+    expect(curve.at(-1)[0]).toBe(1);
+  });
+
+  it("starts and ends where the trim does, whatever the rate", () => {
+    for (const rate of [0.5, 1, 2]) {
+      const curve = envelopeCurve(envelope, { trim: { start: 0.2, end: 0.6 }, duration: 5, rate });
+      expect(curve[0][0]).toBeCloseTo(0.2);
+      expect(curve.at(-1)[0]).toBeCloseTo(0.6);
+    }
+  });
+});
+
+describe("curveLevelAt", () => {
+  const curve = [
+    [0.2, 0],
+    [0.4, 1],
+    [0.8, 0.5],
+  ];
+
+  it("interpolates between the points", () => {
+    expect(curveLevelAt(curve, 0.3)).toBeCloseTo(0.5);
+    expect(curveLevelAt(curve, 0.6)).toBeCloseTo(0.75);
+  });
+
+  it("is the level at a point itself", () => {
+    expect(curveLevelAt(curve, 0.2)).toBe(0);
+    expect(curveLevelAt(curve, 0.4)).toBe(1);
+    expect(curveLevelAt(curve, 0.8)).toBe(0.5);
+  });
+
+  it("is 1, untouched, outside the part the curve covers, and for no curve", () => {
+    expect(curveLevelAt(curve, 0.1)).toBe(1);
+    expect(curveLevelAt(curve, 0.9)).toBe(1);
+    expect(curveLevelAt([], 0.5)).toBe(1);
   });
 });

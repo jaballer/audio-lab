@@ -16,6 +16,8 @@
 // before the decay has finished cuts the decay short, from the level it had reached), except that the release never
 // begins before the attack has reached full, so a release as long as the sample still plays it, rising and falling.
 
+import { trimWindow } from "./trim.js";
+
 const MIN_DECAY = 0.001; // a decay of 0 with a sustain below 1 is a step down, which is a click; this is a fast ramp
 
 // Does this envelope change nothing: no attack, no release, and nothing to decay to?
@@ -50,4 +52,28 @@ export function envelopeShape({ attack = 0, decay = 0, sustain = 1, release = 0 
   if (release > 0) shape.push([length, 0]);
   // A point at the same time as the one before it replaces it (a ramp cannot be given two values at one moment).
   return shape.filter((point, i) => i === shape.length - 1 || point[0] !== shape[i + 1][0]);
+}
+
+// The envelope as a curve over the sample's waveform, for drawing: [[x, level], ...] where x is a fraction (0 to 1) of
+// the whole sample, so it lines up with the waveform whatever the trim and the pitch are. The envelope runs over the
+// trimmed part, and the time it is heard for is shorter or longer than that by the playback rate, so a point `t`
+// seconds into the hit is `t * rate` seconds into the sample.
+//
+//   envelopeCurve(envelope, { trim: { start: 0.25, end: 0.75 }, duration: 4, rate: 1 })   // from x = 0.25 to x = 0.75
+export function envelopeCurve(envelope, { trim, duration, rate = 1 }) {
+  const { offset, length } = trimWindow(trim, duration);
+  return envelopeShape(envelope, length / rate).map(([time, level]) => [(offset + time * rate) / duration, level]);
+}
+
+// The level of a curve at `x`, by interpolation; 1 (untouched) outside the part the curve covers.
+export function curveLevelAt(curve, x) {
+  if (!curve.length || x < curve[0][0] || x > curve.at(-1)[0]) return 1;
+  for (let i = 1; i < curve.length; i++) {
+    const [x1, level1] = curve[i];
+    if (x <= x1) {
+      const [x0, level0] = curve[i - 1];
+      return x1 === x0 ? level1 : level0 + ((level1 - level0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return curve.at(-1)[1];
 }

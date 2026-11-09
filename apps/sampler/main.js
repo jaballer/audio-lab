@@ -16,6 +16,7 @@ import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportAction, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
+import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
@@ -259,7 +260,11 @@ function render() {
     info: formatSampleInfo(kit.get(state.selected).info),
   });
   const sound = kit.get(state.selected);
-  trimView.refresh(typeof sound.setTrim === "function" ? sound : null); // a built-in sound has no waveform
+  // A built-in sound has no waveform. The envelope and the pitch decide the curve drawn on it.
+  trimView.refresh(typeof sound.setTrim === "function" ? sound : null, {
+    envelope: kit.envelope(state.selected),
+    rate: pitchToRate(state.padSettings.pitch),
+  });
   settingsSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   envelopeSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   colorSwatches.refresh({ color: state.padSettings.color });
