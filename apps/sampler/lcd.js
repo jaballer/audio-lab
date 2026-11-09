@@ -2,7 +2,11 @@
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, selected, soundName, bpm, playheadStep, steps, stepsOn }
+//   state = { playing, recording, sequence, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, stepsOn }
+//     steps:     how many steps one bar has
+//     bars:      how many bars the sequence has
+//     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
+//     sequence:  the current sequence, 0-based
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 
@@ -10,12 +14,26 @@ import { pad2 } from "./format.js";
 
 const MESSAGE_MS = 1600;
 
-export function formatLcd({ playing, recording, selected, soundName, bpm, playheadStep, steps, stepsOn }) {
-  const stepLabel = playheadStep >= 0 && playing ? pad2(playheadStep + 1) : "--";
+export function formatLcd({
+  playing,
+  recording,
+  sequence = 0,
+  selected,
+  soundName,
+  bpm,
+  playheadStep,
+  playheadPosition = playheadStep,
+  steps,
+  bars = 1,
+  stepsOn,
+}) {
+  const located = playheadPosition >= 0 && playing;
+  const stepLabel = located ? pad2((playheadPosition % steps) + 1) : "--";
+  const barLabel = located ? pad2(Math.floor(playheadPosition / steps) + 1) : "--";
   return {
-    line1: `SEQ 01  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
+    line1: `SEQ ${pad2(sequence + 1)}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
     line2: `PAD ${pad2(selected + 1)}  ${soundName}`,
-    line3: `BPM ${bpm.toFixed(1)}  STEP ${stepLabel}/${steps}`,
+    line3: `BPM ${bpm.toFixed(1)}  BAR ${barLabel}/${pad2(bars)}  STEP ${stepLabel}/${steps}`,
     ruler: stepsOn.map((on, i) => ({ on, now: playing && i === playheadStep })),
   };
 }

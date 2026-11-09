@@ -49,11 +49,11 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 
 - `index.html` + `apps/sampler/` — the pad sampler
   - `main.js` — wires the page: connects the pads, step keys, tempo knob, computer keyboard and MIDI to the sampler and the views
-  - `controller.js` — the sampler's state (selected pad, recording, volume) and every action on it (hit a pad, toggle a step, record, tap tempo...), with the follow-ups each one needs (LCD message, save, redraw); no DOM
-  - `layout.js` — how many pads (and in what grid) and steps the sampler has, decided once; the pad grid, step keys, key map and Launchpad profile read it; no DOM
+  - `controller.js` — the sampler's state (selected pad, recording, volume, the current sequence) and every action on it (hit a pad, toggle a step, record, tap tempo...), with the follow-ups each one needs (LCD message, save, redraw); no DOM
+  - `layout.js` — how many pads (and in what grid), steps per bar, bars and sequences the sampler has, decided once; the pad grid, step keys, key map and Launchpad profile read it; no DOM
   - `format.js` — small text helpers for the display and messages; no DOM
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
-  - `song.js` — what is kept between visits (pattern, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
+  - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `pads.js`, `tempo-knob.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `lcd.js` has the pure text formatter)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step

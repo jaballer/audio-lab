@@ -17,18 +17,27 @@ describe("formatLcd", () => {
     expect(formatLcd(stopped)).toMatchObject({
       line1: "SEQ 01  STOPPED",
       line2: "PAD 01  Kick",
-      line3: "BPM 100.0  STEP --/16",
+      line3: "BPM 100.0  BAR --/01  STEP --/16",
     });
+  });
+
+  it("shows the sequence number, counting from 1", () => {
+    expect(formatLcd({ ...stopped, sequence: 2 }).line1).toBe("SEQ 03  STOPPED");
   });
 
   it("shows PLAYING and the step number, counting from 1", () => {
     const text = formatLcd({ ...stopped, playing: true, playheadStep: 4 });
     expect(text.line1).toBe("SEQ 01  PLAYING");
-    expect(text.line3).toBe("BPM 100.0  STEP 05/16");
+    expect(text.line3).toBe("BPM 100.0  BAR 01/01  STEP 05/16");
+  });
+
+  it("shows the bar the playhead is in, out of all the bars, and the step within it", () => {
+    const text = formatLcd({ ...stopped, playing: true, bars: 4, playheadPosition: 37, playheadStep: -1 });
+    expect(text.line3).toBe("BPM 100.0  BAR 03/04  STEP 06/16");
   });
 
   it("hides a stale playhead step while stopped", () => {
-    expect(formatLcd({ ...stopped, playheadStep: 7 }).line3).toBe("BPM 100.0  STEP --/16");
+    expect(formatLcd({ ...stopped, playheadStep: 7 }).line3).toBe("BPM 100.0  BAR --/01  STEP --/16");
   });
 
   it("shows no step before the first one plays", () => {

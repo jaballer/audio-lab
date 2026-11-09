@@ -251,8 +251,42 @@
     inset 0 2px 6px rgba(0, 0, 0, 0.25),
     0 1px 0 #f3f0e6;
 }
-.step-title {
+/* Under the LCD: the settings of the sequence the LCD is showing. */
+.seq-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.step-head,
+.step-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.step-head {
+  justify-content: space-between;
+  flex-wrap: wrap;
   margin-bottom: 10px;
+}
+.seq-lengths {
+  display: flex;
+  gap: 6px;
+}
+/* A length key is a narrow LED button: the lamp sits above the number. */
+.seq-lengths .btn {
+  min-width: 2.6em;
+}
+.seq-bar .btn:disabled,
+.step-nav .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.seq-bar .btn:disabled:active,
+.step-nav .btn:disabled:active {
+  transform: none;
+  border-bottom-width: 4px;
 }
 
 /* ---------- Focus ---------- */

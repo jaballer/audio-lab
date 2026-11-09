@@ -2,7 +2,7 @@
 // and the volume. No DOM, and no storage of its own (the caller passes `save`),
 // so it can be tested. Storage itself is shared/storage.js.
 //
-//   const song = parseSong(loadJson(SONG_KEY), { rows: 16, steps: 16 });   // null if unusable
+//   const song = parseSong(loadJson(SONG_KEY), { rows: 16, steps: 16, maxBars: 8, sequenceCount: 8 });   // null if unusable
 //   const saver = createSongSaver({ read, save });
 //   saver.schedule();   // something changed: save once things settle
 //   saver.flush();      // about to leave the page: save now if a change is waiting
@@ -16,16 +16,27 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 1;
+export const SONG_VERSION = 2;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
-// field itself is set by upgradeSong. Empty while version 1 is the only one.
-const MIGRATIONS = {};
+// field itself is set by upgradeSong.
+const MIGRATIONS = {
+  // Version 1 had one pattern; version 2 has a list of sequences, each with its own pattern and length.
+  // (`bars` is read only so a pattern longer than one bar is not lost; the page did not save it at first.)
+  1: ({ bars, pattern, ...rest }) => ({ ...rest, current: 0, sequences: [{ bars, pattern }] }),
+};
 
 const VOLUME_MAX = 100;
 
-// `pattern` is pattern.snapshot(): { pad row: [steps that are on] }.
-export const serializeSong = ({ bpm, volume, pattern }) => ({ version: SONG_VERSION, bpm, volume, pattern });
+// `sequences` is a list of { bars, pattern }, where `pattern` is pattern.snapshot():
+// { pad row: [steps that are on] }. `current` is the index of the one that was showing.
+export const serializeSong = ({ bpm, volume, current, sequences }) => ({
+  version: SONG_VERSION,
+  bpm,
+  volume,
+  current,
+  sequences,
+});
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const isIndex = (value, length) => Number.isInteger(value) && value >= 0 && value < length;
@@ -61,15 +72,28 @@ export function upgradeSong(raw, migrations = MIGRATIONS) {
 // Turn whatever was in storage into a song, or null when it is not one we can
 // trust (missing, corrupt, from a version it cannot upgrade). Values that are the right
 // kind but out of range are brought back into range rather than rejected.
-export function parseSong(stored, { rows, steps }) {
+export function parseSong(stored, { rows, steps, maxBars = 1, sequenceCount = 1 }) {
   const raw = upgradeSong(stored);
   if (!raw) return null;
-  if (!Number.isFinite(raw.bpm) || !Number.isFinite(raw.volume) || !isObject(raw.pattern)) return null;
+  if (!Number.isFinite(raw.bpm) || !Number.isFinite(raw.volume) || !Array.isArray(raw.sequences)) return null;
+  if (!raw.sequences.every((sequence) => isObject(sequence) && isObject(sequence.pattern))) return null;
+
+  // Always `sequenceCount` of them: ones the song does not have are empty, and extra ones are dropped.
+  const sequences = Array.from({ length: sequenceCount }, (_, i) => {
+    const saved = raw.sequences[i];
+    if (!saved) return { bars: 1, pattern: {} };
+    return {
+      // Not every saved sequence says how long it is (a version 1 song did not): one bar, as it was.
+      bars: Number.isInteger(saved.bars) ? Math.min(maxBars, Math.max(1, saved.bars)) : 1,
+      pattern: cleanPattern(saved.pattern, { rows, steps: steps * maxBars }),
+    };
+  });
 
   return {
     bpm: clampBpm(raw.bpm),
     volume: Math.round(Math.min(VOLUME_MAX, Math.max(0, raw.volume))),
-    pattern: cleanPattern(raw.pattern, { rows, steps }),
+    current: isIndex(raw.current, sequenceCount) ? raw.current : 0,
+    sequences,
   };
 }
 
