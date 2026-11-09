@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { BIG_STEP, SHIFT_WHEEL_GAP_MS, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
+import { BIG_STEP, SHIFT_WHEEL_GAP_MS, createShiftWheelClock, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
 
 describe("dragTempo", () => {
   it("moves half a BPM per pixel and lands on a whole number", () => {
     expect(dragTempo(120, 10, false)).toBe(125);
-    expect(dragTempo(120, 3, false)).toBe(122); // 121.5 rounds up
+    expect(dragTempo(120, 4, false)).toBe(122);
     expect(dragTempo(120, -10, false)).toBe(115);
   });
 
   it("rounds a tapped tempo to a whole number even with no movement", () => {
     expect(dragTempo(117.3, 0, false)).toBe(117);
+  });
+
+  it("moves the same distance up and down for the same travel", () => {
+    expect(dragTempo(120, 1, false)).toBe(121);
+    expect(dragTempo(120, -1, false)).toBe(119); // not 120: Math.round(119.5) would swallow the first pixel down
+    expect(dragTempo(120, -3, false)).toBe(118);
+    expect(dragTempo(120, 3, false)).toBe(122);
   });
 
   it("moves a tenth of a BPM per pixel with Shift, in either direction", () => {
@@ -69,5 +76,29 @@ describe("keyTempo", () => {
   it("returns null for other keys", () => {
     expect(keyTempo(120, "a", false)).toBeNull();
     expect(keyTempo(120, "Home", false)).toBeNull();
+  });
+});
+
+describe("createShiftWheelClock", () => {
+  it("counts every Shift+wheel event, so a long stream is dropped after its first event", () => {
+    const since = createShiftWheelClock();
+    const accepted = [];
+    for (let t = 0; t <= 1000; t += 16) {
+      if (wheelTempo(120, { deltaY: -1, shift: true, sinceLastMs: since(t, true) }) !== null) accepted.push(t);
+    }
+    expect(accepted).toEqual([0]); // the 16 ms frames never leave a 100 ms gap
+  });
+
+  it("accepts a Shift+wheel after a pause", () => {
+    const since = createShiftWheelClock();
+    since(0, true);
+    expect(since(SHIFT_WHEEL_GAP_MS, true)).toBe(SHIFT_WHEEL_GAP_MS);
+  });
+
+  it("is not restarted by a plain wheel event", () => {
+    const since = createShiftWheelClock();
+    since(0, true);
+    since(50, false);
+    expect(since(120, true)).toBe(120);
   });
 });

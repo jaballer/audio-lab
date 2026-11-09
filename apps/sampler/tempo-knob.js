@@ -9,7 +9,7 @@
 // the current tempo, which relative moves start from.
 
 import { setAttr } from "../../shared/dom-updates.js";
-import { dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
+import { createShiftWheelClock, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
 
 const SWEEP = 270; // degrees from minimum to maximum
 
@@ -43,7 +43,7 @@ export function createTempoKnob(element, { min, max, getBpm, onChange }) {
   element.addEventListener("pointerup", endDrag);
   element.addEventListener("pointercancel", endDrag);
 
-  let lastShiftWheel = -Infinity;
+  const sinceShiftWheel = createShiftWheelClock();
   element.addEventListener(
     "wheel",
     (e) => {
@@ -52,10 +52,9 @@ export function createTempoKnob(element, { min, max, getBpm, onChange }) {
         deltaX: e.deltaX,
         deltaY: e.deltaY,
         shift: e.shiftKey,
-        sinceLastMs: e.timeStamp - lastShiftWheel,
+        sinceLastMs: sinceShiftWheel(e.timeStamp, e.shiftKey),
       });
       if (bpm === null) return;
-      if (e.shiftKey) lastShiftWheel = e.timeStamp;
       onChange(bpm);
     },
     { passive: false },
