@@ -223,6 +223,18 @@
   font-family: var(--mono);
   letter-spacing: 0;
 }
+/* Read by a screen reader, not seen: the reason a slider is disabled. */
+.sampler-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .sampler-setting.disabled {
   opacity: 0.45;
 }

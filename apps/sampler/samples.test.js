@@ -435,6 +435,60 @@ describe("the length check before decoding", () => {
   });
 });
 
+describe("a sample's pitch", () => {
+  it("starts at the sample's own pitch when a sample is loaded, and the pad's gain stays", async () => {
+    const { kit, samples } = setup();
+    kit.setSetting(0, "pitch", 7);
+    kit.setSetting(0, "gain", -6);
+    await samples.load(0, file("a.wav"));
+    expect(kit.settings(0)).toEqual({ gain: -6, pitch: 0 });
+  });
+
+  it("goes with the sample: Default Sound leaves no pitch to come back with the next one", async () => {
+    const { kit, samples } = setup();
+    await samples.load(0, file("a.wav"));
+    kit.setSetting(0, "pitch", 5);
+    kit.setSetting(0, "gain", 3);
+    await samples.reset(0);
+    expect(kit.settings(0)).toEqual({ gain: 3, pitch: 0 });
+    await samples.load(0, file("b.wav"));
+    expect(kit.settings(0).pitch).toBe(0);
+  });
+
+  it("is left alone when kept samples are restored at the start of a visit", async () => {
+    const stored = { version: SAMPLES_VERSION, pads: { 0: { name: "Kept", bytes: 10 } } };
+    const store = fakeStore({ initial: { "sample-0": new ArrayBuffer(10) } });
+    const kit = createKit(defaults, { settings: { 0: { gain: 0, pitch: 4 } } });
+    const samples = createSamples({
+      kit,
+      audio: { ensure: () => ({}) },
+      store,
+      decode: async () => decoded(),
+      readMap: () => stored,
+      writeMap: () => true,
+    });
+    await samples.restore();
+    expect(kit.get(0).name).toBe("Kept");
+    expect(kit.settings(0).pitch).toBe(4);
+  });
+
+  it("does not report a change for a pad whose pitch was already 0", async () => {
+    const changes = [];
+    const kit = createKit(defaults, { onChange: (index, what) => changes.push([index, what]) });
+    const samples = createSamples({
+      kit,
+      audio: { ensure: () => ({}) },
+      store: fakeStore(),
+      decode: async () => decoded(),
+      probe: async () => null,
+      readMap: () => null,
+      writeMap: () => true,
+    });
+    await samples.load(0, file("a.wav"));
+    expect(changes).toEqual([[0, "sound"]]);
+  });
+});
+
 describe("reset", () => {
   it("frees the pad's share of the total", async () => {
     const { samples } = setup({ maxTotalBytes: 100 });

@@ -198,6 +198,50 @@ describe("pad settings", () => {
     expect(sounds[1].play.mock.calls.slice(1).every((call) => call[3]?.rate === 2)).toBe(true); // and the steps
   });
 
+  it("is heard from the next step built: steps already queued keep what they were built with", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const sampler = createSampler({
+      audio,
+      kit: createKit(sounds),
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+    });
+    sampler.start();
+    audio.ctx.currentTime += 0.2;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    const built = sounds[0].play.mock.calls.length;
+    expect(built).toBeGreaterThan(1);
+    sampler.setPadSetting("gain", -6); // while steps are queued
+    audio.ctx.currentTime += 0.3;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    const calls = sounds[0].play.mock.calls;
+    expect(calls.length).toBeGreaterThan(built);
+    const isBus = (out) => out.gain.value === 1; // a step's own gain (the fake starts every gain at 1)
+    expect(calls.slice(0, built).every((call) => isBus(call[1]))).toBe(true); // built before: untouched
+    expect(calls.slice(built).every((call) => call[1].gain.value < 1)).toBe(true); // built after: through the stage
+  });
+
+  it("puts the gain stage under the step's own gain, so stopping silences it with the step", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const sampler = createSampler({
+      audio,
+      kit: createKit(sounds),
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+    });
+    sampler.setPadSetting("gain", -6);
+    sampler.start();
+    audio.ctx.currentTime += 0.2;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    const last = sounds[0].play.mock.calls.at(-1)[1]; // the stage the last queued step plays through
+    const bus = last.connect.mock.calls[0][0]; // ... which feeds the step's own gain
+    expect(bus.connect).toHaveBeenCalledWith(audio.master);
+    sampler.stop();
+    expect(bus.disconnect).toHaveBeenCalled(); // a step not yet started is cut off, stage and all
+  });
+
   it("applies the gain to a live hit through a stage of its own, in front of the master", () => {
     const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
     const audio = fakeAudio();

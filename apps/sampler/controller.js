@@ -426,11 +426,11 @@ export function createSampler({
       // The step number in the whole sequence, for the LCD.
       playheadPosition: scheduler.playheadStep,
       stepsOn: pattern.row(selected).slice(page * steps, (page + 1) * steps),
-      // Their velocities, 1-127 (a step that is off reads as full).
-      padSettings: kit.settings(selected), // { gain, pitch } of the selected pad
       canUndo: history.canUndo,
       canRedo: history.canRedo,
+      // The velocities of the steps shown, 1-127 (a step that is off reads as full).
       stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
+      padSettings: kit.settings(selected), // { gain, pitch } of the selected pad
     }),
 
     getSong: () => ({

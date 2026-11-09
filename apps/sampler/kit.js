@@ -13,7 +13,8 @@
 //   kit.settingsSnapshot();           // { pad: { gain, pitch } } for the pads that are not at the defaults
 //   kit.voice(3).play(ctx, out, t)    // what the sequencer and live hits call: the sound, with the pad's settings
 //
-// `onChange(index)` is called when a pad's sound or a setting actually changes, so views can show it. The
+// `onChange(index, what)` is called when a pad's sound ("sound") or a setting ("setting") actually changes, so views
+// can show it and the page can save it. The
 // sequencer and the pads read the kit each time they play, so a change is heard at the next hit. `settings` is
 // the starting settings, in the shape settingsSnapshot gives (parsePadSettings makes it from what was saved).
 //
@@ -52,19 +53,19 @@ export function createKit(defaults, { onChange, settings: initial = {} } = {}) {
     set(index, sound) {
       if (current[index] === sound) return;
       current[index] = sound;
-      onChange?.(index);
+      onChange?.(index, "sound");
     },
     reset(index) {
       if (current[index] === defaults[index]) return;
       current[index] = defaults[index];
-      onChange?.(index);
+      onChange?.(index, "sound");
     },
     settings: (index) => ({ ...settings[index] }),
     setSetting(index, name, value) {
       const next = clampSetting(name, value);
       if (settings[index][name] === next) return;
       settings[index][name] = next;
-      onChange?.(index);
+      onChange?.(index, "setting");
     },
     settingsSnapshot() {
       const out = {};

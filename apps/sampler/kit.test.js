@@ -20,7 +20,7 @@ describe("createKit", () => {
     expect(kit.get(2)).toBe(loaded);
     expect(kit.get(0)).toBe(defaults[0]);
     expect(kit.isDefault(2)).toBe(false);
-    expect(onChange).toHaveBeenCalledWith(2);
+    expect(onChange).toHaveBeenCalledWith(2, "sound");
   });
 
   it("puts the built-in sound back", () => {
@@ -73,7 +73,7 @@ describe("pad settings", () => {
     const kit = createKit(defaults, { onChange });
     kit.setSetting(0, "gain", -3.4);
     expect(kit.settings(0).gain).toBe(-3);
-    expect(onChange).toHaveBeenCalledWith(0);
+    expect(onChange).toHaveBeenCalledWith(0, "setting");
     kit.setSetting(0, "gain", -3);
     kit.setSetting(0, "pitch", 0);
     expect(onChange).toHaveBeenCalledTimes(1);
