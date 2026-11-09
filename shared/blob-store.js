@@ -14,26 +14,32 @@ export function createBlobStore({
   storeName = "blobs",
   factory = () => globalThis.indexedDB,
 } = {}) {
-  let opened = null; // the open database, once there is one
+  let opening = null; // the open in progress, or the open database: calls made while it opens share it
 
   function open() {
-    if (opened) return Promise.resolve(opened);
-    return new Promise((resolve) => {
+    if (opening) return opening;
+    opening = new Promise((resolve) => {
+      // A failed open is not kept, so the next call tries again.
+      const fail = () => {
+        opening = null;
+        resolve(null);
+      };
       try {
         const request = factory().open(dbName, 1);
         request.onupgradeneeded = () => request.result.createObjectStore(storeName);
         request.onsuccess = () => {
-          opened = request.result;
+          const db = request.result;
           // Another tab upgrading or the browser closing the connection: open again next time.
-          opened.onclose = () => (opened = null);
-          resolve(opened);
+          db.onclose = () => (opening = null);
+          resolve(db);
         };
-        request.onerror = () => resolve(null);
-        request.onblocked = () => resolve(null);
+        request.onerror = fail;
+        request.onblocked = fail;
       } catch {
-        resolve(null);
+        fail();
       }
     });
+    return opening;
   }
 
   // Runs one request in its own transaction and resolves when the transaction has finished, which is

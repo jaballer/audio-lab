@@ -82,6 +82,21 @@ describe("createBlobStore", () => {
     expect(idb.opens).toBe(1);
   });
 
+  it("shares one open between calls made at the same time", async () => {
+    const idb = fakeIndexedDB();
+    const store = withStore(idb);
+    await Promise.all(Array.from({ length: 16 }, (_, i) => store.get(`k${i}`)));
+    expect(idb.opens).toBe(1);
+  });
+
+  it("tries again after a failed open, instead of keeping the failure", async () => {
+    const idb = fakeIndexedDB({ failures: { open: "error" } });
+    const store = withStore(idb);
+    expect(await store.get("a")).toBeNull();
+    expect(await store.get("a")).toBeNull();
+    expect(idb.opens).toBe(2);
+  });
+
   it("opens again after the browser closes the connection", async () => {
     const idb = fakeIndexedDB();
     const store = withStore(idb);
