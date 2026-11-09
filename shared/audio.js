@@ -89,14 +89,16 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
 
   // Sound that is already playing cannot be taken back by the page that started it (a long sample, a crash, the
   // tail of a held note), so the engine does it: every sound is connected to the master gain, so the master is
-  // faded out and cut off, and a new one takes its place for whatever is played next. Pages read `audio.master`
-  // each time they play, so they pick the new one up.
+  // faded out and cut off, and a new one takes its place for whatever is played next. A page must read
+  // `audio.master` each time it plays to pick the new one up: one that connects to it once (the Tone page's delay)
+  // must not call this. Whether anything was cut off: false before the context exists.
   function killSound() {
-    if (!ctx) return;
+    if (!ctx) return false;
     const old = master;
     master = createMaster();
     old.gain.setTargetAtTime(0, ctx.currentTime, KILL_TIME_CONSTANT);
     setTimeout(() => old.disconnect(), KILL_DISCONNECT_MS);
+    return true;
   }
 
   // Browsers only start audio after a click or key press on the page, and a

@@ -15,7 +15,7 @@ function fakeAudio() {
     currentTime: 0,
     createGain: vi.fn(() => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() })),
   };
-  return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn(), killSound: vi.fn() };
+  return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn(), killSound: vi.fn(() => true) };
 }
 
 const SEQUENCES = 4;
@@ -1112,6 +1112,13 @@ describe("Stop pressed again", () => {
     const { audio, sampler } = setup();
     sampler.stop();
     expect(audio.killSound).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when there was no sound to cut off, as on a fresh page before the audio exists", () => {
+    const { audio, sampler, message } = setup();
+    audio.killSound.mockReturnValue(false);
+    sampler.stop();
+    expect(message).not.toHaveBeenCalledWith("ALL SOUND OFF");
   });
 
   it("is not triggered by Play, which restarts the sequence without a Stop", () => {

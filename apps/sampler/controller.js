@@ -368,10 +368,8 @@ export function createSampler({
     const wasPlaying = scheduler.playing;
     scheduler.stop();
     cancelQueuedHits();
-    if (!wasPlaying) {
-      audio.killSound();
-      onMessage("ALL SOUND OFF");
-    }
+    // Nothing to cut off before the audio exists (a fresh page), so nothing is said.
+    if (!wasPlaying && audio.killSound()) onMessage("ALL SOUND OFF");
     onChange();
   }
 

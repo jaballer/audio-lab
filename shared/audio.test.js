@@ -327,9 +327,9 @@ describe("killSound", () => {
     return { audio, made };
   }
 
-  it("does nothing before the context exists", () => {
+  it("does nothing before the context exists, and says so", () => {
     const { audio, made } = withMasters();
-    expect(() => audio.killSound()).not.toThrow();
+    expect(audio.killSound()).toBe(false);
     expect(made).toHaveLength(0);
   });
 
@@ -338,7 +338,7 @@ describe("killSound", () => {
     const { audio, made } = withMasters();
     audio.ensure();
     const old = audio.master;
-    audio.killSound();
+    expect(audio.killSound()).toBe(true);
     const [target, when, constant] = old.gain.setTargetAtTime.mock.calls.at(-1);
     expect(target).toBe(0);
     expect(when).toBe(2);
@@ -347,7 +347,34 @@ describe("killSound", () => {
     vi.advanceTimersByTime(100);
     expect(old.disconnect).toHaveBeenCalledTimes(1);
     expect(made).toHaveLength(2);
+    expect(audio.master).toBe(made[1]); // the new one is not the one that was cut off
+    expect(made[1].disconnect).not.toHaveBeenCalled();
     vi.useRealTimers();
+  });
+
+  it("cuts off only the master it replaces, however many times it is called", () => {
+    vi.useFakeTimers();
+    const { audio, made } = withMasters();
+    audio.ensure();
+    audio.killSound();
+    vi.advanceTimersByTime(30);
+    audio.killSound(); // a second press before the first master has been disconnected
+    vi.advanceTimersByTime(40); // the first one's timer is due, the second's is not
+    expect(made[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(made[1].disconnect).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(made[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(made[2].disconnect).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("raises the new master again when the power comes back on", () => {
+    const { audio } = withMasters();
+    audio.ensure();
+    audio.powerOff();
+    audio.killSound();
+    audio.powerOn();
+    expect(audio.master.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.6, expect.any(Number), expect.any(Number));
   });
 
   it("gives sounds played afterwards a new master, at the level the volume is at, wired to the speakers", () => {
