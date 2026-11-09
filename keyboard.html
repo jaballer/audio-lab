@@ -49,7 +49,8 @@
       <div id="piano" class="piano" aria-label="Piano keys"></div>
 
       <section class="monitor" aria-label="Monitor and envelope">
-        <div class="lcd" role="status" aria-label="Display">
+        <!-- A group, not a live region: the lines change on every note, bend and controller. -->
+        <div class="lcd" role="group" aria-label="Display">
           <div class="lcd-screen kb-screen">
             <div class="lcd-line" id="lcd-note"></div>
             <div class="lcd-line" id="lcd-vel"></div>

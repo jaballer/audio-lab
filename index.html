@@ -30,13 +30,14 @@
         </section>
 
         <section class="console" aria-label="Display and controls">
-          <div class="lcd" role="status" aria-label="Display">
+          <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
+          <div class="lcd" role="group" aria-label="Display">
             <div class="lcd-screen">
               <div class="lcd-line" id="lcd-1"></div>
               <div class="lcd-line" id="lcd-2"></div>
               <div class="lcd-line" id="lcd-3"></div>
               <div class="ruler" id="ruler" aria-hidden="true"></div>
-              <div class="lcd-line lcd-msg" id="lcd-msg"></div>
+              <div class="lcd-line lcd-msg" id="lcd-msg" role="status"></div>
             </div>
           </div>
 
