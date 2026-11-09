@@ -411,10 +411,6 @@
   opacity: 0.45;
   cursor: default;
 }
-.pad-tools .btn:disabled:active {
-  transform: none;
-  border-bottom-width: 3px;
-}
 
 .sampler-pads {
   display: grid;
@@ -586,12 +582,6 @@
 .step-nav .btn:disabled {
   opacity: 0.45;
   cursor: default;
-}
-.seq-bar .btn:disabled:active,
-.step-tools .btn:disabled:active,
-.step-nav .btn:disabled:active {
-  transform: none;
-  border-bottom-width: 4px;
 }
 
 /* ---------- Velocity bars (under the step keys) ---------- */
