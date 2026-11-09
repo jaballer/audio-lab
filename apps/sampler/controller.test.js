@@ -14,7 +14,7 @@ function fakeAudio() {
   const ctx = {
     currentTime: 0,
     createGain: vi.fn(() => ({
-      gain: { value: 1, setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+      gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
       connect: vi.fn(),
       disconnect: vi.fn(),
     })),
@@ -1227,6 +1227,21 @@ describe("choke groups", () => {
     for (let i = 0; i < 10; i++) advance(0.05); // pad 1's step 4 is at 0.55 s, queued within the lookahead
     const [, , cutTime] = sounds[1].play.mock.calls[0];
     expect(voiceOf(sounds[0], 0).gain.setTargetAtTime).toHaveBeenCalledWith(0, cutTime, expect.any(Number));
+  });
+
+  it("lets another pad's voice carry on when the step that was going to cut it is cancelled by Stop", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [3] } }) });
+    for (const pad of [0, 1]) {
+      sampler.selectPad(pad);
+      sampler.setPadSetting("choke", 1);
+    }
+    sampler.start();
+    for (let i = 0; i < 7; i++) advance(0.05); // pad 0's step 0 sounds; pad 1's step 3 (0.425 s) is queued, and will cut it
+    const first = voiceOf(sounds[0], 0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
+    sampler.stop();
+    expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1); // and not cut again
   });
 
   it("does not cut pads in no group", () => {

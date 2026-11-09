@@ -72,7 +72,7 @@ function fakeOffline() {
     destination,
     createGain: () => {
       const node = {
-        gain: { value: 1, setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+        gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
         connect: vi.fn(),
         disconnect: vi.fn(),
       };

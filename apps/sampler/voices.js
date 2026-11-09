@@ -11,7 +11,9 @@
 //
 // (`cleanUp: false` is for an offline render, which has no use for the timers.) A pad always cuts its own earlier voices,
 // in a group or not. Another pad's voices are cut only when both are in the same group, which is looked at when the hit
-// starts, and group 0 is no group.
+// starts, and group 0 is no group. When two pads of a group start at the same moment (the same step), each cuts the
+// other from that moment, so the one handled last is the one heard (the higher pad number): the order a step's pads
+// are started in is the pad order.
 //
 // A voice is a gain node of its own in front of the sound, so cutting it is a fade on the audio clock (a few
 // milliseconds, no click) and works for a sound scheduled ahead of time. A voice can be asked to be cut by more than
@@ -33,7 +35,10 @@ export function createVoices(pads, { cleanUp = true, groupOf = () => 0 } = {}) {
     voice.out.gain.cancelScheduledValues(0);
     const at = cutTime(voice);
     if (at === undefined) return;
-    voice.out.gain.setTargetAtTime(0, at, CHOKE_TIME_CONSTANT);
+    // A voice cut at the moment it starts (two pads of a group on the same step, or two hits in one render quantum) is
+    // not heard at all: a fade would let its first few milliseconds through.
+    if (at <= voice.time) voice.out.gain.setValueAtTime(0, at);
+    else voice.out.gain.setTargetAtTime(0, at, CHOKE_TIME_CONSTANT);
     if (!cleanUp) return; // an offline render has no use for it: nothing is playing in the meantime
     const wait = Math.max(0, at - ctx.currentTime) + CLEAN_UP_AFTER_S;
     voice.timer = setTimeout(() => voice.out.disconnect(), wait * 1000);
