@@ -15,7 +15,9 @@ import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
-import { createExportAction, exportLabel, exportSequence } from "./export-wav.js";
+import { createExportDialog } from "./export-dialog.js";
+import { exportFormat, exportInfo, exportReadout, exportTitle, normalizeExportOptions } from "./export-options.js";
+import { EXPORT_SAMPLE_RATE, createExportAction, exportSequence, hasSteps } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -55,7 +57,13 @@ const header = createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
   sub: "Digital Sampler & Sequencer",
   onPower: () => togglePower(audio),
+  actions: [
+    { label: "Export", title: "Save the sequence as a WAV file", popup: "dialog", onPress: () => openExport() },
+  ],
 });
+
+// The Export dialog, built below with the rest of export; the song can change (a MIDI knob) before it exists.
+let exportDialog = null;
 
 const volInput = $("vol");
 const playBtn = $("play");
@@ -131,7 +139,10 @@ const sampler = createSampler({
     padGrid.light(index);
     midi.padHit(index);
   },
-  onSongChange: () => saver.schedule(),
+  onSongChange() {
+    saver.schedule();
+    if (exportDialog?.isOpen) refreshExportDialog(); // a tempo knob on a controller can move while it is open
+  },
 });
 
 // ---------- Views ----------
@@ -360,42 +371,80 @@ const redoBtn = $("redo");
 undoBtn.addEventListener("click", sampler.undo);
 redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
-// Export WAV: the sequence showing, rendered offline and saved as a file (export-wav.js decides when it may run). While
-// it renders the button shows how far it has got, and pressing it again cancels. The percentage is on the button only:
-// the LCD's message is a live region, and a report every few per cent would be read out each time. The button keeps
-// one accessible name (aria-label) while the visible text counts up, for the same reason.
-const exportBtn = $("export");
-const exportIdleTitle = exportBtn.getAttribute("title") ?? "";
-const showExport = (label) => setText(exportBtn, label);
-exportBtn.addEventListener(
-  "click",
-  createExportAction({
-    ready: () => restoring,
-    run: ({ signal, onProgress }) =>
-      exportSequence({
-        song: sampler.getSong(),
-        kit,
-        stepsPerBar: STEPS,
-        onMessage: say,
-        save: saveBlob,
-        signal,
-        onProgress,
-      }),
-    onMessage: say,
-    onProgress: (fraction) => showExport(exportLabel(fraction)),
-    onCancel: () => showExport("Cancelling…"), // a browser that cannot pause the render finishes it first
-    onBusy(busy) {
-      showExport(busy ? "Cancel export" : "Export WAV"); // no per cent until the render reports: it may be waiting for samples
-      setAttr(exportBtn, "aria-label", busy ? "Cancel export" : "Export WAV");
-      setAttr(exportBtn, "aria-busy", String(busy));
-      setAttr(exportBtn, "title", busy ? "Press again to cancel" : exportIdleTitle);
-    },
-  }),
-);
+// ---------- Export ----------
+// The sequence showing, rendered offline and saved as a WAV file (export-wav.js decides when it may run and what it
+// renders). The machine header's Export button opens a dialog for the choices (loops, stereo or mono), which are kept
+// between visits; the dialog says how long and how big the file will be, shows how far a long render has got, and
+// cancels it. A message goes to the dialog as well as the LCD: the LCD is behind the dialog, and out of reach of a
+// screen reader while it is open.
+const EXPORT_KEY = "pad-sampler:export";
+let exportOptions = normalizeExportOptions(loadJson(EXPORT_KEY));
+
+// While the dialog is open the LCD is behind it and a screen reader cannot reach it, so what is said goes to the dialog;
+// the one that matters afterwards (EXPORTED ...) is said on the LCD once the dialog has closed.
+let exportMessage = "";
+function sayExport(text) {
+  exportMessage = text;
+  exportDialog.showMessage(text);
+  if (!exportDialog.isOpen) say(text);
+}
+
+function refreshExportDialog() {
+  const current = sampler.getSong();
+  exportDialog.refresh({
+    title: exportTitle(current),
+    readout: exportReadout(exportInfo(current, exportOptions, STEPS, EXPORT_SAMPLE_RATE)),
+    format: exportFormat(EXPORT_SAMPLE_RATE),
+    empty: !hasSteps(current, STEPS),
+  });
+}
+
+exportDialog = createExportDialog($("export-dialog"), {
+  opener: header.actionButtons[0],
+  onChange(options) {
+    exportOptions = normalizeExportOptions(options);
+    saveJson(EXPORT_KEY, exportOptions);
+    exportDialog.setOptions(exportOptions);
+    refreshExportDialog();
+  },
+  // Saved: the dialog's work is done. Anything else (nothing to export, cancelled, failed) stays on it, with what was said.
+  async onExport() {
+    if (!(await pressExport())) return;
+    exportDialog.close();
+    say(exportMessage);
+  },
+  onCancel: () => pressExport(), // pressed again while it works, the action cancels
+});
+exportDialog.setOptions(exportOptions);
+
+const pressExport = createExportAction({
+  ready: () => restoring,
+  run: ({ signal, onProgress }) =>
+    exportSequence({
+      song: sampler.getSong(),
+      kit,
+      stepsPerBar: STEPS,
+      options: exportOptions,
+      onMessage: sayExport,
+      save: saveBlob,
+      signal,
+      onProgress,
+    }),
+  onMessage: sayExport,
+  onProgress: (fraction) => exportDialog.setProgress(fraction),
+  onCancel: () => exportDialog.setCancelling(), // a browser that cannot pause the render finishes it first
+  onBusy: (busy) => exportDialog.setBusy(busy),
+});
+
+function openExport() {
+  refreshExportDialog();
+  exportDialog.open();
+}
 volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------
 window.addEventListener("keydown", (e) => {
+  if (exportDialog.isOpen) return; // the dialog has the keys: pads, Space and undo are behind it
   // Ctrl or Cmd + Z undoes, with Shift redoes (Ctrl + Y too, as on Windows).
   if ((e.metaKey || e.ctrlKey) && !e.altKey) {
     const key = e.key.toLowerCase();

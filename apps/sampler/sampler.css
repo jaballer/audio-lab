@@ -775,3 +775,139 @@
     transition: none;
   }
 }
+
+/* ---------- Export dialog ---------- */
+/* A plate like the machine's own, over a dimmed page. The dialog element is the plate (no border or padding of its own:
+   the edge is an inset shadow), so a click on the element itself is a click on the dimmed page around it. */
+.export-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--chassis-top), var(--chassis-bottom));
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px #f3f0e6 inset,
+    0 2px 0 #f6f3ea inset,
+    0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.export-dialog::backdrop {
+  background: rgba(10, 9, 8, 0.62);
+}
+.export-dialog-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px 20px;
+}
+.export-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.export-title {
+  margin: 2px 0 0;
+  font: 800 0.95rem var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.export-options {
+  display: grid;
+  gap: 10px;
+}
+.export-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.export-row > .small-label {
+  min-width: 5em;
+}
+.export-choices {
+  display: flex;
+  gap: 6px;
+}
+.export-choices .btn {
+  min-width: 2.6em;
+}
+.export-file {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgb(185, 181, 167);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.25),
+    0 1px 0 rgb(243, 240, 230);
+}
+.export-readout {
+  margin: 0;
+  font: 700 0.75rem var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.export-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+/* The same green as the display, so the bar reads as part of the machine. */
+.export-bar {
+  height: 14px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--lcd-bg);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.export-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: var(--lcd-ink);
+}
+/* A line is always kept for it, so a message does not push the buttons down. */
+.export-message {
+  min-height: 1.2em;
+  margin: 0;
+  font: 700 0.75rem var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.export-go {
+  min-width: 9em;
+  border-color: var(--lcd-ink);
+  background: linear-gradient(180deg, #3b4a30, var(--lcd-ink));
+  color: #e8f0d8;
+}
+.export-go:hover {
+  background: linear-gradient(180deg, #475a3a, #25351d);
+}
+.export-dialog button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.export-dialog.is-busy .export-options {
+  opacity: 0.45;
+}
+.export-dialog :focus-visible {
+  outline: 3px solid var(--focus-on-light);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .export-bar {
+    border: 1px solid CanvasText;
+  }
+  .export-bar > span {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}
