@@ -24,6 +24,12 @@ describe("createSampleSound", () => {
     return { ctx, sources };
   };
 
+  it("carries what the pad editor shows about it: length, channels, sample rate and the file's size", () => {
+    const buffer = { duration: 0.5, numberOfChannels: 2, sampleRate: 48000, length: 24000 };
+    const sound = createSampleSound({ id: "s", name: "S", buffer, bytes: 1234 });
+    expect(sound.info).toEqual({ seconds: 0.5, channels: 2, sampleRate: 48000, bytes: 1234 });
+  });
+
   it("has the shape of a built-in sound", () => {
     const sound = createSampleSound({ id: "sample-3", name: "Kick", buffer: audioBuffer(1) });
     expect(sound).toMatchObject({ id: "sample-3", name: "Kick" });

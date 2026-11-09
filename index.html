@@ -21,93 +21,118 @@
     </div>
     <header id="site-header"></header>
     <div id="audio-notice" class="audio-notice" role="status" hidden></div>
-    <main class="device">
-      <header id="header" class="top"></header>
+    <div class="sampler-stage">
+      <main class="device">
+        <header id="header" class="top"></header>
 
-      <div class="body">
-        <section class="pad-panel" aria-label="Pads">
-          <div id="pads" class="sampler-pads"></div>
-          <div class="pad-tools" role="group" aria-label="Sound on the selected pad">
-            <button id="load-sample" class="btn btn-small" type="button">Load Sample</button>
-            <button id="reset-sound" class="btn btn-small" type="button" disabled>Default Sound</button>
-            <input id="sample-file" type="file" accept="audio/*" hidden />
-          </div>
-          <div id="pad-settings" role="group" aria-label="Gain and pitch of the selected pad"></div>
-        </section>
-
-        <section class="console" aria-label="Display and controls">
-          <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
-          <div class="lcd" role="group" aria-label="Display">
-            <div class="lcd-screen">
-              <div class="lcd-line" id="lcd-1"></div>
-              <div class="lcd-line" id="lcd-2"></div>
-              <div class="lcd-line" id="lcd-3"></div>
-              <div class="ruler" id="ruler" aria-hidden="true"></div>
-              <div class="lcd-line lcd-msg" id="lcd-msg" role="status"></div>
+        <div class="body">
+          <section class="pad-panel" aria-label="Pads">
+            <div id="pads" class="sampler-pads"></div>
+            <div class="pad-tools">
+              <button id="edit-pad" class="btn btn-small btn-led" type="button">Edit Pad</button>
             </div>
-          </div>
+            <!-- The pad editor. It sits beside the machine when there is room, and under the pads when there is not
+               (main.js moves it); closed, it is not there. -->
+            <aside id="pad-drawer" class="pad-drawer" aria-labelledby="pad-drawer-title" hidden>
+              <header class="pad-drawer-head">
+                <div>
+                  <div class="small-label">Pad editor</div>
+                  <h2 id="pad-drawer-title" class="pad-drawer-title"></h2>
+                </div>
+                <button id="pad-drawer-close" class="btn btn-small" type="button" aria-label="Close the pad editor">
+                  &times;
+                </button>
+              </header>
+              <section class="pad-drawer-section" aria-labelledby="pad-drawer-sound">
+                <h3 id="pad-drawer-sound" class="small-label">Sound</h3>
+                <p id="pad-drawer-info" class="pad-drawer-info"></p>
+                <div class="pad-tools">
+                  <button id="load-sample" class="btn btn-small" type="button">Load Sample</button>
+                  <button id="reset-sound" class="btn btn-small" type="button" disabled>Default Sound</button>
+                  <input id="sample-file" type="file" accept="audio/*" hidden />
+                </div>
+              </section>
+              <section class="pad-drawer-section" aria-labelledby="pad-drawer-tune">
+                <h3 id="pad-drawer-tune" class="small-label">Tune</h3>
+                <div id="pad-settings" role="group" aria-label="Gain and pitch of the selected pad"></div>
+              </section>
+            </aside>
+          </section>
 
-          <div class="seq-bar" role="group" aria-label="Sequence and its length">
-            <span class="small-label">Seq</span>
-            <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">&lt;</button>
-            <span id="seq-number" class="small-label" aria-live="polite"></span>
-            <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
-            <span class="small-label">Bars</span>
-            <div id="bars" class="seq-lengths" role="group" aria-label="Sequence length in bars"></div>
-          </div>
-
-          <div class="controls">
-            <div class="ctl">
-              <div
-                id="knob"
-                class="knob"
-                role="slider"
-                tabindex="0"
-                aria-label="Tempo in beats per minute"
-                aria-valuemin="40"
-                aria-valuemax="240"
-                aria-valuenow="100"
-              ></div>
-              <span class="small-label">Tempo</span>
-            </div>
-
-            <div class="ctl ctl-fader">
-              <input id="vol" class="fader" type="range" min="0" max="100" value="80" aria-label="Master volume" />
-              <span class="small-label">Volume</span>
+          <section class="console" aria-label="Display and controls">
+            <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
+            <div class="lcd" role="group" aria-label="Display">
+              <div class="lcd-screen">
+                <div class="lcd-line" id="lcd-1"></div>
+                <div class="lcd-line" id="lcd-2"></div>
+                <div class="lcd-line" id="lcd-3"></div>
+                <div class="ruler" id="ruler" aria-hidden="true"></div>
+                <div class="lcd-line lcd-msg" id="lcd-msg" role="status"></div>
+              </div>
             </div>
 
-            <div class="buttons">
-              <button id="play" class="btn btn-led btn-play" type="button" aria-pressed="false">Play</button>
-              <button id="stop" class="btn btn-stop" type="button">Stop</button>
-              <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
-              <button id="tap" class="btn" type="button">Tap Tempo</button>
+            <div class="seq-bar" role="group" aria-label="Sequence and its length">
+              <span class="small-label">Seq</span>
+              <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">&lt;</button>
+              <span id="seq-number" class="small-label" aria-live="polite"></span>
+              <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
+              <span class="small-label">Bars</span>
+              <div id="bars" class="seq-lengths" role="group" aria-label="Sequence length in bars"></div>
             </div>
-          </div>
-        </section>
-      </div>
 
-      <section class="step-panel" aria-label="Step keys for the selected pad">
-        <div class="step-head">
-          <div class="small-label">Step keys &middot; selected pad</div>
-          <div class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
-            <button id="undo" class="btn btn-small" type="button" disabled>Undo</button>
-            <button id="redo" class="btn btn-small" type="button" disabled>Redo</button>
-            <button id="copy" class="btn btn-small" type="button">Copy Steps</button>
-            <button id="paste" class="btn btn-small" type="button">Paste Steps</button>
-            <button id="clear" class="btn btn-small" type="button">Clear Steps</button>
-            <button id="clear-all" class="btn btn-small" type="button">Clear All</button>
-          </div>
-          <div class="step-nav" role="group" aria-label="Which bar is shown">
-            <button id="steps-prev" class="btn btn-small" type="button" aria-label="Previous bar">&lt;</button>
-            <span id="steps-range" class="small-label" aria-live="polite"></span>
-            <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
-          </div>
+            <div class="controls">
+              <div class="ctl">
+                <div
+                  id="knob"
+                  class="knob"
+                  role="slider"
+                  tabindex="0"
+                  aria-label="Tempo in beats per minute"
+                  aria-valuemin="40"
+                  aria-valuemax="240"
+                  aria-valuenow="100"
+                ></div>
+                <span class="small-label">Tempo</span>
+              </div>
+
+              <div class="ctl ctl-fader">
+                <input id="vol" class="fader" type="range" min="0" max="100" value="80" aria-label="Master volume" />
+                <span class="small-label">Volume</span>
+              </div>
+
+              <div class="buttons">
+                <button id="play" class="btn btn-led btn-play" type="button" aria-pressed="false">Play</button>
+                <button id="stop" class="btn btn-stop" type="button">Stop</button>
+                <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
+                <button id="tap" class="btn" type="button">Tap Tempo</button>
+              </div>
+            </div>
+          </section>
         </div>
-        <div id="steps"></div>
-        <div class="small-label sampler-velocity-label">Velocity &middot; drag to set, soft to hard</div>
-        <div id="velocity" role="group" aria-label="Step velocities for the selected pad"></div>
-      </section>
-    </main>
+
+        <section class="step-panel" aria-label="Step keys for the selected pad">
+          <div class="step-head">
+            <div class="small-label">Step keys &middot; selected pad</div>
+            <div class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
+              <button id="undo" class="btn btn-small" type="button" disabled>Undo</button>
+              <button id="redo" class="btn btn-small" type="button" disabled>Redo</button>
+              <button id="copy" class="btn btn-small" type="button">Copy Steps</button>
+              <button id="paste" class="btn btn-small" type="button">Paste Steps</button>
+              <button id="clear" class="btn btn-small" type="button">Clear Steps</button>
+              <button id="clear-all" class="btn btn-small" type="button">Clear All</button>
+            </div>
+            <div class="step-nav" role="group" aria-label="Which bar is shown">
+              <button id="steps-prev" class="btn btn-small" type="button" aria-label="Previous bar">&lt;</button>
+              <span id="steps-range" class="small-label" aria-live="polite"></span>
+              <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
+            </div>
+          </div>
+          <div id="steps"></div>
+          <div class="small-label sampler-velocity-label">Velocity &middot; drag to set, soft to hard</div>
+          <div id="velocity" role="group" aria-label="Step velocities for the selected pad"></div>
+        </section>
+      </main>
+    </div>
 
     <aside class="help-panel" aria-labelledby="help-title">
       <h2 id="help-title" class="help-title">Help</h2>
@@ -118,9 +143,9 @@
         </li>
         <li><kbd>Space</kbd> plays or stops the sequence</li>
         <li>
-          Drop an audio file on a pad, or press Load Sample for the selected pad, to play it there (up to 10 seconds and
-          5 MB). Samples are kept in this browser; Default Sound puts the built-in one back. Gain sets how loud the
-          selected pad is, and Pitch (for a loaded sample) how high; press Delete or double-click a slider to reset it
+          Drop an audio file on a pad to play it there (up to 10 seconds and 5 MB); it is kept in this browser. Edit Pad
+          opens the pad editor for the selected pad: Load Sample, Default Sound, and its Gain and Pitch (for a loaded
+          sample); press Delete or double-click a slider to reset it. Escape closes it
         </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;

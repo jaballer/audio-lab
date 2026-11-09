@@ -435,6 +435,31 @@ describe("the length check before decoding", () => {
   });
 });
 
+describe("what a loaded sample says about itself", () => {
+  const buffered = (extra) => ({
+    ok: true,
+    buffer: { duration: 1.5, numberOfChannels: 2, sampleRate: 44100, ...extra },
+  });
+
+  it("is its length, channels and the file's size, when it is loaded", async () => {
+    const { kit, samples } = setup({ decode: vi.fn(async () => buffered()) });
+    await samples.load(0, file("a.wav", 4321));
+    expect(kit.get(0).info).toEqual({ seconds: 1.5, channels: 2, sampleRate: 44100, bytes: 4321 });
+    expect(kit.get(1).info).toBeUndefined(); // a built-in sound has none
+  });
+
+  it("is the same after a restore, with the size that was kept", async () => {
+    const stored = { version: SAMPLES_VERSION, pads: { 0: { name: "Kept", bytes: 777 } } };
+    const { kit, samples } = setup({
+      stored,
+      store: fakeStore({ initial: { "sample-0": new ArrayBuffer(777) } }),
+      decode: vi.fn(async () => buffered({ numberOfChannels: 1 })),
+    });
+    await samples.restore();
+    expect(kit.get(0).info).toEqual({ seconds: 1.5, channels: 1, sampleRate: 44100, bytes: 777 });
+  });
+});
+
 describe("a sample's pitch", () => {
   it("starts at the sample's own pitch when a sample is loaded, and the pad's gain stays", async () => {
     const { kit, samples } = setup();

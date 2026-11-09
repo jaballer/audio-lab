@@ -15,7 +15,8 @@ import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createKit } from "./kit.js";
 import { createLcd } from "./lcd.js";
-import { pad2 } from "./format.js";
+import { createPadDrawer } from "./pad-drawer.js";
+import { formatSampleInfo, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
@@ -136,6 +137,17 @@ const samples = createSamples({
   writeMap: (map) => saveJson(SAMPLES_KEY, map),
   onMessage: (text) => lcd.showMessage(text),
 });
+// The pad editor: a drawer for the selected pad's sound and settings, opened with Edit Pad and remembered.
+const DRAWER_KEY = "pad-sampler:drawer";
+const padDrawer = createPadDrawer({
+  element: $("pad-drawer"),
+  toggle: $("edit-pad"),
+  close: $("pad-drawer-close"),
+  title: $("pad-drawer-title"),
+  info: $("pad-drawer-info"),
+  onToggle: (open) => saveJson(DRAWER_KEY, open),
+});
+
 const settingsSliders = createSettingsSliders($("pad-settings"), {
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
@@ -201,6 +213,10 @@ function render() {
   const soundName = kit.get(state.selected).name;
   padGrid.select(state.selected);
   // A sample that is kept but could not be restored this visit can still be removed.
+  padDrawer.refresh({
+    title: `PAD ${pad2(state.selected + 1)} \u00b7 ${soundName}`,
+    info: formatSampleInfo(kit.get(state.selected).info),
+  });
   settingsSliders.refresh({ settings: state.padSettings, pitchEnabled: !kit.isDefault(state.selected) });
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
@@ -320,6 +336,19 @@ function placeConsole() {
 }
 placeConsole();
 narrow.addEventListener("change", placeConsole);
+
+// ---------- Where the pad editor goes ----------
+// Beside the machine when the window is wide enough to hold both, otherwise under the pads, where it takes the
+// place the Load Sample buttons used to have. The one element is moved, as the display is above. 1180px is the
+// width of the machine (980) and the drawer (290) with their gap, and the page's side padding.
+const dock = window.matchMedia("(min-width: 1180px)");
+function placeDrawer() {
+  if (dock.matches) document.querySelector(".sampler-stage").append($("pad-drawer"));
+  else $("pads").closest(".pad-panel").append($("pad-drawer"));
+}
+placeDrawer();
+dock.addEventListener("change", placeDrawer);
+if (loadJson(DRAWER_KEY, false) === true) padDrawer.open(); // as it was left
 
 // ---------- Init ----------
 if (decodesEarly) samples.restore(); // kept samples back on their pads, before the first click or key
