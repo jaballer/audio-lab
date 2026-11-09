@@ -264,21 +264,21 @@ describe("undo and redo", () => {
 describe("copy and paste", () => {
   it("says there is nothing to paste before something is copied", () => {
     const { sampler, message } = setup();
-    sampler.pastePad();
+    sampler.pasteSteps();
     expect(message).toHaveBeenLastCalledWith("NO STEPS COPIED");
     expect(sampler.getState().canUndo).toBe(false);
   });
 
-  it("copies the selected pad's steps and velocities over another pad, and it can be undone", () => {
+  it("copies the bar showing for a pad and its velocities over another pad, and it can be undone", () => {
     const { sampler, message } = setup({
       song: savedSong({ pattern: { 0: [0, 4], 2: [9] }, velocities: { 0: { 4: 50 } } }),
     });
     sampler.selectPad(0);
-    sampler.copyPad();
-    expect(message).toHaveBeenLastCalledWith("PAD 01 STEPS COPIED");
+    sampler.copySteps();
+    expect(message).toHaveBeenLastCalledWith("PAD 01 BAR 1 COPIED");
     sampler.selectPad(2);
-    sampler.pastePad();
-    expect(message).toHaveBeenLastCalledWith("STEPS PASTED TO PAD 03");
+    sampler.pasteSteps();
+    expect(message).toHaveBeenLastCalledWith("PASTED TO PAD 03 BAR 1");
     expect(sampler.getSong().sequences[0]).toMatchObject({
       pattern: { 0: [0, 4], 2: [0, 4] },
       velocities: { 0: { 4: 50 }, 2: { 4: 50 } },
@@ -287,22 +287,49 @@ describe("copy and paste", () => {
     expect(sampler.getSong().sequences[0].pattern[2]).toEqual([9]);
   });
 
-  it("copies across bars and into another sequence", () => {
-    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [3, 20] } }) });
+  it("repeats a bar on the same pad: copy it, go to the next bar, paste", () => {
+    const { sampler, message } = setup({
+      song: savedSong({ bars: 2, pattern: { 1: [3, 5] }, velocities: { 1: { 5: 40 } } }),
+    });
     sampler.selectPad(1);
-    sampler.copyPad();
+    sampler.copySteps();
+    sampler.setPage(1);
+    sampler.pasteSteps();
+    expect(message).toHaveBeenLastCalledWith("PASTED TO PAD 02 BAR 2");
+    expect(sampler.getSong().sequences[0]).toMatchObject({
+      pattern: { 1: [3, 5, 19, 21] },
+      velocities: { 1: { 5: 40, 21: 40 } },
+    });
+    sampler.undo();
+    expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [3, 5] });
+  });
+
+  it("copies only the bar showing, and replaces only the bar it is pasted on", () => {
+    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [3, 20], 2: [1, 17] } }) });
+    sampler.selectPad(1);
+    sampler.setPage(1);
+    sampler.copySteps(); // bar 2 of pad 1: step 20, which is step 4 of the bar
+    sampler.selectPad(2);
+    sampler.setPage(0);
+    sampler.pasteSteps(); // over bar 1 of pad 2
+    expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [3, 20], 2: [4, 17] });
+  });
+
+  it("copies into another sequence", () => {
+    const { sampler } = setup({ song: savedSong({ pattern: { 1: [3, 7] } }) });
+    sampler.selectPad(1);
+    sampler.copySteps();
     sampler.setSequence(1);
-    sampler.setBars(2);
-    sampler.pastePad();
-    expect(sampler.getSong().sequences[1].pattern).toEqual({ 1: [3, 20] });
+    sampler.pasteSteps();
+    expect(sampler.getSong().sequences[1].pattern).toEqual({ 1: [3, 7] });
   });
 
   it("pastes a copy that is not changed by what happens to the pad afterwards", () => {
     const { sampler } = setup({ song: savedSong({ pattern: { 0: [1] } }) });
-    sampler.copyPad();
+    sampler.copySteps();
     sampler.clearPad();
     sampler.selectPad(1);
-    sampler.pastePad();
+    sampler.pasteSteps();
     expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [1] });
   });
 });

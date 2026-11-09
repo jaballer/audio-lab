@@ -27,7 +27,8 @@
 //   sampler.start()              // from the first step, even if it is already playing
 //   sampler.stop(); sampler.toggleRec()
 //   sampler.clearPad(); sampler.clearAll()
-//   sampler.copyPad(); sampler.pastePad()   // the selected pad's steps and velocities, over the selected pad (any sequence)
+//   sampler.copySteps(); sampler.pasteSteps()   // the steps and velocities of the bar showing for the selected pad,
+//                                               // over the bar showing for the selected pad (another bar, pad or sequence)
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
@@ -91,7 +92,7 @@ export function createSampler({
   });
   let pattern = slots[current].pattern;
   let history = slots[current].history;
-  let clipboard = null; // a pad's steps and velocities, from copyPad; kept across sequences
+  let clipboard = null; // a bar of one pad's steps and velocities, from copySteps; kept across sequences
   let lastMergedAt = -Infinity; // when the last velocity change was made, for MERGE_MS
   let lastMergedPad = -1; // and on which pad: a change to another pad is another undo, however soon it comes
   let bars = slots[current].bars;
@@ -252,20 +253,21 @@ export function createSampler({
     onChange();
   }
 
-  // Copy the selected pad's steps (all bars) and velocities, and paste them over the selected pad, which
-  // may be in another sequence.
-  function copyPad() {
-    clipboard = pattern.rowState(selected);
-    onMessage(`PAD ${pad2(selected + 1)} STEPS COPIED`);
+  // Copy the steps and velocities of the bar being shown for the selected pad, and paste them over the bar
+  // being shown for the selected pad, which may be another bar, pad or sequence (the same pad's next bar is
+  // how a bar is repeated).
+  function copySteps() {
+    clipboard = pattern.rowState(selected, page * steps, steps);
+    onMessage(`PAD ${pad2(selected + 1)} BAR ${page + 1} COPIED`);
   }
 
-  function pastePad() {
+  function pasteSteps() {
     if (!clipboard) {
       onMessage("NO STEPS COPIED");
       return;
     }
-    edit(() => pattern.replaceRow(selected, clipboard));
-    onMessage(`STEPS PASTED TO PAD ${pad2(selected + 1)}`);
+    edit(() => pattern.replaceRow(selected, clipboard, page * steps));
+    onMessage(`PASTED TO PAD ${pad2(selected + 1)} BAR ${page + 1}`);
     onChange();
   }
 
@@ -370,8 +372,8 @@ export function createSampler({
     setSequence,
     clearPad,
     clearAll,
-    copyPad,
-    pastePad,
+    copySteps,
+    pasteSteps,
     undo,
     redo,
     start,

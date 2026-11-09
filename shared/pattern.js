@@ -18,8 +18,9 @@
 // starts at full and no step carries a velocity nobody can see.
 //
 // Whole rows and the whole pattern can be read and replaced, for copy and paste and for undo:
-//   pattern.rowState(0);               // { on: [steps], velocities: { step: velocity } } of one pad
-//   pattern.replaceRow(1, rowState);   // pad 1 becomes a copy of it
+//   pattern.rowState(0);                // { length, on: [steps], velocities: { step: velocity } } of one pad
+//   pattern.rowState(0, 16, 16);        // the same for a stretch of it: here steps 16-31 (steps count from its start)
+//   pattern.replaceRow(1, rowState);    // pad 1 becomes a copy of it (from step 0, or `replaceRow(1, state, 16)` from 16)
 //   pattern.state();                   // { pattern: snapshot(), velocities: velocitySnapshot() }
 //   pattern.restore(state);            // every pad becomes what state says
 //
@@ -63,22 +64,40 @@ export function createPattern(rows, steps, initial = {}, { onChange, velocities:
     onChange?.();
   }
 
-  // Steps and velocities that do not exist are ignored, so a state from elsewhere cannot break the grid.
-  function fillRow(row, on = [], byStep = {}) {
-    grid[row].fill(false);
-    velocities[row].fill(FULL_VELOCITY);
-    for (const step of on) if (Number.isInteger(step) && step >= 0 && step < steps) grid[row][step] = true;
+  // Makes `length` steps of a row from `start` what `on` and `byStep` say (steps counted from `start`), the
+  // rest of the row left alone. Steps and velocities that do not exist are ignored, so a state from elsewhere
+  // cannot break the grid.
+  function fillRow(row, on = [], byStep = {}, start = 0, length = steps - start) {
+    const end = Math.min(steps, start + length);
+    grid[row].fill(false, start, end);
+    velocities[row].fill(FULL_VELOCITY, start, end);
+    for (const step of on) {
+      if (Number.isInteger(step) && step >= 0 && start + step < end) grid[row][start + step] = true;
+    }
     for (const [step, value] of Object.entries(byStep)) {
-      if (grid[row][step]) velocities[row][step] = clampVelocity(value);
+      if (grid[row][start + Number(step)] && start + Number(step) < end)
+        velocities[row][start + Number(step)] = clampVelocity(value);
     }
   }
 
   const rowKey = (row) => JSON.stringify([grid[row], velocities[row]]);
 
-  function replaceRow(row, state) {
+  function replaceRow(row, state, start = 0) {
     const before = rowKey(row);
-    fillRow(row, state.on, state.velocities);
+    fillRow(row, state.on, state.velocities, start, state.length ?? steps - start);
     if (rowKey(row) !== before) onChange?.();
+  }
+
+  function rowState(row, start = 0, length = steps - start) {
+    const end = Math.min(steps, start + length);
+    const on = [];
+    const byStep = {};
+    for (let step = start; step < end; step++) {
+      if (!grid[row][step]) continue;
+      on.push(step - start);
+      if (velocities[row][step] !== FULL_VELOCITY) byStep[step - start] = velocities[row][step];
+    }
+    return { length: end - start, on, velocities: byStep };
   }
 
   function restore(state) {
@@ -111,14 +130,7 @@ export function createPattern(rows, steps, initial = {}, { onChange, velocities:
       velocities.forEach((row) => row.fill(FULL_VELOCITY));
       onChange?.();
     },
-    rowState: (row) => ({
-      on: grid[row].flatMap((isOn, step) => (isOn ? [step] : [])),
-      velocities: Object.fromEntries(
-        grid[row].flatMap((isOn, step) =>
-          isOn && velocities[row][step] !== FULL_VELOCITY ? [[step, velocities[row][step]]] : [],
-        ),
-      ),
-    }),
+    rowState,
     replaceRow,
     restore,
     state() {
