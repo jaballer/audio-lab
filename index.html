@@ -46,6 +46,13 @@
               <section class="pad-drawer-section" aria-labelledby="pad-drawer-sound">
                 <h3 id="pad-drawer-sound" class="small-label">Sound</h3>
                 <p id="pad-drawer-info" class="pad-drawer-info"></p>
+                <div
+                  id="pad-trim"
+                  class="pad-trim"
+                  role="group"
+                  aria-label="Which part of the sample plays"
+                  hidden
+                ></div>
                 <div class="pad-tools">
                   <button id="load-sample" class="btn btn-small" type="button">Load Sample</button>
                   <button id="reset-sound" class="btn btn-small" type="button" disabled>Default Sound</button>
@@ -144,8 +151,9 @@
         <li><kbd>Space</kbd> plays or stops the sequence</li>
         <li>
           Drop an audio file on a pad to play it there (up to 10 seconds and 5 MB); it is kept in this browser. Edit Pad
-          opens the pad editor for the selected pad: Load Sample, Default Sound, and its Gain and Pitch (for a loaded
-          sample); press Delete or double-click a slider to reset it. Escape closes it
+          opens the pad editor for the selected pad: Load Sample, Default Sound, the waveform of a loaded sample with
+          its Start and End (drag the picture, or use the sliders), and Gain and Pitch (for a loaded sample); press
+          Delete or double-click a slider to reset it. Escape closes it
         </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;

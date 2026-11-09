@@ -42,3 +42,9 @@ export function formatSampleInfo(info) {
 
 // The pad editor's heading: the pad's number and what it plays, "PAD 03 \u00b7 Snare".
 export const formatPadTitle = (index, soundName) => `PAD ${pad2(index + 1)} \u00b7 ${soundName}`;
+
+// A time in a sample for a small display: "120 ms" under a second, "1.25 s" from there.
+export function formatTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  return seconds < 1 ? `${Math.round(seconds * 1000)} ms` : `${seconds.toFixed(2)} s`;
+}
