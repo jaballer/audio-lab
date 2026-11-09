@@ -83,6 +83,10 @@ const sampler = createSampler({
     padGrid.flash(index);
     midi.padHit(index);
   },
+  onPadPlayed(index) {
+    padGrid.light(index);
+    midi.padHit(index);
+  },
   onSongChange: () => saver.schedule(),
 });
 

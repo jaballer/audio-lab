@@ -14,6 +14,7 @@
 //     onChange,            // something on screen is out of date: read getState() and redraw
 //     onMessage,           // (text) a short note for the LCD
 //     onPadHit,            // (index) a pad just sounded live: flash it
+//     onPadPlayed,         // (index) the sequence just reached a pad that is on: light it (a pad does not move for this)
 //     onSongChange,        // the pattern, tempo or volume changed: worth saving
 //   });
 //
@@ -24,9 +25,10 @@
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
-//   sampler.poll()               // call every animation frame; true when the playhead moved
-//   sampler.getState()           // { selected, recording, playing, bpm, volume, playheadStep, stepsOn }
-//   sampler.getSong()            // { bpm, volume, pattern }: what song.js saves
+//   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
+//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn }
+//                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
+//   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern }] }: what song.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
@@ -54,6 +56,7 @@ export function createSampler({
   onChange = noop,
   onMessage = noop,
   onPadHit = noop,
+  onPadPlayed = noop,
   onSongChange = noop,
 }) {
   let selected = 0;
@@ -123,6 +126,14 @@ export function createSampler({
   }
 
   // ---------- Steps ----------
+  // The sound is scheduled ahead of time, so the pads flash from here, when the playhead
+  // reaches the step, to line up with what is heard. Only the light: the selected pad stays.
+  function flashStep(step) {
+    sounds.forEach((_sound, row) => {
+      if (pattern.isOn(row, step)) onPadPlayed(row);
+    });
+  }
+
   // The step keys show one bar; the playhead is only on them while it is in that bar.
   function playheadOnPage(step) {
     const local = step - page * steps;
@@ -237,7 +248,11 @@ export function createSampler({
     nudgeTempo: (delta) => setBpm(scheduler.bpm + delta),
     tapTempo,
     setVolume,
-    poll: () => scheduler.poll(),
+    poll() {
+      const moved = scheduler.poll();
+      if (moved && scheduler.playing) flashStep(scheduler.playheadStep);
+      return moved;
+    },
 
     getState: () => ({
       selected,

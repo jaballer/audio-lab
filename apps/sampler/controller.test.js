@@ -29,7 +29,7 @@ const savedSong = ({ bpm = 100, volume = 50, bars = 1, pattern = {}, current = 0
 function setup({ song = null, bpm } = {}) {
   const audio = fakeAudio();
   const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
-  const calls = { change: vi.fn(), message: vi.fn(), padHit: vi.fn(), songChange: vi.fn() };
+  const calls = { change: vi.fn(), message: vi.fn(), padHit: vi.fn(), padPlayed: vi.fn(), songChange: vi.fn() };
   let clock = 0;
   const sampler = createSampler({
     audio,
@@ -42,6 +42,7 @@ function setup({ song = null, bpm } = {}) {
     onChange: calls.change,
     onMessage: calls.message,
     onPadHit: calls.padHit,
+    onPadPlayed: calls.padPlayed,
     onSongChange: calls.songChange,
   });
   // Move the audio clock forward and let the scheduler wake up.
@@ -121,6 +122,17 @@ describe("recording", () => {
     s.sampler.poll();
     return s;
   }
+
+  it("lights the pads that are on when the playhead reaches a step, without selecting them", () => {
+    const { sampler, padHit, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 2: [1] } }) });
+    sampler.start();
+    advance(0.2); // as below, the playhead is then on step 1
+    expect(padPlayed).not.toHaveBeenCalled(); // scheduled, but the playhead has not been polled yet
+    sampler.poll();
+    expect(padPlayed).toHaveBeenCalledWith(2);
+    expect(padHit).not.toHaveBeenCalled(); // not a live hit: those are the ones that push a pad down
+    expect(sampler.getState().selected).toBe(0);
+  });
 
   it("writes a live hit into the step the playhead is on", () => {
     const { sampler, songChange } = playing();

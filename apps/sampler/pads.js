@@ -1,7 +1,8 @@
 // The 4 x 4 grid of pads, and the computer keys that mirror it.
 //
 //   const grid = createPadGrid(element, { sounds, onTrigger });
-//   grid.flash(0);    // light a pad briefly
+//   grid.flash(0);    // a pad was pressed: light it and push it down briefly
+//   grid.light(0);    // the sequence played a pad: light it, but it does not move
 //   grid.select(0);   // mark the selected pad
 //   padForKey("q")    // which pad a key plays (8), or -1
 
@@ -27,6 +28,7 @@ const FLASH_MS = 110;
 export function createPadGrid(element, { sounds, onTrigger }) {
   const padEls = [];
   const flash = createFlasher("hit", FLASH_MS);
+  const light = createFlasher("lit", FLASH_MS);
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
 
   for (let row = 0; row < PAD_ROWS; row++) {
@@ -57,6 +59,10 @@ export function createPadGrid(element, { sounds, onTrigger }) {
   return {
     flash(idx) {
       flash(padEls[idx]);
+    },
+
+    light(idx) {
+      light(padEls[idx]);
     },
 
     select(idx) {
