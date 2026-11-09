@@ -132,6 +132,22 @@ describe("pad settings", () => {
       expect(defaults[2].play.mock.calls[1]).toHaveLength(3);
     });
 
+    it("applies gain and pitch together: the gain stage in front of the output and the rate to the sound", () => {
+      const { ctx, gains } = fakeContext();
+      const kit = createKit(defaults);
+      kit.setSetting(1, "gain", -6);
+      kit.setSetting(1, "pitch", 12);
+      const out = { name: "out" };
+      kit.voice(1).play(ctx, out, 3);
+      expect(gains).toHaveLength(1);
+      expect(gains[0].gain.value).toBeCloseTo(0.501, 3);
+      expect(gains[0].connect).toHaveBeenCalledWith(out);
+      const call = defaults[1].play.mock.calls[0];
+      expect(call[1]).toBe(gains[0]);
+      expect(call[2]).toBe(3);
+      expect(call[3]).toEqual({ rate: 2 });
+    });
+
     it("follows the kit: a swapped sound and a changed setting are heard at the next hit", () => {
       const { ctx } = fakeContext();
       const kit = createKit(defaults);

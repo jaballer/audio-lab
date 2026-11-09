@@ -242,6 +242,70 @@ describe("pad settings", () => {
     expect(bus.disconnect).toHaveBeenCalled(); // a step not yet started is cut off, stage and all
   });
 
+  describe("kitChanged", () => {
+    // Playing with steps queued ahead of the clock, and a way to see what a change did to them.
+    function queuedSteps() {
+      const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+      const audio = fakeAudio();
+      const songChange = vi.fn();
+      const kit = createKit(sounds);
+      const sampler = createSampler({
+        audio,
+        kit,
+        steps: STEPS,
+        song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+        onSongChange: songChange,
+      });
+      sampler.start();
+      audio.ctx.currentTime += 0.2;
+      vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+      const buses = sounds[0].play.mock.calls.map((call) => call[1]);
+      expect(buses.length).toBeGreaterThan(1);
+      return { sounds, sampler, audio, kit, buses, songChange };
+    }
+
+    it("does not rebuild the steps already queued for a setting, so dragging a slider cannot make them late", () => {
+      const { sounds, sampler, audio, buses, songChange } = queuedSteps();
+      const built = sounds[0].play.mock.calls.length;
+      songChange.mockClear();
+      for (let tick = 0; tick < 5; tick++) sampler.kitChanged("setting"); // a slider drag: many changes
+      expect(buses.some((bus) => bus.disconnect.mock.calls.length > 0)).toBe(false); // nothing silenced
+      expect(sounds[0].play.mock.calls.length).toBe(built); // nothing built again
+      audio.ctx.currentTime += 0.05;
+      vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+      expect(sounds[0].play.mock.calls.length - built).toBeLessThanOrEqual(1); // the grid carried on as it was
+    });
+
+    it("saves for a setting, which can change without the sampler being asked (a cleared pitch)", () => {
+      const { sampler, songChange } = queuedSteps();
+      songChange.mockClear();
+      sampler.kitChanged("setting");
+      expect(songChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("rebuilds the steps already queued for a new sound, and does not save for it", () => {
+      const { sounds, sampler, buses, songChange } = queuedSteps();
+      songChange.mockClear();
+      sampler.kitChanged("sound");
+      expect(buses.at(-1).disconnect).toHaveBeenCalled(); // the last step queued has not started: silenced
+      expect(songChange).not.toHaveBeenCalled(); // a sound is kept by samples.js, not the song
+      expect(sounds[0].play).toHaveBeenCalled();
+    });
+  });
+
+  it("applies gain and pitch together: the gain stage and the playback rate", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const sampler = createSampler({ audio, kit: createKit(sounds), steps: STEPS });
+    sampler.setPadSetting("gain", -6);
+    sampler.setPadSetting("pitch", 12);
+    sampler.triggerPad(0);
+    const [, stage, , options] = sounds[0].play.mock.calls[0];
+    expect(stage.gain.value).toBeCloseTo(0.501, 3);
+    expect(stage.connect).toHaveBeenCalledWith(audio.master);
+    expect(options).toEqual({ rate: 2 });
+  });
+
   it("applies the gain to a live hit through a stage of its own, in front of the master", () => {
     const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
     const audio = fakeAudio();
@@ -272,7 +336,7 @@ describe("the kit", () => {
     expect(queued.length).toBeGreaterThan(1);
     const swapped = { id: "loaded", name: "Loaded", play: vi.fn() };
     kit.set(0, swapped);
-    sampler.soundsChanged();
+    sampler.kitChanged("sound");
     expect(queued.at(-1).disconnect).toHaveBeenCalled(); // the last step queued has not started: silenced
     audio.ctx.currentTime += 0.05;
     vi.advanceTimersByTime(SCHEDULER_TICK_MS);

@@ -31,7 +31,7 @@
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.copySteps(); sampler.pasteSteps()   // the steps and velocities of the bar showing for the selected pad,
 //                                               // over the bar showing for the selected pad (another bar, pad or sequence)
-//   sampler.soundsChanged()                  // the kit's sounds changed: steps already queued are built again
+//   sampler.kitChanged("sound" | "setting")  // the kit changed: a new sound rebuilds the queued steps, a setting is saved
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
@@ -318,10 +318,14 @@ export function createSampler({
     scheduler.rewindTo(step, time);
   }
 
-  // The kit changed (a sample was loaded, restored or removed). The steps already handed to the audio clock
-  // were built with the sounds it had, so the ones that have not started are built again from the new ones.
-  function soundsChanged() {
-    rescheduleQueuedHits();
+  // The kit changed: `what` is "sound" (a sample was loaded, restored or removed) or "setting" (a pad's gain or
+  // pitch). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
+  // the ones that have not started are built again from the new ones. A setting does not rebuild them: the next
+  // step built picks it up, at most the lookahead (about 120 ms) later, and rebuilding for every tick of a slider
+  // made steps late. It is saved, though, for a setting changed from elsewhere (a sample's pitch cleared).
+  function kitChanged(what) {
+    if (what === "sound") rescheduleQueuedHits();
+    else onSongChange();
   }
 
   // ---------- Play and stop ----------
@@ -394,7 +398,7 @@ export function createSampler({
     setSequence,
     clearPad,
     clearAll,
-    soundsChanged,
+    kitChanged,
     copySteps,
     pasteSteps,
     undo,

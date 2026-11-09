@@ -89,15 +89,8 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 const kit = createKit(SOUNDS, {
   settings: song ? song.padSettings : {}, // each pad's gain and pitch, kept with the song
   onChange(index, what) {
-    if (what === "sound") {
-      padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
-      sampler.soundsChanged(); // a step already queued would otherwise play the sound the pad had
-    } else {
-      // A setting is picked up by the next step built, which is at most the lookahead (about 120 ms) away.
-      // Rebuilding the queued steps for every tick of a slider would make them late, and it is not heard.
-      // Saved here as well as by the sampler, for a setting changed from elsewhere (a loaded sample's pitch).
-      saver.schedule();
-    }
+    if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
+    sampler.kitChanged(what); // rebuilds the queued steps for a new sound, saves for a setting (see the controller)
     render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
   },
 });
