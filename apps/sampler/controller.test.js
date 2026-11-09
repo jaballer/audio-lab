@@ -176,9 +176,27 @@ describe("pad settings", () => {
     expect(change).toHaveBeenCalledTimes(1);
     sampler.setPadSetting("pitch", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 PITCH +3 st");
-    expect(sampler.getState().padSettings).toEqual({ gain: -6, pitch: 3, choke: 0, color: 0 });
+    expect(sampler.getState().padSettings).toEqual({
+      gain: -6,
+      pitch: 3,
+      choke: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    });
     sampler.selectPad(0);
-    expect(sampler.getState().padSettings).toEqual({ gain: 0, pitch: 0, choke: 0, color: 0 });
+    expect(sampler.getState().padSettings).toEqual({
+      gain: 0,
+      pitch: 0,
+      choke: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    });
   });
 
   it("says the value it kept, which is the clamped one", () => {
@@ -192,7 +210,9 @@ describe("pad settings", () => {
     expect(sampler.getSong().padSettings).toEqual({});
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", -5);
-    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: -5, choke: 0, color: 0 } });
+    expect(sampler.getSong().padSettings).toEqual({
+      1: { gain: 0, pitch: -5, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
   });
 
   it("changes a live hit and the sequence, from the next hit", () => {
@@ -1180,6 +1200,47 @@ describe("a pad plays one voice at a time", () => {
   });
 });
 
+describe("a pad's release", () => {
+  // Pads that play loaded samples (they have setTrim), so the envelope applies.
+  const samplePads = () =>
+    Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn(), setTrim() {} }));
+
+  it("is how long a hit on the same pad takes to cut the last one off", () => {
+    const sounds = samplePads();
+    const audio = fakeAudio();
+    const sampler = createSampler({ audio, kit: createKit(sounds), steps: STEPS });
+    sampler.setPadSetting("release", 100); // 5 s
+    audio.ctx.currentTime = 1;
+    sampler.triggerPad(0);
+    audio.ctx.currentTime = 2;
+    sampler.triggerPad(0);
+    const [, , , options] = sounds[0].play.mock.calls[0];
+    expect(options.envelope.release).toBe(5);
+    const firstVoice = audio.ctx.createGain.mock.results[0].value; // the first hit's voice
+    expect(firstVoice.gain.setTargetAtTime).toHaveBeenCalledWith(0, 2, 5 / 7); // 5 s over seven time constants
+  });
+
+  it("is not used for a pad that plays a built-in sound: it keeps the short fade", () => {
+    const { audio, sounds, sampler } = setup();
+    sampler.setPadSetting("release", 100);
+    audio.ctx.currentTime = 1;
+    sampler.triggerPad(0);
+    audio.ctx.currentTime = 2;
+    sampler.triggerPad(0);
+    expect(sounds[0].play.mock.calls[0]).toHaveLength(3); // no options: nothing for a built-in sound to do with them
+    const firstVoice = audio.ctx.createGain.mock.results[0].value;
+    expect(firstVoice.gain.setTargetAtTime).toHaveBeenCalledWith(0, 2, 0.004);
+  });
+
+  it("sets like the other settings: the LCD says the time", () => {
+    const { sampler, message } = setup();
+    sampler.setPadSetting("attack", 50);
+    expect(message).toHaveBeenLastCalledWith("PAD 01 ATTACK 250 MS");
+    sampler.setPadSetting("sustain", 40);
+    expect(message).toHaveBeenLastCalledWith("PAD 01 SUSTAIN 40 %");
+  });
+});
+
 describe("pad colours", () => {
   it("sets a pad's colour like the other settings: says so, saves it, and tells the views", () => {
     const { sampler, message, songChange, change } = setup();
@@ -1189,7 +1250,9 @@ describe("pad colours", () => {
     sampler.setPadSetting("color", 5);
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
     expect(sampler.getState().padSettings.color).toBe(5);
-    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: 0, choke: 0, color: 5 } });
+    expect(sampler.getSong().padSettings).toEqual({
+      1: { gain: 0, pitch: 0, choke: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
     expect(songChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
     sampler.setPadSetting("color", 0);
@@ -1225,7 +1288,9 @@ describe("choke groups", () => {
     sampler.setPadSetting("choke", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE GROUP 3");
     expect(sampler.getState().padSettings.choke).toBe(3);
-    expect(sampler.getSong().padSettings).toEqual({ 2: { gain: 0, pitch: 0, choke: 3, color: 0 } });
+    expect(sampler.getSong().padSettings).toEqual({
+      2: { gain: 0, pitch: 0, choke: 3, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
     expect(songChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
     sampler.setPadSetting("choke", 0);

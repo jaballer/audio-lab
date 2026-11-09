@@ -399,3 +399,87 @@ describe("probeDuration", () => {
     ).toBeNull();
   });
 });
+
+describe("a sample with an envelope", () => {
+  const setup = () => {
+    const sources = [];
+    const stages = [];
+    const ctx = {
+      currentTime: 0,
+      createBufferSource: () => {
+        const source = { buffer: null, connect: vi.fn(), start: vi.fn(), playbackRate: { value: 1 } };
+        sources.push(source);
+        return source;
+      },
+      createGain: () => {
+        const stage = {
+          gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
+          connect: vi.fn(),
+        };
+        stages.push(stage);
+        return stage;
+      },
+    };
+    return { ctx, sources, stages };
+  };
+  const sample = (seconds = 2, trim) => createSampleSound({ id: "s", name: "S", buffer: audioBuffer(seconds), trim });
+  const envelope = { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.4 };
+
+  it("plays through a gain stage of its own into the output, ramped through the shape from its start", () => {
+    const { ctx, sources, stages } = setup();
+    const out = { name: "out" };
+    sample().play(ctx, out, 3, { envelope });
+    expect(stages).toHaveLength(1);
+    expect(sources[0].connect).toHaveBeenCalledWith(stages[0]);
+    expect(stages[0].connect).toHaveBeenCalledWith(out);
+    const gain = stages[0].gain;
+    expect(gain.setValueAtTime).toHaveBeenCalledWith(0, 3);
+    const ramps = gain.linearRampToValueAtTime.mock.calls.map(([level, time]) => [level, Number(time.toFixed(6))]);
+    expect(ramps).toEqual([
+      [1, 3.1],
+      [0.5, 3.3],
+      [0.5, 4.6],
+      [0, 5],
+    ]);
+    expect(sources[0].start).toHaveBeenCalledWith(3);
+  });
+
+  it("adds no stage when there is no envelope", () => {
+    const { ctx, sources, stages } = setup();
+    const out = { name: "out" };
+    sample().play(ctx, out, 3);
+    expect(stages).toHaveLength(0);
+    expect(sources[0].connect).toHaveBeenCalledWith(out);
+  });
+
+  it("lays the envelope over the time the sample is heard: a higher pitch is shorter, so the release is nearer the start", () => {
+    const { ctx, stages } = setup();
+    sample(2).play(ctx, {}, 0, { rate: 2, envelope: { release: 0.5 } }); // heard for 1 s
+    const ramps = stages[0].gain.linearRampToValueAtTime.mock.calls.map(([level, time]) => [level, time]);
+    expect(ramps).toEqual([
+      [1, 0.5],
+      [0, 1],
+    ]);
+  });
+
+  it("lays it over the trimmed part, from where the trimmed hit starts (after the lead), in front of the trim's fades", () => {
+    const { ctx, sources, stages } = setup();
+    const out = { name: "out" };
+    ctx.currentTime = 10;
+    sample(4, { start: 0.25, end: 0.75 }).play(ctx, out, 10, { envelope: { release: 0.5 } }); // 2 s of it
+    const [trimStage, envelopeStage] = [stages[1], stages[0]]; // the envelope's is made first, the trim's after it
+    expect(envelopeStage.connect).toHaveBeenCalledWith(out);
+    expect(trimStage.connect).toHaveBeenCalledWith(envelopeStage);
+    const start = 10 + TRIM_LEAD_SECONDS;
+    expect(envelopeStage.gain.setValueAtTime).toHaveBeenCalledWith(1, start);
+    const ramps = envelopeStage.gain.linearRampToValueAtTime.mock.calls.map(([level, time]) => [
+      level,
+      Number(time.toFixed(6)),
+    ]);
+    expect(ramps).toEqual([
+      [1, Number((start + 1.5).toFixed(6))],
+      [0, Number((start + 2).toFixed(6))],
+    ]);
+    expect(sources[0].start).toHaveBeenCalledWith(start, 1, 2);
+  });
+});

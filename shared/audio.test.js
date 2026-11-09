@@ -32,7 +32,8 @@ function installAudioContext() {
     }
 
     createGain() {
-      return { gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn() };
+      // `disconnect` too: killSound lets go of the master it replaces, from a timer that outlives a test
+      return { gain: { value: 1, setTargetAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() };
     }
 
     createWaveShaper() {
@@ -463,6 +464,7 @@ describe("killSound", () => {
 
 describe("killSound with the clipper", () => {
   it("connects the new master to the same clipper, which stays", () => {
+    vi.useFakeTimers(); // the cut-off master is disconnected from a timer, which must not outlive the test
     installAudioContext();
     const audio = createAudioEngine();
     const ctx = audio.ensure();
@@ -472,5 +474,8 @@ describe("killSound with the clipper", () => {
     expect(audio.master).not.toBe(old);
     expect(audio.master.connect).toHaveBeenCalledWith(half);
     expect(audio.master.connect).not.toHaveBeenCalledWith(ctx.destination);
+    vi.runAllTimers();
+    expect(old.disconnect).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

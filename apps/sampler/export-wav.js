@@ -7,9 +7,11 @@
 //   exportName(song)                                                        // "pad16-seq-01-100bpm.wav"
 //
 // `song` is what the sampler saves (controller.getSong()): the sequence exported is the one showing (`current`), and
-// the file is exactly the length of its bars, so it loops. To make it loop cleanly the sequence is played twice and
-// the second pass is kept: what rings on from the end of the first pass (a crash, a long sample) is in the start of
-// the second, as it is when the page loops, and a pad's last hit is cut by its first hit of the next pass. The
+// the file is exactly the length of its bars, so it loops. To make it loop cleanly the sequence is played more than
+// once and the last pass is kept: what rings on from the end of the earlier passes (a crash, a long sample, a long
+// Release) is in the start of it, as it is when the page loops, and a pad's last hit is cut by its first hit of the
+// next pass. Two passes (one to warm up) are enough unless a pad's Release is longer than the loop: then each tail
+// reaches into several passes, and there are enough before the kept one to cover the longest. The
 // render does not depend on the power switch or on the audio context of the page.
 
 import { createClipper } from "../../shared/audio.js";
@@ -24,6 +26,9 @@ export const EXPORT_SAMPLE_RATE = 44100;
 // The first step is not at time 0: a trimmed sample starts at least a few milliseconds into the context's time (see
 // sample-voice.js), so every step is moved on by this much, which keeps every hit where it belongs.
 export const LEAD_SECONDS = 0.01;
+// How many passes may come before the one that is kept, at most: a 5 s release in a 1 s loop needs six; a longer one is
+// cut short rather than render for ever (the oldest, quietest tails are left out).
+export const MAX_WARM_UP_PASSES = 12;
 
 // The steps that are on, as { step, row, velocity }, in the order they sound (and per step by pad). Only the steps of
 // the bars the sequence has: a sequence made shorter keeps the steps of the bars it dropped (for when they come
@@ -52,9 +57,14 @@ export async function renderSequence({
   const hits = hitsOf(sequence, stepsPerBar);
   const length = sequence.bars * stepsPerBar; // steps in one pass
   const stepLength = stepSeconds(song.bpm);
-  // The second pass is the file: from the end of the first (and the lead) for the length of one pass.
-  const first = Math.round((LEAD_SECONDS + length * stepLength) * sampleRate);
-  const frames = Math.round(length * stepLength * sampleRate);
+  // The last pass is the file. The passes before it are warm-up: a voice rings on after it is cut, for the pad's Release,
+  // and a Release longer than the loop leaves tails from several passes back in the loop's steady state, so there are
+  // enough passes before the one kept to cover the longest (one, with no release).
+  const loopSeconds = length * stepLength;
+  const longestRelease = Math.max(0, ...hits.map(({ row }) => kit.envelope(row)?.release ?? 0));
+  const warmUp = Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil(longestRelease / loopSeconds));
+  const first = Math.round((LEAD_SECONDS + warmUp * loopSeconds) * sampleRate);
+  const frames = Math.round(loopSeconds * sampleRate);
   const ctx = createContext(first + frames, sampleRate);
 
   const master = ctx.createGain();
@@ -67,8 +77,12 @@ export async function renderSequence({
     master.connect(ctx.destination);
   }
 
-  const voices = createVoices(kit.length, { cleanUp: false, groupOf: (pad) => kit.settings(pad).choke });
-  for (const pass of [0, 1]) {
+  const voices = createVoices(kit.length, {
+    cleanUp: false,
+    groupOf: (pad) => kit.settings(pad).choke,
+    releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
+  });
+  for (let pass = 0; pass <= warmUp; pass++) {
     for (const { step, row, velocity } of hits) {
       const time = LEAD_SECONDS + (pass * length + step) * stepLength;
       const { out } = voices.start(ctx, row, master, time);

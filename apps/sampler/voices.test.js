@@ -283,4 +283,71 @@ describe("createVoices", () => {
       expect(queued.out.gain.setTargetAtTime).not.toHaveBeenCalled();
     });
   });
+
+  describe("a pad's release", () => {
+    it("is how long a cut takes to fade: spread over a few time constants, never faster than the short fade", () => {
+      const { ctx } = fakeContext(10);
+      const voices = createVoices(2, { releaseOf: (pad) => (pad === 0 ? 2 : 0) });
+      const slow = voices.start(ctx, 0, {}, 10);
+      voices.start(ctx, 0, {}, 11);
+      expect(slow.out.gain.setTargetAtTime).toHaveBeenCalledWith(0, 11, 2 / 7); // 2 s over seven time constants
+      const quick = voices.start(ctx, 1, {}, 12);
+      voices.start(ctx, 1, {}, 13);
+      expect(quick.out.gain.setTargetAtTime).toHaveBeenCalledWith(0, 13, CHOKE_TIME_CONSTANT);
+    });
+
+    it("never goes below the short fade, however small it is", () => {
+      const { ctx } = fakeContext(10);
+      const voices = createVoices(1, { releaseOf: () => 0.004 });
+      const first = voices.start(ctx, 0, {}, 10);
+      voices.start(ctx, 0, {}, 10.5);
+      expect(first.out.gain.setTargetAtTime).toHaveBeenCalledWith(0, 10.5, CHOKE_TIME_CONSTANT);
+    });
+
+    it("is far down by the time the voice is disconnected, so there is no step to hear", () => {
+      const { ctx } = fakeContext(10);
+      for (const release of [0.5, 2, 5]) {
+        const voices = createVoices(1, { releaseOf: () => release });
+        const first = voices.start(ctx, 0, {}, 10);
+        voices.start(ctx, 0, {}, 10);
+        // not the equal-moment case: a later hit
+        const later = createVoices(1, { releaseOf: () => release });
+        const a = later.start(ctx, 0, {}, 10);
+        later.start(ctx, 0, {}, 11);
+        const constant = a.out.gain.setTargetAtTime.mock.calls[0][2];
+        const left = Math.exp(-(release + 0.1) / constant); // the level when the voice is disconnected, from 1
+        expect(left, `release ${release}`).toBeLessThan(0.002); // under -54 dB
+        expect(first.out.gain.setValueAtTime).toHaveBeenCalled();
+      }
+    });
+
+    it("keeps the voice connected for the release, and a little longer", () => {
+      const { ctx } = fakeContext(10);
+      const voices = createVoices(1, { releaseOf: () => 2 });
+      const first = voices.start(ctx, 0, {}, 10);
+      voices.start(ctx, 0, {}, 10.5); // the cut is half a second away, and takes two seconds
+      vi.advanceTimersByTime(2500);
+      expect(first.out.disconnect).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(200);
+      expect(first.out.disconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it("is the voice's own, read when the hit starts, so changing it later does not change a voice already playing", () => {
+      const { ctx } = fakeContext(10);
+      let release = 2;
+      const voices = createVoices(1, { releaseOf: () => release });
+      const first = voices.start(ctx, 0, {}, 10);
+      release = 0;
+      voices.start(ctx, 0, {}, 11);
+      expect(first.out.gain.setTargetAtTime).toHaveBeenCalledWith(0, 11, 2 / 7);
+    });
+
+    it("does not delay a cut that silences a voice at once (two hits at the same moment)", () => {
+      const { ctx } = fakeContext(10);
+      const voices = createVoices(1, { releaseOf: () => 2 });
+      const first = voices.start(ctx, 0, {}, 10);
+      voices.start(ctx, 0, {}, 10);
+      expect(first.out.gain.setValueAtTime).toHaveBeenCalledWith(0, 10);
+    });
+  });
 });

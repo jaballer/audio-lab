@@ -7,8 +7,11 @@ import {
   gainToLinear,
   parsePadSettings,
   pitchToRate,
+  SAMPLE_SETTING_NAMES,
   SETTING_NAMES,
   SLIDER_NAMES,
+  envelopeSeconds,
+  padEnvelope,
 } from "./pad-settings.js";
 import { COLOR_COUNT, padColorName } from "./pad-colors.js";
 
@@ -62,15 +65,15 @@ describe("parsePadSettings", () => {
       9: { gain: -1, pitch: 0 },
     };
     expect(parsePadSettings(stored, 4)).toEqual({
-      0: { gain: -6, pitch: 0, choke: 0, color: 0 },
-      2: { gain: 0, pitch: 5, choke: 0, color: 0 },
+      0: { gain: -6, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: 0, pitch: 5, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("brings values into range and fills in what is missing", () => {
     expect(parsePadSettings({ 1: { gain: 100, pitch: -50 }, 2: { gain: -3 } }, 4)).toEqual({
-      1: { gain: 6, pitch: -12, choke: 0, color: 0 },
-      2: { gain: -3, pitch: 0, choke: 0, color: 0 },
+      1: { gain: 6, pitch: -12, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: -3, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
@@ -84,7 +87,16 @@ describe("parsePadSettings", () => {
   });
 
   it("agrees with the defaults it is compared to", () => {
-    expect(DEFAULT_SETTINGS).toEqual({ gain: 0, pitch: 0, choke: 0, color: 0 });
+    expect(DEFAULT_SETTINGS).toEqual({
+      gain: 0,
+      pitch: 0,
+      choke: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    });
   });
 });
 
@@ -103,13 +115,15 @@ describe("the choke setting", () => {
   });
 
   it("makes a pad count as not at the defaults when it is the only thing set", () => {
-    expect(parsePadSettings({ 1: { choke: 2 } }, 4)).toEqual({ 1: { gain: 0, pitch: 0, choke: 2, color: 0 } });
+    expect(parsePadSettings({ 1: { choke: 2 } }, 4)).toEqual({
+      1: { gain: 0, pitch: 0, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
   });
 
   it("is brought into range, and filled in as no group when it is missing (a song saved before it existed)", () => {
     expect(parsePadSettings({ 0: { gain: -3, choke: 50 }, 1: { gain: 2, pitch: 1 } }, 4)).toEqual({
-      0: { gain: -3, pitch: 0, choke: 8, color: 0 },
-      1: { gain: 2, pitch: 1, choke: 0, color: 0 },
+      0: { gain: -3, pitch: 0, choke: 8, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 2, pitch: 1, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 });
@@ -129,12 +143,75 @@ describe("the color setting", () => {
   });
 
   it("has no slider: the sliders are the other settings", () => {
-    expect(SLIDER_NAMES).toEqual(["gain", "pitch", "choke"]);
+    expect(SLIDER_NAMES).toEqual(["gain", "pitch", "choke", "attack", "decay", "sustain", "release"]);
     expect(SETTING_NAMES).toContain("color");
   });
 
   it("makes a pad count as not at the defaults when it is the only thing set, and fills in none when missing", () => {
-    expect(parsePadSettings({ 2: { color: 4 } }, 4)).toEqual({ 2: { gain: 0, pitch: 0, choke: 0, color: 4 } });
-    expect(parsePadSettings({ 1: { gain: -2 } }, 4)).toEqual({ 1: { gain: -2, pitch: 0, choke: 0, color: 0 } });
+    expect(parsePadSettings({ 2: { color: 4 } }, 4)).toEqual({
+      2: { gain: 0, pitch: 0, choke: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
+    expect(parsePadSettings({ 1: { gain: -2 } }, 4)).toEqual({
+      1: { gain: -2, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
+  });
+});
+
+describe("the envelope settings", () => {
+  it("are slider positions from 0 to 100, with sustain at 100 (no change) by default", () => {
+    for (const name of ["attack", "decay", "release", "sustain"])
+      expect(SETTINGS[name]).toMatchObject({ min: 0, max: 100 });
+    expect(DEFAULT_SETTINGS).toMatchObject({ attack: 0, decay: 0, sustain: 100, release: 0 });
+    expect(clampSetting("attack", 250)).toBe(100);
+    expect(clampSetting("sustain", "x")).toBe(100);
+  });
+
+  it("are for loaded samples, like pitch", () => {
+    expect(SAMPLE_SETTING_NAMES).toEqual(["pitch", "attack", "decay", "sustain", "release"]);
+  });
+
+  it("turn a position into a time: none at 0, finer control over short times, the longest at 100", () => {
+    expect(envelopeSeconds("attack", 0)).toBe(0);
+    expect(envelopeSeconds("attack", 100)).toBe(2);
+    expect(envelopeSeconds("decay", 100)).toBe(2);
+    expect(envelopeSeconds("release", 100)).toBe(5);
+    expect(envelopeSeconds("attack", 50)).toBeCloseTo(0.25);
+    expect(envelopeSeconds("attack", 10)).toBeCloseTo(0.002);
+    expect(envelopeSeconds("attack", 50)).toBeLessThan(envelopeSeconds("attack", 100) / 2);
+  });
+
+  it("count anything under a millisecond as no time at all, so it is shown as 0 MS and is no envelope", () => {
+    expect(envelopeSeconds("attack", 1)).toBe(0); // 2 microseconds
+    expect(envelopeSeconds("attack", 7)).toBe(0); // 0.7 ms
+    expect(envelopeSeconds("attack", 8)).toBeGreaterThan(0.001);
+    expect(formatSetting("attack", 1)).toBe("0 MS");
+    expect(padEnvelope({ ...DEFAULT_SETTINGS, attack: 1 })).toBeNull();
+  });
+
+  it("are shown as the time, not the position, and the sustain as a percentage", () => {
+    expect(formatSetting("attack", 0)).toBe("0 MS");
+    expect(formatSetting("attack", 10)).toBe("2 MS");
+    expect(formatSetting("attack", 50)).toBe("250 MS");
+    expect(formatSetting("release", 100)).toBe("5.00 S");
+    expect(formatSetting("sustain", 60)).toBe("60 %");
+    expect(formatSetting("sustain", 100)).toBe("100 %");
+  });
+
+  it("make an envelope in seconds and levels, or none when they change nothing", () => {
+    expect(padEnvelope({ ...DEFAULT_SETTINGS })).toBeNull();
+    expect(padEnvelope({ ...DEFAULT_SETTINGS, decay: 80 })).toBeNull(); // a decay to the level it is at
+    expect(padEnvelope({ ...DEFAULT_SETTINGS, attack: 100, sustain: 50, release: 100 })).toEqual({
+      attack: 2,
+      decay: 0,
+      sustain: 0.5,
+      release: 5,
+    });
+  });
+
+  it("make a pad count as not at the defaults when only one is set, and fill in the defaults when missing", () => {
+    expect(parsePadSettings({ 0: { sustain: 70 } }, 2)).toEqual({
+      0: { gain: 0, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 70, release: 0 },
+    });
+    expect(parsePadSettings({ 0: { gain: 2 } }, 2)[0]).toMatchObject({ sustain: 100, attack: 0 });
   });
 });

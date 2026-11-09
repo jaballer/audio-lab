@@ -16,6 +16,7 @@ import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportAction, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
+import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
@@ -176,6 +177,13 @@ const colorSwatches = createColorSwatches($("pad-colors"), {
   onChange: (index) => sampler.setPadSetting("color", index),
 });
 const settingsSliders = createSettingsSliders($("pad-settings"), {
+  names: ["gain", "pitch", "choke"],
+  onChange: (name, value) => sampler.setPadSetting(name, value),
+});
+// The envelope of a loaded sample (attack, decay, sustain, release).
+const envelopeSliders = createSettingsSliders($("pad-envelope"), {
+  names: ["attack", "decay", "sustain", "release"],
+  fallbackFocus: $("load-sample"), // where focus goes if they are disabled (a built-in sound came back) while one has it
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
 // The waveform and the Start and End of the selected pad's sample, in the pad editor.
@@ -252,8 +260,13 @@ function render() {
     info: formatSampleInfo(kit.get(state.selected).info),
   });
   const sound = kit.get(state.selected);
-  trimView.refresh(typeof sound.setTrim === "function" ? sound : null); // a built-in sound has no waveform
-  settingsSliders.refresh({ settings: state.padSettings, pitchEnabled: !kit.isDefault(state.selected) });
+  // A built-in sound has no waveform. The envelope and the pitch decide the curve drawn on it.
+  trimView.refresh(typeof sound.setTrim === "function" ? sound : null, {
+    envelope: kit.envelope(state.selected),
+    rate: pitchToRate(state.padSettings.pitch),
+  });
+  settingsSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
+  envelopeSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   colorSwatches.refresh({ color: state.padSettings.color });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));

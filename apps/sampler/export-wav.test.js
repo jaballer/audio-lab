@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   LEAD_SECONDS,
+  MAX_WARM_UP_PASSES,
   READY_WAIT_MS,
   createExportAction,
   encodeWav,
@@ -223,6 +224,54 @@ describe("renderSequence", () => {
     await render();
     const first = sounds[0].play.mock.calls[0][1];
     expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, expect.any(Number));
+  });
+
+  describe("warm-up passes for a long release", () => {
+    const samplePad = () => ({ id: "s", name: "s", play: vi.fn(), setTrim() {} });
+
+    it("renders one warm-up pass when no release reaches past the loop, as before", async () => {
+      const { render, sounds } = setup(sequence({ 0: [0] }));
+      await render();
+      expect(sounds[0].play).toHaveBeenCalledTimes(2);
+    });
+
+    it("renders enough passes before the one kept to cover a release longer than the loop", async () => {
+      const sounds = [samplePad(), sound("b"), sound("c")];
+      const { render, kit, offline } = setup(sequence({ 0: [0] }), {}, sounds); // a 2 s loop at 120 BPM
+      kit.setSetting(0, "release", 100); // 5 s: tails from three passes back, so 1 + ceil(5 / 2) = 4 warm-up passes
+      const audio = await render();
+      expect(sounds[0].play).toHaveBeenCalledTimes(5); // four warm-up passes and the one kept
+      const times = sounds[0].play.mock.calls.map((call) => call[2]);
+      expect(times).toEqual([0, 2, 4, 6, 8].map((t) => LEAD_SECONDS + t));
+      expect(offline.made.frames).toBe(Math.round((LEAD_SECONDS + 8) * 1000) + 2000); // the kept pass is the last
+      expect(audio.channels[0]).toHaveLength(2000); // and the file is still exactly the loop
+      expect(audio.channels[0][0]).toBe(Math.round((LEAD_SECONDS + 8) * 1000));
+    });
+
+    it("counts only the pads that have steps: a long release on an unused pad adds nothing", async () => {
+      const sounds = [sound("a"), samplePad(), sound("c")];
+      const { render, kit } = setup(sequence({ 0: [0] }), {}, sounds);
+      kit.setSetting(1, "release", 100);
+      await render();
+      expect(sounds[0].play).toHaveBeenCalledTimes(2);
+    });
+
+    it("stops adding passes at a limit, so a very short loop cannot render for ever", async () => {
+      const sounds = [samplePad(), sound("b"), sound("c")];
+      const { render, kit } = setup(sequence({ 0: [0] }), { bpm: 1000 }, sounds); // a loop of a quarter of a second
+      kit.setSetting(0, "release", 100);
+      await render();
+      expect(sounds[0].play).toHaveBeenCalledTimes(MAX_WARM_UP_PASSES + 1);
+    });
+  });
+
+  it("fades a cut over the pad's release, as the page does, for a pad that plays a loaded sample", async () => {
+    const sounds = [{ id: "s", name: "s", play: vi.fn(), setTrim() {} }, sound("b"), sound("c")];
+    const { render, kit } = setup(sequence({ 0: [0, 4] }), {}, sounds);
+    kit.setSetting(0, "release", 100); // 5 s
+    await render();
+    const first = sounds[0].play.mock.calls[0][1];
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, 5 / 7);
   });
 
   it("cuts a pad's hit when another pad in its choke group starts, as it does on the page", async () => {

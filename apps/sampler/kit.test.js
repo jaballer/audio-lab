@@ -64,8 +64,26 @@ describe("pad settings", () => {
 
   it("starts every pad at the defaults, or at the settings it is given", () => {
     const kit = createKit(defaults, { settings: { 1: { gain: -6, pitch: 2 } } });
-    expect(kit.settings(0)).toEqual({ gain: 0, pitch: 0, choke: 0, color: 0 });
-    expect(kit.settings(1)).toEqual({ gain: -6, pitch: 2, choke: 0, color: 0 });
+    expect(kit.settings(0)).toEqual({
+      gain: 0,
+      pitch: 0,
+      choke: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    });
+    expect(kit.settings(1)).toEqual({
+      gain: -6,
+      pitch: 2,
+      choke: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    });
   });
 
   it("changes one setting, clamped, and tells the views only when it changed", () => {
@@ -93,13 +111,24 @@ describe("pad settings", () => {
     kit.setSetting(2, "pitch", -5);
     kit.setSetting(1, "gain", 3);
     expect(kit.settingsSnapshot()).toEqual({
-      1: { gain: 3, pitch: 0, choke: 0, color: 0 },
-      2: { gain: 0, pitch: -5, choke: 0, color: 0 },
+      1: { gain: 3, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: 0, pitch: -5, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
     kit.setSetting(2, "pitch", 0);
-    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0, choke: 0, color: 0 } });
+    expect(kit.settingsSnapshot()).toEqual({
+      1: { gain: 3, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
     const copy = createKit(defaults, { settings: kit.settingsSnapshot() });
-    expect(copy.settings(1)).toEqual({ gain: 3, pitch: 0, choke: 0, color: 0 });
+    expect(copy.settings(1)).toEqual({
+      gain: 3,
+      pitch: 0,
+      choke: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    });
   });
 
   describe("the voice a pad plays with", () => {
@@ -190,7 +219,9 @@ describe("a pad's choke group", () => {
   it("is listed for a pad that has nothing else set, and left out when it goes back to none", () => {
     const kit = createKit(defaults);
     kit.setSetting(2, "choke", 1);
-    expect(kit.settingsSnapshot()).toEqual({ 2: { gain: 0, pitch: 0, choke: 1, color: 0 } });
+    expect(kit.settingsSnapshot()).toEqual({
+      2: { gain: 0, pitch: 0, choke: 1, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
     kit.setSetting(2, "choke", 0);
     expect(kit.settingsSnapshot()).toEqual({});
   });
@@ -212,8 +243,62 @@ describe("a pad's colour", () => {
   it("is listed for a pad that has nothing else set, and left out when it goes back to none", () => {
     const kit = createKit(defaults);
     kit.setSetting(1, "color", 2);
-    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 0, pitch: 0, choke: 0, color: 2 } });
+    expect(kit.settingsSnapshot()).toEqual({
+      1: { gain: 0, pitch: 0, choke: 0, color: 2, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
     kit.setSetting(1, "color", 0);
+    expect(kit.settingsSnapshot()).toEqual({});
+  });
+});
+
+describe("a pad's envelope", () => {
+  const sampleSound = (id) => ({ id, name: id, play: vi.fn(), setTrim() {} });
+
+  it("is null for a pad with none set, and null for a built-in sound whatever is set", () => {
+    const kit = createKit([sampleSound("a"), sound("b")]);
+    expect(kit.envelope(0)).toBeNull();
+    kit.setSetting(1, "attack", 50);
+    expect(kit.envelope(1)).toBeNull(); // a built-in sound has its own envelope
+  });
+
+  it("is in seconds and levels for a loaded sample that has one set", () => {
+    const kit = createKit([sampleSound("a")]);
+    kit.setSetting(0, "attack", 50); // 250 ms
+    kit.setSetting(0, "sustain", 60);
+    kit.setSetting(0, "release", 100); // 5 s
+    expect(kit.envelope(0)).toEqual({ attack: 0.25, decay: 0, sustain: 0.6, release: 5 });
+  });
+
+  it("is passed to the sample with the pitch when both are set, and with nothing else when only it is", () => {
+    const s = sampleSound("a");
+    const kit = createKit([s]);
+    const ctx = {};
+    const out = { name: "out" };
+    kit.setSetting(0, "release", 100);
+    kit.voice(0).play(ctx, out, 1);
+    expect(s.play).toHaveBeenLastCalledWith(ctx, out, 1, { envelope: { attack: 0, decay: 0, sustain: 1, release: 5 } });
+    kit.setSetting(0, "pitch", 12);
+    kit.voice(0).play(ctx, out, 1);
+    expect(s.play).toHaveBeenLastCalledWith(ctx, out, 1, {
+      rate: 2,
+      envelope: { attack: 0, decay: 0, sustain: 1, release: 5 },
+    });
+  });
+
+  it("leaves the call as it always was when there is no pitch and no envelope", () => {
+    const s = sampleSound("a");
+    const kit = createKit([s]);
+    const ctx = {};
+    const out = { name: "out" };
+    kit.voice(0).play(ctx, out, 1);
+    expect(s.play).toHaveBeenLastCalledWith(ctx, out, 1);
+  });
+
+  it("is listed for a pad that has only an envelope setting, and left out when it goes back to the default", () => {
+    const kit = createKit([sampleSound("a")]);
+    kit.setSetting(0, "sustain", 40);
+    expect(Object.keys(kit.settingsSnapshot())).toEqual(["0"]);
+    kit.setSetting(0, "sustain", 100);
     expect(kit.settingsSnapshot()).toEqual({});
   });
 });
