@@ -93,6 +93,7 @@ export function createSampler({
   let history = slots[current].history;
   let clipboard = null; // a pad's steps and velocities, from copyPad; kept across sequences
   let lastMergedAt = -Infinity; // when the last velocity change was made, for MERGE_MS
+  let lastMergedPad = -1; // and on which pad: a change to another pad is another undo, however soon it comes
   let bars = slots[current].bars;
   const totalSteps = () => bars * steps;
   const lastPage = () => bars - 1;
@@ -183,8 +184,9 @@ export function createSampler({
     change();
     if (JSON.stringify(pattern.state()) === JSON.stringify(before)) return;
     const at = now();
-    const continues = merge && at - lastMergedAt <= MERGE_MS;
+    const continues = merge && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
     lastMergedAt = merge ? at : -Infinity;
+    lastMergedPad = selected;
     if (!continues) history.push(before);
   }
 
