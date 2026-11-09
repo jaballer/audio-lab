@@ -12,7 +12,8 @@
 // Release) is in the start of it, as it is when the page loops, and a pad's last hit is cut by its first hit of the
 // next pass. Two passes (one to warm up) are enough unless a pad's Release is longer than the loop: then each tail
 // reaches into several passes, and there are enough before the kept one to cover the longest. The
-// render does not depend on the power switch or on the audio context of the page.
+// render does not depend on the power switch or on the audio context of the page. A long render reports how far it
+// has got and can be cancelled (see PROGRESS_PAUSES).
 
 import { createClipper } from "../../shared/audio.js";
 import { VOLUME_SCALE } from "./controller.js";
@@ -29,6 +30,66 @@ export const LEAD_SECONDS = 0.01;
 // How many passes may come before the one that is kept, at most: a 5 s release in a 1 s loop needs six; a longer one is
 // cut short rather than render for ever (the oldest, quietest tails are left out).
 export const MAX_WARM_UP_PASSES = 12;
+// The render is paused this many times along its length to say how far it has got, and to notice a cancel: a cancelled
+// render stops at the next pause, so the computer is free again within a twentieth of the work.
+export const PROGRESS_PAUSES = 20;
+// The audio engine moves in blocks of this many frames, and a pause lands on one of their edges.
+const RENDER_QUANTUM = 128;
+
+// The frames to pause at, as a whole number of blocks: `count` of them spread over `total`, none at the very start or
+// end and none twice (two pauses in one block are an error), so a short render has fewer.
+export function pauseFrames(total, count = PROGRESS_PAUSES) {
+  const frames = new Set();
+  for (let i = 1; i <= count; i++) {
+    const frame = Math.round((total * i) / (count + 1) / RENDER_QUANTUM) * RENDER_QUANTUM;
+    if (frame > 0 && frame < total) frames.add(frame);
+  }
+  return [...frames];
+}
+
+const cancelled = () => new DOMException("Export cancelled", "AbortError");
+export const wasCancelled = (error) => error?.name === "AbortError";
+
+// Renders `ctx` (an OfflineAudioContext of `total` frames), reporting `onProgress(0..1)` at each pause and giving up
+// with an AbortError, soon after `signal` aborts. A browser that cannot pause an offline context renders in one go,
+// with no progress, and a cancel then only throws the result away.
+async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }) {
+  if (signal?.aborted) throw cancelled();
+  // A pause that cannot be resumed would leave the render waiting for ever, so that fails the render with its error.
+  let fail;
+  const failed = new Promise((_, reject) => (fail = reject));
+  const report = (fraction) => {
+    try {
+      onProgress?.(fraction);
+    } catch (error) {
+      console.error("Export progress failed:", error); // only for the eye: the render goes on
+    }
+  };
+  if (typeof ctx.suspend === "function") {
+    for (const frame of pauseFrames(total)) {
+      // A quarter of a block early: the time is rounded to a block edge, up or to the nearest, and this lands on it either way.
+      ctx
+        .suspend((frame - RENDER_QUANTUM / 4) / sampleRate)
+        .then(
+          () => {
+            if (signal?.aborted) return undefined; // left paused for good: nothing more is rendered
+            const resumed = ctx.resume(); // first: nothing in the report may keep the render waiting
+            report(frame / total);
+            return resumed;
+          },
+          () => {}, // a pause that could not be set only loses one progress report
+        )
+        .catch(fail);
+    }
+  }
+  const aborted = new Promise((_, reject) =>
+    signal?.addEventListener("abort", () => reject(cancelled()), { once: true }),
+  );
+  const rendered = await Promise.race([ctx.startRendering(), aborted, failed]);
+  if (signal?.aborted) throw cancelled();
+  report(1);
+  return rendered;
+}
 
 // The steps that are on, as { step, row, velocity }, in the order they sound (and per step by pad). Only the steps of
 // the bars the sequence has: a sequence made shorter keeps the steps of the bars it dropped (for when they come
@@ -52,6 +113,8 @@ export async function renderSequence({
   stepsPerBar,
   sampleRate = EXPORT_SAMPLE_RATE,
   createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
+  onProgress,
+  signal,
 }) {
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
@@ -90,7 +153,7 @@ export async function renderSequence({
     }
   }
 
-  const rendered = await ctx.startRendering();
+  const rendered = await renderWithProgress(ctx, first + frames, sampleRate, { onProgress, signal });
   const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) =>
     rendered.getChannelData(i).slice(first, first + frames),
   );
@@ -135,13 +198,16 @@ export const exportName = (song) => `pad16-seq-${pad2(song.current + 1)}-${Math.
 export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.current], stepsPerBar).length > 0;
 
 // What the Export button does: checks there is something to export, renders it, and hands the file to `save`
-// (shared/download.js). Says how it went on the LCD through `onMessage`. Whether a file was saved.
+// (shared/download.js). Says how it went on the LCD through `onMessage`. `onProgress(0..1)` is how far the render
+// has got, and aborting `signal` cancels it: nothing is saved. Whether a file was saved.
 export async function exportSequence({
   song,
   kit,
   stepsPerBar,
   onMessage,
   save,
+  onProgress,
+  signal,
   render = renderSequence,
   supported = typeof OfflineAudioContext === "function",
 }) {
@@ -155,61 +221,80 @@ export async function exportSequence({
   }
   onMessage("EXPORTING...");
   try {
-    const audio = await render({ song, kit, stepsPerBar });
+    const audio = await render({ song, kit, stepsPerBar, onProgress, signal });
     const name = exportName(song);
     save(new Blob([encodeWav(audio.channels, audio.sampleRate)], { type: "audio/wav" }), name);
     onMessage(`EXPORTED ${name}`);
     return true;
   } catch (error) {
+    if (wasCancelled(error)) {
+      onMessage("EXPORT CANCELLED");
+      return false;
+    }
     console.error("Export failed:", error);
     onMessage("EXPORT FAILED");
     return false;
   }
 }
 
+// What the button says while it renders: it cancels, and how far along it is.
+export const exportLabel = (fraction) => `Cancel export ${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+
 export const READY_WAIT_MS = 5000; // how long a click waits for the saved samples to be back before giving up
 
-// What pressing the Export button does around exportSequence: one export at a time (a press while one runs says so,
-// instead of being dropped), `onBusy(true/false)` so the button can show it is working (the LCD's message is gone
-// after a moment, and a long export takes longer), and a wait for `ready` (the saved samples being restored, so the
-// file does not hold the built-in sounds where a sample is about to be) that gives up after READY_WAIT_MS with a
-// message rather than leave the button dead: a restore that never settles or fails is not something to render over.
+// What pressing the Export button does around exportSequence: one export at a time, and a press while one runs cancels
+// it (the render stops at its next pause and nothing is saved). `onBusy(true/false)` lets the button show it is
+// working (the LCD's message is gone after a moment, and a long export takes longer), and `onProgress(0..1)` how far
+// it has got. It waits for `ready` (the saved samples being restored, so the file does not hold the built-in sounds
+// where a sample is about to be) and gives up after READY_WAIT_MS with a message rather than leave the button dead: a
+// restore that never settles or fails is not something to render over. A cancel during that wait ends it too.
 //
-//   const press = createExportAction({ ready: () => restoring, run: () => exportSequence({ ... }), onMessage, onBusy });
+//   const press = createExportAction({
+//     ready: () => restoring,
+//     run: ({ signal, onProgress }) => exportSequence({ ..., signal, onProgress }),
+//     onMessage, onBusy, onProgress,
+//   });
 //   button.addEventListener("click", press);
 export function createExportAction({
   ready,
   run,
   onMessage,
   onBusy = () => {},
+  onProgress = () => {},
   waitMs = READY_WAIT_MS,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 }) {
-  let busy = false;
+  let controller = null;
   return async function press() {
-    if (busy) {
-      onMessage("ALREADY EXPORTING");
+    if (controller) {
+      controller.abort(); // pressed again while it works: cancel (a second press while it stops does nothing more)
       return false;
     }
-    busy = true;
+    controller = new AbortController();
+    const { signal } = controller;
     onBusy(true);
     try {
       let timer;
       const timedOut = new Promise((resolve) => (timer = setTimer(() => resolve("late"), waitMs)));
-      const outcome = await Promise.race([Promise.resolve(ready()).then(() => "ready"), timedOut]);
+      const stopped = new Promise((resolve) => signal.addEventListener("abort", () => resolve("cancelled")));
+      const outcome = await Promise.race([Promise.resolve(ready()).then(() => "ready"), timedOut, stopped]);
       clearTimer(timer);
       if (outcome === "late") {
         onMessage("SAMPLES STILL LOADING");
         return false;
       }
-      return await run();
+      if (outcome === "cancelled") {
+        onMessage("EXPORT CANCELLED");
+        return false;
+      }
+      return await run({ signal, onProgress });
     } catch (error) {
       console.error("Export failed:", error);
       onMessage("EXPORT FAILED");
       return false;
     } finally {
-      busy = false;
+      controller = null;
       onBusy(false);
     }
   };
