@@ -86,7 +86,7 @@ export function createSampler({
   const lastPage = () => bars - 1;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
-  const scheduledHits = []; // { time, rows, bus } for each step handed to the scheduler, until its light is shown
+  const scheduledHits = []; // { time, step, rows, bus } for each step handed to the scheduler, until its light is shown
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -107,7 +107,7 @@ export function createSampler({
       });
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
-      scheduledHits.push({ time, rows, bus });
+      scheduledHits.push({ time, step, rows, bus });
       if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
     },
   });
@@ -151,7 +151,9 @@ export function createSampler({
     // tab stops the frames, not the scheduler) the ones before it are over and must not all flash.
     let reached = null;
     while (scheduledHits.length && scheduledHits[0].time <= scheduler.playheadTime) reached = scheduledHits.shift();
-    if (reached) for (const row of reached.rows) onPadPlayed(row);
+    // Only when it is the very step the playhead is on: after a stall the scheduler moves the playhead
+    // across steps it chose not to sound, and those have no record (the last one found would be old).
+    if (reached && reached.time === scheduler.playheadTime) for (const row of reached.rows) onPadPlayed(row);
   }
 
   // The step keys show one bar; the playhead is only on them while it is in that bar.
@@ -194,6 +196,7 @@ export function createSampler({
     page = 0;
     scheduler.setSteps(totalSteps());
     scheduler.forgetHeard(); // a live hit still waiting for its step was recorded into the old sequence
+    rescheduleQueuedHits();
     onMessage(`SEQ ${pad2(current + 1)}`);
     onChange();
     onSongChange();
@@ -209,6 +212,18 @@ export function createSampler({
     pattern.clearAll();
     onMessage("ALL PADS CLEARED");
     onChange();
+  }
+
+  // The steps already handed to the audio clock were built from the sequence just replaced. Silence
+  // the ones that have not started and have the scheduler build them again from the new one.
+  function rescheduleQueuedHits() {
+    if (!scheduler.playing) return;
+    const now = clock.now();
+    const first = scheduledHits.findIndex((hit) => hit.time > now);
+    if (first === -1) return;
+    const { step, time } = scheduledHits[first];
+    for (const hit of scheduledHits.splice(first)) hit.bus.disconnect();
+    scheduler.rewindTo(step, time);
   }
 
   // ---------- Play and stop ----------

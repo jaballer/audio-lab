@@ -179,6 +179,16 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     if (heardStep >= steps) forgetHeard();
   }
 
+  // Take back the steps scheduled from `step` (at `time`) on, and schedule them again from there: the
+  // page replaced what they were built from (a different sequence), after the scheduler had already
+  // handed the next step or two to the audio clock. The caller silences the old ones itself.
+  function rewindTo(step, time) {
+    nextStep = step % steps;
+    nextTime = time;
+    for (let i = visualQueue.length - 1; i >= 0; i--) if (visualQueue[i].time >= time) visualQueue.splice(i, 1);
+    forgetHeard();
+  }
+
   function setBpm(value) {
     bpm = clampBpm(value, bpmRange);
     return bpm;
@@ -190,6 +200,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     poll,
     setBpm,
     setSteps,
+    rewindTo,
     get playing() {
       return playing;
     },

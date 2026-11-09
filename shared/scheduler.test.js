@@ -125,6 +125,18 @@ describe("createScheduler", () => {
     expect(played[0][0]).toBe(0);
   });
 
+  it("schedules again from a step it is rewound to, and the playhead does not report the taken-back ones", () => {
+    const { scheduler, played, run } = setup({ steps: 16, bpm: 120 });
+    scheduler.start();
+    while (!played.some(([step]) => step === 2)) run(0.01); // step 2 (at 0.3 s) is scheduled, not yet reached
+    const [, time] = played.find(([step]) => step === 2);
+    played.length = 0;
+    scheduler.rewindTo(2, time);
+    run(0.4);
+    expect(played[0]).toEqual([2, time]); // handed out again, at the same moment
+    expect(played.slice(0, 3).map(([step]) => step)).toEqual([2, 3, 4]);
+  });
+
   it("moves the playhead into the new length at once when the loop is made shorter", () => {
     const { scheduler, run } = setup({ steps: 16, bpm: 120 });
     scheduler.start();
