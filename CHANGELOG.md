@@ -24,6 +24,26 @@ Numbers link to the pull request.
   for the selected pad ([#101](https://github.com/jaballer/audio-lab/pull/101),
   [#102](https://github.com/jaballer/audio-lab/pull/102)), and the waveform of a loaded sample with a Start and an
   End to trim it ([#104](https://github.com/jaballer/audio-lab/pull/104)).
+- Sampler: Export WAV, beside Tap Tempo, saves the sequence showing as an audio file of exactly its length, so it
+  loops. It is rendered as the page plays it: the sounds and samples, each step's velocity, the pads' settings and the
+  master volume ([#111](https://github.com/jaballer/audio-lab/pull/111)).
+- Sampler: Stop pressed again, while the sequence is already stopped, cuts off all sound, such as a crash's tail or a
+  long sample ([#109](https://github.com/jaballer/audio-lab/pull/109)).
+- Sampler: choke groups. A Choke slider in the pad editor puts a pad in a group from 1 to 8; pads in the same group
+  cut each other off, like a closed hat cutting an open one. Saved with the song
+  ([#123](https://github.com/jaballer/audio-lab/pull/123)).
+- Sampler: a colour for each pad, set in the pad editor from a fixed row of swatches. It shows as the pad's rim, is
+  named for a screen reader, and is saved with the song ([#124](https://github.com/jaballer/audio-lab/pull/124)).
+- Sampler: an amplitude envelope per pad for loaded samples: Attack, Decay, Sustain and Release sliders in the pad
+  editor, drawn on the sample's waveform. Release is also how long a hit fades out the pad's last one. Saved with the
+  song ([#125](https://github.com/jaballer/audio-lab/pull/125)).
+- Sampler: the step editor, and the pad editor's Tune and Envelope sections, can be collapsed with a button on their
+  headings. The page remembers which are open ([#126](https://github.com/jaballer/audio-lab/pull/126)).
+- Sampler: a thin progress bar along the top of the display shows where the playhead is in the whole sequence, one
+  segment per bar ([#128](https://github.com/jaballer/audio-lab/pull/128)).
+- Sampler: Shift with a click on a pad, or with the pad's computer key, selects the pad and opens the pad editor
+  without playing it, so a pad can be set up in the middle of a take. Opened by key, focus moves to the editor
+  ([#127](https://github.com/jaballer/audio-lab/pull/127), [#130](https://github.com/jaballer/audio-lab/pull/130)).
 - Tone page: the keys as a piano, value readouts, and Release, Echo time and Feedback controls
   ([#78](https://github.com/jaballer/audio-lab/pull/78), [#82](https://github.com/jaballer/audio-lab/pull/82)).
 
@@ -55,11 +75,26 @@ Numbers link to the pull request.
   sending Start and a steady clock, so the device follows the page's tempo while it plays. The separate Play and
   Stop buttons, the Space shortcut and the Sound button are gone: the pads always play the sampler's sounds
   ([#61](https://github.com/jaballer/audio-lab/pull/61)).
+- Sampler: a pad plays one voice at a time. Tapping a pad that is still playing a long sample fades the earlier hit
+  out, as on a hardware sampler ([#110](https://github.com/jaballer/audio-lab/pull/110)).
+- Sampler: the tempo knob moves in whole BPM when dragged, scrolled or stepped with the arrow keys. Shift changes the
+  size of a move: Shift + drag moves a tenth of a BPM per pixel, and Shift + scroll or arrow steps by 10
+  ([#127](https://github.com/jaballer/audio-lab/pull/127)).
 
 ### Fixed
 
 - Sampler: the LCD is no longer a live region, so screen readers stop announcing every step
   ([#96](https://github.com/jaballer/audio-lab/pull/96)).
+- Loud steps no longer crackle: a soft clipper after the master volume keeps sounds that add up past full scale from
+  clipping. It applies to every page that makes sound ([#108](https://github.com/jaballer/audio-lab/pull/108)).
+- Sampler: loading, resetting and trimming samples on one pad happen in order, and two tabs no longer erase each
+  other's samples. Power off builds no sound and records no silent hit, a very short trim is no longer cut or
+  silent, a song the page cannot read is backed up before it is saved over, and Undo and Redo jump to the pad and bar
+  they changed ([#105](https://github.com/jaballer/audio-lab/pull/105)).
+- Sampler: screen readers no longer hear the same text announced again on every step while playing, a control that
+  goes disabled keeps focus where the person was, the selected pad is marked, a right or middle click on a pad is no
+  longer a hit, and text and small buttons have more contrast and size
+  ([#106](https://github.com/jaballer/audio-lab/pull/106)).
 - Tone page: the computer keys keep playing after using a slider or menu
   ([#79](https://github.com/jaballer/audio-lab/pull/79)).
 
@@ -67,6 +102,8 @@ Numbers link to the pull request.
 
 - Project skills for shipping work here, in `.claude/skills/`
   ([#100](https://github.com/jaballer/audio-lab/pull/100)).
+- Tests for behaviour that was not pinned, a fix for a negative velocity key when filling steps, and the docs brought up
+  to date ([#107](https://github.com/jaballer/audio-lab/pull/107)).
 
 ## 2026-11-08
 
