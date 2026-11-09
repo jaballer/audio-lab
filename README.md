@@ -1,6 +1,6 @@
 # Audio Lab
 
-A small set of browser audio tools built with Vite, the Web Audio API and Web MIDI: a 16-pad drum sampler and step sequencer, a MIDI keyboard test page, a MIDI monitor, a companion page for the Akai MPC Sample, and a Tone.js synth demo. The built-in sounds are synthesized in the browser, so there are no sample files to download. There are no accounts and no server: what you make is kept in your browser.
+A small set of browser audio tools built with Vite, the Web Audio API and Web MIDI: a 16-pad drum sampler and step sequencer, a MIDI keyboard test page, a MIDI monitor, a companion page for the Akai MPC Sample, and a Tone.js synth demo. The built-in sounds are synthesized in the browser, so there are no sample files to download. There are no accounts and no server: the sampler keeps your work in your browser (the MPC Sample page's step pattern is not saved between visits).
 
 **Live demo: https://jaballer.github.io/audio-lab/**
 
