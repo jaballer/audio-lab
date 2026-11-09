@@ -18,6 +18,12 @@
 // every sounding note and its release against a stopped clock, and a power cycle would bring
 // them back; running muted lets them play out, unheard, on the clock as usual.
 //
+// The master gain feeds a soft clipper before the speakers: several loud sounds on one step (kick, snare and hat
+// together, or a hit at a higher gain) add up past full scale, which the speakers would clip into a crackle. Below
+// the clipper's knee the signal passes unchanged, so a single sound is not touched; above it the signal is bent
+// towards a ceiling just under full scale. (A compressor is not used: Web Audio's lowers quiet sounds too.) If the
+// context cannot make one, the master goes straight to the speakers as before.
+//
 // The context is created lazily, so nothing is built until it is needed.
 //
 // `createContext` is for a library that insists on owning the context. Tone.js builds its own
@@ -28,6 +34,35 @@
 export const POWER_SWITCH = "[data-power-switch]";
 
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
+
+// The clipper's shape: untouched up to `knee`, then a smooth bend that never reaches `ceiling`. A shaper only maps
+// inputs from -1 to 1 across its curve, and clamps what lies outside, so the signal is halved before it and the
+// curve spans -2 to 2: a sum of sounds can reach twice full scale before it is simply held at the ceiling.
+export const CLIP = { knee: 0.7, ceiling: 0.98, reach: 2 };
+
+export function softClipCurve({ knee, ceiling, reach }, size = 4097) {
+  const curve = new Float32Array(size);
+  const span = ceiling - knee;
+  for (let i = 0; i < size; i++) {
+    const x = (i / (size - 1)) * 2 * reach - reach;
+    const magnitude = Math.abs(x);
+    curve[i] = magnitude <= knee ? x : Math.sign(x) * (knee + span * Math.tanh((magnitude - knee) / span));
+  }
+  return curve;
+}
+
+// The pieces between the master gain and the speakers: the first node to connect the master to, and the last one
+// (which goes to the speakers). Null when the context has no waveshaper.
+function createClipper(ctx) {
+  if (typeof ctx.createWaveShaper !== "function") return null;
+  const half = ctx.createGain();
+  half.gain.value = 1 / CLIP.reach;
+  const shaper = ctx.createWaveShaper();
+  shaper.curve = softClipCurve(CLIP);
+  shaper.oversample = "none"; // oversampling rings past full scale, which is what this is here to prevent
+  half.connect(shaper);
+  return { input: half, output: shaper };
+}
 
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
@@ -47,7 +82,13 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
       ctx.addEventListener("statechange", notify);
       master = ctx.createGain();
       master.gain.value = powered ? level : 0;
-      master.connect(ctx.destination);
+      const clipper = createClipper(ctx);
+      if (clipper) {
+        master.connect(clipper.input);
+        clipper.output.connect(ctx.destination);
+      } else {
+        master.connect(ctx.destination);
+      }
     }
     // "interrupted" is Safari after a phone call or a locked screen; resume() ends it too.
     // Off stays off: a click, a key or a note must not wake a context the browser holds suspended.

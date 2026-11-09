@@ -100,7 +100,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/pattern.js`, `shared/history.js` — the step grid (on/off, and a velocity per step) and undo/redo over any state that can be set aside as a value; no DOM
 - `shared/storage-budget.js` — how much room the browser gives the site (the sampler's total cap is a share of it), asking it to keep the data (`navigator.storage.persist()`), and the "4.2/32 MB" text; never throws, no DOM
 - `shared/blob-store.js` — bytes kept in IndexedDB that never throws (a failed read is `null`, a failed write is `false`), for what localStorage cannot hold: the sampler's samples
-- `shared/audio.js` — the `AudioContext`, master volume, power on/off and first-interaction unlock, used by every app
+- `shared/audio.js` — the `AudioContext`, master volume (through a soft clipper, so sounds that add up past full scale do not crackle), power on/off and first-interaction unlock, used by every app
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
 - `shared/power.js` — what pressing a device's POWER switch does to its audio (on goes off, anything else comes on)
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
