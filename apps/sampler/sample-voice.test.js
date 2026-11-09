@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_SAMPLE_BYTES,
   EDGE_FADE_SECONDS,
+  TRIM_LEAD_SECONDS,
   MAX_SAMPLE_SECONDS,
   REASONS,
   createSampleSound,
@@ -74,14 +75,16 @@ describe("createSampleSound", () => {
 });
 
 describe("a trimmed sample", () => {
-  // A context that records the source and the gain stage between it and the output.
-  function recordingContext() {
+  // A context that records the source and the gain stage between it and the output. Its clock is well behind the
+  // times the tests schedule at, so a hit is never moved on by the lead (the lead has tests of its own below).
+  function recordingContext(currentTime = -1) {
     const sources = [];
     const stages = [];
     return {
       sources,
       stages,
       ctx: {
+        currentTime,
         createBufferSource: () => {
           const source = { buffer: null, playbackRate: { value: 1 }, connect: vi.fn(), start: vi.fn() };
           sources.push(source);
@@ -175,6 +178,46 @@ describe("a trimmed sample", () => {
     const fast = recordingContext();
     make({ start: 0.25, end: 0.75 }, 2).play(fast.ctx, {}, 10, { rate: 2 });
     expect(fast.stages[0].gain.setValueAtTime.mock.calls[1]).toEqual([1, 10 + 0.5 - EDGE_FADE_SECONDS]);
+  });
+
+  describe("the lead a trimmed hit starts with", () => {
+    const window = { start: 0.25, end: 0.75 }; // 1 s of a 2 s sample
+
+    it("is moved on to a few milliseconds ahead of the clock when it would start at or before it", () => {
+      const now = recordingContext(10);
+      make(window, 2).play(now.ctx, {}, 10); // at "now", as a live hit is
+      expect(now.sources[0].start).toHaveBeenCalledWith(10 + TRIM_LEAD_SECONDS, 0.5, 1);
+      const late = recordingContext(10);
+      make(window, 2).play(late.ctx, {}, 9.99); // already late, as a sequenced step can be
+      expect(late.sources[0].start.mock.calls[0][0]).toBeCloseTo(10 + TRIM_LEAD_SECONDS, 9);
+    });
+
+    it("moves the fades with it, so the window is faded where it really starts and stops", () => {
+      const { ctx, stages } = recordingContext(10);
+      make(window, 2).play(ctx, {}, 10);
+      const start = 10 + TRIM_LEAD_SECONDS;
+      expect(stages[0].gain.setValueAtTime.mock.calls[0]).toEqual([0, start]);
+      expect(stages[0].gain.linearRampToValueAtTime.mock.calls.at(-1)[1]).toBeCloseTo(start + 1, 9);
+    });
+
+    it("leaves a hit that is already further ahead exactly where it was", () => {
+      const { ctx, sources } = recordingContext(10);
+      make(window, 2).play(ctx, {}, 10.5);
+      expect(sources[0].start).toHaveBeenCalledWith(10.5, 0.5, 1);
+    });
+
+    it("does not touch an untrimmed sample, which a late start only shortens by the time it was late", () => {
+      const { ctx, sources } = recordingContext(10);
+      make(undefined, 2).play(ctx, {}, 10);
+      expect(sources[0].start).toHaveBeenCalledWith(10);
+    });
+
+    it("copes with a context that reports no time", () => {
+      const { ctx, sources } = recordingContext();
+      delete ctx.currentTime;
+      make(window, 2).play(ctx, {}, 0);
+      expect(sources[0].start).toHaveBeenCalledWith(TRIM_LEAD_SECONDS, 0.5, 1);
+    });
   });
 
   it("is changed with setTrim, which gives back what it became, kept possible, and plays that from then on", () => {

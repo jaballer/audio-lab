@@ -369,6 +369,140 @@ describe("the kit", () => {
   });
 });
 
+describe("undo and redo show where they acted", () => {
+  const twoBars = (extra = {}) => setup({ song: savedSong({ bars: 2, pattern: { 0: [1], 2: [20] }, ...extra }) });
+
+  it("selects the pad and bar of the step it changed, so the change is never out of sight", () => {
+    const { sampler } = twoBars();
+    sampler.selectPad(2);
+    sampler.setPage(1);
+    sampler.toggleStep(4); // step 20 of the sequence, on pad 2: it was on, so it goes off
+    sampler.selectPad(0); // somewhere else entirely
+    sampler.setPage(0);
+    sampler.undo();
+    expect(sampler.getState().selected).toBe(2);
+    expect(sampler.getState().page).toBe(1);
+    expect(sampler.getState().stepsOn[4]).toBe(true); // and it is on the screen
+  });
+
+  it("does the same for redo", () => {
+    const { sampler } = twoBars();
+    sampler.selectPad(2);
+    sampler.setPage(1);
+    sampler.toggleStep(4);
+    sampler.undo();
+    sampler.selectPad(1);
+    sampler.setPage(0);
+    sampler.redo();
+    expect(sampler.getState()).toMatchObject({ selected: 2, page: 1 });
+    expect(sampler.getState().stepsOn[4]).toBe(false);
+  });
+
+  it("goes to a velocity change as well", () => {
+    const { sampler, setClock } = twoBars();
+    sampler.selectPad(0);
+    setClock(10_000);
+    sampler.setStepVelocity(1, 40);
+    sampler.selectPad(3);
+    sampler.undo();
+    expect(sampler.getState().selected).toBe(0);
+    expect(sampler.getState().stepVelocities[1]).toBe(127);
+  });
+
+  it("goes to the first thing that changed when several did", () => {
+    const { sampler } = twoBars();
+    sampler.selectPad(2);
+    sampler.setPage(1);
+    sampler.clearAll(); // pad 0 step 1 and pad 2 step 20 both go
+    sampler.selectPad(3);
+    sampler.undo();
+    expect(sampler.getState()).toMatchObject({ selected: 0, page: 0 });
+  });
+
+  it("stays on the last bar there is when the change is beyond it", () => {
+    const { sampler } = twoBars();
+    sampler.selectPad(2);
+    sampler.setPage(1);
+    sampler.toggleStep(4);
+    sampler.setBars(1); // the sequence is now one bar long, with step 20 out of reach
+    sampler.undo();
+    expect(sampler.getState().page).toBe(0);
+  });
+
+  it("leaves the selection alone when there is nothing to undo", () => {
+    const { sampler } = twoBars();
+    sampler.selectPad(3);
+    sampler.undo();
+    expect(sampler.getState().selected).toBe(3);
+  });
+});
+
+describe("with the power off", () => {
+  function powered(on) {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    audio.powered = on;
+    const sampler = createSampler({
+      audio,
+      kit: createKit(sounds),
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+    });
+    return { sounds, audio, sampler };
+  }
+  const run = (audio, seconds) => {
+    audio.ctx.currentTime += seconds;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+  };
+
+  it("builds no sound for the steps, so no tails pile up to be heard all at once at power on", () => {
+    const { sounds, audio, sampler } = powered(false);
+    sampler.start();
+    run(audio, 0.4);
+    expect(sounds[0].play).not.toHaveBeenCalled();
+  });
+
+  it("builds them again once the power is on, and the beat has been going all the time", () => {
+    const { sounds, audio, sampler } = powered(false);
+    sampler.start();
+    run(audio, 0.4);
+    audio.powered = true;
+    run(audio, 0.4);
+    sampler.poll();
+    expect(sounds[0].play).toHaveBeenCalled();
+    expect(sampler.getState().playheadStep).toBeGreaterThan(0); // it did not wait at the first step
+  });
+
+  it("can still be stopped and restarted with nothing queued to cut off", () => {
+    const { audio, sampler } = powered(false);
+    sampler.start();
+    run(audio, 0.4);
+    expect(() => {
+      sampler.stop();
+      sampler.start();
+    }).not.toThrow();
+  });
+
+  it("does not write a hit that was not heard into the pattern", () => {
+    const { audio, sampler } = powered(false);
+    sampler.start();
+    run(audio, 0.2);
+    sampler.toggleRec();
+    sampler.triggerPad(3);
+    expect(sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+  });
+
+  it("writes a hit that was heard, as it always did", () => {
+    const { audio, sampler } = powered(true);
+    sampler.start();
+    run(audio, 0.2);
+    sampler.poll();
+    sampler.toggleRec();
+    sampler.triggerPad(3);
+    expect(sampler.getSong().sequences[0].pattern[3]).toBeDefined();
+  });
+});
+
 describe("undo and redo", () => {
   const withBeat = (extra = {}) => setup({ song: savedSong({ pattern: { 0: [0, 4] }, ...extra }) });
 
@@ -433,6 +567,30 @@ describe("undo and redo", () => {
     sampler.undo();
     expect(sampler.getState().stepVelocities.slice(0, 5)).toEqual([127, 127, 127, 127, 127]);
     expect(sampler.getState().canUndo).toBe(false);
+  });
+
+  it("does not let an undone velocity change swallow the next one into its undo", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    setClock(1000);
+    sampler.setStepVelocity(0, 40);
+    sampler.undo();
+    setClock(1100); // well inside the merge window of the change that was undone
+    sampler.setStepVelocity(0, 60);
+    expect(sampler.getState().canUndo).toBe(true);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(127);
+  });
+
+  it("does the same after a redo", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    setClock(1000);
+    sampler.setStepVelocity(0, 40);
+    sampler.undo();
+    sampler.redo();
+    setClock(1100);
+    sampler.setStepVelocity(0, 60);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(40); // only the last change is undone
   });
 
   it("does not merge velocity changes made on different pads, however close together", () => {

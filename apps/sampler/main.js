@@ -20,11 +20,11 @@ import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
-import { SAMPLES_KEY, createSamples } from "./samples.js";
+import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
-import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
+import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
@@ -34,6 +34,7 @@ import { createVelocityBars } from "./velocity-bars.js";
 import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
+const SAMPLES_BACKUP_KEY = `${SAMPLES_KEY}:backup`;
 
 // Kept samples are decoded at the start of the visit, with an offline context: the real one only exists after the
 // first click or key, and until then (or until it had decoded them) the pads would play their built-in sounds.
@@ -57,12 +58,19 @@ const recBtn = $("rec");
 // because the audio engine takes its starting level from the saved volume.
 // With nothing usable saved (first visit, blocked storage), the page starts
 // from the starter beat as it always did.
-const song = parseSong(loadJson(SONG_KEY), {
+const storedSong = loadJson(SONG_KEY);
+const song = parseSong(storedSong, {
   rows: PAD_COUNT,
   steps: STEPS,
   maxBars: MAX_BARS,
   sequenceCount: SEQUENCE_COUNT,
 });
+
+// A song this page cannot read (from a newer page, or damaged) is kept under another key before the first edit
+// saves over it, and so is a samples map. The page starts from the starter beat and no samples, as before.
+backUpUnusable(storedSong, song, SONG_BACKUP_KEY, saveJson);
+const storedSamples = loadJson(SAMPLES_KEY);
+backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, saveJson);
 
 const saver = createSongSaver({
   read: () => sampler.getSong(),
