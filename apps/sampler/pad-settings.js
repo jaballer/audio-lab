@@ -54,7 +54,7 @@ export function formatSetting(name, value) {
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// What was stored, as { pad: { gain, pitch, choke } } for the pads that exist and have something other than the
+// What was stored, as { pad: { gain, pitch, choke, color } } for the pads that exist and have something other than the
 // defaults. Values are brought into range; anything unusable is left out.
 export function parsePadSettings(stored, padCount) {
   const pads = {};

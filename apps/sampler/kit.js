@@ -1,5 +1,5 @@
 // What each pad plays and how: the built-in sound, which can be swapped for another (a loaded sample) and put
-// back, and the pad's settings (gain, pitch, choke group). No DOM. A sound is { id, name, play(ctx, out, t) }, as in
+// back, and the pad's settings (gain, pitch, choke group, colour). No DOM. A sound is { id, name, play(ctx, out, t) }, as in
 // shared/sounds.js.
 //
 //   const kit = createKit(SOUNDS, { onChange, settings });

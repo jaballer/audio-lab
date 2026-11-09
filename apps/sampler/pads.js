@@ -27,6 +27,11 @@ export function padForKey(key) {
 
 const FLASH_MS = 110;
 
+// A pad's label for a screen reader: which pad, what it plays, its key, and its colour when it has one.
+export function padLabel({ index, name, key, color = 0 }) {
+  return `Pad ${index + 1}, ${name}, key ${key.toUpperCase()}${color ? `, ${padColorName(color).toLowerCase()}` : ""}`;
+}
+
 // `sounds` is a list of { name }; `onTrigger(index)` is called for a pointer
 // press or a keyboard activation (Enter/Space on a focused pad).
 export function createPadGrid(element, { sounds, onTrigger }) {
@@ -34,9 +39,7 @@ export function createPadGrid(element, { sounds, onTrigger }) {
   const keys = []; // each pad's computer key, for its label
   const names = []; // what each pad plays now
   const colors = []; // each pad's colour (0 for none)
-  // The pad's label for a screen reader: which pad, what it plays, its key, and its colour when it has one.
-  const labelOf = (idx) =>
-    `Pad ${idx + 1}, ${names[idx]}, key ${keys[idx].toUpperCase()}${colors[idx] ? `, ${padColorName(colors[idx]).toLowerCase()}` : ""}`;
+  const labelOf = (idx) => padLabel({ index: idx, name: names[idx], key: keys[idx], color: colors[idx] });
   const flash = createFlasher("hit", FLASH_MS);
   const light = createFlasher("lit", FLASH_MS);
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
@@ -94,10 +97,10 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       const css = padColorCss(color);
       if (css) {
         el.style.setProperty("--pad-color", css);
-        el.dataset.color = padColorName(color).toLowerCase();
+        el.title = padColorName(color); // a cue that is not the colour alone, for anyone who cannot tell two apart
       } else {
         el.style.removeProperty("--pad-color");
-        delete el.dataset.color;
+        el.removeAttribute("title");
       }
       el.setAttribute("aria-label", labelOf(idx));
     },

@@ -101,7 +101,7 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 // is fine because the sampler reports nothing until something happens.
 // What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
 const kit = createKit(SOUNDS, {
-  settings: song ? song.padSettings : {}, // each pad's gain, pitch and choke group, kept with the song
+  settings: song ? song.padSettings : {}, // each pad's gain, pitch, choke group and colour, kept with the song
   onChange(index, what) {
     if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
     if (what === "setting") padGrid.setColor(index, kit.settings(index).color);

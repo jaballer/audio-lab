@@ -1197,12 +1197,20 @@ describe("pad colours", () => {
     expect(sampler.getSong().padSettings).toEqual({});
   });
 
-  it("has no effect on how a pad plays", () => {
-    const { audio, sounds, sampler } = setup();
-    sampler.setPadSetting("color", 3);
-    audio.ctx.currentTime = 1;
-    sampler.triggerPad(0);
-    expect(sounds[0].play).toHaveBeenCalledTimes(1);
+  it("has no effect on how a pad plays: the same call, to the same kind of node, at the same time", () => {
+    const plain = setup();
+    plain.audio.ctx.currentTime = 1;
+    plain.sampler.triggerPad(0, 0.5);
+    const coloured = setup();
+    coloured.sampler.setPadSetting("color", 3);
+    coloured.audio.ctx.currentTime = 1;
+    coloured.sampler.triggerPad(0, 0.5);
+    const [, plainOut, plainTime, ...plainRest] = plain.sounds[0].play.mock.calls[0];
+    const [, colouredOut, colouredTime, ...colouredRest] = coloured.sounds[0].play.mock.calls[0];
+    expect(colouredTime).toBe(plainTime);
+    expect(colouredRest).toEqual(plainRest);
+    expect(colouredOut.gain.value).toBe(plainOut.gain.value);
+    expect(coloured.audio.ctx.createGain).toHaveBeenCalledTimes(plain.audio.ctx.createGain.mock.calls.length);
   });
 });
 

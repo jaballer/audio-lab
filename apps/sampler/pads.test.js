@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEY_ROWS, padForKey } from "./pads.js";
+import { KEY_ROWS, padForKey, padLabel } from "./pads.js";
 
 describe("padForKey", () => {
   it("maps the bottom key row to pads 1-4 (indexes 0-3)", () => {
@@ -24,5 +24,17 @@ describe("padForKey", () => {
     expect(padForKey("p")).toBe(-1);
     expect(padForKey(" ")).toBe(-1);
     expect(padForKey("Q")).toBe(-1); // callers lower-case first
+  });
+});
+
+describe("padLabel", () => {
+  it("says which pad, what it plays and its key, in capitals", () => {
+    expect(padLabel({ index: 0, name: "Kick", key: "z" })).toBe("Pad 1, Kick, key Z");
+  });
+
+  it("ends with the colour's name when the pad has one, in lower case, and not for none", () => {
+    expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 5 })).toBe("Pad 3, C.Hat, key C, blue");
+    expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 0 })).toBe("Pad 3, C.Hat, key C");
+    expect(padLabel({ index: 2, name: "C.Hat", key: "c" })).toBe("Pad 3, C.Hat, key C");
   });
 });
