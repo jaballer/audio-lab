@@ -110,34 +110,46 @@ export function hitsOf(sequence, stepsPerBar) {
   return hits.sort((a, b) => a.step - b.step || a.row - b.row);
 }
 
-export async function renderSequence({
+// What a render is made of, worked out before any audio is made (so it can be tested without a context): the hits, how
+// many passes there are and where the kept window sits in them. The last `copies` passes are the file; the passes
+// before it are warm-up: a voice rings on after it is cut, for the pad's Release, and a Release longer than the loop
+// leaves tails from several passes back in the loop's steady state, so there are enough passes before the file to
+// cover the longest (one, with no release).
+export function planRender({
   song,
   kit,
   stepsPerBar,
   sampleRate = EXPORT_SAMPLE_RATE,
-  createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
   loops = DEFAULT_EXPORT_OPTIONS.loops,
-  channels: channelMode = DEFAULT_EXPORT_OPTIONS.channels,
-  onProgress,
-  signal,
 }) {
   const copies = Math.max(1, Math.floor(loops) || 1);
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
   const length = sequence.bars * stepsPerBar; // steps in one pass
   const stepLength = stepSeconds(song.bpm);
-  // The last pass is the file. The passes before it are warm-up: a voice rings on after it is cut, for the pad's Release,
-  // and a Release longer than the loop leaves tails from several passes back in the loop's steady state, so there are
-  // enough passes before the one kept to cover the longest (one, with no release).
   const loopSeconds = length * stepLength;
   const longestRelease = Math.max(0, ...hits.map(({ row }) => kit.envelope(row)?.release ?? 0));
   const warmUp = Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil(longestRelease / loopSeconds));
   const first = Math.round((LEAD_SECONDS + warmUp * loopSeconds) * sampleRate);
   const frames = exportFrames(song, stepsPerBar, copies, sampleRate);
-  const ctx = createContext(first + frames, sampleRate);
+  return {
+    hits,
+    copies,
+    length,
+    stepLength,
+    warmUp,
+    passes: warmUp + copies,
+    first,
+    frames,
+    total: first + frames,
+    sampleRate,
+  };
+}
 
+// The render's output chain: the master gain at the page's volume, into the clipper, into the speakers.
+function connectOutput(ctx, volume) {
   const master = ctx.createGain();
-  master.gain.value = song.volume / VOLUME_SCALE;
+  master.gain.value = volume / VOLUME_SCALE;
   const clipper = createClipper(ctx);
   if (clipper) {
     master.connect(clipper.input);
@@ -145,27 +157,52 @@ export async function renderSequence({
   } else {
     master.connect(ctx.destination);
   }
+  return master;
+}
 
+// Starts every hit of one pass (0 is the first warm-up pass), through the voices so that a hit cuts the pad's earlier one
+// and the pads of its choke group, as they do on the page.
+function schedulePass(ctx, { voices, kit, master, plan, pass }) {
+  for (const { step, row, velocity } of plan.hits) {
+    const time = LEAD_SECONDS + (pass * plan.length + step) * plan.stepLength;
+    const { out } = voices.start(ctx, row, master, time);
+    kit.voice(row).play(ctx, withVelocity(ctx, out, velocity / FULL_VELOCITY), time);
+  }
+}
+
+// The file out of the render: the kept window, as views of the render and not copies (a long render is hundreds of
+// megabytes, and a copy of each channel is as much again at the moment the most is held: stereo, or both channels and
+// then the mono mix), mixed down to one channel if asked.
+function keptWindow(rendered, plan, channelMode) {
+  const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) =>
+    rendered.getChannelData(i).subarray(plan.first, plan.first + plan.frames),
+  );
+  return { sampleRate: rendered.sampleRate, channels: channelMode === "mono" ? [toMono(channels)] : channels };
+}
+
+export async function renderSequence({
+  song,
+  kit,
+  stepsPerBar,
+  sampleRate = EXPORT_SAMPLE_RATE,
+  createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
+  loops = DEFAULT_EXPORT_OPTIONS.loops,
+  channels = DEFAULT_EXPORT_OPTIONS.channels,
+  onProgress,
+  signal,
+}) {
+  const plan = planRender({ song, kit, stepsPerBar, sampleRate, loops });
+  const ctx = createContext(plan.total, sampleRate);
+  const master = connectOutput(ctx, song.volume);
   const voices = createVoices(kit.length, {
     cleanUp: false,
     groupOf: (pad) => kit.settings(pad).choke,
     releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
   });
-  for (let pass = 0; pass < warmUp + copies; pass++) {
-    for (const { step, row, velocity } of hits) {
-      const time = LEAD_SECONDS + (pass * length + step) * stepLength;
-      const { out } = voices.start(ctx, row, master, time);
-      kit.voice(row).play(ctx, withVelocity(ctx, out, velocity / FULL_VELOCITY), time);
-    }
-  }
+  for (let pass = 0; pass < plan.passes; pass++) schedulePass(ctx, { voices, kit, master, plan, pass });
 
-  const rendered = await renderWithProgress(ctx, first + frames, sampleRate, { onProgress, signal });
-  // Views of the kept window, not copies: a long render is hundreds of megabytes, and a copy of each channel is as
-  // much again at the moment the most is held (stereo, or both channels and then the mono mix).
-  const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) =>
-    rendered.getChannelData(i).subarray(first, first + frames),
-  );
-  return { sampleRate: rendered.sampleRate, channels: channelMode === "mono" ? [toMono(channels)] : channels };
+  const rendered = await renderWithProgress(ctx, plan.total, sampleRate, { onProgress, signal });
+  return keptWindow(rendered, plan, channels);
 }
 
 // The channels as one: at each frame, the mean of them (so identical channels come out unchanged).

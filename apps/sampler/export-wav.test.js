@@ -13,6 +13,7 @@ import {
   hasSteps,
   hitsOf,
   pauseFrames,
+  planRender,
   renderSequence,
   toMono,
   wasCancelled,
@@ -356,6 +357,55 @@ describe("renderSequence", () => {
     await render();
     expect(vi.getTimerCount()).toBe(0);
     vi.useRealTimers();
+  });
+});
+
+describe("planRender", () => {
+  // 120 BPM, 16 steps a bar: 2 s a bar; at 1000 Hz, 2000 frames
+  const plan = (seq, extra = {}, options = {}, sounds = [sound("a"), sound("b"), sound("c")]) =>
+    planRender({ song: songOf(seq, extra), kit: createKit(sounds), stepsPerBar: 16, sampleRate: 1000, ...options });
+
+  it("is the hits, the passes and where the kept window is, worked out before any audio", () => {
+    const p = plan(sequence({ 0: [0, 4], 1: [8] }));
+    expect(p.hits).toHaveLength(3);
+    expect(p.length).toBe(16);
+    expect(p.stepLength).toBeCloseTo(0.125);
+    expect(p.warmUp).toBe(1);
+    expect(p.copies).toBe(1);
+    expect(p.passes).toBe(2);
+    expect(p.first).toBe(Math.round((LEAD_SECONDS + 2) * 1000));
+    expect(p.frames).toBe(2000);
+    expect(p.total).toBe(p.first + p.frames);
+    expect(p.sampleRate).toBe(1000);
+  });
+
+  it("keeps the loops after the same warm-up", () => {
+    const p = plan(sequence({ 0: [0] }), {}, { loops: 4 });
+    expect(p.copies).toBe(4);
+    expect(p.warmUp).toBe(1);
+    expect(p.passes).toBe(5);
+    expect(p.frames).toBe(8000);
+  });
+
+  it("warms up for a release longer than the loop, up to the limit, counting only the pads that have steps", () => {
+    const sample = () => ({ id: "s", name: "s", play: vi.fn(), setTrim() {} });
+    const kit = createKit([sample(), sample()]);
+    kit.setSetting(0, "release", 100); // 5 s in a 2 s loop
+    kit.setSetting(1, "release", 100);
+    const planned = (pattern, bpm = 120) =>
+      planRender({ song: songOf(sequence(pattern), { bpm }), kit, stepsPerBar: 16, sampleRate: 1000 });
+    expect(planned({ 0: [0] }).warmUp).toBe(1 + Math.ceil(5 / 2));
+    expect(planned({ 0: [0] }, 1000).warmUp).toBe(MAX_WARM_UP_PASSES); // a loop of a quarter of a second
+    const silent = createKit([sound("a"), sample()]);
+    silent.setSetting(1, "release", 100); // a long release on a pad with no steps
+    expect(
+      planRender({ song: songOf(sequence({ 0: [0] })), kit: silent, stepsPerBar: 16, sampleRate: 1000 }).warmUp,
+    ).toBe(1);
+  });
+
+  it("treats loops that are not a count as one", () => {
+    expect(plan(sequence({ 0: [0] }), {}, { loops: 0 }).copies).toBe(1);
+    expect(plan(sequence({ 0: [0] }), {}, { loops: 2.7 }).copies).toBe(2);
   });
 });
 

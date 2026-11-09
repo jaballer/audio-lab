@@ -229,6 +229,29 @@ describe("a trimmed sample", () => {
     expect(sources[0].start).toHaveBeenCalledWith(0, 0, 1);
   });
 
+  it("gives a snapshot of itself that keeps the trim it has now, while the original goes on being edited", () => {
+    const { ctx, sources } = recordingContext();
+    const sound = make({ start: 0, end: 0.5 }, 2);
+    const frozen = sound.snapshot();
+    sound.setTrim({ start: 0.5, end: 1 });
+    frozen.play(ctx, {}, 0);
+    sound.play(ctx, {}, 0);
+    expect(sources[0].start).toHaveBeenCalledWith(0, 0, 1); // the frozen one: the first half
+    expect(sources[1].start).toHaveBeenCalledWith(0, 1, 1); // the edited one: the second half
+    expect(typeof frozen.setTrim).toBe("function"); // still a sample to the kit, which gives a sample's pad an envelope
+    expect(frozen.id).toBe(sound.id);
+    expect(frozen.name).toBe(sound.name);
+    expect(frozen.info).toEqual(sound.info);
+  });
+
+  it("shares the decoded audio with its snapshot, not a copy of it", () => {
+    const { ctx, sources } = recordingContext();
+    const shared = buffer(2);
+    const sound = createSampleSound({ id: "s", name: "S", buffer: shared, bytes: 10 });
+    sound.snapshot().play(ctx, {}, 0);
+    expect(sources[0].buffer).toBe(shared);
+  });
+
   it("holds back the handle that is being moved", () => {
     const sound = make({ start: 0.2, end: 0.6 }, 2);
     expect(sound.setTrim({ start: 0.9, end: 0.6 }, "start").end).toBe(0.6);
