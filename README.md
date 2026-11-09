@@ -105,6 +105,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/storage-budget.js` — how much room the browser gives the site (the sampler's total cap is a share of it), asking it to keep the data (`navigator.storage.persist()`), and the "4.2/32 MB" text; never throws, no DOM
 - `shared/download.js` — saves a Blob as a file through a link that is clicked by code (takes its document as a parameter)
 - `shared/dom-updates.js` — `setText`, `setAttr`, `setDisabled`, `setHidden`: a view writes only what changed (a redraw every step would otherwise be announced again), and a button that goes disabled or a group that is hidden hands keyboard focus to a neighbour first
+- `shared/disclosure.js` — a button that shows and hides some regions (`aria-expanded`, `aria-controls`, focus handed to the button when it hides what has it); the sampler's step editor uses it
 - `shared/blob-store.js` — bytes kept in IndexedDB that never throws (a failed read is `null`, a failed write is `false`), for what localStorage cannot hold: the sampler's samples
 - `shared/audio.js` — the `AudioContext`, master volume (through a soft clipper, so sounds that add up past full scale do not crackle), power on/off and first-interaction unlock, used by every app
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)

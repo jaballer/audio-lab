@@ -680,3 +680,44 @@
     outline-offset: 2px;
   }
 }
+
+/* ---------- The step editor's heading: the button that hides the rest of it ---------- */
+.step-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+/* A chevron, pointing down while the editor is shown and right while it is hidden. */
+.step-toggle::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border: solid currentcolor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.12s;
+}
+.step-toggle[aria-expanded="false"]::before {
+  transform: translateX(-2px) rotate(-45deg);
+}
+.step-toggle:focus-visible {
+  outline: 3px solid var(--focus-on-light);
+  outline-offset: 2px;
+}
+/* Hidden parts of the header and the body stay hidden: their own display rules would show them. */
+.step-panel [hidden] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-toggle::before {
+    transition: none;
+  }
+}

@@ -132,8 +132,11 @@
 
         <section class="step-panel" aria-label="Step keys for the selected pad">
           <div class="step-head">
-            <div class="small-label">Step keys &middot; selected pad</div>
-            <div class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
+            <!-- The heading is the button that hides the rest of the step editor, and says whether it is shown. -->
+            <button id="steps-toggle" class="small-label step-toggle" type="button" aria-expanded="true">
+              Step keys &middot; selected pad
+            </button>
+            <div id="step-tools" class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
               <button id="undo" class="btn btn-small" type="button" disabled>Undo</button>
               <button id="redo" class="btn btn-small" type="button" disabled>Redo</button>
               <button id="copy" class="btn btn-small" type="button">Copy Steps</button>
@@ -141,15 +144,17 @@
               <button id="clear" class="btn btn-small" type="button">Clear Steps</button>
               <button id="clear-all" class="btn btn-small" type="button">Clear All</button>
             </div>
-            <div class="step-nav" role="group" aria-label="Which bar is shown">
+            <div id="step-nav" class="step-nav" role="group" aria-label="Which bar is shown">
               <button id="steps-prev" class="btn btn-small" type="button" aria-label="Previous bar">&lt;</button>
               <span id="steps-range" class="small-label" aria-live="polite"></span>
               <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
             </div>
           </div>
-          <div id="steps"></div>
-          <div class="small-label sampler-velocity-label">Velocity &middot; drag to set, soft to hard</div>
-          <div id="velocity" role="group" aria-label="Step velocities for the selected pad"></div>
+          <div id="step-body">
+            <div id="steps"></div>
+            <div class="small-label sampler-velocity-label">Velocity &middot; drag to set, soft to hard</div>
+            <div id="velocity" role="group" aria-label="Step velocities for the selected pad"></div>
+          </div>
         </section>
       </main>
     </div>
@@ -180,8 +185,9 @@
           the next bar with the arrows and paste to repeat it
         </li>
         <li>
-          Drag along the velocity bars under the step keys to set how hard each step plays; a step recorded live keeps
-          the velocity of the hit
+          The heading above the step keys hides or shows the step editor (the keys, the velocity bars and the edit
+          tools), and the page remembers which. Drag along the velocity bars under the step keys to set how hard each
+          step plays; a step recorded live keeps the velocity of the hit
         </li>
         <li>
           Export WAV saves the sequence showing as a 16-bit stereo WAV file, exactly the length of its bars so that it

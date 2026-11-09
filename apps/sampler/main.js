@@ -30,6 +30,7 @@ import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
 import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
+import { createDisclosure } from "../../shared/disclosure.js";
 import { saveBlob } from "../../shared/download.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
@@ -417,6 +418,15 @@ narrow.addEventListener("change", placeConsole);
 // (the machine's 980, the drawer's 290, a 16px gap and the page's side padding), so from 1180px up the machine
 // gives up some width while the drawer is open (850px at the breakpoint; its own layout holds down to 800) and
 // takes it back when the drawer closes. Below that the machine keeps its width and the drawer goes under the pads.
+// The step editor can be hidden, leaving its heading: its keys, velocity bars and tools. Remembered, and shown by default.
+const STEPS_KEY = "pad-sampler:steps";
+createDisclosure({
+  toggle: $("steps-toggle"),
+  regions: [$("step-tools"), $("step-nav"), $("step-body")],
+  open: loadJson(STEPS_KEY, true) !== false,
+  onToggle: (open) => saveJson(STEPS_KEY, open),
+});
+
 const dock = window.matchMedia("(min-width: 1180px)");
 function placeDrawer() {
   const home = dock.matches ? document.querySelector(".sampler-stage") : $("pads").closest(".pad-panel");
