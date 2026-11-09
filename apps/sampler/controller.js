@@ -177,9 +177,13 @@ export function createSampler({
   function setBars(value) {
     const next = Math.min(maxBars, Math.max(1, Math.round(value)));
     if (next === bars) return;
+    const shorter = next < bars;
     bars = next;
     slots[current].bars = bars;
     scheduler.setSteps(totalSteps());
+    // A step queued from a bar that is gone must not sound: build the queued ones again. (Made longer,
+    // what is queued is still right.)
+    if (shorter) rescheduleQueuedHits();
     page = Math.min(page, lastPage());
     onMessage(`${bars} ${bars === 1 ? "BAR" : "BARS"}`);
     onChange();
