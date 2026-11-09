@@ -108,3 +108,15 @@ A pad can be given a colour in the pad editor (a row of swatches under Tune), to
 - **For a screen reader:** the pad's label ends with the colour's name (`Pad 3, Kick, key C, blue`), and each swatch has its name; the group of swatches is a radio group (arrow keys, Home and End).
 - **A pad setting like Gain, Pitch and Choke** (`pad-settings.js`, the kit, the song's `padSettings`; song version 6, a version 5 song has no colours), shown on the LCD (`PAD 03 COLOR BLUE`), not part of the step undo history. It belongs to the pad, so Default Sound does not clear it. It has no effect on playback or the export.
 - **Not decided here:** default colours for the built-in kit, a swatch beside the pad editor's heading, mapping a colour to a Launchpad's LEDs (only red, green and amber), and naming a group.
+
+## Amplitude envelope
+
+A loaded sample can be given an attack, a decay, a sustain level and a release in the pad editor, under Tune (#120).
+
+- **Laid over the time the sample is heard for.** A sample plays once and says nothing when it ends (there is no note off), so the envelope is applied across its heard length (the trimmed part, at the pad's pitch): Attack fades it in from the start, Decay lowers it to the Sustain level, which is held, and Release fades the last that-much of it out (`apps/sampler/envelope.js`, pure and tested). A stage that runs into the next is cut where the next begins, from the level it had reached. All at their defaults (no attack, no release, sustain 100) is no envelope, and the sample plays exactly as before, with no extra node.
+- **Release is also the fade of a cut.** A hit on the same pad, or on another pad in its choke group, fades the pad's earlier voice out over the pad's Release (spread over a few time constants, never faster than the 4 ms every cut has) instead of the fixed short fade. Read when the voice starts.
+- **When there is a note off** (hold mode, #114): the sustain would hold until the pad is released and Release would start there. The settings mean the same; only what ends the held part changes.
+- **Samples only, like Pitch:** a built-in sound is synthesized with its own envelope, so the sliders are disabled (with the same hint) while a pad plays one, and `kit.envelope` is null for it.
+- **Sliders, in positions:** attack and decay go to 2 s and release to 5 s, on a cubic scale (fine control over short times: position 10 is 2 ms, 50 is 250 ms); sustain is 0 to 100 per cent. The values kept are the positions, so the song format (version 7) and the settings code stay whole numbers; the display shows the time.
+- **The export** follows with no extra work (the same `kit.voice().play` and `createVoices`).
+- **Not decided here:** a drawing of the envelope under the sliders; curved (exponential) segments instead of linear ramps; an envelope for the built-in sounds.

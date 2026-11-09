@@ -225,6 +225,15 @@ describe("renderSequence", () => {
     expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, expect.any(Number));
   });
 
+  it("fades a cut over the pad's release, as the page does, for a pad that plays a loaded sample", async () => {
+    const sounds = [{ id: "s", name: "s", play: vi.fn(), setTrim() {} }, sound("b"), sound("c")];
+    const { render, kit } = setup(sequence({ 0: [0, 4] }), {}, sounds);
+    kit.setSetting(0, "release", 100); // 5 s
+    await render();
+    const first = sounds[0].play.mock.calls[0][1];
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, 1.25);
+  });
+
   it("cuts a pad's hit when another pad in its choke group starts, as it does on the page", async () => {
     const { render, kit, sounds } = setup(sequence({ 0: [0], 1: [4] }));
     kit.setSetting(0, "choke", 2);

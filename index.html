@@ -65,6 +65,10 @@
                 <h3 id="pad-drawer-tune" class="small-label">Tune</h3>
                 <div id="pad-settings" role="group" aria-label="Gain, pitch and choke group of the selected pad"></div>
               </section>
+              <section class="pad-drawer-section" aria-labelledby="pad-drawer-envelope">
+                <h3 id="pad-drawer-envelope" class="small-label">Envelope</h3>
+                <div id="pad-envelope" role="group" aria-label="Envelope of the selected pad's sample"></div>
+              </section>
               <section class="pad-drawer-section" aria-labelledby="pad-drawer-color">
                 <h3 id="pad-drawer-color" class="small-label">Color</h3>
                 <div id="pad-colors"></div>
@@ -164,10 +168,11 @@
         <li>
           Drop an audio file on a pad to play it there (up to 10 seconds and 5 MB); it is kept in this browser. Edit Pad
           opens the pad editor for the selected pad: Load Sample, Default Sound, the waveform of a loaded sample with
-          its Start and End (drag the picture, or use the sliders), Gain (for any sound), Pitch (for a loaded sample)
-          and Choke (a group number: pads in the same group cut each other off, like a closed hat cutting an open one)
-          and Color (a colour for the pad's rim, to group pads by sight); press Delete or double-click a slider to reset
-          it. Escape, pressed inside the editor, closes it
+          its Start and End (drag the picture, or use the sliders), Gain (for any sound), Pitch and an Envelope of
+          Attack, Decay, Sustain and Release (for a loaded sample: Release is also how long a hit cuts off the pad's
+          last one), and Choke (a group number: pads in the same group cut each other off, like a closed hat cutting an
+          open one) and Color (a colour for the pad's rim, to group pads by sight); press Delete or double-click a
+          slider to reset it. Escape, pressed inside the editor, closes it
         </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;

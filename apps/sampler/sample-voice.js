@@ -8,6 +8,7 @@
 // copy at a time. The decoded buffer is shared; each hit makes a source of its own (they are
 // single-use).
 
+import { envelopeShape } from "./envelope.js";
 import { FULL_TRIM, clampTrim, isFullTrim, parseTrim, trimWindow } from "./trim.js";
 import { computePeaks } from "./waveform.js";
 
@@ -88,6 +89,16 @@ export const EDGE_FADE_SECONDS = 0.003;
 export const TRIM_LEAD_SECONDS = 0.005;
 const PEAK_COLUMNS = 400; // the outline is made once, at a width the view can draw at any size
 
+// A gain stage in front of `out`, ramped through the envelope from `start` for `heard` seconds: what to play into.
+function envelopeStage(ctx, out, start, envelope, heard) {
+  const stage = ctx.createGain();
+  const shape = envelopeShape(envelope, heard);
+  stage.gain.setValueAtTime(shape[0][1], start + shape[0][0]);
+  for (const [time, level] of shape.slice(1)) stage.gain.linearRampToValueAtTime(level, start + time);
+  stage.connect(out);
+  return stage;
+}
+
 // `bytes` is the size of the file it came from. `info` is what the pad editor shows about it: not the sample
 // rate, which the decoded buffer reports as the audio context's and not the file's. `trim` is the part that
 // plays (trim.js): all of it unless given.
@@ -114,21 +125,27 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
       return peaks;
     },
     // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
-    play(ctx, out, t, { rate = 1 } = {}) {
+    // `options.envelope` is { attack, decay, sustain, release } (envelope.js): a gain stage of its own, ramped through
+    // the shape over the time the sample is heard for, between the sample and `out`; left out, there is no such stage.
+    play(ctx, out, t, { rate = 1, envelope = null } = {}) {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       if (rate !== 1) source.playbackRate.value = rate;
-      if (isFullTrim(current)) {
+      const trimmed = !isFullTrim(current);
+      // Only the trimmed part, faded in where it starts if that is not the start of the file and out where
+      // it stops if that is not the end. `length` is in the sample's own time: the rate shortens it when played.
+      // `t` is moved on to the lead where it is already behind it, and the fades and the start use the moved time.
+      const { offset, length } = trimmed
+        ? trimWindow(current, buffer.duration)
+        : { offset: 0, length: buffer.duration };
+      if (trimmed) t = Math.max(t, (ctx.currentTime ?? 0) + TRIM_LEAD_SECONDS);
+      const heard = length / rate;
+      if (envelope) out = envelopeStage(ctx, out, t, envelope, heard);
+      if (!trimmed) {
         source.connect(out);
         source.start(t);
         return;
       }
-      // Only the trimmed part, faded in where it starts if that is not the start of the file and out where
-      // it stops if that is not the end. `length` is in the sample's own time: the rate shortens it when played.
-      // `t` is moved on to the lead where it is already behind it, and the fades and the start use the moved time.
-      const { offset, length } = trimWindow(current, buffer.duration);
-      t = Math.max(t, (ctx.currentTime ?? 0) + TRIM_LEAD_SECONDS);
-      const heard = length / rate;
       const fade = Math.min(EDGE_FADE_SECONDS, heard / 2);
       const stage = ctx.createGain();
       stage.gain.setValueAtTime(current.start > 0 ? 0 : 1, t);

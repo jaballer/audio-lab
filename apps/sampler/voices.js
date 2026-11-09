@@ -2,7 +2,9 @@
 // instead of layering a second copy over the first (a long sample would play over itself). And pads in the same choke
 // group cut each other off, as a closed hat cuts an open hat. No DOM, and nothing is built until a hit asks for it.
 //
-//   const voices = createVoices(16, { groupOf: (pad) => 0 });   // groupOf: a pad's choke group now, 0 for none
+//   const voices = createVoices(16, { groupOf: (pad) => 0, releaseOf: (pad) => 0 });
+//   // groupOf: a pad's choke group now, 0 for none. releaseOf: how long a voice on the pad takes to fade out when it is cut,
+//   // in seconds (the pad's Release, for a loaded sample); 0 is the short fade a cut always has
 //   const { out, chokes } = voices.start(ctx, pad, destination, time);
 //   //   `out` is a gain node to play the sound into; it is connected to `destination`. Whatever the pad (and the pads
 //   //   in its group) were still playing from before `time` is faded out from `time`. `chokes` says which, for undo().
@@ -24,9 +26,14 @@
 export const CHOKE_TIME_CONSTANT = 0.004; // seconds: fast, and still a fade
 const CLEAN_UP_AFTER_S = 0.1; // after the cut, once it is far below hearing
 
+// How fast a cut fades: the pad's release spread over a few time constants (so it is nearly silent by the end of it),
+// and never faster than the short fade every cut has.
+const RELEASE_CONSTANTS = 4;
+const fadeConstant = (voice) => Math.max(CHOKE_TIME_CONSTANT, voice.release / RELEASE_CONSTANTS);
+
 const cutTime = (voice) => (voice.cuts.length ? Math.min(...voice.cuts.map((cut) => cut.time)) : undefined);
 
-export function createVoices(pads, { cleanUp = true, groupOf = () => 0 } = {}) {
+export function createVoices(pads, { cleanUp = true, groupOf = () => 0, releaseOf = () => 0 } = {}) {
   const lists = Array.from({ length: pads }, () => []); // per pad, the voices that have not been cut off long ago
 
   // Makes the voice's gain and its clean-up match its cut requests: the earliest one is the cut.
@@ -38,9 +45,9 @@ export function createVoices(pads, { cleanUp = true, groupOf = () => 0 } = {}) {
     // A voice cut at the moment it starts (two pads of a group on the same step, or two hits in one render quantum) is
     // not heard at all: a fade would let its first few milliseconds through.
     if (at <= voice.time) voice.out.gain.setValueAtTime(0, at);
-    else voice.out.gain.setTargetAtTime(0, at, CHOKE_TIME_CONSTANT);
+    else voice.out.gain.setTargetAtTime(0, at, fadeConstant(voice));
     if (!cleanUp) return; // an offline render has no use for it: nothing is playing in the meantime
-    const wait = Math.max(0, at - ctx.currentTime) + CLEAN_UP_AFTER_S;
+    const wait = Math.max(0, at - ctx.currentTime) + voice.release + CLEAN_UP_AFTER_S;
     voice.timer = setTimeout(() => voice.out.disconnect(), wait * 1000);
   }
 
@@ -73,7 +80,7 @@ export function createVoices(pads, { cleanUp = true, groupOf = () => 0 } = {}) {
         lists[other] = list;
       }
       const list = lists[pad];
-      list.push({ out, time, cuts: [], timer: null });
+      list.push({ out, time, cuts: [], timer: null, release: Math.max(0, releaseOf(pad)) });
       lists[pad] = list;
       return { out, chokes };
     },

@@ -67,7 +67,11 @@ export async function renderSequence({
     master.connect(ctx.destination);
   }
 
-  const voices = createVoices(kit.length, { cleanUp: false, groupOf: (pad) => kit.settings(pad).choke });
+  const voices = createVoices(kit.length, {
+    cleanUp: false,
+    groupOf: (pad) => kit.settings(pad).choke,
+    releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
+  });
   for (const pass of [0, 1]) {
     for (const { step, row, velocity } of hits) {
       const time = LEAD_SECONDS + (pass * length + step) * stepLength;
