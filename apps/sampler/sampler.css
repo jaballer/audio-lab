@@ -2,7 +2,7 @@
 
 .body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: 22px;
   align-items: start;
 }
@@ -266,6 +266,10 @@
 @media (max-width: 800px) {
   .body {
     grid-template-columns: 1fr;
+  }
+  /* One column: keep the display on top, as before the pads moved left. */
+  .console {
+    order: -1;
   }
 }
 
