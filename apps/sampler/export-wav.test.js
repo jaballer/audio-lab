@@ -1,16 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  LEAD_SECONDS,
-  MAX_TAIL_SECONDS,
-  encodeWav,
-  exportName,
-  exportSequence,
-  hasSteps,
-  heardSeconds,
-  hitsOf,
-  renderSequence,
-  tailSeconds,
-} from "./export-wav.js";
+import { LEAD_SECONDS, encodeWav, exportName, exportSequence, hasSteps, hitsOf, renderSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
@@ -63,31 +52,6 @@ describe("hasSteps", () => {
   });
 });
 
-describe("the tail", () => {
-  it("is as long as a built-in sound rings, for a built-in sound", () => {
-    expect(heardSeconds(sound("kick"))).toBe(1.5);
-  });
-
-  it("is a sample's trimmed length at its pitch: an octave down is twice as long, a trim shorter", () => {
-    expect(heardSeconds(sample(4))).toBeCloseTo(4);
-    expect(heardSeconds(sample(4), -12)).toBeCloseTo(8);
-    expect(heardSeconds(sample(4, { start: 0.25, end: 0.75 }))).toBeCloseTo(2);
-  });
-
-  it("is the longest of the pads used, and not those that are not used", () => {
-    const kit = createKit([sound("a"), sample(6), sample(9)]);
-    expect(tailSeconds([{ row: 0 }, { row: 1 }], kit)).toBeCloseTo(6);
-    expect(tailSeconds([{ row: 0 }], kit)).toBe(1.5);
-  });
-
-  it("stops at a limit, and is nothing for no hits", () => {
-    const kit = createKit([sample(10)]);
-    kit.setSetting(0, "pitch", -24);
-    expect(tailSeconds([{ row: 0 }], kit)).toBe(MAX_TAIL_SECONDS);
-    expect(tailSeconds([], kit)).toBe(0);
-  });
-});
-
 // An offline context that records what is done to it and hands back a render with a marker in every frame.
 function fakeOffline() {
   const nodes = [];
@@ -137,13 +101,14 @@ describe("renderSequence", () => {
       });
     return { kit, offline, render, sounds };
   };
+  // 120 BPM: a sixteenth is 0.125 s, a bar of 16 steps is 2 s
 
-  it("plays each step that is on at its time (a sixteenth at the song's tempo), after the lead", async () => {
+  it("plays each step that is on at its time, after the lead, in two passes, so the second is a loop's steady state", async () => {
     const { render, sounds } = setup(sequence({ 0: [0, 4], 1: [8] }));
     await render();
-    // 120 BPM: a sixteenth is 0.125 s
-    expect(sounds[0].play.mock.calls.map((call) => call[2])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 0.5]);
-    expect(sounds[1].play.mock.calls.map((call) => call[2])).toEqual([LEAD_SECONDS + 1]);
+    const times = (sound) => sound.play.mock.calls.map((call) => call[2]);
+    expect(times(sounds[0])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 0.5, LEAD_SECONDS + 2, LEAD_SECONDS + 2.5]);
+    expect(times(sounds[1])).toEqual([LEAD_SECONDS + 1, LEAD_SECONDS + 3]);
     expect(sounds[2].play).not.toHaveBeenCalled();
   });
 
@@ -153,27 +118,46 @@ describe("renderSequence", () => {
     expect(sounds[0].play.mock.calls[0][2]).toBeCloseTo(LEAD_SECONDS + 4 * 0.25);
   });
 
-  it("runs the master at the volume on the page, through the clipper when the context has one", async () => {
+  it("is exactly the length of the bars, and is the second pass: the first pass's end is at its start", async () => {
+    const { render, offline } = setup(sequence({ 0: [0] }, {}, 2)); // 2 bars: 32 steps, 4 s
+    const audio = await render();
+    expect(offline.made.rate).toBe(1000);
+    const first = Math.round((LEAD_SECONDS + 4) * 1000); // where the second pass begins in the render
+    expect(offline.made.frames).toBe(first + 4000);
+    expect(audio.channels).toHaveLength(2);
+    expect(audio.channels[0]).toHaveLength(4000);
+    expect(audio.channels[1]).toHaveLength(4000);
+    expect(audio.channels[0][0]).toBe(first); // the render's frame at the start of the second pass is the file's first
+    expect(audio.channels[1][0]).toBe(1000 + first);
+    expect(audio.sampleRate).toBe(1000);
+  });
+
+  it("is as long as the bars whatever is in them: a sample longer than the loop adds nothing", async () => {
+    const { render, offline } = setup(sequence({ 0: [0] }), {}, [sample(9), sound("b"), sound("c")]);
+    const audio = await render();
+    expect(audio.channels[0]).toHaveLength(2000);
+    expect(offline.made.frames).toBe(Math.round((LEAD_SECONDS + 2) * 1000) + 2000);
+  });
+
+  it("runs the master at the volume on the page, straight to the speakers when the context has no clipper", async () => {
     const { render, offline } = setup(sequence({ 0: [0] }), { volume: 50 });
     await render();
     const master = offline.nodes[0];
     expect(master.gain.value).toBe(0.5);
-    expect(master.connect).toHaveBeenCalledWith(offline.destination); // no waveshaper in the stand-in: straight out
+    expect(master.connect).toHaveBeenCalledWith(offline.destination);
   });
 
   it("runs the master through the clipper, and the clipper to the speakers, when the context can make one", async () => {
     const { kit, offline } = setup(sequence({ 0: [0] }));
     const base = offline.createContext;
     const shaper = { curve: null, oversample: "2x", connect: vi.fn() };
-    const render = () =>
-      renderSequence({
-        song: songOf(sequence({ 0: [0] })),
-        kit,
-        stepsPerBar: 16,
-        sampleRate: 1000,
-        createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: () => shaper }),
-      });
-    await render();
+    await renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: () => shaper }),
+    });
     const [master, half] = offline.nodes;
     expect(master.connect).toHaveBeenCalledWith(half);
     expect(half.connect).toHaveBeenCalledWith(shaper);
@@ -181,12 +165,11 @@ describe("renderSequence", () => {
     expect(master.connect).not.toHaveBeenCalledWith(offline.destination);
   });
 
-  it("does not play steps in bars the sequence does not have, and the tail ignores pads used only there", async () => {
-    const sounds = [sound("a"), sample(9)];
-    const { offline, render } = setup(sequence({ 0: [0], 1: [20] }, {}, 1), {}, sounds);
+  it("does not play steps in bars the sequence does not have", async () => {
+    const sounds = [sound("a"), sound("b")];
+    const { render } = setup(sequence({ 0: [0], 1: [20] }, {}, 1), {}, sounds);
     await render();
     expect(sounds[1].play).not.toHaveBeenCalled();
-    expect(offline.made.frames).toBe(Math.ceil((LEAD_SECONDS + 2 + 1.5) * 1000)); // 2 s of steps and the built-in tail
   });
 
   it("gives a quieter step a gain stage in front of its pad's voice", async () => {
@@ -212,16 +195,11 @@ describe("renderSequence", () => {
     expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, expect.any(Number));
   });
 
-  it("is as long as the sequence and the tail, and starts on the first step (the lead is cut off)", async () => {
-    const { render, offline } = setup(sequence({ 0: [0] }, {}, 2)); // 2 bars of 16 steps at 0.125 s = 4 s
-    const audio = await render();
-    expect(offline.made.rate).toBe(1000);
-    expect(offline.made.frames).toBe(Math.ceil((LEAD_SECONDS + 4 + 1.5) * 1000));
-    expect(audio.channels).toHaveLength(2);
-    expect(audio.channels[0]).toHaveLength(offline.made.frames - LEAD_SECONDS * 1000);
-    expect(audio.channels[0][0]).toBe(LEAD_SECONDS * 1000); // frame 10 of the render is now the first
-    expect(audio.channels[1][0]).toBe(1000 + LEAD_SECONDS * 1000);
-    expect(audio.sampleRate).toBe(1000);
+  it("lets the last hit of the first pass be cut by the pad's first hit of the second, as in a loop", async () => {
+    const { render, sounds } = setup(sequence({ 0: [0] }));
+    await render();
+    const lastOfFirstPass = sounds[0].play.mock.calls[0][1];
+    expect(lastOfFirstPass.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 2, expect.any(Number));
   });
 
   it("starts no timers: an offline render has nothing to clean up", async () => {

@@ -325,6 +325,7 @@ $("export").addEventListener("click", async () => {
   if (exporting) return;
   exporting = true;
   try {
+    await restoring;
     await exportSequence({ song: sampler.getSong(), kit, stepsPerBar: STEPS, onMessage: say, save: saveBlob });
   } finally {
     exporting = false;
@@ -404,5 +405,7 @@ dock.addEventListener("change", placeDrawer);
 if (loadJson(DRAWER_KEY, false) === true) padDrawer.open(); // as it was left
 
 // ---------- Init ----------
-if (decodesEarly) samples.restore(); // kept samples back on their pads, before the first click or key
+// Kept samples back on their pads, before the first click or key. Export waits for it, so it never renders the
+// built-in sounds where a saved sample is about to be.
+const restoring = decodesEarly ? samples.restore() : Promise.resolve();
 sampler.selectPad(0);

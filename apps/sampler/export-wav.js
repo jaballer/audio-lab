@@ -6,28 +6,24 @@
 //   const bytes = encodeWav(audio.channels, audio.sampleRate);              // an ArrayBuffer: the .wav file
 //   exportName(song)                                                        // "pad16-seq-01-100bpm.wav"
 //
-// `song` is what the sampler saves (controller.getSong()): the sequence exported is the one showing (`current`), one
-// pass from the first step to the last, followed by a tail long enough for the longest sound used to ring out, so
-// the last hit is not cut off. It is not looped. The render does not depend on the power switch or on the audio
-// context of the page.
+// `song` is what the sampler saves (controller.getSong()): the sequence exported is the one showing (`current`), and
+// the file is exactly the length of its bars, so it loops. To make it loop cleanly the sequence is played twice and
+// the second pass is kept: what rings on from the end of the first pass (a crash, a long sample) is in the start of
+// the second, as it is when the page loops, and a pad's last hit is cut by its first hit of the next pass. The
+// render does not depend on the power switch or on the audio context of the page.
 
 import { createClipper } from "../../shared/audio.js";
 import { FULL_VELOCITY } from "../../shared/pattern.js";
 import { withVelocity } from "../../shared/sounds.js";
 import { stepSeconds } from "../../shared/tempo.js";
 import { pad2 } from "./format.js";
-import { pitchToRate } from "./pad-settings.js";
-import { trimWindow } from "./trim.js";
 import { createVoices } from "./voices.js";
 
 export const EXPORT_SAMPLE_RATE = 44100;
 export const VOLUME_SCALE = 100; // the slider's scale, as in the controller
 // The first step is not at time 0: a trimmed sample starts at least a few milliseconds into the context's time (see
-// sample-voice.js), so every step is moved on by this much and the lead is cut from the front of the result, which
-// keeps every hit where it belongs and the file starting on step 1.
+// sample-voice.js), so every step is moved on by this much, which keeps every hit where it belongs.
 export const LEAD_SECONDS = 0.01;
-const BUILT_IN_TAIL_SECONDS = 1.5; // the longest of the built-in sounds is the crash, at about 1.25 s
-export const MAX_TAIL_SECONDS = 15; // a 10 s sample played an octave down is 20 s: long enough is enough
 
 // The steps that are on, as { step, row, velocity }, in the order they sound (and per step by pad). Only the steps of
 // the bars the sequence has: a sequence made shorter keeps the steps of the bars it dropped (for when they come
@@ -45,21 +41,6 @@ export function hitsOf(sequence, stepsPerBar) {
   return hits.sort((a, b) => a.step - b.step || a.row - b.row);
 }
 
-// How long a hit on this pad is heard, for working out the tail: a sample for its trimmed length at its pitch, a
-// built-in sound for the longest of them.
-export function heardSeconds(sound, pitch = 0) {
-  if (typeof sound.setTrim !== "function") return BUILT_IN_TAIL_SECONDS;
-  return trimWindow(sound.trim, sound.duration).length / pitchToRate(pitch);
-}
-
-export function tailSeconds(hits, kit) {
-  const longest = Math.max(
-    0,
-    ...[...new Set(hits.map((hit) => hit.row))].map((row) => heardSeconds(kit.get(row), kit.settings(row).pitch)),
-  );
-  return Math.min(MAX_TAIL_SECONDS, longest);
-}
-
 export async function renderSequence({
   song,
   kit,
@@ -69,10 +50,12 @@ export async function renderSequence({
 }) {
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
+  const length = sequence.bars * stepsPerBar; // steps in one pass
   const stepLength = stepSeconds(song.bpm);
-  const playing = sequence.bars * stepsPerBar * stepLength;
-  const frames = Math.ceil((LEAD_SECONDS + playing + tailSeconds(hits, kit)) * sampleRate);
-  const ctx = createContext(frames, sampleRate);
+  // The second pass is the file: from the end of the first (and the lead) for the length of one pass.
+  const first = Math.round((LEAD_SECONDS + length * stepLength) * sampleRate);
+  const frames = Math.round(length * stepLength * sampleRate);
+  const ctx = createContext(first + frames, sampleRate);
 
   const master = ctx.createGain();
   master.gain.value = song.volume / VOLUME_SCALE;
@@ -85,15 +68,18 @@ export async function renderSequence({
   }
 
   const voices = createVoices(kit.length, { cleanUp: false });
-  for (const { step, row, velocity } of hits) {
-    const time = LEAD_SECONDS + step * stepLength;
-    const { out } = voices.start(ctx, row, master, time);
-    kit.voice(row).play(ctx, withVelocity(ctx, out, velocity / FULL_VELOCITY), time);
+  for (const pass of [0, 1]) {
+    for (const { step, row, velocity } of hits) {
+      const time = LEAD_SECONDS + (pass * length + step) * stepLength;
+      const { out } = voices.start(ctx, row, master, time);
+      kit.voice(row).play(ctx, withVelocity(ctx, out, velocity / FULL_VELOCITY), time);
+    }
   }
 
   const rendered = await ctx.startRendering();
-  const lead = Math.round(LEAD_SECONDS * sampleRate);
-  const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) => rendered.getChannelData(i).slice(lead));
+  const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) =>
+    rendered.getChannelData(i).slice(first, first + frames),
+  );
   return { sampleRate: rendered.sampleRate, channels };
 }
 
