@@ -1,5 +1,6 @@
 // A loaded sample as a pad sound, and the decoding that makes one. No DOM, and nothing at import time.
 //
+//   const seconds = await probeDuration(file);            // a file's length from its header, or null: before decoding
 //   const result = await decodeSample(ctx, arrayBuffer);   // { ok: true, buffer } or { ok: false, reason }
 //   const sound = createSampleSound({ id, name, buffer }); // the same shape as the built-in sounds: play(ctx, out, t)
 //
@@ -7,8 +8,17 @@
 // as the built-in sounds do. The decoded buffer is shared; each hit makes a source of its own (they are
 // single-use).
 
+// Why these numbers. Decoded audio is 4-byte floats at the audio context's rate, so a sample costs
+// seconds x rate x channels x 4 bytes of memory: 10 s of stereo at 48 kHz is about 3.7 MiB, and the 16 pads at
+// the cap are about 59 MiB, which is the most the kit can ever take whatever the files are (a typical drum hit
+// of half a second is a few hundred KB). The file cap keeps a file from being read whole into memory and
+// decoded for nothing; 5 MB holds 10 s of 48 kHz 24-bit stereo WAV with room to spare, and MP3s of that
+// length are a few hundred KB. The length is checked from the file's header first (probeDuration), because
+// a 5 MB MP3 can be five minutes long and decoding that, only to refuse it, would take over 100 MB and a
+// second or more of CPU.
 export const MAX_SAMPLE_BYTES = 5 * 1024 * 1024;
 export const MAX_SAMPLE_SECONDS = 10;
+const PROBE_TIMEOUT_MS = 2000;
 
 // The short reasons are for the LCD, which is small.
 export const REASONS = {
@@ -17,6 +27,47 @@ export const REASONS = {
   notAudio: "NOT AUDIO",
   seconds: "OVER 10 SECONDS",
 };
+
+// The length of an audio file in seconds, read from its header by a media element without decoding it, or null
+// when that cannot be told (a format the browser will not read, no metadata in time). Never throws or rejects.
+// `env` is where the element and the object URLs come from, so a test can hand in stand-ins.
+export function probeDuration(file, env = {}) {
+  const {
+    createAudio = () => new Audio(),
+    createUrl = (blob) => URL.createObjectURL(blob),
+    revokeUrl = (url) => URL.revokeObjectURL(url),
+    timeoutMs = PROBE_TIMEOUT_MS,
+    setTimer = (fn, ms) => setTimeout(fn, ms),
+    clearTimer = (id) => clearTimeout(id),
+  } = env;
+  return new Promise((resolve) => {
+    let url = null;
+    let audio = null;
+    let timer = null;
+    const finish = (seconds) => {
+      clearTimer(timer);
+      if (audio) {
+        audio.onloadedmetadata = null;
+        audio.onerror = null;
+        audio.removeAttribute?.("src"); // lets the browser drop the file
+      }
+      if (url) revokeUrl(url);
+      // Infinity and NaN are what a stream without a known length reports.
+      resolve(Number.isFinite(seconds) && seconds >= 0 ? seconds : null);
+    };
+    try {
+      url = createUrl(file);
+      audio = createAudio();
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => finish(audio.duration);
+      audio.onerror = () => finish(null);
+      timer = setTimer(() => finish(null), timeoutMs);
+      audio.src = url;
+    } catch {
+      finish(null);
+    }
+  });
+}
 
 export function createSampleSound({ id, name, buffer }) {
   return {

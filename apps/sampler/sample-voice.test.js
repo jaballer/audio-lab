@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAX_SAMPLE_BYTES, MAX_SAMPLE_SECONDS, REASONS, createSampleSound, decodeSample } from "./sample-voice.js";
+import {
+  MAX_SAMPLE_BYTES,
+  MAX_SAMPLE_SECONDS,
+  REASONS,
+  createSampleSound,
+  decodeSample,
+  probeDuration,
+} from "./sample-voice.js";
 
 const bytes = (length) => new ArrayBuffer(length);
 const audioBuffer = (seconds, length = 100) => ({ duration: seconds, length });
@@ -93,5 +100,88 @@ describe("decodeSample", () => {
       reason: REASONS.seconds,
     });
     expect((await decodeSample(ctxDecoding(audioBuffer(MAX_SAMPLE_SECONDS)), bytes(10))).ok).toBe(true);
+  });
+});
+
+describe("probeDuration", () => {
+  // A stand-in for the media element and the URLs: `reply(audio)` is what the element does once it has a source.
+  function env({ reply, timeoutMs = 50 } = {}) {
+    const audio = {
+      preload: "",
+      onloadedmetadata: null,
+      onerror: null,
+      duration: NaN,
+      removeAttribute: vi.fn(),
+      set src(value) {
+        this._src = value;
+        queueMicrotask(() => reply?.(audio));
+      },
+    };
+    return {
+      audio,
+      revokeUrl: vi.fn(),
+      env: { createAudio: () => audio, createUrl: () => "blob:x", revokeUrl: vi.fn(), timeoutMs },
+    };
+  }
+
+  it("gives the length the element reads from the header", async () => {
+    const { env: e, audio } = env({
+      reply: (a) => {
+        a.duration = 3.25;
+        a.onloadedmetadata();
+      },
+    });
+    expect(await probeDuration({}, e)).toBe(3.25);
+    expect(audio.preload).toBe("metadata");
+  });
+
+  it("gives up the file and the URL when it is done", async () => {
+    const { env: e, audio } = env({
+      reply: (a) => {
+        a.duration = 1;
+        a.onloadedmetadata();
+      },
+    });
+    await probeDuration({}, e);
+    expect(e.revokeUrl).toHaveBeenCalledWith("blob:x");
+    expect(audio.removeAttribute).toHaveBeenCalledWith("src");
+  });
+
+  it("is null when the length is not known (a stream's Infinity, or NaN)", async () => {
+    for (const duration of [Infinity, NaN, -1]) {
+      const { env: e } = env({
+        reply: (a) => {
+          a.duration = duration;
+          a.onloadedmetadata();
+        },
+      });
+      expect(await probeDuration({}, e)).toBeNull();
+    }
+  });
+
+  it("is null when the browser cannot read the file, or says nothing in time", async () => {
+    expect(await probeDuration({}, env({ reply: (a) => a.onerror() }).env)).toBeNull();
+    expect(await probeDuration({}, env({ reply: undefined, timeoutMs: 5 }).env)).toBeNull();
+  });
+
+  it("is null, not an error, when there is no media element or URL support", async () => {
+    const throwing = {
+      createUrl: () => {
+        throw new TypeError("no URL");
+      },
+    };
+    expect(await probeDuration({}, throwing)).toBeNull();
+    expect(
+      await probeDuration(
+        {},
+        {
+          createUrl: () => "blob:x",
+          revokeUrl: () => {},
+          createAudio: () => {
+            throw new ReferenceError("no Audio");
+          },
+        },
+      ),
+    ).toBeNull();
   });
 });

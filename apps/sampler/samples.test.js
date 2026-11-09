@@ -27,6 +27,7 @@ function setup({
   stored = null,
   store = fakeStore(),
   decode = vi.fn(async () => decoded()),
+  probe = vi.fn(async () => null), // a length that cannot be told from the header, unless a test says
   failMap = false,
   ...options
 } = {}) {
@@ -39,6 +40,7 @@ function setup({
     audio,
     store,
     decode,
+    probe,
     readMap: () => stored,
     writeMap: (map) => {
       writes.push(structuredClone(map));
@@ -47,7 +49,7 @@ function setup({
     onMessage: (text) => messages.push(text),
     ...options,
   });
-  return { kit, audio, store, decode, samples, writes, messages };
+  return { kit, audio, store, decode, probe, samples, writes, messages };
 }
 
 describe("parseSamples", () => {
@@ -265,6 +267,32 @@ describe("the browser's storage budget", () => {
   it("works with no budget given", async () => {
     const { samples } = setup();
     expect(await samples.load(0, file("a.wav"))).toBe(true);
+  });
+});
+
+describe("the length check before decoding", () => {
+  it("refuses a file whose header says it is too long, without reading or decoding it", async () => {
+    const { samples, decode, messages, kit } = setup({ probe: vi.fn(async () => 11) });
+    const long = file("loop.mp3", 3000);
+    expect(await samples.load(0, long)).toBe(false);
+    expect(messages.at(-1)).toBe("PAD 01 OVER 10 SECONDS");
+    expect(long.arrayBuffer).not.toHaveBeenCalled();
+    expect(decode).not.toHaveBeenCalled();
+    expect(kit.isDefault(0)).toBe(true);
+  });
+
+  it("lets a short file through, and one whose length cannot be told (decoding checks that)", async () => {
+    expect(await setup({ probe: vi.fn(async () => 2.5) }).samples.load(0, file("a.wav"))).toBe(true);
+    expect(await setup({ probe: vi.fn(async () => 10) }).samples.load(0, file("a.wav"))).toBe(true);
+    const { samples, decode } = setup({ probe: vi.fn(async () => null) });
+    expect(await samples.load(0, file("a.wav"))).toBe(true);
+    expect(decode).toHaveBeenCalled();
+  });
+
+  it("does not probe a file that is too big already", async () => {
+    const { samples, probe } = setup();
+    await samples.load(0, file("big.wav", 6 * 1024 * 1024));
+    expect(probe).not.toHaveBeenCalled();
   });
 });
 

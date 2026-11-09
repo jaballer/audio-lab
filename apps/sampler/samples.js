@@ -21,7 +21,14 @@
 
 import { formatSpace } from "../../shared/storage-budget.js";
 import { pad2, sampleName } from "./format.js";
-import { MAX_SAMPLE_BYTES, REASONS, createSampleSound, decodeSample } from "./sample-voice.js";
+import {
+  MAX_SAMPLE_BYTES,
+  MAX_SAMPLE_SECONDS,
+  REASONS,
+  createSampleSound,
+  decodeSample,
+  probeDuration,
+} from "./sample-voice.js";
 
 export const SAMPLES_KEY = "pad-sampler:samples";
 export const SAMPLES_VERSION = 1;
@@ -54,6 +61,7 @@ export function createSamples({
   restoreContext = () => audio.ensure(),
   budget = { limit: async (maxBytes) => maxBytes, persist: async () => false },
   decode = decodeSample,
+  probe = probeDuration,
   maxTotalBytes = MAX_TOTAL_BYTES,
 }) {
   const pads = parseSamples(readMap(), kit.length); // { pad: { name, bytes } }, the samples that are kept
@@ -79,6 +87,10 @@ export function createSamples({
 
   async function load(pad, file) {
     if (file.size > MAX_SAMPLE_BYTES) return fail(pad, REASONS.bytes);
+    // Its length from the header, so a long file is refused without being read and decoded. Null when the
+    // browser cannot tell, and then decoding finds out.
+    const seconds = await probe(file);
+    if (seconds > MAX_SAMPLE_SECONDS) return fail(pad, REASONS.seconds);
     let bytes;
     try {
       bytes = await file.arrayBuffer();
