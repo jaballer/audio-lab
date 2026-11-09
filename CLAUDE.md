@@ -29,10 +29,10 @@ failing check blocks the deploy.
 ## Architecture rules
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
-  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `echo-guard.js`, `song.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
+  `notes.js`, `holds.js`, `pointer-notes.js`, `pad-learner.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `echo-guard.js`, `song.js`, `kit.js`, `samples.js`, `sample-voice.js`, `blob-store.js`, `history.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
   `midi-messages.js`, `mpc-sample.js`, `board.js`, `storage.js`, `console-log.js`, `pages.js`, `page-ready.js` and `audio.js` only export functions, factories or plain data. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
-  `pads.js`, `step-keys.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `synth-panel.js`, `site-header.js`, `console-drawer.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
+  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `synth-panel.js`, `site-header.js`, `console-drawer.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.
@@ -67,7 +67,8 @@ Beyond what they enforce:
 - Unused function arguments are prefixed `_`.
 - Save anything between visits with `shared/storage.js` (`loadJson` / `saveJson`), never `localStorage`
   directly: storage can throw or be empty (private windows, blocked site data), and the page must work
-  without it.
+  without it Bytes that
+  localStorage cannot hold (audio) go through `shared/blob-store.js`, which has the same never-throws contract.
 - Magic numbers get a named constant or a comment (`BEND_RANGE`, `STICK_TRAVEL`, `LOOKAHEAD_MS`).
 
 ## Tests

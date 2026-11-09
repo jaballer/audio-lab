@@ -203,6 +203,25 @@
     0 1px 0 #f3f0e6;
 }
 
+/* Under the pads: load a sample onto the selected pad, or put its built-in sound back. */
+.pad-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.pad-tools .btn {
+  padding: 5px 8px;
+}
+.pad-tools .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pad-tools .btn:disabled:active {
+  transform: none;
+  border-bottom-width: 3px;
+}
+
 .sampler-pads {
   display: grid;
   grid-template-columns: repeat(var(--pad-columns, 4), 1fr);
@@ -246,6 +265,20 @@
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+/* A pad that plays a loaded sample says so with a lit name; a file being dragged over a pad rings it. */
+.sampler-pad.custom .name {
+  color: #ffd04a;
+}
+.sampler-pad .name {
+  overflow: hidden;
+  padding: 0 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sampler-pad.drop {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 .sampler-pad .key {
   position: absolute;

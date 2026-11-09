@@ -1,0 +1,130 @@
+// Samples on the pads: loading a file onto a pad, putting the built-in sound back, and keeping the samples
+// between visits. No DOM. The kit (kit.js) holds what each pad plays; this decides what goes in it.
+//
+//   const samples = createSamples({
+//     kit, audio,
+//     store,                 // shared/blob-store.js: where the files' bytes are kept
+//     readMap, writeMap,     // () => stored map | null, and (map) => saved: which pads have a sample, by name
+//     onMessage,             // (text) a short note for the LCD
+//   });
+//   await samples.load(3, file);   // true when pad 3 plays the file now
+//   await samples.reset(3);        // the built-in sound again
+//   await samples.restore();       // once the audio context is running: put back what was kept
+//
+// The file's original bytes are what is kept, not the decoded audio: they are smaller, and the page decodes
+// them again for whatever sample rate the audio context has. Nothing is decoded before the context exists
+// (it is made on the first click or key), so until then a pad with a kept sample plays its built-in sound.
+// Whatever storage does, the sample plays in this visit: a failed save only means it is gone next time.
+
+import { pad2, sampleName } from "./format.js";
+import { MAX_SAMPLE_BYTES, REASONS, createSampleSound, decodeSample } from "./sample-voice.js";
+
+export const SAMPLES_KEY = "pad-sampler:samples";
+export const SAMPLES_VERSION = 1;
+export const MAX_TOTAL_BYTES = 32 * 1024 * 1024; // across all the pads, so a full kit stays reasonable
+export const MEMORY_FULL = "SAMPLE MEMORY FULL";
+
+const keyFor = (pad) => `sample-${pad}`;
+const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// What was stored, as { pad: { name, bytes } } for the pads that exist; anything unusable is left out.
+export function parseSamples(stored, padCount) {
+  const pads = {};
+  if (!isObject(stored) || stored.version !== SAMPLES_VERSION || !isObject(stored.pads)) return pads;
+  for (const [key, info] of Object.entries(stored.pads)) {
+    const pad = Number(key);
+    if (!Number.isInteger(pad) || String(pad) !== key || pad < 0 || pad >= padCount) continue;
+    if (!isObject(info) || typeof info.name !== "string" || !Number.isFinite(info.bytes) || info.bytes < 0) continue;
+    pads[pad] = { name: info.name, bytes: info.bytes };
+  }
+  return pads;
+}
+
+export function createSamples({
+  kit,
+  audio,
+  store,
+  readMap,
+  writeMap,
+  onMessage = () => {},
+  decode = decodeSample,
+  maxTotalBytes = MAX_TOTAL_BYTES,
+}) {
+  const pads = parseSamples(readMap(), kit.length); // { pad: { name, bytes } }, the samples that are kept
+  const touched = new Set(); // pads changed in this visit, which a restore must not overwrite
+  const latest = new Array(kit.length).fill(0); // a later load or reset of the same pad wins over an earlier one
+  let restored = false;
+
+  const persist = () => writeMap({ version: SAMPLES_VERSION, pads });
+  const bytesElsewhere = (pad) =>
+    Object.entries(pads).reduce((sum, [key, info]) => (Number(key) === pad ? sum : sum + info.bytes), 0);
+
+  function fail(pad, reason) {
+    onMessage(reason === MEMORY_FULL ? reason : `PAD ${pad2(pad + 1)} ${reason}`);
+    return false;
+  }
+
+  async function load(pad, file) {
+    const ticket = ++latest[pad];
+    if (file.size > MAX_SAMPLE_BYTES) return fail(pad, REASONS.bytes);
+    let bytes;
+    try {
+      bytes = await file.arrayBuffer();
+    } catch {
+      return fail(pad, REASONS.notAudio);
+    }
+    if (bytesElsewhere(pad) + bytes.byteLength > maxTotalBytes) return fail(pad, MEMORY_FULL);
+
+    const result = await decode(audio.ensure(), bytes);
+    if (ticket !== latest[pad]) return false; // another file or a reset came after this one
+    if (!result.ok) return fail(pad, result.reason);
+
+    const name = sampleName(file.name);
+    kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer }));
+    touched.add(pad);
+
+    const kept = await store.set(keyFor(pad), bytes);
+    if (ticket !== latest[pad]) return true; // it played, but something newer has taken the pad since
+    if (kept) {
+      pads[pad] = { name, bytes: bytes.byteLength };
+      persist();
+      onMessage(`PAD ${pad2(pad + 1)} SAMPLE LOADED`);
+    } else {
+      // Not kept, so what was kept before for this pad is not what the pad plays any more.
+      delete pads[pad];
+      persist();
+      store.delete(keyFor(pad));
+      onMessage(`PAD ${pad2(pad + 1)} LOADED, NOT SAVED`);
+    }
+    return true;
+  }
+
+  async function reset(pad) {
+    latest[pad]++;
+    touched.add(pad);
+    kit.reset(pad);
+    delete pads[pad];
+    persist();
+    await store.delete(keyFor(pad));
+    onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
+  }
+
+  // Call when the audio context is running. Only once: it is for the start of a visit.
+  async function restore() {
+    if (restored) return;
+    restored = true;
+    const ctx = audio.ensure();
+    for (const [key, info] of Object.entries(pads)) {
+      const pad = Number(key);
+      if (touched.has(pad)) continue;
+      // A missing file leaves the entry alone: storage may only be unavailable for this visit.
+      const bytes = await store.get(keyFor(pad));
+      if (!bytes) continue;
+      const result = await decode(ctx, bytes);
+      if (!result.ok || touched.has(pad)) continue;
+      kit.set(pad, createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer }));
+    }
+  }
+
+  return { load, reset, restore };
+}

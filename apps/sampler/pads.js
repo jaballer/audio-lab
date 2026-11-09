@@ -4,6 +4,7 @@
 //   grid.flash(0);    // a pad was pressed: light it and push it down briefly
 //   grid.light(0);    // the sequence played a pad: light it, but it does not move
 //   grid.select(0);   // mark the selected pad
+//   grid.setName(0, "Kick 808", true);   // a pad plays another sound now (true: a loaded sample, not the built-in one)
 //   padForKey("q")    // which pad a key plays (8), or -1
 
 import { createFlasher } from "../../shared/flash.js";
@@ -27,6 +28,7 @@ const FLASH_MS = 110;
 // press or a keyboard activation (Enter/Space on a focused pad).
 export function createPadGrid(element, { sounds, onTrigger }) {
   const padEls = [];
+  const keys = []; // each pad's computer key, for its label
   const flash = createFlasher("hit", FLASH_MS);
   const light = createFlasher("lit", FLASH_MS);
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
@@ -38,11 +40,12 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "sampler-pad";
+      btn.dataset.pad = String(idx); // which pad a dropped file is for (sample-loader.js)
       btn.setAttribute("aria-label", `Pad ${idx + 1}, ${sounds[idx].name}, key ${key.toUpperCase()}`);
       btn.innerHTML =
-        `<span class="num">${idx + 1}</span>` +
-        `<span class="key">${key}</span>` +
-        `<span class="name">${sounds[idx].name}</span>`;
+        `<span class="num">${idx + 1}</span>` + `<span class="key">${key}</span>` + `<span class="name"></span>`;
+      btn.querySelector(".name").textContent = sounds[idx].name; // text, not markup: a file's name goes here
+      keys[idx] = key;
       btn.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         onTrigger(idx);
@@ -63,6 +66,13 @@ export function createPadGrid(element, { sounds, onTrigger }) {
 
     light(idx) {
       light(padEls[idx]);
+    },
+
+    setName(idx, name, custom = false) {
+      const el = padEls[idx];
+      el.querySelector(".name").textContent = name;
+      el.classList.toggle("custom", custom);
+      el.setAttribute("aria-label", `Pad ${idx + 1}, ${name}, key ${keys[idx].toUpperCase()}`);
     },
 
     select(idx) {
