@@ -10,7 +10,8 @@
 //   });
 //   dialog.open(); dialog.close(); dialog.isOpen;
 //   dialog.setOptions({ loops: 2, channels: "mono" });        // which choices are lit
-//   dialog.refresh({ title, readout, format, note, empty });  // for the sequence showing; `note`: a warning about it; `empty`: nothing to export
+//   dialog.refresh({ title, readout, format, note, blocked }); // for the sequence showing; `note`: a warning about it;
+//                                                             `blocked`: why Export WAV is off (a sentence), or "" when it is on
 //   dialog.setBusy(true); dialog.setProgress(0.4);            // while it renders (null: not known yet)
 //   dialog.setCancelling();                                   // a cancel was asked for, and the render is still stopping
 //   dialog.showMessage("EXPORT CANCELLED");                   // the LCD's short messages, again: the LCD is behind the dialog
@@ -47,7 +48,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
 
   let busy = false;
   let cancelling = false;
-  let empty = false;
+  let blocked = "";
   let changedAt = -Infinity; // when a render last started or stopped, in the clock of event.timeStamp
   let latest = ""; // the last message said while it renders, shown when it stops: "EXPORTING..." is the progress bar's job
   let current = { loops: LOOP_CHOICES[0], channels: CHANNEL_CHOICES[0] };
@@ -84,7 +85,9 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
       if (typeof root.showModal === "function") root.showModal();
       else root.setAttribute("open", ""); // a browser without <dialog>: not modal, but the page ignores its keys while it is open
     }
-    (busy ? cancelButton : goButton).focus();
+    // Export WAV when it can be pressed, otherwise Cancel (a disabled button cannot take focus, and the first one in the
+    // dialog would be the ×, with nothing said about why the export is off: see `blocked` in draw()).
+    [goButton, cancelButton].find((button) => !button.disabled && !button.hidden)?.focus();
   }
 
   function close() {
@@ -93,17 +96,20 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     else root.removeAttribute("open");
   }
 
-  // What can be pressed and what is shown follow from `busy`, `cancelling` and `empty`.
+  // What can be pressed and what is shown follow from `busy`, `cancelling` and `blocked`.
   function draw() {
     root.classList.toggle("is-busy", busy);
     setAttr(root, "aria-busy", String(busy));
     for (const { button } of [...loopButtons, ...channelButtons]) setDisabled(button, busy, cancelButton);
     setDisabled(closeButton, busy, cancelButton);
     setHidden(goButton, busy, cancelButton); // the Cancel export button takes its place, and the focus
-    setDisabled(goButton, empty, cancelButton);
+    setDisabled(goButton, blocked !== "", cancelButton);
     setHidden(bar, !busy);
     setHidden(progress, !busy);
     setHidden(hint, busy);
+    // The reason Export WAV is off is read out with the dialog's name when it opens, not left to be found by browsing.
+    if (blocked) setAttr(root, "aria-describedby", hint.id);
+    else root.removeAttribute("aria-describedby");
     setHidden(note, busy || !note.textContent);
     setText(cancelButton, cancelling ? "Cancelling…" : busy ? "Cancel export" : "Cancel");
   }
@@ -183,8 +189,8 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
       setText(readout, next.readout);
       setText(format, next.format);
       setText(note, next.note ?? "");
-      if (next.empty !== undefined) empty = next.empty;
-      setText(hint, empty ? "This sequence has no steps yet, so there is nothing to export." : defaultHint);
+      if (next.blocked !== undefined) blocked = next.blocked;
+      setText(hint, blocked || defaultHint); // the reason Export WAV is off takes the hint's place
       draw();
     },
     setBusy(next) {

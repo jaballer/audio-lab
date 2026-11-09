@@ -715,6 +715,34 @@
     outline: 3px solid Highlight;
     outline-offset: 2px;
   }
+  /* A lamp is a colour and a glow, and both are dropped: a lit and an unlit one would look the same. Say it by the
+     fill instead (a hollow ring when off, filled with the system's highlight when on), which needs no colour sense.
+     Play and Stop are shapes, handled below: Play's on and off differ in colour only, and `aria-pressed` says it too. */
+  .btn-led:not(.btn-play)::before {
+    forced-color-adjust: none;
+    box-sizing: border-box;
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    box-shadow: none;
+  }
+  .btn-led[aria-pressed="true"]:not(.btn-play)::before,
+  .btn-led[aria-expanded="true"]:not(.btn-play)::before {
+    border-color: Highlight;
+    background: Highlight;
+  }
+  /* The transport symbols are shapes with a colour of their own, which forced colours turns to the button's own. */
+  .btn-play::before,
+  .btn-stop::before {
+    forced-color-adjust: none;
+    background: ButtonText;
+    filter: none;
+    box-shadow: none;
+  }
+  .btn-play[aria-pressed="true"]::before {
+    background: Highlight;
+    filter: none; /* the pressed rule above it has a green glow, with the same weight as the rule that removes it */
+    box-shadow: none;
+  }
 }
 
 /* ---------- A heading that is the button that hides the rest of its section (the step editor, the pad editor's Tune and Envelope) ---------- */
@@ -901,6 +929,12 @@
   outline-offset: 2px;
 }
 @media (forced-colors: active) {
+  /* A gradient is not a colour, so forced colours leaves the plate see-through: paint it, and give it an edge. */
+  .export-dialog {
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+  }
   .export-bar {
     border: 1px solid CanvasText;
   }
