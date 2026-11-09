@@ -38,6 +38,9 @@ export const MAX_TOTAL_BYTES = 32 * 1024 * 1024; // across all the pads, so a fu
 export const MEMORY_FULL = "SAMPLE MEMORY FULL";
 
 const keyFor = (pad) => `sample-${pad}`;
+
+// A pad's entry in the saved map; the trim is only there when the sample is trimmed.
+const entryFor = (name, bytes, trim) => (isFullTrim(trim) ? { name, bytes } : { name, bytes, trim });
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
 // What was stored, as { pad: { name, bytes, trim? } } for the pads that exist; anything unusable is left out.
@@ -49,10 +52,7 @@ export function parseSamples(stored, padCount) {
     const pad = Number(key);
     if (!Number.isInteger(pad) || String(pad) !== key || pad < 0 || pad >= padCount) continue;
     if (!isObject(info) || typeof info.name !== "string" || !Number.isFinite(info.bytes) || info.bytes < 0) continue;
-    const trim = parseTrim(info.trim);
-    pads[pad] = isFullTrim(trim)
-      ? { name: info.name, bytes: info.bytes }
-      : { name: info.name, bytes: info.bytes, trim };
+    pads[pad] = entryFor(info.name, info.bytes, parseTrim(info.trim));
   }
   return pads;
 }
@@ -72,6 +72,9 @@ export function createSamples({
 }) {
   const pads = parseSamples(readMap(), kit.length); // { pad: { name, bytes } }, the samples that are kept
   const touched = new Set(); // pads changed in this visit, which a restore must not overwrite
+  // The sound each pad's saved entry describes. A trim is written only to an entry that is its own sound's: while a
+  // new sample is still being saved the pad already plays it, but the entry is still the old sample's.
+  const owners = new Map();
   // Order of the requests on each pad. Every load and reset is numbered when it is made (`requested`), and the
   // newest one to be accepted is the one that stands (`accepted`): an older request that is accepted after a
   // newer one, or overtaken while it works, gives way to it. A load that is refused is never accepted, so it
@@ -143,7 +146,8 @@ export function createSamples({
     }
 
     const name = sampleName(file.name);
-    kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength }));
+    const sound = createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength });
+    kit.set(pad, sound);
     kit.setSetting(pad, "pitch", 0); // pitch tunes a sample, so a new one starts at its own pitch (gain is the pad's)
     touched.add(pad);
     held[pad] = bytes.byteLength;
@@ -151,7 +155,9 @@ export function createSamples({
 
     const bytesKept = await store.set(keyFor(pad), bytes);
     if (accepted[pad] !== request) return true; // it played, but something newer has taken the pad since
-    pads[pad] = { name, bytes: bytes.byteLength };
+    // Made from the sound as it is now: it may have been trimmed while it was being saved.
+    pads[pad] = entryFor(name, bytes.byteLength, sound.trim);
+    owners.set(pad, sound);
     if (bytesKept && persist()) {
       onMessage(`PAD ${pad2(pad + 1)} LOADED ${formatSpace(countedTotal(), limit)}`);
     } else {
@@ -171,6 +177,7 @@ export function createSamples({
     delete pads[pad];
     delete held[pad];
     delete reserved[pad];
+    owners.delete(pad);
     persist();
     kit.reset(pad);
     kit.setSetting(pad, "pitch", 0); // the built-in sound cannot be pitched, so no pitch is left behind to reappear
@@ -195,16 +202,15 @@ export function createSamples({
         if (!bytes) return;
         const result = await decode(ctx, bytes);
         if (!result.ok || touched.has(pad)) return;
-        kit.set(
-          pad,
-          createSampleSound({
-            id: keyFor(pad),
-            name: info.name,
-            buffer: result.buffer,
-            bytes: bytes.byteLength,
-            trim: info.trim,
-          }),
-        );
+        const sound = createSampleSound({
+          id: keyFor(pad),
+          name: info.name,
+          buffer: result.buffer,
+          bytes: bytes.byteLength,
+          trim: info.trim,
+        });
+        kit.set(pad, sound);
+        owners.set(pad, sound);
       }),
     );
   }
@@ -216,9 +222,8 @@ export function createSamples({
     const sound = kit.get(pad);
     if (typeof sound.setTrim !== "function") return null;
     const next = sound.setTrim(trim, moved);
-    if (pads[pad]) {
-      if (isFullTrim(next)) delete pads[pad].trim;
-      else pads[pad].trim = next;
+    if (pads[pad] && owners.get(pad) === sound) {
+      pads[pad] = entryFor(pads[pad].name, pads[pad].bytes, next);
       persist();
     }
     return next;

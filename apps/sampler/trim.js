@@ -12,7 +12,7 @@
 // meet, so the other one stays where it is.
 
 export const MIN_TRIM_SECONDS = 0.005; // shorter than this is a click, not a sound
-const PRECISION = 10000; // a hundredth of a percent: 1 ms in 10 s
+const PRECISION = 10000; // grid steps in a sample: a hundredth of a percent, 1 ms in 10 s
 
 export const FULL_TRIM = Object.freeze({ start: 0, end: 1 });
 
@@ -22,21 +22,24 @@ const round = (value) => Math.round(value * PRECISION) / PRECISION;
 const unit = (value, fallback) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback);
 
 export function clampTrim(trim, duration, moved) {
-  let start = unit(trim?.start, 0);
-  let end = unit(trim?.end, 1);
-  // The shortest window, as a fraction of this sample. A sample shorter than that has nothing to trim.
-  const gap = duration > 0 ? MIN_TRIM_SECONDS / duration : 1;
-  if (gap >= 1) return FULL_TRIM;
+  // Whole steps of the grid, so rounding comes first and cannot shorten the window after it has been checked.
+  let start = Math.round(unit(trim?.start, 0) * PRECISION);
+  let end = Math.round(unit(trim?.end, 1) * PRECISION);
+  // The shortest window in steps, rounded up (the small subtraction keeps 25.000000000000004 from becoming 26).
+  // A sample too short to hold one has nothing to trim.
+  const gap = duration > 0 ? Math.ceil((MIN_TRIM_SECONDS / duration) * PRECISION - 1e-9) : PRECISION;
+  if (gap >= PRECISION) return FULL_TRIM;
   if (end - start < gap) {
-    if (moved === "start") start = Math.max(0, end - gap);
-    else end = Math.min(1, start + gap);
-    // Pushed against an edge: the other one gives way, so the window is still at least `gap` long.
-    if (end - start < gap) {
-      if (moved === "start") end = start + gap;
-      else start = end - gap;
+    if (moved === "start") {
+      start = end - gap;
+      // Pushed against the edge: the other one gives way, so the window is still the shortest it may be.
+      if (start < 0) [start, end] = [0, gap];
+    } else {
+      end = start + gap;
+      if (end > PRECISION) [start, end] = [PRECISION - gap, PRECISION];
     }
   }
-  return { start: round(start), end: round(end) };
+  return { start: start / PRECISION, end: end / PRECISION };
 }
 
 // Offset and length in seconds of the part that plays.

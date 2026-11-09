@@ -156,11 +156,25 @@ describe("a trimmed sample", () => {
     expect(stages[0].gain.linearRampToValueAtTime.mock.calls).toEqual([[0, 0.5]]); // heard for half a second
   });
 
-  it("keeps a fade short enough to fit a very short window", () => {
+  it("keeps a fade to half of a very short window, so the fades meet and do not overlap", () => {
     const { ctx, stages } = recordingContext();
     make({ start: 0.5, end: 0.5025 }, 2).play(ctx, {}, 0); // a 5 ms window
-    const [[, fadeInEnd]] = stages[0].gain.linearRampToValueAtTime.mock.calls;
-    expect(fadeInEnd).toBeLessThanOrEqual(0.0025 + 1e-9);
+    const [fadeIn, fadeOut] = stages[0].gain.linearRampToValueAtTime.mock.calls;
+    expect(fadeIn[1]).toBeCloseTo(0.0025, 9); // half the window, not a quarter
+    expect(fadeOut[1]).toBeCloseTo(0.005, 9);
+    expect(stages[0].gain.setValueAtTime.mock.calls[1][1]).toBeCloseTo(0.0025, 9); // held at full where the fade out begins
+  });
+
+  it("holds the gain at full until the fade out begins, in the time it is heard (a pitched sample)", () => {
+    const { ctx, stages } = recordingContext();
+    make({ start: 0.25, end: 0.75 }, 2).play(ctx, {}, 10, { rate: 0.5 }); // 1 s of sample, 2 s heard
+    const [, hold] = stages[0].gain.setValueAtTime.mock.calls;
+    expect(hold).toEqual([1, 10 + 2 - EDGE_FADE_SECONDS]);
+    expect(stages[0].gain.linearRampToValueAtTime.mock.calls.at(-1)).toEqual([0, 12]);
+    // and at double speed, when it is over in half the time
+    const fast = recordingContext();
+    make({ start: 0.25, end: 0.75 }, 2).play(fast.ctx, {}, 10, { rate: 2 });
+    expect(fast.stages[0].gain.setValueAtTime.mock.calls[1]).toEqual([1, 10 + 0.5 - EDGE_FADE_SECONDS]);
   });
 
   it("is changed with setTrim, which gives back what it became, kept possible, and plays that from then on", () => {

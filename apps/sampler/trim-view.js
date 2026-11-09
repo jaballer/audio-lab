@@ -71,7 +71,7 @@ export function createTrimView(element, { onChange }) {
   }
 
   // Press and drag on the picture: the handle nearer the press follows the pointer.
-  let dragging = null;
+  let dragging = null; // { handle, sound }: a drag belongs to the sound it began on
   const fractionAt = (event) => {
     const rect = canvas.getBoundingClientRect();
     return rect.width > 0 ? Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)) : 0;
@@ -79,13 +79,19 @@ export function createTrimView(element, { onChange }) {
   canvas.addEventListener("pointerdown", (event) => {
     if (!sound || event.button !== 0) return;
     const fraction = fractionAt(event);
-    dragging = nearestHandle(sound.trim, fraction);
+    dragging = { handle: nearestHandle(sound.trim, fraction), sound };
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
-    report({ ...sound.trim, [dragging]: fraction }, dragging);
+    report({ ...sound.trim, [dragging.handle]: fraction }, dragging.handle);
   });
   canvas.addEventListener("pointermove", (event) => {
-    if (dragging) report({ ...sound.trim, [dragging]: fractionAt(event) }, dragging);
+    if (!dragging) return;
+    // Another pad's sound has come in under the pointer (a pad hit, a sample finishing): the drag is over.
+    if (dragging.sound !== sound) {
+      dragging = null;
+      return;
+    }
+    report({ ...sound.trim, [dragging.handle]: fractionAt(event) }, dragging.handle);
   });
   const stop = () => (dragging = null);
   canvas.addEventListener("pointerup", stop);
@@ -97,9 +103,18 @@ export function createTrimView(element, { onChange }) {
     const width = canvas.clientWidth;
     if (!sound || width === 0) return;
     const { start, end } = sound.trim;
-    if (drawn && drawn.sound === sound && drawn.start === start && drawn.end === end && drawn.width === width) return;
-    drawn = { sound, start, end, width };
-    const ratio = window.devicePixelRatio || 1;
+    const ratio = window.devicePixelRatio || 1; // part of what is drawn: it changes on another screen
+    if (
+      drawn &&
+      drawn.sound === sound &&
+      drawn.start === start &&
+      drawn.end === end &&
+      drawn.width === width &&
+      drawn.ratio === ratio
+    ) {
+      return;
+    }
+    drawn = { sound, start, end, width, ratio };
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(HEIGHT * ratio);
     const ctx = canvas.getContext("2d");

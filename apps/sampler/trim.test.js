@@ -26,12 +26,43 @@ describe("clampTrim", () => {
   });
 
   it("never leaves less than the shortest window, even against an edge", () => {
-    const gap = MIN_TRIM_SECONDS / 2;
+    const seconds = (trim, duration) => (trim.end - trim.start) * duration;
     const atStart = clampTrim({ start: 0, end: 0 }, 2, "end");
-    expect(atStart.end - atStart.start).toBeGreaterThanOrEqual(gap - 1e-4);
+    expect(atStart.start).toBe(0);
+    expect(seconds(atStart, 2)).toBeGreaterThanOrEqual(MIN_TRIM_SECONDS - 1e-9);
     const atEnd = clampTrim({ start: 1, end: 1 }, 2, "start");
     expect(atEnd.end).toBe(1);
-    expect(atEnd.end - atEnd.start).toBeGreaterThanOrEqual(gap - 1e-4);
+    expect(seconds(atEnd, 2)).toBeGreaterThanOrEqual(MIN_TRIM_SECONDS - 1e-9);
+  });
+
+  it("gives way at the edge it is pushed against, whichever handle is moved", () => {
+    const gap = 0.0025; // 5 ms of 2 s
+    expect(clampTrim({ start: 0, end: 0 }, 2, "start")).toEqual({ start: 0, end: gap }); // start cannot go below 0
+    expect(clampTrim({ start: 1, end: 1 }, 2, "end")).toEqual({ start: 1 - gap, end: 1 }); // end cannot go above 1
+    expect(clampTrim({ start: 1, end: 1 }, 2, "start")).toEqual({ start: 1 - gap, end: 1 });
+    expect(clampTrim({ start: 0, end: 0 }, 2, "end")).toEqual({ start: 0, end: gap });
+  });
+
+  it("is never shorter than the shortest window after rounding: 4.8 ms of a 3 s sample was possible", () => {
+    const trim = clampTrim({ start: 0.7327, end: 0.1071 }, 3, "end");
+    expect((trim.end - trim.start) * 3).toBeGreaterThanOrEqual(MIN_TRIM_SECONDS - 1e-9);
+  });
+
+  it("holds for a spread of trims, handles and sample lengths", () => {
+    // A small deterministic generator, so a failure can be reproduced.
+    let seed = 12345;
+    const next = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    for (let i = 0; i < 3000; i++) {
+      const duration = [0.02, 0.1, 0.5, 1.7, 3, 10][Math.floor(next() * 6)];
+      const trim = { start: next() * 1.4 - 0.2, end: next() * 1.4 - 0.2 };
+      const moved = [undefined, "start", "end"][Math.floor(next() * 3)];
+      const result = clampTrim(trim, duration, moved);
+      expect(result.start).toBeGreaterThanOrEqual(0);
+      expect(result.end).toBeLessThanOrEqual(1);
+      expect(result.start).toBeLessThan(result.end);
+      expect((result.end - result.start) * duration).toBeGreaterThanOrEqual(MIN_TRIM_SECONDS - 1e-9);
+      expect(clampTrim(result, duration, moved)).toEqual(result); // and a trim that is possible stays as it is
+    }
   });
 
   it("does not trim a sample that is shorter than the shortest window", () => {
