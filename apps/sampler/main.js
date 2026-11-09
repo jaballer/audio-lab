@@ -22,6 +22,7 @@ import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "../../shared/step-keys.js";
 import { createTempoKnob } from "./tempo-knob.js";
+import { createVelocityBars } from "./velocity-bars.js";
 import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
@@ -104,6 +105,11 @@ const stepKeys = createStepKeys($("steps"), {
   group: STEP_GROUP,
   onToggle: (step) => sampler.toggleStep(step),
 });
+const velocityBars = createVelocityBars($("velocity"), {
+  steps: STEPS,
+  group: STEP_GROUP,
+  onChange: (step, value) => sampler.setStepVelocity(step, value),
+});
 const seqPrev = $("seq-prev");
 const seqNext = $("seq-next");
 const seqNumber = $("seq-number");
@@ -140,6 +146,11 @@ function render() {
   const soundName = SOUNDS[state.selected].name;
   padGrid.select(state.selected);
   stepKeys.refresh({ on: state.stepsOn, soundName });
+  velocityBars.refresh({
+    on: state.stepsOn,
+    velocities: state.stepVelocities,
+    soundName,
+  });
   stepKeys.paintPlayhead(state.playing, state.playheadStep);
   knob.render(state.bpm);
   seqNumber.textContent = pad2(state.sequence + 1);

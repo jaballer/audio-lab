@@ -19,11 +19,13 @@ function fakeAudio() {
 
 const SEQUENCES = 4;
 // A saved song with one sequence of the given pattern and length, the rest empty.
-const savedSong = ({ bpm = 100, volume = 50, bars = 1, pattern = {}, current = 0 } = {}) => ({
+const savedSong = ({ bpm = 100, volume = 50, bars = 1, pattern = {}, velocities = {}, current = 0 } = {}) => ({
   bpm,
   volume,
   current,
-  sequences: Array.from({ length: SEQUENCES }, (_, i) => (i === 0 ? { bars, pattern } : { bars: 1, pattern: {} })),
+  sequences: Array.from({ length: SEQUENCES }, (_, i) =>
+    i === 0 ? { bars, pattern, velocities } : { bars: 1, pattern: {}, velocities: {} },
+  ),
 });
 
 function setup({ song = null, bpm } = {}) {
@@ -67,6 +69,28 @@ describe("starting state", () => {
     expect(sampler.getSong().sequences[0].pattern).toEqual(STARTER_BEAT);
     expect(sampler.getSong().sequences[1].pattern).toEqual({}); // only the first has the starter beat
     expect(sampler.getState()).toMatchObject({ selected: 0, recording: false, playing: false, playheadStep: -1 });
+  });
+
+  it("starts from saved velocities, and plays them", () => {
+    const song = savedSong({ bpm: 120, pattern: { 0: [0] }, velocities: { 0: { 0: 50 } } });
+    const { sampler, sounds, advance } = setup({ song });
+    expect(sampler.getSong()).toEqual(song);
+    expect(sampler.getState().stepVelocities[0]).toBe(50);
+    sampler.start();
+    advance(0);
+    expect(sounds[0].play.mock.calls[0][1].gain.value).toBeCloseTo(50 / 127);
+  });
+
+  it("keeps each sequence's velocities apart", () => {
+    const song = {
+      ...savedSong({ pattern: { 0: [0] }, velocities: { 0: { 0: 50 } } }),
+    };
+    song.sequences[1] = { bars: 1, pattern: { 0: [0] }, velocities: {} };
+    const { sampler } = setup({ song });
+    sampler.setSequence(1);
+    expect(sampler.getState().stepVelocities[0]).toBe(127);
+    sampler.setSequence(0);
+    expect(sampler.getState().stepVelocities[0]).toBe(50);
   });
 
   it("starts from a saved song", () => {
@@ -202,6 +226,19 @@ describe("recording", () => {
     sampler.triggerPad(3);
     expect(sampler.getState().stepsOn[2]).toBe(true);
     expect(sampler.getState().stepsOn[1]).toBe(false);
+  });
+
+  it("records the velocity of a live hit, and a hit played again over the step replaces it", () => {
+    const { sampler, sounds, advance } = playing();
+    sampler.toggleRec();
+    sampler.triggerPad(3, 0.5);
+    expect(sampler.getState().stepVelocities[1]).toBe(64); // 0.5 of 127, rounded
+    expect(sampler.getSong().sequences[0].velocities).toEqual({ 3: { 1: 64 } });
+    sampler.triggerPad(3, 1);
+    expect(sampler.getState().stepVelocities[1]).toBe(127);
+    expect(sampler.getSong().sequences[0].velocities).toEqual({});
+    expect(sounds[3].play).toHaveBeenCalledTimes(2); // each hit sounded once, live
+    advance(0);
   });
 
   it("records nothing unless it is armed", () => {
@@ -465,16 +502,30 @@ describe("transport", () => {
     expect(sounds[1].play.mock.calls[0][1]).toBe(bus); // a step left at full velocity plays straight into it
   });
 
-  it("changes a step's velocity only for a step that is on, and tells the views", () => {
-    const { sampler, change, songChange } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
+  it("changes a step's velocity only for a step that is on, and tells the views and the LCD", () => {
+    const { sampler, change, songChange, message } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
     sampler.selectPad(0);
     change.mockClear();
     songChange.mockClear();
     sampler.setStepVelocity(2, 50);
     expect(songChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
+    expect(message).toHaveBeenLastCalledWith("VEL 50");
+    expect(sampler.getState().stepVelocities[2]).toBe(50);
     sampler.setStepVelocity(3, 50); // off: nothing to change
     expect(songChange).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledTimes(1);
+  });
+
+  it("sets the velocity of a step on the bar being shown, for the selected pad", () => {
+    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [5, 21] } }) });
+    sampler.selectPad(1);
+    sampler.setPage(1);
+    sampler.setStepVelocity(5, 30); // step 21 of the sequence
+    expect(sampler.getSong().sequences[0].velocities).toEqual({ 1: { 21: 30 } });
+    expect(sampler.getState().stepVelocities[5]).toBe(30);
+    sampler.setPage(0);
+    expect(sampler.getState().stepVelocities[5]).toBe(127);
   });
 
   it("starts again from the first step when Play is pressed while playing", () => {
