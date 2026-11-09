@@ -22,8 +22,8 @@ function setup({ controller = null, waiting = null, rejects = false } = {}) {
   return { registration, container, location, onUpdate, run };
 }
 
-function worker() {
-  return Object.assign(emitter(), { state: "installing", postMessage: vi.fn() });
+function worker(state = "installing") {
+  return Object.assign(emitter(), { state, postMessage: vi.fn() });
 }
 
 // A new build arriving: the browser sets `installing`, fires updatefound, then the worker reaches "installed".
@@ -77,7 +77,7 @@ describe("registerServiceWorker", () => {
   });
 
   it("offers a build that was already waiting when the page loaded", async () => {
-    const { onUpdate, run } = setup({ controller: {}, waiting: worker() });
+    const { onUpdate, run } = setup({ controller: {}, waiting: worker("installed") });
     await run();
     expect(onUpdate).toHaveBeenCalledTimes(1);
   });
@@ -107,5 +107,27 @@ describe("registerServiceWorker", () => {
     await run();
     container.emit("controllerchange"); // the first install claiming the page
     expect(location.reload).not.toHaveBeenCalled();
+  });
+
+  it("offers a plain reload when another tab applied the update", async () => {
+    const { container, location, onUpdate, run } = setup({ controller: {}, waiting: worker("installed") });
+    await run();
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    container.emit("controllerchange"); // the other tab pressed Reload; this tab did not
+    expect(location.reload).not.toHaveBeenCalled();
+    expect(onUpdate).toHaveBeenCalledTimes(2);
+    onUpdate.mock.calls[1][0]();
+    expect(location.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads instead of messaging a worker that already took over or was replaced", async () => {
+    const { registration, location, onUpdate, run } = setup({ controller: {} });
+    await run();
+    const w = worker();
+    install(registration, w);
+    w.state = "activated"; // another tab applied it first
+    onUpdate.mock.calls[0][0]();
+    expect(w.postMessage).not.toHaveBeenCalled();
+    expect(location.reload).toHaveBeenCalledTimes(1);
   });
 });
