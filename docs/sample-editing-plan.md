@@ -1,6 +1,6 @@
 # Step editing for the sampler: design
 
-The sampler has 16 pads (no banks) and a step sequencer whose steps are only on or off. This records why step editing
+The sampler has 16 pads (no banks) and a step sequencer whose steps, when this was written, were only on or off. This records why step editing
 starts with per-step velocity, and how. The phases and their status are tracked in the GitHub epic
 [#87](https://github.com/jaballer/audio-lab/issues/87), not here.
 

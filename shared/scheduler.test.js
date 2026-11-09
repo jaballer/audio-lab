@@ -181,7 +181,7 @@ describe("createScheduler", () => {
     run(1);
     scheduler.stop();
     expect(scheduler.pendingSteps).toBe(0);
-    clock.t += 5;
+    clock.time += 5;
     scheduler.start();
     expect(scheduler.pendingSteps).toBe(0);
     expect(scheduler.poll()).toBe(false);

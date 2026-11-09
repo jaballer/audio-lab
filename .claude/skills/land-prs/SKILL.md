@@ -34,7 +34,7 @@ then merge it.
 
 ```bash
 git fetch -p origin
-git -C "$(git worktree list --porcelain | head -1 | cut -d' ' -f2)" pull --ff-only   # the root checkout's main (the first worktree listed)
+git -C "$(git worktree list --porcelain | sed -n '1s/^worktree //p')" pull --ff-only   # the root checkout's main (the first worktree listed)
 git switch --detach origin/main                                 # in the worktree you are in
 ```
 
