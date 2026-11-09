@@ -13,7 +13,7 @@
 // next pass. Two passes (one to warm up) are enough unless a pad's Release is longer than the loop: then each tail
 // reaches into several passes, and there are enough before the kept one to cover the longest. The
 // render does not depend on the power switch or on the audio context of the page. A long render reports how far it
-// has got and can be cancelled (see PROGRESS_PAUSES).
+// has got and can be cancelled (see WINDOW_SECONDS).
 //
 // `loops` keeps the loop that many times in one file (the passes after the warm-up are all kept, and run on into
 // each other as the page's loop does), and `channels: "mono"` mixes the two channels down to one. What the dialog
@@ -35,18 +35,22 @@ export const LEAD_SECONDS = 0.01;
 // How many passes may come before the one that is kept, at most: a 5 s release in a 1 s loop needs six; a longer one is
 // cut short rather than render for ever (the oldest, quietest tails are left out).
 export const MAX_WARM_UP_PASSES = 12;
-// The render is paused this many times along its length to say how far it has got, and to notice a cancel: a cancelled
-// render stops at the next pause, so the computer is free again within a twentieth of the work.
-export const PROGRESS_PAUSES = 20;
+// The render is scheduled this much audio at a time. Every node that is waiting for its start time is looked at by the
+// audio thread in every block until it has started, so what costs is the nodes waiting times the length they wait: with
+// the whole sequence scheduled before it begins, the work grows with the square of the length (a dense render of 18
+// seconds took 24 and one of twice that took four times as long). Scheduled a window or two ahead, what waits is bounded.
+// The render pauses at the end of each window to schedule the next, which also gives a progress report and a place to
+// stop at, a window of audio apart.
+export const WINDOW_SECONDS = 1;
 // The audio engine moves in blocks of this many frames, and a pause lands on one of their edges.
 const RENDER_QUANTUM = 128;
 
-// The frames to pause at, as a whole number of blocks: `count` of them spread over `total`, none at the very start or
-// end and none twice (two pauses in one block are an error), so a short render has fewer.
-export function pauseFrames(total, count = PROGRESS_PAUSES) {
+// The frames to pause at: one at the end of each window, as a whole number of blocks, none at the very start or end and
+// none twice (two pauses in one block are an error).
+export function windowPauses(total, sampleRate, windowSeconds = WINDOW_SECONDS) {
   const frames = new Set();
-  for (let i = 1; i <= count; i++) {
-    const frame = Math.round((total * i) / (count + 1) / RENDER_QUANTUM) * RENDER_QUANTUM;
+  for (let window = 1; window * windowSeconds * sampleRate < total; window++) {
+    const frame = Math.round((window * windowSeconds * sampleRate) / RENDER_QUANTUM) * RENDER_QUANTUM;
     if (frame > 0 && frame < total) frames.add(frame);
   }
   return [...frames];
@@ -55,15 +59,27 @@ export function pauseFrames(total, count = PROGRESS_PAUSES) {
 const cancelled = () => new DOMException("Export cancelled", "AbortError");
 export const wasCancelled = (error) => error?.name === "AbortError";
 
-// Renders `ctx` (an OfflineAudioContext of `total` frames), reporting `onProgress(0..1)` at each pause. After `signal`
-// aborts it ends with an AbortError once the render has really stopped: at its next pause, which it is not resumed
-// from, or at its end, where it cannot pause (Firefox has no OfflineAudioContext.suspend) or has passed its last. Not
-// sooner, so that an export is not over, and another cannot start beside it, while the first still renders.
-async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }) {
+// Renders `ctx` (an OfflineAudioContext of `plan.total` frames) a window at a time: `schedule(until)` starts every hit that
+// sounds before `until` seconds, once before it begins (two windows) and again at the end of each window, always two
+// windows ahead of where the render is (so no hit is started closer than about a window, to the nearest block, to the moment
+// it sounds, where a sample's start would be moved on by the clock). Reports `onProgress(0..1)` at each pause. After `signal`
+// aborts it ends with an AbortError at its next pause, a window of audio on at most; then `abandon()` lets go of the
+// render, and what is left of it runs out unheard in the background (a few tens of milliseconds, measured, for a render of
+// three minutes), so another export may begin while it does. Where it cannot pause (Firefox has no
+// OfflineAudioContext.suspend: there everything is scheduled before it starts, and it renders in one go) it ends at the end
+// of the render, so that an export is not over, and another does not start beside it, while the first still renders.
+// `abandon()` also lets go of a render that failed: a render must not be left paused for good, which a browser never frees.
+async function renderInWindows(ctx, plan, { windowSeconds, schedule, abandon, onProgress, signal }) {
   if (signal?.aborted) throw cancelled();
-  // A pause that cannot be resumed would leave the render waiting for ever, so that fails the render with its error.
-  let fail;
-  const failed = new Promise((_, reject) => (fail = reject));
+  // A pause that cannot be set, or reached, or resumed, would leave the rest of the sequence unscheduled (silence in the
+  // file) or the render waiting for ever, so any of them fails the render with its error.
+  let broken = false;
+  let rejectFailed;
+  const failed = new Promise((_, reject) => (rejectFailed = reject));
+  const fail = (error) => {
+    broken = true; // the pauses that are still to come only resume: nothing more is scheduled for a render that is lost
+    rejectFailed(error);
+  };
   const report = (fraction) => {
     try {
       onProgress?.(fraction);
@@ -71,24 +87,36 @@ async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }
       console.error("Export progress failed:", error); // only for the eye: the render goes on
     }
   };
+  const ahead = (seconds) => seconds + 2 * windowSeconds;
   if (typeof ctx.suspend === "function") {
-    for (const frame of pauseFrames(total)) {
+    schedule(ahead(0));
+    for (const frame of windowPauses(plan.total, plan.sampleRate, windowSeconds)) {
       // A quarter of a block early: the time is rounded to a block edge, up or to the nearest, and this lands on it either way.
       ctx
-        .suspend((frame - RENDER_QUANTUM / 4) / sampleRate)
-        .then(
-          () => {
-            if (signal?.aborted) return fail(cancelled()); // left paused for good: nothing more is rendered
-            const resumed = ctx.resume(); // first: nothing in the report may keep the render waiting
-            report(frame / total);
-            return resumed;
-          },
-          () => {}, // a pause that could not be set only loses one progress report
-        )
+        .suspend((frame - RENDER_QUANTUM / 4) / plan.sampleRate)
+        .then(() => {
+          if (broken) return ctx.resume();
+          if (signal?.aborted) {
+            fail(cancelled());
+            return ctx.resume(); // nothing more is scheduled, and the end of the render is silent and quick
+          }
+          schedule(ahead(frame / plan.sampleRate));
+          const resumed = ctx.resume(); // before the report: nothing in it may keep the render waiting
+          report(frame / plan.total);
+          return resumed;
+        })
         .catch(fail);
     }
+  } else {
+    schedule(Infinity);
   }
-  const rendered = await Promise.race([ctx.startRendering(), failed]);
+  let rendered;
+  try {
+    rendered = await Promise.race([ctx.startRendering(), failed]);
+  } catch (error) {
+    abandon();
+    throw error;
+  }
   if (signal?.aborted) throw cancelled();
   report(1);
   return rendered;
@@ -160,14 +188,33 @@ function connectOutput(ctx, volume) {
   return master;
 }
 
-// Starts every hit of one pass (0 is the first warm-up pass), through the voices so that a hit cuts the pad's earlier one
-// and the pads of its choke group, as they do on the page.
-function schedulePass(ctx, { voices, kit, master, plan, pass }) {
-  for (const { step, row, velocity } of plan.hits) {
-    const time = LEAD_SECONDS + (pass * plan.length + step) * plan.stepLength;
-    const { out } = voices.start(ctx, row, master, time);
-    kit.voice(row).play(ctx, withVelocity(ctx, out, velocity / FULL_VELOCITY), time);
-  }
+// The hits that have yet to start, in the order they sound: `take(until)` gives those that sound before `until` seconds
+// (the last of the first pass is followed by the first of the second, and so on through the warm-up and the loops).
+function createHitFeeder(plan) {
+  let pass = 0;
+  let index = 0;
+  return function take(until) {
+    const taken = [];
+    while (pass < plan.passes && index < plan.hits.length) {
+      const hit = plan.hits[index];
+      const time = LEAD_SECONDS + (pass * plan.length + hit.step) * plan.stepLength;
+      if (time >= until) break;
+      taken.push({ row: hit.row, velocity: hit.velocity, time });
+      if (++index === plan.hits.length) {
+        index = 0;
+        pass++;
+      }
+    }
+    return taken;
+  };
+}
+
+// Starts one hit through the voices, so that it cuts the pad's earlier one and the pads of its choke group, as it does on
+// the page; a sound that gives back a way to stop its source has it stopped when the hit is cut.
+function startHit(ctx, { voices, kit, master }, { row, velocity, time }) {
+  const started = voices.start(ctx, row, master, time);
+  const played = kit.voice(row).play(ctx, withVelocity(ctx, started.out, velocity / FULL_VELOCITY), time);
+  started.stopWith(played?.stop);
 }
 
 // The file out of the render: the kept window, as views of the render and not copies (a long render is hundreds of
@@ -188,6 +235,7 @@ export async function renderSequence({
   createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
   loops = DEFAULT_EXPORT_OPTIONS.loops,
   channels = DEFAULT_EXPORT_OPTIONS.channels,
+  windowSeconds = WINDOW_SECONDS,
   onProgress,
   signal,
 }) {
@@ -196,12 +244,26 @@ export async function renderSequence({
   const master = connectOutput(ctx, song.volume);
   const voices = createVoices(kit.length, {
     cleanUp: false,
+    stopCut: true,
     groupOf: (pad) => kit.settings(pad).choke,
     releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
   });
-  for (let pass = 0; pass < plan.passes; pass++) schedulePass(ctx, { voices, kit, master, plan, pass });
+  const take = createHitFeeder(plan);
+  const schedule = (until) => {
+    for (const hit of take(until)) startHit(ctx, { voices, kit, master }, hit);
+  };
+  // A render that will not be used is let go of: nothing it still has to play is heard, and it runs on to its end quickly.
+  // Left suspended it is never freed (Chromium keeps the whole graph and the output buffer): a cancel cost about 90 MB.
+  const abandon = () => {
+    try {
+      master.disconnect();
+    } catch {
+      /* already gone */
+    }
+    Promise.resolve(ctx.resume?.()).catch(() => {});
+  };
 
-  const rendered = await renderWithProgress(ctx, plan.total, sampleRate, { onProgress, signal });
+  const rendered = await renderInWindows(ctx, plan, { windowSeconds, schedule, abandon, onProgress, signal });
   return keptWindow(rendered, plan, channels);
 }
 
@@ -353,8 +415,9 @@ export function createExportAction({
   let controller = null;
   return async function press() {
     if (controller) {
-      // pressed again while it works: cancel (a second press while it stops does nothing more). A render that cannot be
-      // stopped (see renderWithProgress) goes on to its end first, so `onCancel` lets the button say it is stopping.
+      // pressed again while it works: cancel (a second press while it stops does nothing more). The render stops at its next
+      // pause, a window of audio on; one that cannot be stopped (see renderInWindows) goes on to its end first, so
+      // `onCancel` lets the button say it is stopping.
       if (!controller.signal.aborted) {
         controller.abort();
         onCancel();

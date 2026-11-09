@@ -374,3 +374,15 @@ describe("kit.snapshot", () => {
     expect(frozen.envelope(0)).not.toBeNull();
   });
 });
+
+describe("kit.voice(...).play", () => {
+  it("gives back what the sound gave back, with the pad's settings or without them", () => {
+    const handle = { stop() {} };
+    const played = { id: "s", name: "s", play: vi.fn(() => handle), setTrim() {} };
+    const kit = createKit([played, defaults[1], defaults[2]]);
+    const ctx = { createGain: () => ({ gain: { value: 1 }, connect() {} }) };
+    expect(kit.voice(0).play(ctx, { connect() {} }, 0)).toBe(handle);
+    kit.setSetting(0, "pitch", 4); // a setting that is passed on as an option: the other way of calling it
+    expect(kit.voice(0).play(ctx, { connect() {} }, 0)).toBe(handle);
+  });
+});

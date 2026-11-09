@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CHOKE_TIME_CONSTANT, createVoices } from "./voices.js";
+import { CHOKE_TIME_CONSTANT, CLEAN_UP_AFTER_S, createVoices } from "./voices.js";
 
 // A context whose gain nodes record what is done to them.
 function fakeContext(time = 10) {
@@ -383,4 +383,76 @@ describe("createVoices, in an offline render", () => {
         for (let pad = 0; pad < 16; pad++) voices.start(ctx, pad, {}, 0.01 + (pass * 128 + step) * 0.125);
     expect(performance.now() - began).toBeLessThan(3000);
   }, 60000);
+});
+
+describe("createVoices, stopping what was cut (an offline render)", () => {
+  // A source that keeps on running after its voice is cut makes no sound, but the render still does the work of it: a
+  // ten second sample cut after a tenth of a second is nine and nine tenths of silence to compute.
+  const plainContext = () => ({
+    currentTime: 0,
+    createGain: () => ({
+      gain: { cancelScheduledValues() {}, setValueAtTime() {}, setTargetAtTime() {} },
+      connect() {},
+      disconnect() {},
+    }),
+  });
+
+  it("stops a voice's source a little after the cut, when it was told how", () => {
+    const ctx = plainContext();
+    const voices = createVoices(2, { cleanUp: false, stopCut: true });
+    const stop = vi.fn();
+    voices.start(ctx, 0, {}, 1).stopWith(stop);
+    expect(stop).not.toHaveBeenCalled(); // nothing cuts it yet
+    voices.start(ctx, 0, {}, 5);
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledWith(5 + CLEAN_UP_AFTER_S); // by then the fade is far below hearing
+  });
+
+  it("leaves room for the pad's release: the fade takes that long", () => {
+    const ctx = plainContext();
+    const voices = createVoices(2, { cleanUp: false, stopCut: true, releaseOf: () => 5 });
+    const stop = vi.fn();
+    voices.start(ctx, 0, {}, 1).stopWith(stop);
+    voices.start(ctx, 0, {}, 5);
+    // the cut fades with a time constant of a seventh of the release: twice the release is fourteen of them
+    expect(stop).toHaveBeenCalledWith(5 + 2 * 5 + CLEAN_UP_AFTER_S);
+  });
+
+  it("stops the voice of another pad in the choke group that the new hit cuts", () => {
+    const ctx = plainContext();
+    const voices = createVoices(3, { cleanUp: false, stopCut: true, groupOf: () => 1 });
+    const stop = vi.fn();
+    voices.start(ctx, 0, {}, 1).stopWith(stop);
+    voices.start(ctx, 2, {}, 3);
+    expect(stop).toHaveBeenCalledWith(3 + CLEAN_UP_AFTER_S);
+  });
+
+  it("stops each voice once, and not one that was never cut", () => {
+    const ctx = plainContext();
+    const voices = createVoices(2, { cleanUp: false, stopCut: true });
+    const first = vi.fn();
+    const other = vi.fn();
+    voices.start(ctx, 0, {}, 1).stopWith(first);
+    voices.start(ctx, 1, {}, 1).stopWith(other); // another pad, no group
+    voices.start(ctx, 0, {}, 2);
+    voices.start(ctx, 0, {}, 3); // the one at 2 is cut here; the one at 1 is already gone
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(other).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for a sound that gave nothing to stop (a built-in one stops itself)", () => {
+    const ctx = plainContext();
+    const voices = createVoices(1, { cleanUp: false, stopCut: true });
+    voices.start(ctx, 0, {}, 1).stopWith(undefined);
+    expect(() => voices.start(ctx, 0, {}, 2)).not.toThrow();
+  });
+
+  it("stops nothing on the page itself: only an offline render asks for it", () => {
+    const { ctx } = fakeContext(0);
+    const voices = createVoices(1); // as the page makes them
+    const stop = vi.fn();
+    voices.start(ctx, 0, {}, 1).stopWith(stop);
+    voices.start(ctx, 0, {}, 2);
+    expect(stop).not.toHaveBeenCalled();
+  });
 });
