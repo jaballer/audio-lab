@@ -134,6 +134,17 @@ describe("recording", () => {
     expect(sampler.getState().selected).toBe(0);
   });
 
+  it("lights the pads that were scheduled, even if the pattern changed before the playhead got there", () => {
+    const { sampler, sounds, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 2: [1] } }) });
+    sampler.start();
+    advance(0.2); // step 1 is scheduled, and its sound is on its way
+    expect(sounds[2].play).toHaveBeenCalledTimes(1);
+    sampler.selectPad(2);
+    sampler.toggleStep(1); // too late to unsound it, so it must still light
+    sampler.poll();
+    expect(padPlayed).toHaveBeenCalledWith(2);
+  });
+
   it("writes a live hit into the step the playhead is on", () => {
     const { sampler, songChange } = playing();
     sampler.toggleRec();

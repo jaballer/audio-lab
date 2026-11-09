@@ -45,6 +45,7 @@ import { STARTER_BEAT } from "./starter-beat.js";
 
 export const DEFAULT_VOLUME = 80; // 0-100; the same as the slider's markup
 const VOLUME_SCALE = 100;
+const MAX_SCHEDULED_HITS = 64; // a page that stops polling (a hidden tab) must not grow the list for ever
 
 const noop = () => {};
 
@@ -85,6 +86,7 @@ export function createSampler({
   const lastPage = () => bars - 1;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
+  const scheduledHits = []; // { time, rows } for each step handed to the scheduler, until its light is shown
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -92,9 +94,17 @@ export function createSampler({
     bpm: song?.bpm,
     onStep(step, time, heard) {
       const { ctx, master } = audio;
+      const rows = [];
       sounds.forEach((sound, row) => {
-        if (pattern.isOn(row, step) && !heard.has(row)) sound.play(ctx, master, time);
+        if (pattern.isOn(row, step) && !heard.has(row)) {
+          sound.play(ctx, master, time);
+          rows.push(row);
+        }
       });
+      // Remember what was scheduled, so the lights show what is heard even if the pattern is
+      // edited in the lookahead before the playhead reaches this step.
+      scheduledHits.push({ time, rows });
+      if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
     },
   });
 
@@ -129,12 +139,15 @@ export function createSampler({
   }
 
   // ---------- Steps ----------
-  // The sound is scheduled ahead of time, so the pads flash from here, when the playhead
-  // reaches the step, to line up with what is heard. Only the light: the selected pad stays.
-  function flashStep(step) {
-    sounds.forEach((_sound, row) => {
-      if (pattern.isOn(row, step)) onPadPlayed(row);
-    });
+  // The sound is scheduled ahead of time, so the pads light from here, when the playhead reaches the
+  // steps, to line up with what is heard. They light for the hits that were scheduled, not for what
+  // the pattern says now. Only the light: the selected pad stays.
+  function lightReachedSteps() {
+    const lit = new Set();
+    while (scheduledHits.length && scheduledHits[0].time <= scheduler.playheadTime) {
+      for (const row of scheduledHits.shift().rows) lit.add(row);
+    }
+    for (const row of lit) onPadPlayed(row);
   }
 
   // The step keys show one bar; the playhead is only on them while it is in that bar.
@@ -198,12 +211,14 @@ export function createSampler({
   // sequence is running, it starts again from the top.
   function start() {
     scheduler.stop();
+    scheduledHits.length = 0;
     scheduler.start();
     onChange();
   }
 
   function stop() {
     scheduler.stop();
+    scheduledHits.length = 0;
     onChange();
   }
 
@@ -256,7 +271,7 @@ export function createSampler({
     setVolume,
     poll() {
       const moved = scheduler.poll();
-      if (moved && scheduler.playing) flashStep(scheduler.playheadStep);
+      if (moved && scheduler.playing) lightReachedSteps();
       return moved;
     },
 
