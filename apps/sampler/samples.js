@@ -23,7 +23,7 @@ import { formatSpace } from "../../shared/storage-budget.js";
 import { pad2, sampleName } from "./format.js";
 import {
   MAX_SAMPLE_BYTES,
-  MAX_SAMPLE_SECONDS,
+  PROBE_REFUSE_SECONDS,
   REASONS,
   createSampleSound,
   decodeSample,
@@ -66,16 +66,25 @@ export function createSamples({
 }) {
   const pads = parseSamples(readMap(), kit.length); // { pad: { name, bytes } }, the samples that are kept
   const touched = new Set(); // pads changed in this visit, which a restore must not overwrite
-  const latest = new Array(kit.length).fill(0); // a later load or reset of the same pad wins over an earlier one
+  // Order of the requests on each pad. Every load and reset is numbered when it is made (`requested`), and the
+  // newest one to be accepted is the one that stands (`accepted`): an older request that is accepted after a
+  // newer one, or overtaken while it works, gives way to it. A load that is refused is never accepted, so it
+  // changes nothing and does not cancel an earlier load that is still working.
+  const requested = new Array(kit.length).fill(0);
+  const accepted = new Array(kit.length).fill(0);
   let restored = false;
-  let persistAsked = false; // the browser is asked once per visit to keep the samples, after the first one is saved
+  let persistAsked = false; // the browser is asked once per visit to keep the samples
 
-  // What counts toward the total cap: every pad that has a sample, kept or only playing in this visit, and
-  // a load that has been accepted but not finished. Not the same as `pads`, which is what was kept.
-  const counted = Object.fromEntries(Object.entries(pads).map(([pad, info]) => [pad, info.bytes]));
-  const countedTotal = () => Object.values(counted).reduce((sum, bytes) => sum + bytes, 0);
-  const bytesElsewhere = (pad) =>
-    Object.entries(counted).reduce((sum, [key, bytes]) => (Number(key) === pad ? sum : sum + bytes), 0);
+  // What counts toward the total cap, kept in two parts so it can always be put right: `held` is what each pad
+  // has now (a sample that is playing in this visit, or kept from an earlier one), and `reserved` is a load that
+  // has been accepted but has not finished, which counts instead of what the pad holds while it works. A load
+  // that fails or is overtaken only drops its own reservation, so the count falls back to what the pad holds.
+  // Not the same as `pads`, which is what was kept.
+  const held = Object.fromEntries(Object.entries(pads).map(([pad, info]) => [pad, info.bytes]));
+  const reserved = {};
+  const countFor = (pad) => reserved[pad] ?? held[pad] ?? 0;
+  const countedTotal = () => Array.from({ length: kit.length }, (_, pad) => countFor(pad)).reduce((a, b) => a + b, 0);
+  const bytesElsewhere = (pad) => countedTotal() - countFor(pad);
 
   // Whether the map was written: the localStorage write can fail (blocked, full) when the files' bytes did not.
   const persist = () => Boolean(writeMap({ version: SAMPLES_VERSION, pads }));
@@ -86,11 +95,20 @@ export function createSamples({
   }
 
   async function load(pad, file) {
+    const request = ++requested[pad];
     if (file.size > MAX_SAMPLE_BYTES) return fail(pad, REASONS.bytes);
-    // Its length from the header, so a long file is refused without being read and decoded. Null when the
-    // browser cannot tell, and then decoding finds out.
+    // Asked here, at the start, because this runs in the click or drop the visitor made and nothing has been
+    // awaited yet: Firefox only shows its permission prompt for a request made while that action is fresh, and
+    // by the time a file is read, decoded and saved it is not. Once per visit, and only for a file worth
+    // trying (not one refused above); the answer changes nothing here, so it is not waited for.
+    if (!persistAsked) {
+      persistAsked = true;
+      budget.persist();
+    }
+    // Its length from the header, so a file that is far too long is refused without being read and decoded. A hint
+    // only (see PROBE_REFUSE_SECONDS): null when the browser cannot tell, and decoding makes the exact call.
     const seconds = await probe(file);
-    if (seconds > MAX_SAMPLE_SECONDS) return fail(pad, REASONS.seconds);
+    if (seconds > PROBE_REFUSE_SECONDS) return fail(pad, REASONS.seconds);
     let bytes;
     try {
       bytes = await file.arrayBuffer();
@@ -102,33 +120,33 @@ export function createSamples({
     const limit = await budget.limit(maxTotalBytes);
     if (bytesElsewhere(pad) + bytes.byteLength > limit) return fail(pad, MEMORY_FULL);
 
-    // From here the file is accepted: it takes the pad over from an earlier load still in progress (one that
-    // is refused above leaves that earlier load alone), and it is counted, so loads that overlap cannot
-    // together go over the cap.
-    const ticket = ++latest[pad];
-    const before = counted[pad];
-    counted[pad] = bytes.byteLength;
+    // From here the file is accepted: it takes the pad over from an earlier request still in progress, unless
+    // a newer one has been accepted already (the quota lookup above can finish out of order). It is counted,
+    // so loads that overlap cannot together go over the cap.
+    if (request < accepted[pad]) return false;
+    const previous = accepted[pad];
+    accepted[pad] = request;
+    reserved[pad] = bytes.byteLength;
     const result = await decode(audio.ensure(), bytes);
-    if (ticket !== latest[pad]) return false; // another file or a reset came after this one, and has its own count
+    if (accepted[pad] !== request) return false; // a newer file or a reset has taken the pad, and has its own count
     if (!result.ok) {
-      if (before === undefined) delete counted[pad];
-      else counted[pad] = before;
+      // It did not work out, so it leaves the pad as it found it, and an earlier request still working may stand.
+      delete reserved[pad];
+      accepted[pad] = previous;
       return fail(pad, result.reason);
     }
 
     const name = sampleName(file.name);
     kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer }));
     touched.add(pad);
+    held[pad] = bytes.byteLength;
+    delete reserved[pad];
 
     const bytesKept = await store.set(keyFor(pad), bytes);
-    if (ticket !== latest[pad]) return true; // it played, but something newer has taken the pad since
+    if (accepted[pad] !== request) return true; // it played, but something newer has taken the pad since
     pads[pad] = { name, bytes: bytes.byteLength };
     if (bytesKept && persist()) {
       onMessage(`PAD ${pad2(pad + 1)} LOADED ${formatSpace(countedTotal(), limit)}`);
-      if (!persistAsked) {
-        persistAsked = true;
-        budget.persist(); // not awaited: the answer changes nothing here, and Firefox waits for the visitor
-      }
     } else {
       // Not kept, in the files or in the map, so what was kept before for this pad is not what the pad plays
       // any more, and bytes with no map entry would only take up room.
@@ -141,10 +159,11 @@ export function createSamples({
   }
 
   async function reset(pad) {
-    latest[pad]++;
+    accepted[pad] = ++requested[pad]; // a reset is always accepted: it overtakes any load made before it
     touched.add(pad);
     delete pads[pad];
-    delete counted[pad];
+    delete held[pad];
+    delete reserved[pad];
     persist();
     kit.reset(pad);
     await store.delete(keyFor(pad));

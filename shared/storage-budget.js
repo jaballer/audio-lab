@@ -33,10 +33,19 @@ function megabytes(bytes) {
 // "4.2/32 MB": what is used of what is allowed.
 export const formatSpace = (used, limit) => `${megabytes(used)}/${megabytes(limit)} MB`;
 
-export function createStorageBudget({ storage = globalThis.navigator?.storage } = {}) {
+const LOOKUP_TIMEOUT_MS = 1500; // an estimate that never answers must not hold up a load
+
+// The promise's value, or `fallback` if it has not settled in `ms`.
+function within(promise, ms, fallback) {
+  let timer;
+  const timeout = new Promise((resolve) => (timer = setTimeout(() => resolve(fallback), ms)));
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+export function createStorageBudget({ storage = globalThis.navigator?.storage, timeoutMs = LOOKUP_TIMEOUT_MS } = {}) {
   async function estimate() {
     try {
-      const { usage, quota } = await storage.estimate();
+      const { usage, quota } = (await within(storage.estimate(), timeoutMs, null)) ?? {};
       return Number.isFinite(usage) && Number.isFinite(quota) ? { usage, quota } : null;
     } catch {
       return null;

@@ -112,6 +112,7 @@ describe("probeDuration", () => {
       onerror: null,
       duration: NaN,
       removeAttribute: vi.fn(),
+      load: vi.fn(),
       set src(value) {
         this._src = value;
         queueMicrotask(() => reply?.(audio));
@@ -144,7 +145,9 @@ describe("probeDuration", () => {
     });
     await probeDuration({}, e);
     expect(e.revokeUrl).toHaveBeenCalledWith("blob:x");
+    // Dropping the source is not enough to make the element let go of the file: load() with none is.
     expect(audio.removeAttribute).toHaveBeenCalledWith("src");
+    expect(audio.load).toHaveBeenCalled();
   });
 
   it("is null when the length is not known (a stream's Infinity, or NaN)", async () => {

@@ -18,7 +18,12 @@
 // second or more of CPU.
 export const MAX_SAMPLE_BYTES = 5 * 1024 * 1024;
 export const MAX_SAMPLE_SECONDS = 10;
-const PROBE_TIMEOUT_MS = 2000;
+// The length from a header is an estimate for some formats (an MP3 with no length in its header), so it is only
+// a hint: a file is refused early when it is far over the limit, and decoding makes the exact call for the rest.
+// A browser that never loads metadata for an element that is not on the page (some mobile Safari) costs a load
+// this much waiting, then decoding goes on as if there were no probe.
+export const PROBE_REFUSE_SECONDS = MAX_SAMPLE_SECONDS * 2;
+const PROBE_TIMEOUT_MS = 1000;
 
 // The short reasons are for the LCD, which is small.
 export const REASONS = {
@@ -49,7 +54,9 @@ export function probeDuration(file, env = {}) {
       if (audio) {
         audio.onloadedmetadata = null;
         audio.onerror = null;
-        audio.removeAttribute?.("src"); // lets the browser drop the file
+        // Removing the source alone does not stop the element holding the file: load() with none does.
+        audio.removeAttribute?.("src");
+        audio.load?.();
       }
       if (url) revokeUrl(url);
       // Infinity and NaN are what a stream without a known length reports.

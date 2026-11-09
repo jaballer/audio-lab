@@ -54,6 +54,13 @@ describe("createStorageBudget", () => {
     expect(await createStorageBudget({ storage: storage({ estimate: async () => ({}) }) }).estimate()).toBeNull();
   });
 
+  it("gives null when the estimate does not answer in time, so a load is not held up", async () => {
+    const hanging = storage({ estimate: () => new Promise(() => {}) });
+    const budget = createStorageBudget({ storage: hanging, timeoutMs: 10 });
+    expect(await budget.estimate()).toBeNull();
+    expect(await budget.limit(32 * MB)).toBe(32 * MB);
+  });
+
   it("limits the cap by the quota, and leaves it when the quota is unknown", async () => {
     expect(await createStorageBudget({ storage: storage() }).limit(32 * MB)).toBe(25 * MB);
     expect(
