@@ -55,9 +55,9 @@ export function softClipCurve({ knee, ceiling, reach }, size = 4097) {
   return curve;
 }
 
-// The pieces between the master gain and the speakers: the first node to connect the master to, and the last one
+// The pieces between the master gain and the speakers (shared with the offline render that exports a sequence): the first node to connect the master to, and the last one
 // (which goes to the speakers). Null when the context has no waveshaper.
-function createClipper(ctx) {
+export function createClipper(ctx) {
   if (typeof ctx.createWaveShaper !== "function") return null;
   const half = ctx.createGain();
   half.gain.value = 1 / CLIP.reach;

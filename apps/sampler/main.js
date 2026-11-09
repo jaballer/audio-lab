@@ -14,6 +14,7 @@ import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
+import { createExportAction, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { createLcd } from "./lcd.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
@@ -27,6 +28,7 @@ import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
 import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
+import { saveBlob } from "../../shared/download.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "../../shared/step-keys.js";
@@ -316,6 +318,20 @@ const redoBtn = $("redo");
 undoBtn.addEventListener("click", sampler.undo);
 redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
+// Export WAV: the sequence showing, rendered offline and saved as a file (export-wav.js decides when it may run).
+const exportBtn = $("export");
+exportBtn.addEventListener(
+  "click",
+  createExportAction({
+    ready: () => restoring,
+    run: () => exportSequence({ song: sampler.getSong(), kit, stepsPerBar: STEPS, onMessage: say, save: saveBlob }),
+    onMessage: say,
+    onBusy(busy) {
+      setText(exportBtn, busy ? "Exporting…" : "Export WAV");
+      setAttr(exportBtn, "aria-busy", String(busy));
+    },
+  }),
+);
 volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------
@@ -390,5 +406,7 @@ dock.addEventListener("change", placeDrawer);
 if (loadJson(DRAWER_KEY, false) === true) padDrawer.open(); // as it was left
 
 // ---------- Init ----------
-if (decodesEarly) samples.restore(); // kept samples back on their pads, before the first click or key
+// Kept samples back on their pads, before the first click or key. Export waits for it, so it never renders the
+// built-in sounds where a saved sample is about to be.
+const restoring = decodesEarly ? samples.restore() : Promise.resolve();
 sampler.selectPad(0);
