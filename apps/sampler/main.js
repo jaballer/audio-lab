@@ -374,6 +374,7 @@ exportBtn.addEventListener(
       }),
     onMessage: say,
     onProgress: (fraction) => showExport(exportLabel(fraction)),
+    onCancel: () => showExport("Cancelling…"), // a browser that cannot pause the render finishes it first
     onBusy(busy) {
       showExport(busy ? "Cancel export" : "Export WAV"); // no per cent until the render reports: it may be waiting for samples
       setAttr(exportBtn, "aria-label", busy ? "Cancel export" : "Export WAV");

@@ -562,10 +562,26 @@ describe("renderSequence, progress and cancel", () => {
     expect(reports).toEqual([1]);
   });
 
-  it("without a pause to stop at, a cancel throws the render away when it ends", async () => {
+  it("without a pause to stop at, a cancel waits for the render to end, then throws it away", async () => {
+    const offline = fakeOffline();
+    const render = offline.ctx.startRendering;
+    let finish;
+    offline.ctx.startRendering = () => new Promise((resolve) => (finish = resolve)).then(render);
     const controller = new AbortController();
-    const { done } = render({ signal: controller.signal }, { pausable: false });
+    let settled = false;
+    const done = renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      signal: controller.signal,
+    });
+    done.catch(() => {}).then(() => (settled = true));
     controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).toBe(false); // still rendering, so still busy: no second render may start beside it
+    finish();
     await expect(done).rejects.toMatchObject({ name: "AbortError" });
   });
 
@@ -699,6 +715,27 @@ describe("createExportAction", () => {
     finish(false);
     await first;
     expect(onBusy.mock.calls.map((call) => call[0])).toEqual([true, false]);
+  });
+
+  it("tells the button it was asked to cancel, once, however often it is pressed", async () => {
+    let finish;
+    const run = vi.fn(() => new Promise((resolve) => (finish = resolve)));
+    const onCancel = vi.fn();
+    const { press } = setup({ run, onCancel });
+    const first = press();
+    await flush();
+    expect(onCancel).not.toHaveBeenCalled();
+    await press();
+    await press();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    finish(false);
+    await first;
+    const second = press();
+    await flush();
+    await press();
+    expect(onCancel).toHaveBeenCalledTimes(2); // a new export is cancelled afresh
+    finish(false);
+    await second;
   });
 
   it("can be pressed again after a cancel, and the new export is not already cancelled", async () => {

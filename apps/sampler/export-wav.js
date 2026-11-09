@@ -47,12 +47,14 @@ export function pauseFrames(total, count = PROGRESS_PAUSES) {
   return [...frames];
 }
 
+const never = new Promise(() => {});
 const cancelled = () => new DOMException("Export cancelled", "AbortError");
 export const wasCancelled = (error) => error?.name === "AbortError";
 
 // Renders `ctx` (an OfflineAudioContext of `total` frames), reporting `onProgress(0..1)` at each pause and giving up
-// with an AbortError, soon after `signal` aborts. A browser that cannot pause an offline context renders in one go,
-// with no progress, and a cancel then only throws the result away.
+// with an AbortError, soon after `signal` aborts. A browser that cannot pause an offline context (Firefox) renders in
+// one go, with no progress, and cannot be stopped: a cancel there waits for the render to end and then throws the
+// result away, so that the export is not over, and another cannot start beside it, while the first still renders.
 async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }) {
   if (signal?.aborted) throw cancelled();
   // A pause that cannot be resumed would leave the render waiting for ever, so that fails the render with its error.
@@ -65,7 +67,8 @@ async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }
       console.error("Export progress failed:", error); // only for the eye: the render goes on
     }
   };
-  if (typeof ctx.suspend === "function") {
+  const pausable = typeof ctx.suspend === "function";
+  if (pausable) {
     for (const frame of pauseFrames(total)) {
       // A quarter of a block early: the time is rounded to a block edge, up or to the nearest, and this lands on it either way.
       ctx
@@ -82,9 +85,11 @@ async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }
         .catch(fail);
     }
   }
-  const aborted = new Promise((_, reject) =>
-    signal?.addEventListener("abort", () => reject(cancelled()), { once: true }),
-  );
+  // Only a render that can be paused is given up on at once: the abort rejects this, and nothing else may be left
+  // holding a rejection that nothing handles.
+  const aborted = pausable
+    ? new Promise((_, reject) => signal?.addEventListener("abort", () => reject(cancelled()), { once: true }))
+    : never;
   const rendered = await Promise.race([ctx.startRendering(), aborted, failed]);
   if (signal?.aborted) throw cancelled();
   report(1);
@@ -243,7 +248,7 @@ export const exportLabel = (fraction) => `Cancel export ${Math.round(Math.min(1,
 export const READY_WAIT_MS = 5000; // how long a click waits for the saved samples to be back before giving up
 
 // What pressing the Export button does around exportSequence: one export at a time, and a press while one runs cancels
-// it (the render stops at its next pause and nothing is saved). `onBusy(true/false)` lets the button show it is
+// it (the render stops at its next pause, or where it cannot pause at its end, and nothing is saved; `onCancel()` says it was asked to). `onBusy(true/false)` lets the button show it is
 // working (the LCD's message is gone after a moment, and a long export takes longer), and `onProgress(0..1)` how far
 // it has got. It waits for `ready` (the saved samples being restored, so the file does not hold the built-in sounds
 // where a sample is about to be) and gives up after READY_WAIT_MS with a message rather than leave the button dead: a
@@ -261,6 +266,7 @@ export function createExportAction({
   onMessage,
   onBusy = () => {},
   onProgress = () => {},
+  onCancel = () => {},
   waitMs = READY_WAIT_MS,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
@@ -268,7 +274,12 @@ export function createExportAction({
   let controller = null;
   return async function press() {
     if (controller) {
-      controller.abort(); // pressed again while it works: cancel (a second press while it stops does nothing more)
+      // pressed again while it works: cancel (a second press while it stops does nothing more). A render that cannot be
+      // stopped (see renderWithProgress) goes on to its end first, so `onCancel` lets the button say it is stopping.
+      if (!controller.signal.aborted) {
+        controller.abort();
+        onCancel();
+      }
       return false;
     }
     controller = new AbortController();
