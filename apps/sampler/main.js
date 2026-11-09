@@ -21,6 +21,7 @@ import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SAMPLES_KEY, createSamples } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
+import { createSettingsSliders } from "./settings-sliders.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
@@ -86,9 +87,10 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 // is fine because the sampler reports nothing until something happens.
 // What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
 const kit = createKit(SOUNDS, {
-  onChange(index) {
-    padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
-    sampler.soundsChanged(); // a step already queued would otherwise play the sound the pad had
+  settings: song ? song.padSettings : {}, // each pad's gain and pitch, kept with the song
+  onChange(index, what) {
+    if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
+    sampler.kitChanged(what); // rebuilds the queued steps for a new sound, saves for a setting (see the controller)
     render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
   },
 });
@@ -133,6 +135,9 @@ const samples = createSamples({
   readMap: () => loadJson(SAMPLES_KEY),
   writeMap: (map) => saveJson(SAMPLES_KEY, map),
   onMessage: (text) => lcd.showMessage(text),
+});
+const settingsSliders = createSettingsSliders($("pad-settings"), {
+  onChange: (name, value) => sampler.setPadSetting(name, value),
 });
 const sampleLoader = createSampleLoader({
   pads: $("pads"),
@@ -196,6 +201,7 @@ function render() {
   const soundName = kit.get(state.selected).name;
   padGrid.select(state.selected);
   // A sample that is kept but could not be restored this visit can still be removed.
+  settingsSliders.refresh({ settings: state.padSettings, pitchEnabled: !kit.isDefault(state.selected) });
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
   undoBtn.disabled = !state.canUndo;

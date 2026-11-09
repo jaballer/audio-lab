@@ -40,6 +40,22 @@ describe("createSampleSound", () => {
     expect(sources[0].start).toHaveBeenCalledWith(2.5);
   });
 
+  it("plays at its own pitch unless a rate is given, and then at that playback rate", () => {
+    const sources = [];
+    const ctx = {
+      createBufferSource: () => {
+        const source = { buffer: null, playbackRate: { value: 1 }, connect: vi.fn(), start: vi.fn() };
+        sources.push(source);
+        return source;
+      },
+    };
+    const sound = createSampleSound({ id: "s", name: "S", buffer: audioBuffer(1) });
+    sound.play(ctx, {}, 0);
+    sound.play(ctx, {}, 0, { rate: 2 });
+    sound.play(ctx, {}, 0, { rate: 0.5 });
+    expect(sources.map((source) => source.playbackRate.value)).toEqual([1, 2, 0.5]);
+  });
+
   it("makes a source of its own for every hit, so hits overlap", () => {
     const { ctx, sources } = setup();
     const sound = createSampleSound({ id: "s", name: "S", buffer: audioBuffer(1) });

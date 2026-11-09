@@ -54,10 +54,11 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `format.js` — small text helpers for the display and messages; no DOM
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
   - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
-  - `kit.js` — the sound on each pad: the built-in one, or a sample loaded onto it, and putting the built-in one back; no DOM
+  - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's gain and pitch settings (`voice(i).play` is what the sequencer and live hits call); no DOM
+  - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the text, and reading them back from a saved song; no DOM
   - `sample-voice.js` — a loaded sample as a pad sound, and decoding a file (with the length and size caps and the reason a file was refused); no DOM
   - `samples.js` — loading a file onto a pad, resetting it, and keeping the samples between visits (the files' bytes in IndexedDB, which pad has which in localStorage), restored at the start of a visit; no DOM
-  - `pads.js`, `tempo-knob.js`, `velocity-bars.js`, `sample-loader.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `lcd.js` has the pure text formatter)
+  - `pads.js`, `tempo-knob.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `settings-sliders.js` is the Gain and Pitch sliders, `lcd.js` has the pure text formatter)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
   - `sampler.css` — sampler-only styles

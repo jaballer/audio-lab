@@ -80,9 +80,11 @@ export function createSampleSound({ id, name, buffer }) {
   return {
     id,
     name,
-    play(ctx, out, t) {
+    // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
+    play(ctx, out, t, { rate = 1 } = {}) {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
+      if (rate !== 1) source.playbackRate.value = rate;
       source.connect(out);
       source.start(t);
     },

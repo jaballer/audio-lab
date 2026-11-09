@@ -239,6 +239,16 @@ export function withVelocity(ctx, out, velocity = 1) {
   return stage;
 }
 
+// Where a sound should be connected so that it is `gain` times as loud (a plain multiplier, which may be above
+// 1): `out` itself at 1, otherwise a gain stage of its own in front of `out`.
+export function withGain(ctx, out, gain) {
+  if (gain === 1) return out;
+  const stage = ctx.createGain();
+  stage.gain.value = gain;
+  stage.connect(out);
+  return stage;
+}
+
 // Plays one sound now through the shared audio engine. `velocity` is 0-1.
 export function playSound(audio, sound, velocity = 1) {
   // Dropped while the power is off: it would be muted, but a long tail would still be playing at power on.

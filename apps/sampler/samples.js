@@ -138,6 +138,7 @@ export function createSamples({
 
     const name = sampleName(file.name);
     kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer }));
+    kit.setSetting(pad, "pitch", 0); // pitch tunes a sample, so a new one starts at its own pitch (gain is the pad's)
     touched.add(pad);
     held[pad] = bytes.byteLength;
     delete reserved[pad];
@@ -166,6 +167,7 @@ export function createSamples({
     delete reserved[pad];
     persist();
     kit.reset(pad);
+    kit.setSetting(pad, "pitch", 0); // the built-in sound cannot be pitched, so no pitch is left behind to reappear
     await store.delete(keyFor(pad));
     onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
   }

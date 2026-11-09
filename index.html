@@ -32,6 +32,7 @@
             <button id="reset-sound" class="btn btn-small" type="button" disabled>Default Sound</button>
             <input id="sample-file" type="file" accept="audio/*" hidden />
           </div>
+          <div id="pad-settings" role="group" aria-label="Gain and pitch of the selected pad"></div>
         </section>
 
         <section class="console" aria-label="Display and controls">
@@ -118,7 +119,8 @@
         <li><kbd>Space</kbd> plays or stops the sequence</li>
         <li>
           Drop an audio file on a pad, or press Load Sample for the selected pad, to play it there (up to 10 seconds and
-          5 MB). Samples are kept in this browser; Default Sound puts the built-in one back
+          5 MB). Samples are kept in this browser; Default Sound puts the built-in one back. Gain sets how loud the
+          selected pad is, and Pitch (for a loaded sample) how high; press Delete or double-click a slider to reset it
         </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;

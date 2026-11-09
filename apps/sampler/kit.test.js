@@ -20,7 +20,7 @@ describe("createKit", () => {
     expect(kit.get(2)).toBe(loaded);
     expect(kit.get(0)).toBe(defaults[0]);
     expect(kit.isDefault(2)).toBe(false);
-    expect(onChange).toHaveBeenCalledWith(2);
+    expect(onChange).toHaveBeenCalledWith(2, "sound");
   });
 
   it("puts the built-in sound back", () => {
@@ -43,5 +43,130 @@ describe("createKit", () => {
     const kit = createKit(defaults);
     kit.set(0, sound("loaded"));
     expect(defaults[0].id).toBe("kick");
+  });
+});
+
+describe("pad settings", () => {
+  // A context whose gains record their level and where they are connected.
+  function fakeContext() {
+    const gains = [];
+    return {
+      gains,
+      ctx: {
+        createGain: () => {
+          const gain = { gain: { value: 1 }, connect: vi.fn() };
+          gains.push(gain);
+          return gain;
+        },
+      },
+    };
+  }
+
+  it("starts every pad at the defaults, or at the settings it is given", () => {
+    const kit = createKit(defaults, { settings: { 1: { gain: -6, pitch: 2 } } });
+    expect(kit.settings(0)).toEqual({ gain: 0, pitch: 0 });
+    expect(kit.settings(1)).toEqual({ gain: -6, pitch: 2 });
+  });
+
+  it("changes one setting, clamped, and tells the views only when it changed", () => {
+    const onChange = vi.fn();
+    const kit = createKit(defaults, { onChange });
+    kit.setSetting(0, "gain", -3.4);
+    expect(kit.settings(0).gain).toBe(-3);
+    expect(onChange).toHaveBeenCalledWith(0, "setting");
+    kit.setSetting(0, "gain", -3);
+    kit.setSetting(0, "pitch", 0);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    kit.setSetting(0, "pitch", 40);
+    expect(kit.settings(0).pitch).toBe(12);
+  });
+
+  it("hands out a copy of the settings, not its own", () => {
+    const kit = createKit(defaults);
+    kit.settings(0).gain = -20;
+    expect(kit.settings(0).gain).toBe(0);
+  });
+
+  it("lists only the pads that are not at the defaults, in the shape it starts from", () => {
+    const kit = createKit(defaults);
+    expect(kit.settingsSnapshot()).toEqual({});
+    kit.setSetting(2, "pitch", -5);
+    kit.setSetting(1, "gain", 3);
+    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0 }, 2: { gain: 0, pitch: -5 } });
+    kit.setSetting(2, "pitch", 0);
+    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0 } });
+    const copy = createKit(defaults, { settings: kit.settingsSnapshot() });
+    expect(copy.settings(1)).toEqual({ gain: 3, pitch: 0 });
+  });
+
+  describe("the voice a pad plays with", () => {
+    it("plays the sound exactly as it always was at the defaults: no extra node, no extra argument", () => {
+      const { ctx, gains } = fakeContext();
+      const kit = createKit(defaults);
+      const out = { name: "out" };
+      kit.voice(0).play(ctx, out, 1.5);
+      expect(defaults[0].play.mock.calls[0]).toEqual([ctx, out, 1.5]);
+      expect(gains).toHaveLength(0);
+    });
+
+    it("puts a gain stage in front of the output for the pad's gain", () => {
+      const { ctx, gains } = fakeContext();
+      const kit = createKit(defaults);
+      kit.setSetting(1, "gain", -6);
+      const out = { name: "out" };
+      kit.voice(1).play(ctx, out, 2);
+      expect(gains).toHaveLength(1);
+      expect(gains[0].gain.value).toBeCloseTo(0.501, 3);
+      expect(gains[0].connect).toHaveBeenCalledWith(out);
+      expect(defaults[1].play.mock.calls[0][1]).toBe(gains[0]);
+    });
+
+    it("passes the playback rate to the sound for the pad's pitch, and only then", () => {
+      const { ctx } = fakeContext();
+      const kit = createKit(defaults);
+      kit.setSetting(2, "pitch", 12);
+      kit.voice(2).play(ctx, {}, 0);
+      expect(defaults[2].play.mock.calls[0][3]).toEqual({ rate: 2 });
+      kit.setSetting(2, "pitch", 0);
+      kit.voice(2).play(ctx, {}, 0);
+      expect(defaults[2].play.mock.calls[1]).toHaveLength(3);
+    });
+
+    it("applies gain and pitch together: the gain stage in front of the output and the rate to the sound", () => {
+      const { ctx, gains } = fakeContext();
+      const kit = createKit(defaults);
+      kit.setSetting(1, "gain", -6);
+      kit.setSetting(1, "pitch", 12);
+      const out = { name: "out" };
+      kit.voice(1).play(ctx, out, 3);
+      expect(gains).toHaveLength(1);
+      expect(gains[0].gain.value).toBeCloseTo(0.501, 3);
+      expect(gains[0].connect).toHaveBeenCalledWith(out);
+      const call = defaults[1].play.mock.calls[0];
+      expect(call[1]).toBe(gains[0]);
+      expect(call[2]).toBe(3);
+      expect(call[3]).toEqual({ rate: 2 });
+    });
+
+    it("follows the kit: a swapped sound and a changed setting are heard at the next hit", () => {
+      const { ctx } = fakeContext();
+      const kit = createKit(defaults);
+      const voice = kit.voice(0); // taken before the changes
+      const loaded = sound("loaded");
+      kit.set(0, loaded);
+      kit.setSetting(0, "pitch", -12);
+      voice.play(ctx, {}, 0);
+      expect(loaded.play.mock.calls[0][3]).toEqual({ rate: 0.5 });
+      expect(voice.name).toBe("loaded");
+      expect(defaults[0].play).not.toHaveBeenCalled();
+    });
+
+    it("keeps a pad's settings when its sound is swapped or put back", () => {
+      const kit = createKit(defaults);
+      kit.setSetting(0, "gain", -9);
+      kit.set(0, sound("loaded"));
+      kit.reset(0);
+      expect(kit.settings(0).gain).toBe(-9);
+    });
   });
 });
