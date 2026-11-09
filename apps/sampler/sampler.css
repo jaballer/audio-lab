@@ -854,6 +854,14 @@
   line-height: 1.35;
   color: var(--ink-soft);
 }
+/* A warning about the file, a step above the hint under it: it is what the person should see before they press. */
+.export-note {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--ink);
+}
 /* The same green as the display, so the bar reads as part of the machine. */
 .export-bar {
   height: 14px;

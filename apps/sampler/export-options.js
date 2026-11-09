@@ -81,3 +81,26 @@ export function renderingLabel(fraction) {
   if (fraction === null || fraction === undefined) return "Rendering…";
   return `Rendering… ${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
 }
+
+// Runs of consecutive numbers as "2–8" (and a lone one as "3"): [1, 2, 4] is ["1–2", "4"].
+function runsOf(numbers) {
+  const runs = [];
+  for (const number of numbers) {
+    const last = runs[runs.length - 1];
+    if (last && number === last.to + 1) last.to = number;
+    else runs.push({ from: number, to: number });
+  }
+  return runs.map(({ from, to }) => (from === to ? String(from) : `${from}–${to}`));
+}
+
+// "A and B", "A, B and C".
+const joinList = (items) =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+// What the dialog says about bars with no steps, which are silent in the file ("Bars 2–8 have no steps: ..."), or
+// nothing when there are none. Not "silent": a long sound from the bar before goes on ringing into the next.
+export function emptyBarsNote(bars) {
+  if (!bars.length) return "";
+  const one = bars.length === 1;
+  return `${one ? "Bar" : "Bars"} ${joinList(runsOf(bars))} ${one ? "has" : "have"} no steps: nothing plays in ${one ? "it" : "them"} but what is still ringing.`;
+}

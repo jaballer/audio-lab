@@ -220,6 +220,16 @@ export function exportName(song, options = DEFAULT_EXPORT_OPTIONS) {
   return `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm${loopPart}${channelPart}.wav`;
 }
 
+// The bars of the sequence showing that have no steps, counting from 1: a file is as long as all its bars, so a bar with
+// nothing in it is a stretch of silence in the file (apart from what is still ringing from the bar before).
+export function emptyBars(song, stepsPerBar) {
+  const sequence = song.sequences[song.current];
+  const filled = new Set(hitsOf(sequence, stepsPerBar).map(({ step }) => Math.floor(step / stepsPerBar)));
+  return Array.from({ length: sequence.bars }, (_, bar) => bar)
+    .filter((bar) => !filled.has(bar))
+    .map((bar) => bar + 1);
+}
+
 // Is there anything in the sequence showing to export (in the bars it has)?
 export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.current], stepsPerBar).length > 0;
 

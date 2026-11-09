@@ -10,7 +10,7 @@
 //   });
 //   dialog.open(); dialog.close(); dialog.isOpen;
 //   dialog.setOptions({ loops: 2, channels: "mono" });        // which choices are lit
-//   dialog.refresh({ title, readout, format, empty });         // for the sequence showing; `empty`: nothing to export
+//   dialog.refresh({ title, readout, format, note, empty });  // for the sequence showing; `note`: a warning about it; `empty`: nothing to export
 //   dialog.setBusy(true); dialog.setProgress(0.4);            // while it renders (null: not known yet)
 //   dialog.setCancelling();                                   // a cancel was asked for, and the render is still stopping
 //   dialog.showMessage("EXPORT CANCELLED");                   // the LCD's short messages, again: the LCD is behind the dialog
@@ -34,6 +34,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
   const title = part("title");
   const readout = part("readout");
   const format = part("format");
+  const note = part("note");
   const hint = part("hint");
   const defaultHint = hint.textContent.replace(/\s+/g, " ").trim();
   const bar = part("bar");
@@ -102,6 +103,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     setHidden(bar, !busy);
     setHidden(progress, !busy);
     setHidden(hint, busy);
+    setHidden(note, busy || !note.textContent);
     setText(cancelButton, cancelling ? "Cancelling…" : busy ? "Cancel export" : "Cancel");
   }
 
@@ -179,6 +181,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
       setText(title, next.title);
       setText(readout, next.readout);
       setText(format, next.format);
+      setText(note, next.note ?? "");
       if (next.empty !== undefined) empty = next.empty;
       setText(hint, empty ? "This sequence has no steps yet, so there is nothing to export." : defaultHint);
       draw();

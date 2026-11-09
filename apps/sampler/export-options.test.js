@@ -4,6 +4,7 @@ import {
   DEFAULT_EXPORT_OPTIONS,
   LOOP_CHOICES,
   channelCount,
+  emptyBarsNote,
   exportFrames,
   exportFormat,
   exportInfo,
@@ -172,5 +173,32 @@ describe("renderingLabel", () => {
   it("only says it is working before the first report", () => {
     expect(renderingLabel(null)).toBe("Rendering…");
     expect(renderingLabel(undefined)).toBe("Rendering…");
+  });
+});
+
+describe("emptyBarsNote", () => {
+  it("is nothing when every bar has steps", () => {
+    expect(emptyBarsNote([])).toBe("");
+  });
+
+  it("names one bar", () => {
+    expect(emptyBarsNote([3])).toBe("Bar 3 has no steps: nothing plays in it but what is still ringing.");
+  });
+
+  it("names a run of bars as a range, the way a trailing silence shows up", () => {
+    expect(emptyBarsNote([2, 3, 4, 5, 6, 7, 8])).toBe(
+      "Bars 2–8 have no steps: nothing plays in them but what is still ringing.",
+    );
+    expect(emptyBarsNote([3, 4])).toBe("Bars 3–4 have no steps: nothing plays in them but what is still ringing.");
+  });
+
+  it("lists separate bars and runs, in order", () => {
+    expect(emptyBarsNote([1, 3])).toBe("Bars 1 and 3 have no steps: nothing plays in them but what is still ringing.");
+    expect(emptyBarsNote([1, 2, 4, 5])).toBe(
+      "Bars 1–2 and 4–5 have no steps: nothing plays in them but what is still ringing.",
+    );
+    expect(emptyBarsNote([1, 3, 5, 6, 8])).toBe(
+      "Bars 1, 3, 5–6 and 8 have no steps: nothing plays in them but what is still ringing.",
+    );
   });
 });

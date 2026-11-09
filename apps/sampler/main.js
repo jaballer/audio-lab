@@ -16,8 +16,15 @@ import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportDialog } from "./export-dialog.js";
-import { exportFormat, exportInfo, exportReadout, exportTitle, normalizeExportOptions } from "./export-options.js";
-import { EXPORT_SAMPLE_RATE, createExportAction, exportSequence, hasSteps } from "./export-wav.js";
+import {
+  emptyBarsNote,
+  exportFormat,
+  exportInfo,
+  exportReadout,
+  exportTitle,
+  normalizeExportOptions,
+} from "./export-options.js";
+import { EXPORT_SAMPLE_RATE, createExportAction, emptyBars, exportSequence, hasSteps } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -391,11 +398,14 @@ function sayExport(text) {
 
 function refreshExportDialog() {
   const current = sampler.getSong();
+  const nothing = !hasSteps(current, STEPS);
   exportDialog.refresh({
     title: exportTitle(current),
     readout: exportReadout(exportInfo(current, exportOptions, STEPS, EXPORT_SAMPLE_RATE)),
     format: exportFormat(EXPORT_SAMPLE_RATE),
-    empty: !hasSteps(current, STEPS),
+    // A sequence with nothing in it is said already; this is for one with steps in some bars and not others.
+    note: nothing ? "" : emptyBarsNote(emptyBars(current, STEPS)),
+    empty: nothing,
   });
 }
 

@@ -5,6 +5,7 @@ import {
   PROGRESS_PAUSES,
   READY_WAIT_MS,
   createExportAction,
+  emptyBars,
   encodeWav,
   exportName,
   exportSequence,
@@ -50,6 +51,32 @@ describe("hitsOf", () => {
 
   it("is empty for an empty sequence", () => {
     expect(hitsOf(sequence({}), 16)).toEqual([]);
+  });
+});
+
+describe("emptyBars", () => {
+  it("lists the bars of the sequence showing that have no steps, counting from 1", () => {
+    // 4 bars of 16 steps: steps in bars 1 and 3
+    const song = songOf(sequence({ 0: [0, 5], 1: [33] }, {}, 4));
+    expect(emptyBars(song, 16)).toEqual([2, 4]);
+  });
+
+  it("is nothing when every bar has a step, and every bar when none has", () => {
+    expect(emptyBars(songOf(sequence({ 0: [0], 1: [16] }, {}, 2)), 16)).toEqual([]);
+    expect(emptyBars(songOf(sequence({}, {}, 3)), 16)).toEqual([1, 2, 3]);
+  });
+
+  it("does not count steps in bars the sequence no longer has, which it keeps for when they come back", () => {
+    expect(emptyBars(songOf(sequence({ 0: [0, 40] }, {}, 2)), 16)).toEqual([2]);
+  });
+
+  it("looks at the sequence showing, not another", () => {
+    const song = {
+      ...songOf(sequence({ 0: [0] }, {}, 2)),
+      sequences: [sequence({ 0: [0] }, {}, 2), sequence({ 0: [16] }, {}, 2)],
+      current: 1,
+    };
+    expect(emptyBars(song, 16)).toEqual([1]);
   });
 });
 
