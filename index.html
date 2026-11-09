@@ -74,8 +74,6 @@
               <button id="stop" class="btn btn-stop" type="button">Stop</button>
               <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
               <button id="tap" class="btn" type="button">Tap Tempo</button>
-              <button id="clear" class="btn" type="button">Clear Pad</button>
-              <button id="clear-all" class="btn" type="button">Clear All</button>
             </div>
           </div>
         </section>
@@ -84,6 +82,14 @@
       <section class="step-panel" aria-label="Step keys for the selected pad">
         <div class="step-head">
           <div class="small-label">Step keys &middot; selected pad</div>
+          <div class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
+            <button id="undo" class="btn btn-small" type="button" disabled>Undo</button>
+            <button id="redo" class="btn btn-small" type="button" disabled>Redo</button>
+            <button id="copy" class="btn btn-small" type="button">Copy Steps</button>
+            <button id="paste" class="btn btn-small" type="button">Paste Steps</button>
+            <button id="clear" class="btn btn-small" type="button">Clear Steps</button>
+            <button id="clear-all" class="btn btn-small" type="button">Clear All</button>
+          </div>
           <div class="step-nav" role="group" aria-label="Which bar is shown">
             <button id="steps-prev" class="btn btn-small" type="button" aria-label="Previous bar">&lt;</button>
             <span id="steps-range" class="small-label" aria-live="polite"></span>
@@ -104,6 +110,10 @@
           <kbd>A</kbd>–<kbd>F</kbd> <kbd>Z</kbd>–<kbd>V</kbd>
         </li>
         <li><kbd>Space</kbd> plays or stops the sequence</li>
+        <li>
+          <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;
+          Copy Steps and Paste Steps copy the selected pad's steps and velocities onto another pad, in any sequence
+        </li>
         <li>
           Drag along the velocity bars under the step keys to set how hard each step plays; a step recorded live keeps
           the velocity of the hit

@@ -56,7 +56,8 @@ function setup({ song = null, bpm } = {}) {
     clock = ms;
     sampler.tapTempo();
   };
-  return { audio, sounds, sampler, advance, tapAt, ...calls };
+  const setClock = (ms) => (clock = ms);
+  return { audio, sounds, sampler, advance, tapAt, setClock, ...calls };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -132,6 +133,177 @@ describe("triggerPad", () => {
     const { audio, sampler } = setup();
     sampler.triggerPad(0, 0);
     expect(audio.ctx.createGain.mock.results[0].value.gain.value).toBe(0.05);
+  });
+});
+
+describe("undo and redo", () => {
+  const withBeat = (extra = {}) => setup({ song: savedSong({ pattern: { 0: [0, 4] }, ...extra }) });
+
+  it("starts with nothing to undo or redo", () => {
+    const { sampler, message } = setup();
+    expect(sampler.getState()).toMatchObject({ canUndo: false, canRedo: false });
+    sampler.undo();
+    expect(message).toHaveBeenLastCalledWith("NOTHING TO UNDO");
+    sampler.redo();
+    expect(message).toHaveBeenLastCalledWith("NOTHING TO REDO");
+  });
+
+  it("undoes a toggled step and redoes it, and saves each time", () => {
+    const { sampler, songChange, message } = withBeat();
+    sampler.toggleStep(1);
+    expect(sampler.getState()).toMatchObject({ canUndo: true, canRedo: false });
+    songChange.mockClear();
+    sampler.undo();
+    expect(sampler.getState().stepsOn[1]).toBe(false);
+    expect(sampler.getState()).toMatchObject({ canUndo: false, canRedo: true });
+    expect(songChange).toHaveBeenCalled();
+    expect(message).toHaveBeenLastCalledWith("UNDO");
+    sampler.redo();
+    expect(sampler.getState().stepsOn[1]).toBe(true);
+    expect(message).toHaveBeenLastCalledWith("REDO");
+  });
+
+  it("undoes clearing a pad, clearing everything and a velocity", () => {
+    const { sampler, setClock } = withBeat({ velocities: { 0: { 4: 50 } } });
+    sampler.clearPad();
+    sampler.undo();
+    expect(sampler.getState().stepsOn[4]).toBe(true);
+    expect(sampler.getState().stepVelocities[4]).toBe(50);
+    sampler.clearAll();
+    sampler.undo();
+    expect(sampler.getSong().sequences[0].pattern).toEqual({ 0: [0, 4] });
+    setClock(10_000);
+    sampler.setStepVelocity(4, 90);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[4]).toBe(50);
+  });
+
+  it("does not keep a change that did nothing", () => {
+    const { sampler } = withBeat();
+    sampler.setStepVelocity(2, 50); // off
+    sampler.selectPad(3);
+    sampler.clearPad(); // already empty
+    expect(sampler.getState().canUndo).toBe(false);
+  });
+
+  it("makes velocity changes made close together one undo, and later ones another", () => {
+    const { sampler, setClock } = withBeat();
+    setClock(1000);
+    sampler.setStepVelocity(0, 100);
+    setClock(1200);
+    sampler.setStepVelocity(0, 80);
+    sampler.setStepVelocity(4, 60);
+    setClock(5000);
+    sampler.setStepVelocity(0, 30);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(80);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities.slice(0, 5)).toEqual([127, 127, 127, 127, 127]);
+    expect(sampler.getState().canUndo).toBe(false);
+  });
+
+  it("does not merge velocity changes made on different pads, however close together", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0], 1: [0] } }) });
+    setClock(1000);
+    sampler.selectPad(0);
+    sampler.setStepVelocity(0, 40);
+    setClock(1100);
+    sampler.selectPad(1);
+    sampler.setStepVelocity(0, 60);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(127); // pad 1 back to full
+    sampler.selectPad(0);
+    expect(sampler.getState().stepVelocities[0]).toBe(40); // pad 0's change is still there
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(127);
+  });
+
+  it("does not merge velocity changes made on different bars, however close together", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ bars: 2, pattern: { 0: [0, 16] } }) });
+    setClock(1000);
+    sampler.setStepVelocity(0, 40);
+    setClock(1100);
+    sampler.setPage(1);
+    sampler.setStepVelocity(0, 60);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(127); // bar 2 back to full
+    sampler.setPage(0);
+    expect(sampler.getState().stepVelocities[0]).toBe(40); // bar 1's change is still there
+  });
+
+  it("ends the redo line when something new is done after an undo", () => {
+    const { sampler } = withBeat();
+    sampler.toggleStep(1);
+    sampler.undo();
+    sampler.toggleStep(2);
+    expect(sampler.getState().canRedo).toBe(false);
+  });
+
+  it("keeps each sequence's undo apart", () => {
+    const { sampler } = withBeat();
+    sampler.toggleStep(1);
+    sampler.setSequence(1);
+    expect(sampler.getState().canUndo).toBe(false);
+    sampler.setSequence(0);
+    expect(sampler.getState().canUndo).toBe(true);
+  });
+
+  it("undoes a recorded hit", () => {
+    const { sampler, advance } = setup({ bpm: 120 });
+    sampler.start();
+    advance(0.2);
+    sampler.poll();
+    sampler.toggleRec();
+    sampler.triggerPad(3);
+    expect(sampler.getState().canUndo).toBe(true);
+    sampler.undo();
+    expect(sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+  });
+});
+
+describe("copy and paste", () => {
+  it("says there is nothing to paste before something is copied", () => {
+    const { sampler, message } = setup();
+    sampler.pastePad();
+    expect(message).toHaveBeenLastCalledWith("NO STEPS COPIED");
+    expect(sampler.getState().canUndo).toBe(false);
+  });
+
+  it("copies the selected pad's steps and velocities over another pad, and it can be undone", () => {
+    const { sampler, message } = setup({
+      song: savedSong({ pattern: { 0: [0, 4], 2: [9] }, velocities: { 0: { 4: 50 } } }),
+    });
+    sampler.selectPad(0);
+    sampler.copyPad();
+    expect(message).toHaveBeenLastCalledWith("PAD 01 STEPS COPIED");
+    sampler.selectPad(2);
+    sampler.pastePad();
+    expect(message).toHaveBeenLastCalledWith("STEPS PASTED TO PAD 03");
+    expect(sampler.getSong().sequences[0]).toMatchObject({
+      pattern: { 0: [0, 4], 2: [0, 4] },
+      velocities: { 0: { 4: 50 }, 2: { 4: 50 } },
+    });
+    sampler.undo();
+    expect(sampler.getSong().sequences[0].pattern[2]).toEqual([9]);
+  });
+
+  it("copies across bars and into another sequence", () => {
+    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [3, 20] } }) });
+    sampler.selectPad(1);
+    sampler.copyPad();
+    sampler.setSequence(1);
+    sampler.setBars(2);
+    sampler.pastePad();
+    expect(sampler.getSong().sequences[1].pattern).toEqual({ 1: [3, 20] });
+  });
+
+  it("pastes a copy that is not changed by what happens to the pad afterwards", () => {
+    const { sampler } = setup({ song: savedSong({ pattern: { 0: [1] } }) });
+    sampler.copyPad();
+    sampler.clearPad();
+    sampler.selectPad(1);
+    sampler.pastePad();
+    expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [1] });
   });
 });
 
@@ -453,14 +625,14 @@ describe("steps and clearing", () => {
     expect(sampler.getState().stepsOn.some(Boolean)).toBe(true); // the starter kick
     sampler.clearPad();
     expect(sampler.getState().stepsOn.some(Boolean)).toBe(false);
-    expect(message).toHaveBeenLastCalledWith("PAD 01 CLEARED");
+    expect(message).toHaveBeenLastCalledWith("PAD 01 STEPS CLEARED");
   });
 
   it("clears every pad", () => {
     const { sampler, message } = setup();
     sampler.clearAll();
     expect(sampler.getSong().sequences[0].pattern).toEqual({});
-    expect(message).toHaveBeenLastCalledWith("ALL PADS CLEARED");
+    expect(message).toHaveBeenLastCalledWith("ALL STEPS CLEARED");
   });
 });
 

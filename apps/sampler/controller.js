@@ -27,10 +27,12 @@
 //   sampler.start()              // from the first step, even if it is already playing
 //   sampler.stop(); sampler.toggleRec()
 //   sampler.clearPad(); sampler.clearAll()
+//   sampler.copyPad(); sampler.pastePad()   // the selected pad's steps and velocities, over the selected pad (any sequence)
+//   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities }
+//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
 //   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern, velocities }] }: what song.js saves
 //
@@ -39,6 +41,7 @@
 
 import { playSound, withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
+import { createHistory } from "../../shared/history.js";
 import { FULL_VELOCITY, createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { createTapTempo, nearestStep } from "../../shared/tempo.js";
@@ -46,6 +49,7 @@ import { STARTER_BEAT } from "./starter-beat.js";
 
 export const DEFAULT_VOLUME = 80; // 0-100; the same as the slider's markup
 const VOLUME_SCALE = 100;
+const MERGE_MS = 600; // velocity changes this close together are one gesture, and one undo
 const MAX_SCHEDULED_HITS = 64; // a page that stops polling (a hidden tab) must not grow the list for ever
 
 const noop = () => {};
@@ -78,6 +82,7 @@ export function createSampler({
     const initial = saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {};
     return {
       bars: Math.min(maxBars, saved?.bars ?? 1),
+      history: createHistory(), // undo and redo are per sequence
       pattern: createPattern(sounds.length, steps * maxBars, initial, {
         onChange: onSongChange,
         velocities: saved?.velocities,
@@ -85,6 +90,10 @@ export function createSampler({
     };
   });
   let pattern = slots[current].pattern;
+  let history = slots[current].history;
+  let clipboard = null; // a pad's steps and velocities, from copyPad; kept across sequences
+  let lastMergedAt = -Infinity; // when the last velocity change was made, for MERGE_MS
+  let lastMergedPad = -1; // and on which pad: a change to another pad is another undo, however soon it comes
   let bars = slots[current].bars;
   const totalSteps = () => bars * steps;
   const lastPage = () => bars - 1;
@@ -142,7 +151,8 @@ export function createSampler({
       steps: totalSteps(),
     });
     if (step < 0) return;
-    pattern.set(index, step, true, Math.round(velocity * FULL_VELOCITY)); // a hit played again over a step replaces its velocity
+    // a hit played again over a step replaces its velocity
+    edit(() => pattern.set(index, step, true, Math.round(velocity * FULL_VELOCITY)));
     scheduler.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
   }
 
@@ -166,8 +176,22 @@ export function createSampler({
     return local >= 0 && local < steps ? local : -1;
   }
 
+  // Every change a person makes to the pattern goes through here, so that it can be undone: the state from
+  // before is kept when the change did something. `merge` is for a change made in a stream (dragging a
+  // velocity), where the first one is kept and the ones right after it are part of the same undo.
+  function edit(change, { merge = false } = {}) {
+    const before = pattern.state();
+    change();
+    if (JSON.stringify(pattern.state()) === JSON.stringify(before)) return;
+    const at = now();
+    const continues = merge && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
+    lastMergedAt = merge ? at : -Infinity;
+    lastMergedPad = selected;
+    if (!continues) history.push(before);
+  }
+
   function toggleStep(step) {
-    pattern.toggle(selected, page * steps + step);
+    edit(() => pattern.toggle(selected, page * steps + step));
     onChange();
   }
 
@@ -175,7 +199,7 @@ export function createSampler({
   function setStepVelocity(step, value) {
     const index = page * steps + step;
     if (!pattern.isOn(selected, index)) return;
-    pattern.setVelocity(selected, index, value);
+    edit(() => pattern.setVelocity(selected, index, value), { merge: true });
     onMessage(`VEL ${pattern.velocity(selected, index)}`);
     onChange();
   }
@@ -184,6 +208,7 @@ export function createSampler({
     const next = Math.min(lastPage(), Math.max(0, value));
     if (next === page) return;
     page = next;
+    lastMergedAt = -Infinity; // a change on another bar is another undo
     onChange();
   }
 
@@ -209,6 +234,8 @@ export function createSampler({
     if (next === current) return;
     current = next;
     pattern = slots[current].pattern;
+    history = slots[current].history;
+    lastMergedAt = -Infinity;
     bars = slots[current].bars;
     page = 0;
     scheduler.setSteps(totalSteps());
@@ -220,14 +247,45 @@ export function createSampler({
   }
 
   function clearPad() {
-    pattern.clearRow(selected);
-    onMessage(`PAD ${pad2(selected + 1)} CLEARED`);
+    edit(() => pattern.clearRow(selected));
+    onMessage(`PAD ${pad2(selected + 1)} STEPS CLEARED`);
     onChange();
   }
 
+  // Copy the selected pad's steps (all bars) and velocities, and paste them over the selected pad, which
+  // may be in another sequence.
+  function copyPad() {
+    clipboard = pattern.rowState(selected);
+    onMessage(`PAD ${pad2(selected + 1)} STEPS COPIED`);
+  }
+
+  function pastePad() {
+    if (!clipboard) {
+      onMessage("NO STEPS COPIED");
+      return;
+    }
+    edit(() => pattern.replaceRow(selected, clipboard));
+    onMessage(`STEPS PASTED TO PAD ${pad2(selected + 1)}`);
+    onChange();
+  }
+
+  // Go back to the pattern as it was before the last change to this sequence, or forward again.
+  function travel(state, message) {
+    if (!state) {
+      onMessage(`NOTHING TO ${message}`);
+      return;
+    }
+    pattern.restore(state);
+    lastMergedAt = -Infinity;
+    onMessage(message);
+    onChange();
+  }
+  const undo = () => travel(history.undo(pattern.state()), "UNDO");
+  const redo = () => travel(history.redo(pattern.state()), "REDO");
+
   function clearAll() {
-    pattern.clearAll();
-    onMessage("ALL PADS CLEARED");
+    edit(() => pattern.clearAll());
+    onMessage("ALL STEPS CLEARED");
     onChange();
   }
 
@@ -312,6 +370,10 @@ export function createSampler({
     setSequence,
     clearPad,
     clearAll,
+    copyPad,
+    pastePad,
+    undo,
+    redo,
     start,
     stop,
     toggleRec,
@@ -340,6 +402,8 @@ export function createSampler({
       playheadPosition: scheduler.playheadStep,
       stepsOn: pattern.row(selected).slice(page * steps, (page + 1) * steps),
       // Their velocities, 1-127 (a step that is off reads as full).
+      canUndo: history.canUndo,
+      canRedo: history.canRedo,
       stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
     }),
 

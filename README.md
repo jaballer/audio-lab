@@ -19,7 +19,7 @@ Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI A
 
 - Bottom-left 4×4 block: the 16 pads (pad 1 in the bottom-left corner)
 - Top two rows: the 16 step keys for the selected pad
-- Top round buttons, left to right: Play, Stop, Rec, Clear Pad, Clear All, Tap Tempo, Tempo −, Tempo +
+- Top round buttons, left to right: Play, Stop, Rec, Clear Steps, Clear All, Tap Tempo, Tempo −, Tempo +
 
 **Akai MPC Sample** — its 16 pads play pads 1-16 in whichever pad bank is selected, with velocity. The [companion page](https://jaballer.github.io/audio-lab/mpc-sample.html) shows the pads live. On the device, set the MIDI port to USB (Shift + Pad 8, MIDI Config) and Pad MIDI Out to Always, or no pad events reach the browser.
 

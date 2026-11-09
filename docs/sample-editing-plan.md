@@ -27,12 +27,18 @@ A strip of vertical bars under the step keys, dragged to set. It needs no modes,
 every value at once. An Edit mode (pick a step, turn the knob, as on the MPC) suits hardware but hides the values.
 It is added only if the Launchpad or MPC should edit velocity too.
 
-## Open decisions
+## Decisions made
 
-- Mouse first, or hardware first? This decides whether the strip phase includes an Edit mode.
-- Velocity stored as 0-1 (what `triggerPad` takes) or 1-127 (MIDI, and what the MPC page sends)? Decided in phase 1.
+- **Velocity is stored as 1-127** (MIDI, and what the MPC page sends) and converted to a 0-1 gain where it is played
+  (`withVelocity` in `shared/sounds.js`).
+- **Mouse first.** The strip is the way to edit; there is no Edit mode for the Launchpad or MPC yet. Add one when
+  hardware should edit steps too.
+- **Undo is per sequence and covers the steps**, not tempo, volume, length or which sequence is showing. Velocity
+  changes made within a moment of each other (a drag) are one undo.
+- **Copy and paste is one pad**, all bars, velocities included, and it can be pasted into another sequence.
 
 ## Later
 
-More per-step settings (nudge, probability, ratchets) should not be ruled out by the velocity data shape. Copy and
-paste of a pad's pattern, undo, and banks are in the epic's last phase.
+More per-step settings (nudge, probability, ratchets) should not be ruled out by the velocity data shape: they would
+be more sparse maps beside `velocities`, in the same version of the song. Banks, only if more than 16 sounds are
+wanted. See the epic for what is left.

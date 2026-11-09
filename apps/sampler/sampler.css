@@ -127,7 +127,7 @@
 .buttons {
   grid-area: buttons;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px 10px;
 }
 
@@ -313,7 +313,8 @@
   margin-top: 14px;
 }
 .step-head,
-.step-nav {
+.step-nav,
+.step-tools {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -321,7 +322,8 @@
 .step-head {
   justify-content: space-between;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  gap: 8px 12px;
+  margin-bottom: 8px;
 }
 .seq-lengths {
   display: flex;
@@ -331,12 +333,33 @@
 .seq-lengths .btn {
   min-width: 2.6em;
 }
+/* Edit tools for the steps below: undo and redo, copy and paste, clear. They have a row of their own under the
+   label and the bar buttons, so the header reads the same at every width. */
+.step-tools {
+  order: 3;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.step-tools .btn {
+  padding: 5px 8px;
+}
+/* On a phone the six tools make two even rows of three, not a ragged wrap. */
+@media (max-width: 480px) {
+  .step-tools {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-items: stretch; /* a label that wraps does not make its neighbours shorter */
+  }
+}
 .seq-bar .btn:disabled,
+.step-tools .btn:disabled,
 .step-nav .btn:disabled {
   opacity: 0.45;
   cursor: default;
 }
 .seq-bar .btn:disabled:active,
+.step-tools .btn:disabled:active,
 .step-nav .btn:disabled:active {
   transform: none;
   border-bottom-width: 4px;
@@ -419,7 +442,7 @@
       "buttons buttons";
   }
   .buttons {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
