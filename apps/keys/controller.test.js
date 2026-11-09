@@ -96,17 +96,15 @@ describe("wheels, pedal and readouts", () => {
     expect(change).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps mod, the last CC and the last pad for the display", () => {
+  it("keeps mod and the last CC for the display", () => {
     const { keys, change } = setup();
     keys.setMod(64);
     keys.showCc(74, 100);
-    keys.showPad({ note: 36, velocity: 90, channel: 10 });
     expect(keys.getState()).toMatchObject({
       mod: 64,
       lastCc: { cc: 74, value: 100 },
-      lastPad: { note: 36, velocity: 90, channel: 10 },
     });
-    expect(change).toHaveBeenCalledTimes(3);
+    expect(change).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -134,6 +132,23 @@ describe("parameters", () => {
     expect(slider).toHaveBeenCalledWith(byName("sustain"), 100, "100%");
     keys.applyKnob(4, 127); // K5 is the waveform: the last choice
     expect(choice).toHaveBeenCalledWith(byName("wave"), "sawtooth");
+  });
+
+  it("remembers the last knob turned, with its value in words, and asks for a redraw", () => {
+    const { keys, change } = setup();
+    expect(keys.getState().lastKnob).toBeNull();
+    keys.applyKnob(2, 127); // K3: sustain
+    expect(keys.getState().lastKnob).toEqual({ index: 2, name: "sustain", text: "100%" });
+    expect(change).toHaveBeenCalledTimes(1);
+    keys.applyKnob(4, 127); // K5: a choice shows its name
+    expect(keys.getState().lastKnob).toEqual({ index: 4, name: "wave", text: "Saw" });
+  });
+
+  it("does not count the defaults being shown as a knob turn", () => {
+    const { keys, change } = setup();
+    keys.syncParams();
+    expect(keys.getState().lastKnob).toBeNull();
+    expect(change).not.toHaveBeenCalled();
   });
 
   it("ignores knobs beyond the last parameter", () => {

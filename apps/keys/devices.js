@@ -47,8 +47,8 @@ export const keyboard = {
 const MPK_KNOB_CCS = [20, 21, 22, 23, 16, 17, 18, 19];
 
 // AKAI MPK mini ("MPK mini 3", "MPK mini Play", "MPKmini2"): a keyboard plus
-// eight knobs and eight pads. The pads send notes on channel 10; they are
-// shown but don't play the synth.
+// eight knobs and eight pads. The pads send notes on channel 10; the keys
+// page has no pads, so it drops them, and they don't play the synth.
 export const mpkMini = {
   id: "mpk-mini",
   match: (name) => /mpk\s*mini/i.test(name),

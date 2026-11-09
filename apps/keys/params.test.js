@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  GROUPS,
   PARAMS,
   choiceKnob,
   choiceLabel,
@@ -9,7 +8,6 @@ import {
   knobChoice,
   knobForChoice,
   knobPosition,
-  labelFor,
   positionKnob,
 } from "./params.js";
 import { DEFAULT_PARAMS, WAVES } from "./synth.js";
@@ -128,19 +126,7 @@ describe("knobForChoice", () => {
 });
 
 describe("labels", () => {
-  it("names a control after its parameter", () => {
-    expect(labelFor(byName("attack"))).toBe("Attack");
-    expect(labelFor(byName("resonance"))).toBe("Resonance");
-  });
-
   it("names a waveform, with the saw shortened", () => {
     expect(WAVES.map(choiceLabel)).toEqual(["Sine", "Triangle", "Square", "Saw"]);
-  });
-});
-
-describe("GROUPS", () => {
-  it("has a section for every group a parameter uses, and no empty ones", () => {
-    const used = new Set(PARAMS.map((p) => p.group));
-    expect(new Set(GROUPS.map((g) => g.id))).toEqual(used);
   });
 });

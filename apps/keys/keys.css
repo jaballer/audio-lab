@@ -6,10 +6,11 @@
   --body-bottom: #161618;
   --edge: #3d3d44;
   --label: #9b988f;
-  --glow: 255, 59, 47; /* pad / key hit colour (RGB) */
+  --gap: 24px; /* between the deck's blocks, and between the deck and the keys */
+  --dial: 60px;
 
   width: min(980px, 100%);
-  padding: 16px 22px 18px;
+  padding: 18px 24px 24px;
   border-radius: 18px;
   background: linear-gradient(180deg, var(--body-top), var(--body-bottom));
   border: 1px solid var(--edge);
@@ -43,13 +44,13 @@
   background: linear-gradient(180deg, #47474e, #2d2d32);
 }
 
-/* ---------- Deck: joystick, pads, knobs ---------- */
+/* ---------- Deck: joystick, display, knobs ---------- */
 .deck {
   display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) minmax(0, 1fr);
-  gap: 22px;
-  align-items: start;
-  margin-bottom: 18px;
+  grid-template-columns: 140px minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: center;
+  margin-bottom: var(--gap);
 }
 
 .deck-block {
@@ -60,7 +61,7 @@
   min-width: 0;
 }
 .deck-block > .small-label {
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   text-align: center;
 }
 .deck-block > :first-child:not(.stick-well) {
@@ -97,83 +98,28 @@
   transition: transform 0.05s linear;
 }
 
-/* Pads: 4 x 2, pads 1-4 on the bottom row like the hardware. */
-.keys-pads {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 9px;
-  padding: 11px;
-  border-radius: 10px;
-  background: #0e0e10;
-  box-shadow:
-    inset 0 2px 8px #000,
-    0 1px 0 #4b4b53;
-}
-.keys-pad {
-  --v: 0; /* hit strength 0-1, set from MIDI velocity */
-  position: relative;
-  aspect-ratio: 1.1;
-  border: 2px solid #08080a;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #2d2d32, #19191c);
-  box-shadow:
-    inset 0 0 0 2px #323238,
-    inset 0 -3px 0 rgba(var(--glow), 0.25),
-    0 3px 0 #08080a;
-  transition:
-    background 0.3s,
-    box-shadow 0.3s;
-}
-.keys-pad.hit {
-  transition: none;
-  background: radial-gradient(
-    circle at 50% 45%,
-    rgba(255, 130, 110, calc(0.55 + 0.45 * var(--v))) 0%,
-    rgb(150, 24, 16) 100%
-  );
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 190, 170, 0.5),
-    0 0 calc(8px + 22px * var(--v)) rgba(var(--glow), 0.85);
-}
-.keys-pad .lbl,
-.keys-pad .nt {
-  position: absolute;
-  font: 700 0.6rem var(--mono);
-  color: #8b887f;
-  pointer-events: none;
-}
-.keys-pad .lbl {
-  top: 5px;
-  left: 7px;
-}
-.keys-pad .nt {
-  bottom: 5px;
-  right: 7px;
-}
-.keys-pad.hit .lbl,
-.keys-pad.hit .nt {
-  color: #ffe9e0;
-}
-
 /* Knobs: 4 x 2. The pointer turns with the incoming CC value, or when the dial is dragged. */
 .knobs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px 8px;
-  padding: 6px 0;
+  gap: 14px 8px;
+  padding: 0;
 }
 .knob-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
 .dial {
   --a: -135deg;
   position: relative;
-  width: 52px;
-  height: 52px;
+  /* Never wider than its cell, less room for the rim that is drawn outside the box, so on a
+     narrow deck the dials get smaller instead of running into each other. */
+  width: min(var(--dial), calc(100% - 10px));
+  aspect-ratio: 1;
+  margin-bottom: 4px; /* the dial's rim is drawn outside its box, so the labels need room */
   border-radius: 50%;
   background: radial-gradient(circle at 35% 28%, #62626a 0%, #26262a 55%, #101012 100%);
   box-shadow:
@@ -193,104 +139,60 @@
 .dial::after {
   content: "";
   position: absolute;
-  top: 5px;
+  top: 9%;
   left: calc(50% - 2px);
   width: 4px;
-  height: 15px;
+  height: 28%;
   border-radius: 2px;
   background: #f1eee6;
 }
 .knob-name {
-  font: 800 0.62rem var(--mono);
+  font: 800 0.7rem var(--mono);
   color: #cfccc3;
 }
 .knob-cc {
-  font: 700 0.56rem var(--mono);
+  font: 700 0.64rem var(--mono);
   color: var(--label);
 }
 .knob-fn {
   min-height: 1em; /* keeps K5-K8 aligned with the labelled K1-K4 */
   font:
-    800 0.56rem system-ui,
+    800 0.62rem system-ui,
     sans-serif;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #e2531f;
 }
 
-/* ---------- Monitor + envelope ---------- */
-.monitor {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 16px;
-  margin-top: 18px;
-  align-items: stretch;
-}
-.monitor .lcd {
+/* ---------- Display ---------- */
+/* The screen sits between the joystick and the knobs, at its own height. */
+.kb-lcd {
   box-shadow:
     0 1px 0 #4b4b53,
     inset 0 2px 6px #000;
 }
-.kb-screen {
-  min-height: 100%;
+/* Bigger than the shared screen, so the display weighs about as much as the knobs beside it. The
+   text size follows the width of its block (a container query), capped at 1.1rem, so the longest
+   line always fits: the BEND line, 26 characters once the browser collapses its double spaces, at
+   0.6em per character plus 0.06em of letter-spacing, is about 17.2em wide. The divisor has some
+   room over that. */
+.display-block {
+  container-type: inline-size;
 }
-
-.synth {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
+.kb-lcd .lcd-screen {
+  min-height: 0;
+  /* For a browser without container query units, which drops the line below. */
+  font-size: 0.85rem;
+  /* 66px: the display's padding on each side (up to 12 + 18), plus a little to spare. */
+  font-size: min(1.1rem, calc((100cqw - 66px) / 17.5));
 }
-
-.env {
-  padding: 12px 14px 14px;
-  border-radius: 10px;
-  background: #1c1c1f;
-  box-shadow:
-    inset 0 2px 8px #000,
-    0 1px 0 #4b4b53;
-}
-.env-title {
-  margin-bottom: 10px;
-}
-
-.env-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px 18px;
-}
-
-.env-ctl {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.env-ctl input {
-  width: 100%;
-  accent-color: #e2531f;
-  cursor: pointer;
-}
-.env-ctl output {
-  font: 700 0.78rem var(--mono);
-  color: #e2dfd6;
-}
-.env-ctl select {
-  width: 100%;
-  padding: 5px 6px;
-  border: 1px solid #08080a;
-  border-radius: 5px;
-  background: #2b2b30;
-  color: #e2dfd6;
-  font: 700 0.78rem var(--mono);
-  cursor: pointer;
-}
-
-/* ---------- Focus ---------- */
-.mpk input:focus-visible,
-.mpk select:focus-visible {
-  outline: 3px solid #6aa8ff;
-  outline-offset: 2px;
+@media (min-width: 481px) {
+  .kb-lcd .lcd-screen {
+    padding: 16px 18px;
+  }
+  .kb-lcd .lcd-line {
+    line-height: 1.75;
+  }
 }
 
 /* ---------- Responsive ---------- */
@@ -304,25 +206,23 @@
     justify-content: center;
     gap: 16px;
   }
-  .monitor {
-    grid-template-columns: 1fr;
+  /* The screen first, then the joystick, as the order reads on a narrow panel. */
+  .display-block {
+    order: -1;
   }
 }
 
 @media (max-width: 480px) {
   .mpk {
-    padding: 14px 12px;
-  }
-  .dial {
-    width: 44px;
-    height: 44px;
+    --gap: 16px;
+    --dial: 48px;
+    padding: 14px 12px 18px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .stick-ball,
-  .dial,
-  .keys-pad {
+  .dial {
     transition: none;
   }
 }

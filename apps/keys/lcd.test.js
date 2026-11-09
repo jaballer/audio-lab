@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bar, formatLcd } from "./lcd.js";
 
-const idle = { last: null, bend: 0, mod: 0, sustain: false, lastCc: null, lastPad: null };
+const idle = { last: null, bend: 0, mod: 0, sustain: false, lastCc: null, lastKnob: null };
 
 describe("bar", () => {
   it("fills a fixed-width meter in proportion", () => {
@@ -18,8 +18,8 @@ describe("formatLcd", () => {
       note: "NOTE --",
       vel: "VEL  --",
       wheels: "BEND +0.00  MOD 0  SUS OFF",
+      knob: "KNOB --",
       cc: "CC   --",
-      pad: "PAD  --",
     });
   });
 
@@ -42,8 +42,12 @@ describe("formatLcd", () => {
     expect(formatLcd({ ...idle, lastCc: { cc: 7, value: 127 } }).cc).toBe("CC007 ################ 127");
   });
 
-  it("shows the last pad hit", () => {
-    const lastPad = { note: 36, velocity: 90, channel: 10 };
-    expect(formatLcd({ ...idle, lastPad }).pad).toBe("PAD  NOTE 36  CH 10  VEL 90");
+  it("shows the last knob turned with its number, name and value", () => {
+    expect(formatLcd({ ...idle, lastKnob: { index: 0, name: "attack", text: "10 ms" } }).knob).toBe(
+      "K1 ATTACK    10 ms",
+    );
+    expect(formatLcd({ ...idle, lastKnob: { index: 6, name: "resonance", text: "24.0 dB" } }).knob).toBe(
+      "K7 RESONANCE 24.0 dB",
+    );
   });
 });
