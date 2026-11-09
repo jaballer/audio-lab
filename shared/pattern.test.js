@@ -134,11 +134,11 @@ describe("velocity", () => {
 describe("rows and state", () => {
   it("gives a row's state and puts it on another pad, velocities too", () => {
     const pattern = createPattern(3, 8, { 0: [1, 4] }, { velocities: { 0: { 4: 40 } } });
-    expect(pattern.rowState(0)).toEqual({ on: [1, 4], velocities: { 4: 40 } });
+    expect(pattern.rowState(0)).toEqual({ length: 8, on: [1, 4], velocities: { 4: 40 } });
     pattern.replaceRow(2, pattern.rowState(0));
     expect(pattern.row(2)).toEqual(pattern.row(0));
     expect(pattern.velocity(2, 4)).toBe(40);
-    expect(pattern.rowState(1)).toEqual({ on: [], velocities: {} });
+    expect(pattern.rowState(1)).toEqual({ length: 8, on: [], velocities: {} });
   });
 
   it("replaces what a row had, and reports one change only when something differs", () => {
@@ -154,7 +154,28 @@ describe("rows and state", () => {
   it("ignores steps and velocities that are not in the row", () => {
     const pattern = createPattern(1, 4);
     pattern.replaceRow(0, { on: [1, 9, -1, 1.5, "2"], velocities: { 1: 30, 3: 30, 9: 30 } });
-    expect(pattern.rowState(0)).toEqual({ on: [1], velocities: { 1: 30 } });
+    expect(pattern.rowState(0)).toEqual({ length: 4, on: [1], velocities: { 1: 30 } });
+  });
+
+  it("copies a stretch of a row and puts it on another stretch, the rest of the row left alone", () => {
+    const pattern = createPattern(2, 8, { 0: [0, 2, 5], 1: [6] }, { velocities: { 0: { 2: 40 } } });
+    const bar = pattern.rowState(0, 0, 4); // steps 0-3 of pad 0
+    expect(bar).toEqual({ length: 4, on: [0, 2], velocities: { 2: 40 } });
+    pattern.replaceRow(0, bar, 4); // over steps 4-7 of the same pad
+    expect(pattern.row(0)).toEqual([true, false, true, false, true, false, true, false]);
+    expect(pattern.velocity(0, 6)).toBe(40);
+    expect(pattern.row(0).slice(0, 4)).toEqual([true, false, true, false]); // the first stretch is as it was
+    pattern.replaceRow(1, bar, 4);
+    expect(pattern.row(1)).toEqual([false, false, false, false, true, false, true, false]);
+  });
+
+  it("clears the stretch it is pasted over, and does not run past the end of the row", () => {
+    const pattern = createPattern(1, 8, { 0: [4, 5, 7] });
+    pattern.replaceRow(0, { length: 4, on: [1], velocities: {} }, 4);
+    expect(pattern.row(0)).toEqual([false, false, false, false, false, true, false, false]);
+    pattern.replaceRow(0, { length: 4, on: [0, 3], velocities: {} }, 6); // only two steps are left
+    expect(pattern.row(0).slice(6)).toEqual([true, false]);
+    expect(pattern.rowState(0, 6, 4)).toEqual({ length: 2, on: [0], velocities: {} });
   });
 
   it("is restored whole from its state, with one change", () => {
