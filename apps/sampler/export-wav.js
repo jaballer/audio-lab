@@ -47,14 +47,13 @@ export function pauseFrames(total, count = PROGRESS_PAUSES) {
   return [...frames];
 }
 
-const never = new Promise(() => {});
 const cancelled = () => new DOMException("Export cancelled", "AbortError");
 export const wasCancelled = (error) => error?.name === "AbortError";
 
-// Renders `ctx` (an OfflineAudioContext of `total` frames), reporting `onProgress(0..1)` at each pause and giving up
-// with an AbortError, soon after `signal` aborts. A browser that cannot pause an offline context (Firefox) renders in
-// one go, with no progress, and cannot be stopped: a cancel there waits for the render to end and then throws the
-// result away, so that the export is not over, and another cannot start beside it, while the first still renders.
+// Renders `ctx` (an OfflineAudioContext of `total` frames), reporting `onProgress(0..1)` at each pause. After `signal`
+// aborts it ends with an AbortError once the render has really stopped: at its next pause, which it is not resumed
+// from, or at its end, where it cannot pause (Firefox has no OfflineAudioContext.suspend) or has passed its last. Not
+// sooner, so that an export is not over, and another cannot start beside it, while the first still renders.
 async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }) {
   if (signal?.aborted) throw cancelled();
   // A pause that cannot be resumed would leave the render waiting for ever, so that fails the render with its error.
@@ -67,15 +66,14 @@ async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }
       console.error("Export progress failed:", error); // only for the eye: the render goes on
     }
   };
-  const pausable = typeof ctx.suspend === "function";
-  if (pausable) {
+  if (typeof ctx.suspend === "function") {
     for (const frame of pauseFrames(total)) {
       // A quarter of a block early: the time is rounded to a block edge, up or to the nearest, and this lands on it either way.
       ctx
         .suspend((frame - RENDER_QUANTUM / 4) / sampleRate)
         .then(
           () => {
-            if (signal?.aborted) return undefined; // left paused for good: nothing more is rendered
+            if (signal?.aborted) return fail(cancelled()); // left paused for good: nothing more is rendered
             const resumed = ctx.resume(); // first: nothing in the report may keep the render waiting
             report(frame / total);
             return resumed;
@@ -85,12 +83,7 @@ async function renderWithProgress(ctx, total, sampleRate, { onProgress, signal }
         .catch(fail);
     }
   }
-  // Only a render that can be paused is given up on at once: the abort rejects this, and nothing else may be left
-  // holding a rejection that nothing handles.
-  const aborted = pausable
-    ? new Promise((_, reject) => signal?.addEventListener("abort", () => reject(cancelled()), { once: true }))
-    : never;
-  const rendered = await Promise.race([ctx.startRendering(), aborted, failed]);
+  const rendered = await Promise.race([ctx.startRendering(), failed]);
   if (signal?.aborted) throw cancelled();
   report(1);
   return rendered;
@@ -248,7 +241,7 @@ export const exportLabel = (fraction) => `Cancel export ${Math.round(Math.min(1,
 export const READY_WAIT_MS = 5000; // how long a click waits for the saved samples to be back before giving up
 
 // What pressing the Export button does around exportSequence: one export at a time, and a press while one runs cancels
-// it (the render stops at its next pause, or where it cannot pause at its end, and nothing is saved; `onCancel()` says it was asked to). `onBusy(true/false)` lets the button show it is
+// it (the render stops at its next pause, or where it cannot pause at its end, and nothing is saved; the export is busy until then, and `onCancel()` says it was asked to). `onBusy(true/false)` lets the button show it is
 // working (the LCD's message is gone after a moment, and a long export takes longer), and `onProgress(0..1)` how far
 // it has got. It waits for `ready` (the saved samples being restored, so the file does not hold the built-in sounds
 // where a sample is about to be) and gives up after READY_WAIT_MS with a message rather than leave the button dead: a

@@ -547,6 +547,34 @@ describe("renderSequence, progress and cancel", () => {
     expect(offline.ctx.resume).toHaveBeenCalledTimes(2);
   });
 
+  it("when cancelled between pauses, is not over until the render has stopped at the next one", async () => {
+    const offline = fakeOffline({ pausable: true });
+    const reaches = [];
+    // the pauses are driven by hand, and the render never ends by itself: it is only ever at a pause or running
+    offline.ctx.suspend.mockImplementation(() => new Promise((reach) => reaches.push(reach)));
+    offline.ctx.startRendering = () => new Promise(() => {});
+    const controller = new AbortController();
+    let settled = false;
+    const done = renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      signal: controller.signal,
+    });
+    done.catch(() => {}).then(() => (settled = true));
+    reaches[0](); // the first pause is reached and resumed
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(offline.ctx.resume).toHaveBeenCalledTimes(1);
+    controller.abort(); // cancelled while it renders towards the second
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(settled).toBe(false); // still rendering, so still busy: another export may not start beside it
+    reaches[1](); // the second pause is reached
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    expect(offline.ctx.resume).toHaveBeenCalledTimes(1); // and not resumed
+  });
+
   it("does not start when it is already cancelled", async () => {
     const controller = new AbortController();
     controller.abort();
