@@ -131,6 +131,49 @@ describe("velocity", () => {
   });
 });
 
+describe("rows and state", () => {
+  it("gives a row's state and puts it on another pad, velocities too", () => {
+    const pattern = createPattern(3, 8, { 0: [1, 4] }, { velocities: { 0: { 4: 40 } } });
+    expect(pattern.rowState(0)).toEqual({ on: [1, 4], velocities: { 4: 40 } });
+    pattern.replaceRow(2, pattern.rowState(0));
+    expect(pattern.row(2)).toEqual(pattern.row(0));
+    expect(pattern.velocity(2, 4)).toBe(40);
+    expect(pattern.rowState(1)).toEqual({ on: [], velocities: {} });
+  });
+
+  it("replaces what a row had, and reports one change only when something differs", () => {
+    const changes = [];
+    const pattern = createPattern(2, 4, { 1: [0, 2] }, { onChange: () => changes.push(1) });
+    pattern.replaceRow(1, { on: [3], velocities: {} });
+    expect(pattern.row(1)).toEqual([false, false, false, true]);
+    expect(changes).toHaveLength(1);
+    pattern.replaceRow(1, { on: [3], velocities: {} });
+    expect(changes).toHaveLength(1);
+  });
+
+  it("ignores steps and velocities that are not in the row", () => {
+    const pattern = createPattern(1, 4);
+    pattern.replaceRow(0, { on: [1, 9, -1, 1.5, "2"], velocities: { 1: 30, 3: 30, 9: 30 } });
+    expect(pattern.rowState(0)).toEqual({ on: [1], velocities: { 1: 30 } });
+  });
+
+  it("is restored whole from its state, with one change", () => {
+    const changes = [];
+    const pattern = createPattern(3, 8, { 0: [0, 4], 2: [7] }, { onChange: () => changes.push(1) });
+    pattern.setVelocity(0, 4, 20);
+    const saved = pattern.state();
+    expect(saved).toEqual({ pattern: { 0: [0, 4], 2: [7] }, velocities: { 0: { 4: 20 } } });
+    pattern.clearAll();
+    pattern.set(1, 1, true, 99);
+    changes.length = 0;
+    pattern.restore(saved);
+    expect(pattern.state()).toEqual(saved);
+    expect(changes).toHaveLength(1);
+    pattern.restore(saved);
+    expect(changes).toHaveLength(1);
+  });
+});
+
 describe("snapshot", () => {
   it("lists the steps that are on, per pad, and leaves empty pads out", () => {
     const pattern = createPattern(4, 8, { 0: [0, 4], 2: [7] });

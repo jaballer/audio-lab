@@ -17,6 +17,12 @@
 // A step that is turned off forgets its velocity, so one that is turned on again
 // starts at full and no step carries a velocity nobody can see.
 //
+// Whole rows and the whole pattern can be read and replaced, for copy and paste and for undo:
+//   pattern.rowState(0);               // { on: [steps], velocities: { step: velocity } } of one pad
+//   pattern.replaceRow(1, rowState);   // pad 1 becomes a copy of it
+//   pattern.state();                   // { pattern: snapshot(), velocities: velocitySnapshot() }
+//   pattern.restore(state);            // every pad becomes what state says
+//
 // Starting velocities come as `{ velocities }` in the options, in the shape velocitySnapshot gives
 // (those of steps that are off are ignored).
 //
@@ -57,6 +63,30 @@ export function createPattern(rows, steps, initial = {}, { onChange, velocities:
     onChange?.();
   }
 
+  // Steps and velocities that do not exist are ignored, so a state from elsewhere cannot break the grid.
+  function fillRow(row, on = [], byStep = {}) {
+    grid[row].fill(false);
+    velocities[row].fill(FULL_VELOCITY);
+    for (const step of on) if (Number.isInteger(step) && step >= 0 && step < steps) grid[row][step] = true;
+    for (const [step, value] of Object.entries(byStep)) {
+      if (grid[row][step]) velocities[row][step] = clampVelocity(value);
+    }
+  }
+
+  const rowKey = (row) => JSON.stringify([grid[row], velocities[row]]);
+
+  function replaceRow(row, state) {
+    const before = rowKey(row);
+    fillRow(row, state.on, state.velocities);
+    if (rowKey(row) !== before) onChange?.();
+  }
+
+  function restore(state) {
+    const before = JSON.stringify([grid, velocities]);
+    for (let row = 0; row < rows; row++) fillRow(row, state.pattern[row], state.velocities[row]);
+    if (JSON.stringify([grid, velocities]) !== before) onChange?.();
+  }
+
   function clearRow(row) {
     if (!grid[row].some(Boolean)) return;
     grid[row].fill(false);
@@ -80,6 +110,19 @@ export function createPattern(rows, steps, initial = {}, { onChange, velocities:
       grid.forEach((row) => row.fill(false));
       velocities.forEach((row) => row.fill(FULL_VELOCITY));
       onChange?.();
+    },
+    rowState: (row) => ({
+      on: grid[row].flatMap((isOn, step) => (isOn ? [step] : [])),
+      velocities: Object.fromEntries(
+        grid[row].flatMap((isOn, step) =>
+          isOn && velocities[row][step] !== FULL_VELOCITY ? [[step, velocities[row][step]]] : [],
+        ),
+      ),
+    }),
+    replaceRow,
+    restore,
+    state() {
+      return { pattern: this.snapshot(), velocities: this.velocitySnapshot() };
     },
     velocitySnapshot() {
       const out = {};

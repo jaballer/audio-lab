@@ -145,7 +145,9 @@ function render() {
   const state = sampler.getState();
   const soundName = SOUNDS[state.selected].name;
   padGrid.select(state.selected);
-  stepKeys.refresh({ on: state.stepsOn, soundName });
+  stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
+  undoBtn.disabled = !state.canUndo;
+  redoBtn.disabled = !state.canRedo;
   velocityBars.refresh({
     on: state.stepsOn,
     velocities: state.stepVelocities,
@@ -196,11 +198,26 @@ $("stop").addEventListener("click", sampler.stop);
 recBtn.addEventListener("click", sampler.toggleRec);
 $("clear").addEventListener("click", sampler.clearPad);
 $("clear-all").addEventListener("click", sampler.clearAll);
+$("copy").addEventListener("click", sampler.copyPad);
+$("paste").addEventListener("click", sampler.pastePad);
+const undoBtn = $("undo");
+const redoBtn = $("redo");
+undoBtn.addEventListener("click", sampler.undo);
+redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
 volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------
 window.addEventListener("keydown", (e) => {
+  // Ctrl or Cmd + Z undoes, with Shift redoes (Ctrl + Y too, as on Windows).
+  if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+    const key = e.key.toLowerCase();
+    if (key !== "z" && key !== "y") return;
+    e.preventDefault();
+    if (key === "y" || e.shiftKey) sampler.redo();
+    else sampler.undo();
+    return;
+  }
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
 
   if (e.code === "Space") {
