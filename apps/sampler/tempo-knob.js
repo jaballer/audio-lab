@@ -8,15 +8,23 @@
 // `onChange(bpm)` receives the wanted tempo (not yet clamped). `getBpm()` is
 // the current tempo, which relative moves start from.
 
+import { setAttr } from "../../shared/dom-updates.js";
+
 const SWEEP = 270; // degrees from minimum to maximum
 const DRAG_BPM_PER_PX = 0.5;
 
 export function createTempoKnob(element, { min, max, getBpm, onChange }) {
+  let drawn = null; // the transform last written
   function render(bpm) {
     const angle = ((bpm - min) / (max - min)) * SWEEP - SWEEP / 2;
-    element.style.transform = `rotate(${angle}deg)`;
-    element.setAttribute("aria-valuenow", String(Math.round(bpm)));
-    element.setAttribute("aria-valuetext", `${bpm.toFixed(1)} BPM`);
+    // Called on every redraw, which is every step while playing: only what changed is written.
+    const transform = `rotate(${angle}deg)`;
+    if (drawn !== transform) {
+      drawn = transform;
+      element.style.transform = transform;
+    }
+    setAttr(element, "aria-valuenow", String(Math.round(bpm)));
+    setAttr(element, "aria-valuetext", `${bpm.toFixed(1)} BPM`);
   }
 
   let drag = null;

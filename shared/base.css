@@ -4,17 +4,23 @@
   --chassis-bottom: #c6c2b5;
   --chassis-edge: #8d8979;
   --ink: #34322c;
-  --ink-soft: #5b5850;
+  --ink-soft: #3a3832; /* 4.8:1 or better on the chassis and the drawer */
   --lcd-bg: #b4c496;
   --lcd-ink: #1c2916;
   --led-red: #ff3b2f;
   --led-green: #58e04a;
   --focus: #0a58ca;
+  --focus-on-light: #0a3d91; /* the ring on the light plastic of the pad editor, where --focus is thin */
   --mono: ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", Menlo, Consolas, monospace;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Something focused or jumped to is not left under the fixed site bar. */
+html {
+  scroll-padding-top: calc(var(--site-bar-height, 56px) + 16px);
 }
 
 body {
@@ -113,6 +119,8 @@ kbd {
   justify-content: flex-end;
 }
 .btn-small {
+  min-width: 24px; /* a small target is still at least 24 CSS pixels */
+  min-height: 24px;
   padding: 6px 10px;
   font-size: 0.62rem;
   border-bottom-width: 3px;

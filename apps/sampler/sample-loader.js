@@ -11,7 +11,10 @@
 //   });
 //   loader.setResetEnabled(false);   // the selected pad plays its built-in sound already
 
+import { setAttr, setDisabled } from "../../shared/dom-updates.js";
+
 const DROP_CLASS = "drop";
+const NOTHING_TO_RESET = "This pad already plays its built-in sound";
 
 const hasFiles = (event) => [...(event.dataTransfer?.types ?? [])].includes("Files");
 
@@ -52,9 +55,9 @@ export function createSampleLoader({ pads, input, loadButton, resetButton, getSe
   return {
     setResetEnabled(enabled) {
       // A disabled button cannot keep focus, and focus that drops to the page would take Escape (which closes the
-      // pad editor) out of reach: move it to the neighbouring button first.
-      if (!enabled && document.activeElement === resetButton) loadButton.focus();
-      resetButton.disabled = !enabled;
+      // pad editor) out of reach: setDisabled moves it to the neighbouring button first.
+      setDisabled(resetButton, !enabled, loadButton);
+      setAttr(resetButton, "title", enabled ? "" : NOTHING_TO_RESET);
     },
   };
 }
