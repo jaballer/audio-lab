@@ -20,6 +20,7 @@ export function createMidi(api) {
   let outputProfile = null;
   const lastSent = new Map();
   const flashing = new Set();
+  const flashTimers = new Map(); // pad -> its pending timeout
 
   const controls = {
     start: () => api.start(),
@@ -85,10 +86,17 @@ export function createMidi(api) {
     if (!output) return;
     flashing.add(idx);
     refresh();
-    setTimeout(() => {
-      flashing.delete(idx);
-      refresh();
-    }, FLASH_MS);
+    // A pad hit again while lit starts its time over: otherwise the first hit's timer would
+    // switch it off partway through the second (dense sequenced patterns flickered).
+    clearTimeout(flashTimers.get(idx));
+    flashTimers.set(
+      idx,
+      setTimeout(() => {
+        flashing.delete(idx);
+        flashTimers.delete(idx);
+        refresh();
+      }, FLASH_MS),
+    );
   }
 
   // Turn the controller's lights off when leaving the page.

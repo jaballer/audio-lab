@@ -106,6 +106,16 @@ describe("createScheduler", () => {
     expect(Math.max(...longer)).toBe(7);
   });
 
+  it("moves the playhead into the new length at once when the loop is made shorter", () => {
+    const { scheduler, run } = setup({ steps: 16, bpm: 120 });
+    scheduler.start();
+    run(1.6);
+    scheduler.poll();
+    expect(scheduler.playheadStep).toBeGreaterThanOrEqual(4);
+    scheduler.setSteps(4);
+    expect(scheduler.playheadStep).toBeLessThan(4);
+  });
+
   it("reports step times in the clock's own domain, and needs no prepare", () => {
     // A clock that starts far from zero, as performance.now() / 1000 does, with no prepare().
     const clock = { time: 5000, now: () => clock.time };
