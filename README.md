@@ -21,7 +21,7 @@ A small set of browser audio tools built with Vite, the Web Audio API and Web MI
 - A looping 16-step sequencer: 8 sequences of 1, 2, 4 or 8 bars, a velocity for every step, Undo and Redo (Ctrl/Cmd + Z), and Copy and Paste for a bar. Space toggles play/stop
 - REC mode: press Rec while playing and hit pads to record them, quantized to 16th notes, with the velocity of the hit
 - Your own sounds: drop an audio file on a pad (up to 10 seconds and 5 MB) or load one in the pad editor, which also trims it and sets each pad's gain, pitch, choke group, amplitude envelope and colour
-- Export WAV saves the sequence showing as a looping audio file
+- Export saves the sequence showing as a looping audio file (1, 2, 4 or 8 loops in one file, in stereo or mono)
 - Tempo knob (drag, scroll, or arrow keys), tap tempo, and a volume fader
 - Your sequences, tempo, volume, pad settings and samples are kept in your browser between visits (nothing is uploaded)
 
@@ -83,13 +83,14 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing, and so do the other pads in its choke group (a fade on the audio clock), live, in the sequence or in the export; no DOM
   - `pad-envelope.js` — the shape of a pad's amplitude envelope (attack, decay, sustain, release) as the points a gain is ramped through, laid over the time a sample is heard for; no DOM
   - `pad-colors.js` — the fixed set of colours a pad can be given (with names for a screen reader); no DOM
-  - `export-wav.js` — exports the sequence showing as a WAV file: plays it into an offline audio context with the page's sounds, velocities, pad settings, retrigger cuts, volume and clipper, over two passes so the file (exactly the length of the bars) loops, then encodes 16-bit PCM; the render pauses along the way to report progress and can be cancelled (pressing the button again); no DOM
+  - `export-wav.js` — exports the sequence showing as a WAV file: plays it into an offline audio context with the page's sounds, velocities, pad settings, retrigger cuts, volume and clipper, over two passes so the file (exactly the length of the bars) loops, then encodes 16-bit PCM; 1, 2, 4 or 8 loops of it can be kept in one file, in stereo or mono; the render pauses along the way to report progress and can be cancelled; no DOM
+  - `export-options.js` — what an export can be told (loops, stereo or mono, kept between visits), and what the Export dialog says about the file before it is made: its length, size and format; no DOM
   - `trim.js` — which part of a sample plays: a start and an end as fractions of its length, kept possible (inside the sample, never shorter than 5 ms), and which handle a press would move; no DOM
   - `waveform.js` — a sample's outline for drawing, the lowest and highest value of each slice; no DOM
   - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the choke group, the text, and reading them back from a saved song; no DOM
   - `sample-voice.js` — a loaded sample as a pad sound, and decoding a file (with the length and size caps and the reason a file was refused); no DOM
   - `samples.js` — loading a file onto a pad, resetting it, and keeping the samples between visits (the files' bytes in IndexedDB, which pad has which in localStorage), restored at the start of a visit; no DOM
-  - `pads.js`, `tempo-knob.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `trim-view.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `settings-sliders.js` is the Gain, Pitch, Choke and envelope sliders, `color-swatches.js` is the row of colours for the pad, `pad-drawer.js` is the pad editor drawer (open, close, heading), `trim-view.js` is the waveform with its Start and End and the pad's envelope drawn on it, `lcd.js` has the pure text formatter and the progress bar along the top of the display)
+  - `pads.js`, `tempo-knob.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `export-dialog.js`, `trim-view.js`, `lcd.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `settings-sliders.js` is the Gain, Pitch, Choke and envelope sliders, `color-swatches.js` is the row of colours for the pad, `pad-drawer.js` is the pad editor drawer (open, close, heading), `export-dialog.js` is the Export window (loops, stereo or mono, size, progress and cancel), `trim-view.js` is the waveform with its Start and End and the pad's envelope drawn on it, `lcd.js` has the pure text formatter and the progress bar along the top of the display)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
   - `sampler.css` — sampler-only styles
@@ -142,7 +143,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/page-ready.js` — resolves when the page has settled (load event, fonts, two drawn frames) or after a timeout; no DOM
 - `shared/site-header.js` — the bar above the machine, the same on every page: the site name, a link to each page, and Connect MIDI, its short status and the Console button
 - `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test)
-- `shared/app-header.js` — the machine's own header: its name and tagline and the POWER switch
+- `shared/app-header.js` — the machine's own header: its name and tagline, its action buttons (Export) and the POWER switch
 - `shared/console-log.js` — the bounded list of messages the device's header leaves out (every MIDI port the browser lists, plug and unplug, errors); no DOM
 - `shared/console-drawer.js` — the drawer along the bottom of the window that shows that list, with Copy and Clear
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects

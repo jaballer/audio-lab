@@ -14,12 +14,17 @@
 // reaches into several passes, and there are enough before the kept one to cover the longest. The
 // render does not depend on the power switch or on the audio context of the page. A long render reports how far it
 // has got and can be cancelled (see PROGRESS_PAUSES).
+//
+// `loops` keeps the loop that many times in one file (the passes after the warm-up are all kept, and run on into
+// each other as the page's loop does), and `channels: "mono"` mixes the two channels down to one. What the dialog
+// offers is in export-options.js.
 
 import { createClipper } from "../../shared/audio.js";
 import { VOLUME_SCALE } from "./controller.js";
 import { FULL_VELOCITY } from "../../shared/pattern.js";
 import { withVelocity } from "../../shared/sounds.js";
 import { stepSeconds } from "../../shared/tempo.js";
+import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions } from "./export-options.js";
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
 
@@ -111,9 +116,12 @@ export async function renderSequence({
   stepsPerBar,
   sampleRate = EXPORT_SAMPLE_RATE,
   createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
+  loops = DEFAULT_EXPORT_OPTIONS.loops,
+  channels: channelMode = DEFAULT_EXPORT_OPTIONS.channels,
   onProgress,
   signal,
 }) {
+  const copies = Math.max(1, Math.floor(loops) || 1);
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
   const length = sequence.bars * stepsPerBar; // steps in one pass
@@ -125,7 +133,7 @@ export async function renderSequence({
   const longestRelease = Math.max(0, ...hits.map(({ row }) => kit.envelope(row)?.release ?? 0));
   const warmUp = Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil(longestRelease / loopSeconds));
   const first = Math.round((LEAD_SECONDS + warmUp * loopSeconds) * sampleRate);
-  const frames = Math.round(loopSeconds * sampleRate);
+  const frames = exportFrames(song, stepsPerBar, copies, sampleRate);
   const ctx = createContext(first + frames, sampleRate);
 
   const master = ctx.createGain();
@@ -143,7 +151,7 @@ export async function renderSequence({
     groupOf: (pad) => kit.settings(pad).choke,
     releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
   });
-  for (let pass = 0; pass <= warmUp; pass++) {
+  for (let pass = 0; pass < warmUp + copies; pass++) {
     for (const { step, row, velocity } of hits) {
       const time = LEAD_SECONDS + (pass * length + step) * stepLength;
       const { out } = voices.start(ctx, row, master, time);
@@ -152,10 +160,23 @@ export async function renderSequence({
   }
 
   const rendered = await renderWithProgress(ctx, first + frames, sampleRate, { onProgress, signal });
+  // Views of the kept window, not copies: a long render is hundreds of megabytes, and a copy of each channel is as
+  // much again at the moment the most is held (stereo, or both channels and then the mono mix).
   const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) =>
-    rendered.getChannelData(i).slice(first, first + frames),
+    rendered.getChannelData(i).subarray(first, first + frames),
   );
-  return { sampleRate: rendered.sampleRate, channels };
+  return { sampleRate: rendered.sampleRate, channels: channelMode === "mono" ? [toMono(channels)] : channels };
+}
+
+// The channels as one: at each frame, the mean of them (so identical channels come out unchanged).
+export function toMono(channels) {
+  const mono = new Float32Array(channels[0]?.length ?? 0);
+  for (let frame = 0; frame < mono.length; frame++) {
+    let sum = 0;
+    for (const channel of channels) sum += channel[frame];
+    mono[frame] = sum / channels.length;
+  }
+  return mono;
 }
 
 // A 16-bit PCM WAV file: the channels interleaved, each sample clamped to full scale and rounded.
@@ -190,20 +211,39 @@ export function encodeWav(channels, sampleRate) {
   return bytes;
 }
 
-export const exportName = (song) => `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm.wav`;
+// "pad16-seq-01-100bpm.wav", with "-x4" for four loops and "-mono" for mono when they are asked for, so exports of the same
+// sequence made differently do not overwrite each other in the downloads folder.
+export function exportName(song, options = DEFAULT_EXPORT_OPTIONS) {
+  const { loops, channels } = normalizeExportOptions(options);
+  const loopPart = loops > 1 ? `-x${loops}` : "";
+  const channelPart = channels === "mono" ? "-mono" : "";
+  return `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm${loopPart}${channelPart}.wav`;
+}
+
+// The bars of the sequence showing that have no steps, counting from 1: a file is as long as all its bars, so a bar with
+// nothing in it is a stretch of silence in the file (apart from what is still ringing from the bar before).
+export function emptyBars(song, stepsPerBar) {
+  const sequence = song.sequences[song.current];
+  const filled = new Set(hitsOf(sequence, stepsPerBar).map(({ step }) => Math.floor(step / stepsPerBar)));
+  return Array.from({ length: sequence.bars }, (_, bar) => bar)
+    .filter((bar) => !filled.has(bar))
+    .map((bar) => bar + 1);
+}
 
 // Is there anything in the sequence showing to export (in the bars it has)?
 export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.current], stepsPerBar).length > 0;
 
 // What the Export button does: checks there is something to export, renders it, and hands the file to `save`
 // (shared/download.js). Says how it went on the LCD through `onMessage`. `onProgress(0..1)` is how far the render
-// has got, and aborting `signal` cancels it: nothing is saved. Whether a file was saved.
+// has got, aborting `signal` cancels it (nothing is saved), and `options` ({ loops, channels }, see export-options.js)
+// say what the file is. Whether a file was saved.
 export async function exportSequence({
   song,
   kit,
   stepsPerBar,
   onMessage,
   save,
+  options = DEFAULT_EXPORT_OPTIONS,
   onProgress,
   signal,
   render = renderSequence,
@@ -217,11 +257,17 @@ export async function exportSequence({
     onMessage("NOTHING TO EXPORT");
     return false;
   }
+  const { loops, channels } = normalizeExportOptions(options);
   onMessage("EXPORTING...");
   try {
-    const audio = await render({ song, kit, stepsPerBar, onProgress, signal });
-    const name = exportName(song);
-    save(new Blob([encodeWav(audio.channels, audio.sampleRate)], { type: "audio/wav" }), name);
+    const audio = await render({ song, kit, stepsPerBar, loops, channels, onProgress, signal });
+    const name = exportName(song, { loops, channels });
+    const wav = encodeWav(audio.channels, audio.sampleRate);
+    // Encoding is one long task (seconds, for a long file), in which a press on Cancel cannot be handled; it waits its
+    // turn at the end of it. So give the event loop one before the file is saved, and honour what it brings.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (signal?.aborted) throw cancelled();
+    save(new Blob([wav], { type: "audio/wav" }), name);
     onMessage(`EXPORTED ${name}`);
     return true;
   } catch (error) {
@@ -235,9 +281,6 @@ export async function exportSequence({
   }
 }
 
-// What the button says while it renders: it cancels, and how far along it is.
-export const exportLabel = (fraction) => `Cancel export ${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
-
 export const READY_WAIT_MS = 5000; // how long a click waits for the saved samples to be back before giving up
 
 // What pressing the Export button does around exportSequence: one export at a time, and a press while one runs cancels
@@ -248,12 +291,14 @@ export const READY_WAIT_MS = 5000; // how long a click waits for the saved sampl
 // restore that never settles or fails is not something to render over. A cancel during that wait ends it too.
 //
 //   const press = createExportAction({
+//     snapshot: () => ({ song: getSong(), options }),     // taken as it is pressed, and handed to `run`
 //     ready: () => restoring,
-//     run: ({ signal, onProgress }) => exportSequence({ ..., signal, onProgress }),
+//     run: ({ signal, onProgress, snapshot }) => exportSequence({ song: snapshot.song, ..., signal, onProgress }),
 //     onMessage, onBusy, onProgress,
 //   });
 //   button.addEventListener("click", press);
 export function createExportAction({
+  snapshot = () => undefined,
   ready,
   run,
   onMessage,
@@ -277,6 +322,9 @@ export function createExportAction({
     }
     controller = new AbortController();
     const { signal } = controller;
+    // What is being exported is what there was when it was pressed: the wait for the samples can be long, and the song
+    // can move in it (a tempo knob on a controller), so it is not read again after.
+    const taken = snapshot();
     onBusy(true);
     try {
       let timer;
@@ -292,7 +340,7 @@ export function createExportAction({
         onMessage("EXPORT CANCELLED");
         return false;
       }
-      return await run({ signal, onProgress });
+      return await run({ signal, onProgress, snapshot: taken });
     } catch (error) {
       console.error("Export failed:", error);
       onMessage("EXPORT FAILED");

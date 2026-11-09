@@ -1,0 +1,214 @@
+// The Export dialog: what the file will be (loops, stereo or mono, and how long and how big that makes it), a
+// button to make it, and how far along the render is. This file is only the dialog: it shows what it is told and
+// reports what is pressed; the page decides what an export is (export-wav.js) and when it may run.
+//
+//   const dialog = createExportDialog(element, {   // a <dialog> whose markup has the parts named by data-export (index.html)
+//     onChange: (options) => {},   // a choice was pressed: { loops, channels }
+//     onExport: () => {},          // Export WAV was pressed
+//     onCancel: () => {},          // Cancel export was pressed, or Escape, while it renders
+//     opener: button,              // optional: the button that opens it, which gets the focus back when it closes
+//   });
+//   dialog.open(); dialog.close(); dialog.isOpen;
+//   dialog.setOptions({ loops: 2, channels: "mono" });        // which choices are lit
+//   dialog.refresh({ title, readout, format, note, empty });  // for the sequence showing; `note`: a warning about it; `empty`: nothing to export
+//   dialog.setBusy(true); dialog.setProgress(0.4);            // while it renders (null: not known yet)
+//   dialog.setCancelling();                                   // a cancel was asked for, and the render is still stopping
+//   dialog.showMessage("EXPORT CANCELLED");                   // the LCD's short messages, again: the LCD is behind the dialog
+//
+// A native <dialog> opened with showModal(), so the page behind it cannot be reached by key or pointer, Tab stays
+// inside it, Escape closes it and focus goes back to the button that opened it. While it renders it cannot be
+// closed (the × is off, a click outside is ignored), and Escape cancels the render instead: the render goes on in the
+// background, and a dialog that closed would leave nothing to say how far it had got, or a way to stop it.
+
+import { setAttr, setDisabled, setHidden, setText } from "../../shared/dom-updates.js";
+import { CHANNEL_CHOICES, LOOP_CHOICES, renderingLabel } from "./export-options.js";
+
+const CHANNEL_NAMES = { stereo: "Stereo", mono: "Mono" };
+const PERCENT = 100;
+// A press this soon after a render started or stopped was meant for the button that was there before it (a double
+// click on Export WAV, or on Cancel export), and not for the one in its place now.
+const SETTLE_MS = 500;
+
+export function createExportDialog(root, { onChange, onExport, onCancel, opener = null }) {
+  const part = (name) => root.querySelector(`[data-export="${name}"]`);
+  const title = part("title");
+  const readout = part("readout");
+  const format = part("format");
+  const note = part("note");
+  const hint = part("hint");
+  const defaultHint = hint.textContent.replace(/\s+/g, " ").trim();
+  const bar = part("bar");
+  const fill = bar.firstElementChild;
+  const progress = part("progress");
+  const message = part("message");
+  const closeButton = part("close");
+  const cancelButton = part("cancel");
+  const goButton = part("go");
+
+  let busy = false;
+  let cancelling = false;
+  let empty = false;
+  let changedAt = -Infinity; // when a render last started or stopped, in the clock of event.timeStamp
+  let latest = ""; // the last message said while it renders, shown when it stops: "EXPORTING..." is the progress bar's job
+  let current = { loops: LOOP_CHOICES[0], channels: CHANNEL_CHOICES[0] };
+
+  // One button per choice, the chosen one lit, like the length keys on the page.
+  function choices(group, option, values, labelOf, nameOf) {
+    return values.map((value) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-small btn-led";
+      button.textContent = labelOf(value);
+      button.setAttribute("aria-label", nameOf(value));
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => onChange({ ...current, [option]: value }));
+      group.append(button);
+      return { value, button };
+    });
+  }
+  const loopButtons = choices(part("loops"), "loops", LOOP_CHOICES, String, (n) => (n === 1 ? "1 loop" : `${n} loops`));
+  const channelButtons = choices(
+    part("channels"),
+    "channels",
+    CHANNEL_CHOICES,
+    (name) => CHANNEL_NAMES[name],
+    (name) => CHANNEL_NAMES[name],
+  );
+
+  const isOpen = () => root.hasAttribute("open");
+
+  function open() {
+    if (!isOpen()) {
+      setText(message, ""); // whatever the last export said is old news
+      changedAt = -Infinity; // and a press now is meant for what it shows now: nothing ran before it was opened
+      if (typeof root.showModal === "function") root.showModal();
+      else root.setAttribute("open", ""); // a browser without <dialog>: not modal, but the page ignores its keys while it is open
+    }
+    (busy ? cancelButton : goButton).focus();
+  }
+
+  function close() {
+    if (busy) return;
+    if (typeof root.close === "function") root.close();
+    else root.removeAttribute("open");
+  }
+
+  // What can be pressed and what is shown follow from `busy`, `cancelling` and `empty`.
+  function draw() {
+    root.classList.toggle("is-busy", busy);
+    setAttr(root, "aria-busy", String(busy));
+    for (const { button } of [...loopButtons, ...channelButtons]) setDisabled(button, busy, cancelButton);
+    setDisabled(closeButton, busy, cancelButton);
+    setHidden(goButton, busy, cancelButton); // the Cancel export button takes its place, and the focus
+    setDisabled(goButton, empty, cancelButton);
+    setHidden(bar, !busy);
+    setHidden(progress, !busy);
+    setHidden(hint, busy);
+    setHidden(note, busy || !note.textContent);
+    setText(cancelButton, cancelling ? "Cancelling…" : busy ? "Cancel export" : "Cancel");
+  }
+
+  function setProgress(fraction) {
+    const label = renderingLabel(fraction);
+    setText(progress, label);
+    if (fraction === null) {
+      bar.removeAttribute("aria-valuenow"); // not known yet: a bar with no value says it is working, not that it is at 0
+      bar.removeAttribute("aria-valuetext");
+      fill.style.width = "0%";
+      return;
+    }
+    const value = Math.round(Math.min(1, Math.max(0, fraction)) * PERCENT);
+    if (fill.style.width !== `${value}%`) fill.style.width = `${value}%`;
+    setAttr(bar, "aria-valuenow", String(value));
+    setAttr(bar, "aria-valuetext", label);
+  }
+
+  closeButton.addEventListener("click", close);
+  cancelButton.addEventListener("click", (event) => {
+    if (event.timeStamp - changedAt < SETTLE_MS) return;
+    if (busy) onCancel();
+    else close();
+  });
+  goButton.addEventListener("click", (event) => {
+    if (event.timeStamp - changedAt < SETTLE_MS) return;
+    onExport();
+  });
+  // Escape, while it renders, stops the render and leaves the dialog where it is. The key's own default (a close
+  // request) is stopped first: a browser lets a page refuse a close request only once per user interaction, and a
+  // second Escape while the render is stopping would close the dialog on it.
+  root.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !busy) return;
+    event.preventDefault();
+    onCancel();
+  });
+  // Any other way to ask a dialog to close (the back gesture on a phone) is refused the same way while it renders.
+  root.addEventListener("cancel", (event) => {
+    if (!busy) return;
+    event.preventDefault();
+    onCancel();
+  });
+  // If a browser closes it anyway, it is put back: a render with no dialog has nothing to say how far it has got.
+  // A browser that does not focus a button when it is clicked (Safari) has nothing for the dialog to give focus back to.
+  root.addEventListener("close", () => {
+    if (busy && typeof root.showModal === "function") root.showModal();
+    else opener?.focus();
+  });
+  // A click on the backdrop (the dialog element itself: its plate fills it, so only the dimmed page around it is the
+  // dialog's own) closes it. Both ends of the click must be on it: a drag that starts inside, on a choice or the
+  // readout, and lets go outside is a click on the dialog too.
+  let pressedOnBackdrop = false;
+  root.addEventListener("pointerdown", (event) => {
+    pressedOnBackdrop = event.target === root;
+  });
+  root.addEventListener("click", (event) => {
+    if (event.target === root && pressedOnBackdrop) close();
+  });
+
+  return {
+    open,
+    close,
+    get isOpen() {
+      return isOpen();
+    },
+    setOptions(next) {
+      current = { ...next };
+      for (const { value, button } of loopButtons) setAttr(button, "aria-pressed", String(value === next.loops));
+      for (const { value, button } of channelButtons) setAttr(button, "aria-pressed", String(value === next.channels));
+    },
+    // What it says is what was pressed: not while it renders, when the song may move under it (a tempo knob on a
+    // controller) and the file is already being made from the song as it was.
+    refresh(next) {
+      if (busy) return;
+      setText(title, next.title);
+      setText(readout, next.readout);
+      setText(format, next.format);
+      setText(note, next.note ?? "");
+      if (next.empty !== undefined) empty = next.empty;
+      setText(hint, empty ? "This sequence has no steps yet, so there is nothing to export." : defaultHint);
+      draw();
+    },
+    setBusy(next) {
+      busy = next;
+      changedAt = performance.now();
+      if (busy) {
+        latest = "";
+        setText(message, "");
+        setProgress(null);
+        draw();
+      } else {
+        cancelling = false;
+        draw(); // first, so that the message is not written into a region that still says it is busy
+        setText(message, latest);
+      }
+    },
+    setProgress,
+    setCancelling() {
+      cancelling = true;
+      draw();
+    },
+    showMessage(text) {
+      latest = text;
+      if (!busy) setText(message, text);
+    },
+  };
+}

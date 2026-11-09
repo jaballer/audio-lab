@@ -5,16 +5,18 @@ import {
   PROGRESS_PAUSES,
   READY_WAIT_MS,
   createExportAction,
+  emptyBars,
   encodeWav,
-  exportLabel,
   exportName,
   exportSequence,
   hasSteps,
   hitsOf,
   pauseFrames,
   renderSequence,
+  toMono,
   wasCancelled,
 } from "./export-wav.js";
+import { exportInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
@@ -49,6 +51,32 @@ describe("hitsOf", () => {
 
   it("is empty for an empty sequence", () => {
     expect(hitsOf(sequence({}), 16)).toEqual([]);
+  });
+});
+
+describe("emptyBars", () => {
+  it("lists the bars of the sequence showing that have no steps, counting from 1", () => {
+    // 4 bars of 16 steps: steps in bars 1 and 3
+    const song = songOf(sequence({ 0: [0, 5], 1: [33] }, {}, 4));
+    expect(emptyBars(song, 16)).toEqual([2, 4]);
+  });
+
+  it("is nothing when every bar has a step, and every bar when none has", () => {
+    expect(emptyBars(songOf(sequence({ 0: [0], 1: [16] }, {}, 2)), 16)).toEqual([]);
+    expect(emptyBars(songOf(sequence({}, {}, 3)), 16)).toEqual([1, 2, 3]);
+  });
+
+  it("does not count steps in bars the sequence no longer has, which it keeps for when they come back", () => {
+    expect(emptyBars(songOf(sequence({ 0: [0, 40] }, {}, 2)), 16)).toEqual([2]);
+  });
+
+  it("looks at the sequence showing, not another", () => {
+    const song = {
+      ...songOf(sequence({ 0: [0] }, {}, 2)),
+      sequences: [sequence({ 0: [0] }, {}, 2), sequence({ 0: [16] }, {}, 2)],
+      current: 1,
+    };
+    expect(emptyBars(song, 16)).toEqual([1]);
   });
 });
 
@@ -320,6 +348,166 @@ describe("renderSequence", () => {
   });
 });
 
+describe("renderSequence, loops and channels", () => {
+  // 120 BPM, 16 steps a bar: 2 s a bar; at 1000 Hz, 2000 frames. One warm-up pass, so the kept window starts at 2010.
+  const first = Math.round((LEAD_SECONDS + 2) * 1000);
+  const run = (options, seq = sequence({ 0: [0] }), kitSounds = [sound("a")]) => {
+    const offline = fakeOffline();
+    const kit = createKit(kitSounds);
+    const done = renderSequence({
+      song: songOf(seq),
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      ...options,
+    });
+    return { done, offline, sounds: kitSounds };
+  };
+
+  it("keeps the sequence once, in stereo, when it is told nothing", async () => {
+    const { done, offline } = run({});
+    const audio = await done;
+    expect(audio.channels).toHaveLength(2);
+    expect(audio.channels[0]).toHaveLength(2000);
+    expect(offline.made.frames).toBe(first + 2000);
+  });
+
+  it("keeps the loop that many times in one file, after the same warm-up", async () => {
+    const { done, offline } = run({ loops: 4 });
+    const audio = await done;
+    expect(audio.channels[0]).toHaveLength(8000);
+    expect(offline.made.frames).toBe(first + 8000);
+    expect(audio.channels[0][0]).toBe(first); // it starts where the one-loop file starts
+  });
+
+  it("plays the steps of every pass it renders: the warm-up, then each loop kept", async () => {
+    const { done, sounds } = run({ loops: 4 });
+    await done;
+    const times = sounds[0].play.mock.calls.map((call) => call[2]);
+    expect(times).toEqual([0, 1, 2, 3, 4].map((pass) => LEAD_SECONDS + pass * 2)); // 1 warm-up + 4 kept
+  });
+
+  it("warms up for as long as a release needs, whatever the loops", async () => {
+    const samplePad = { id: "s", name: "s", play: vi.fn(), setTrim() {} };
+    const kit = createKit([samplePad]);
+    kit.setSetting(0, "release", 100); // 5 s
+    const offline = fakeOffline();
+    await renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      loops: 2,
+    });
+    const warmUp = 1 + Math.ceil(5 / 2); // a 5 s release in a 2 s loop: the loops do not change it
+    expect(offline.made.frames).toBe(Math.round((LEAD_SECONDS + warmUp * 2) * 1000) + 4000);
+    expect(samplePad.play).toHaveBeenCalledTimes(warmUp + 2);
+  });
+
+  it("mixes down to one channel, the mean of the two", async () => {
+    const { done } = run({ channels: "mono" });
+    const audio = await done;
+    expect(audio.channels).toHaveLength(1);
+    expect(audio.channels[0]).toHaveLength(2000);
+    expect(audio.channels[0][0]).toBe(first + 500); // the fake's left is i and its right i + 1000
+    expect(audio.channels[0][10]).toBe(first + 10 + 500);
+  });
+
+  it("does both: loops of a mono file", async () => {
+    const audio = await run({ loops: 2, channels: "mono" }).done;
+    expect(audio.channels).toHaveLength(1);
+    expect(audio.channels[0]).toHaveLength(4000);
+  });
+
+  it("hands back views of the render, not copies of it: a long export is hundreds of megabytes", async () => {
+    const offline = fakeOffline();
+    let data;
+    const audio = await renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: (frames, rate) => {
+        const ctx = offline.createContext(frames, rate);
+        ctx.startRendering = async () => {
+          data = [new Float32Array(frames), new Float32Array(frames)];
+          return { numberOfChannels: 2, sampleRate: rate, getChannelData: (channel) => data[channel] };
+        };
+        return ctx;
+      },
+    });
+    expect(audio.channels[0].buffer).toBe(data[0].buffer);
+    expect(audio.channels[1].buffer).toBe(data[1].buffer);
+    expect(audio.channels[0]).toHaveLength(2000); // the window, not the whole render with its warm-up
+  });
+
+  it("is as long and as big as the dialog said it would be", async () => {
+    const song = songOf(sequence({ 0: [0] }, {}, 2));
+    for (const options of [
+      { loops: 1, channels: "stereo" },
+      { loops: 4, channels: "mono" },
+      { loops: 8, channels: "stereo" },
+    ]) {
+      const offline = fakeOffline();
+      const audio = await renderSequence({
+        song,
+        kit: createKit([sound("a")]),
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        createContext: offline.createContext,
+        ...options,
+      });
+      const info = exportInfo(song, options, 16, 1000);
+      expect(audio.channels[0]).toHaveLength(info.frames);
+      expect(audio.channels).toHaveLength(info.channels === "mono" ? 1 : 2);
+      expect(encodeWav(audio.channels, audio.sampleRate).byteLength).toBe(info.bytes);
+    }
+  });
+});
+
+describe("toMono", () => {
+  it("is the mean of the channels at each frame", () => {
+    const mono = toMono([Float32Array.of(1, 0, -0.5), Float32Array.of(0, 0.5, -0.5)]);
+    expect([...mono]).toEqual([0.5, 0.25, -0.5]);
+  });
+
+  it("leaves two identical channels as they are, to the last bit: mono must not change the level", () => {
+    const channel = Float32Array.from({ length: 1000 }, (_, i) => Math.fround(Math.sin(i) * 0.9));
+    expect(toMono([channel, Float32Array.from(channel)])).toEqual(channel);
+  });
+
+  it("is the channel itself for one channel, and nothing for no audio", () => {
+    expect([...toMono([Float32Array.of(0.25, -1)])]).toEqual([0.25, -1]);
+    expect(toMono([new Float32Array(0), new Float32Array(0)])).toHaveLength(0);
+    expect(toMono([])).toHaveLength(0);
+  });
+});
+
+describe("renderSequence, loops cut into each other", () => {
+  it("lets a pad's last hit of each loop be cut by its first hit of the next, as the page's loop does", async () => {
+    const sounds = [sound("a")];
+    const offline = fakeOffline();
+    await renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit(sounds),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      loops: 3,
+    });
+    const stages = sounds[0].play.mock.calls.map((call) => call[1]);
+    expect(stages).toHaveLength(4); // one warm-up pass and three loops
+    [1, 2, 3].forEach((pass, i) => {
+      // each pass's hit is cut where the next one starts (2 s on); the last loop's hit is cut by nothing
+      const cut = stages[i].gain.setTargetAtTime;
+      expect(cut).toHaveBeenCalledWith(0, LEAD_SECONDS + pass * 2, expect.any(Number));
+    });
+    expect(stages[3].gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+});
+
 describe("encodeWav", () => {
   const view = (bytes) => new DataView(bytes);
   const text = (bytes, at, length) => String.fromCharCode(...new Uint8Array(bytes, at, length));
@@ -367,6 +555,14 @@ describe("exportName", () => {
     expect(exportName({ current: 0, bpm: 100 })).toBe("pad16-seq-01-100bpm.wav");
     expect(exportName({ current: 7, bpm: 96.5 })).toBe("pad16-seq-08-97bpm.wav");
   });
+
+  it("says how many loops and that it is mono, when they are not the plain export, so files do not overwrite each other", () => {
+    const song = { current: 0, bpm: 100 };
+    expect(exportName(song, { loops: 1, channels: "stereo" })).toBe("pad16-seq-01-100bpm.wav");
+    expect(exportName(song, { loops: 4, channels: "stereo" })).toBe("pad16-seq-01-100bpm-x4.wav");
+    expect(exportName(song, { loops: 1, channels: "mono" })).toBe("pad16-seq-01-100bpm-mono.wav");
+    expect(exportName(song, { loops: 8, channels: "mono" })).toBe("pad16-seq-01-100bpm-x8-mono.wav");
+  });
 });
 
 describe("exportSequence", () => {
@@ -388,6 +584,29 @@ describe("exportSequence", () => {
     expect(blob.type).toBe("audio/wav");
     expect(blob.size).toBe(44 + 2 * 2); // a header and one frame of two channels
     expect(onMessage.mock.calls.map((call) => call[0])).toEqual(["EXPORTING...", "EXPORTED pad16-seq-01-120bpm.wav"]);
+  });
+
+  it("renders what it is told to, and names the file for it", async () => {
+    render.mockClear();
+    const { done, save } = run(songOf(sequence({ 0: [0] })), { options: { loops: 4, channels: "mono" } });
+    expect(await done).toBe(true);
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 4, channels: "mono" }));
+    expect(save.mock.calls[0][1]).toBe("pad16-seq-01-120bpm-x4-mono.wav");
+  });
+
+  it("is the plain export, one loop in stereo, when it is told nothing", async () => {
+    render.mockClear();
+    const { done, save } = run(songOf(sequence({ 0: [0] })));
+    await done;
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 1, channels: "stereo" }));
+    expect(save.mock.calls[0][1]).toBe("pad16-seq-01-120bpm.wav");
+  });
+
+  it("treats options that are not choices as the plain export", async () => {
+    render.mockClear();
+    const { done } = run(songOf(sequence({ 0: [0] })), { options: { loops: 99, channels: "5.1" } });
+    await done;
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 1, channels: "stereo" }));
   });
 
   it("says so, and renders nothing, when there is nothing in the sequence", async () => {
@@ -457,19 +676,38 @@ describe("exportSequence, cancelled and with progress", () => {
   });
 });
 
-describe("wasCancelled and exportLabel", () => {
+describe("exportSequence, a cancel while the file is encoded", () => {
+  it("is heard before the file is saved: encoding is one long task, so it gives the event loop a turn first", async () => {
+    const kit = createKit([sound("a")]);
+    const controller = new AbortController();
+    const onMessage = vi.fn();
+    const save = vi.fn();
+    // The press on Cancel arrives while the page is busy encoding: a task queued when the render ended.
+    const render = async () => {
+      setTimeout(() => controller.abort(), 0);
+      return { sampleRate: 8000, channels: [Float32Array.of(0.5)] };
+    };
+    const done = await exportSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit,
+      stepsPerBar: 16,
+      onMessage,
+      save,
+      render,
+      supported: true,
+      signal: controller.signal,
+    });
+    expect(done).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
+  });
+});
+
+describe("wasCancelled", () => {
   it("wasCancelled is whether an error is an abort", () => {
     expect(wasCancelled(new DOMException("x", "AbortError"))).toBe(true);
     expect(wasCancelled(new Error("x"))).toBe(false);
     expect(wasCancelled(undefined)).toBe(false);
-  });
-
-  it("exportLabel says it cancels, and the whole per cent, kept within 0 to 100", () => {
-    expect(exportLabel(0)).toBe("Cancel export 0%");
-    expect(exportLabel(0.404)).toBe("Cancel export 40%");
-    expect(exportLabel(1)).toBe("Cancel export 100%");
-    expect(exportLabel(1.5)).toBe("Cancel export 100%");
-    expect(exportLabel(-1)).toBe("Cancel export 0%");
   });
 });
 
@@ -672,6 +910,28 @@ describe("createExportAction", () => {
     const press = createExportAction({ ready: () => Promise.resolve(), run, onMessage, onBusy, ...extra });
     return { press, run, onMessage, onBusy };
   };
+
+  it("takes its snapshot when it is pressed, before it waits for the samples, and hands the run that one", async () => {
+    let state = "as pressed";
+    let samplesBack;
+    const snapshot = vi.fn(() => state);
+    const { press, run } = setup({ snapshot, ready: () => new Promise((resolve) => (samplesBack = resolve)) });
+    const done = press();
+    state = "moved while it waited"; // a controller's tempo knob, say
+    samplesBack();
+    await done;
+    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ snapshot: "as pressed" }));
+  });
+
+  it("takes no snapshot for a press that only cancels", async () => {
+    const snapshot = vi.fn(() => "x");
+    const { press } = setup({ snapshot, ready: () => new Promise(() => {}) });
+    press();
+    await flush();
+    await press(); // while it works: cancels
+    expect(snapshot).toHaveBeenCalledTimes(1);
+  });
 
   it("runs the export once the samples are back, and shows it is busy only while it works", async () => {
     const { press, run, onBusy } = setup();

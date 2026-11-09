@@ -56,7 +56,10 @@ export function createVoices(pads, { cleanUp = true, groupOf = () => 0, releaseO
     start(ctx, pad, destination, time) {
       const out = ctx.createGain();
       out.connect(destination);
-      const now = ctx.currentTime;
+      // "Long ago" is measured from the clock, which an offline render never advances (it stays at 0 until it runs), so
+      // there it is measured from the hit itself: hits are started in time order, and a voice cut long before this
+      // one is one that no later hit would cut again. Without it every voice of a long render is looked at by every hit.
+      const now = cleanUp ? ctx.currentTime : time;
       const chokes = [];
       const group = groupOf(pad);
       for (let other = 0; other < pads; other++) {
