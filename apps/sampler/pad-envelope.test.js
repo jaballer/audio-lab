@@ -170,6 +170,29 @@ describe("envelopeCurve", () => {
     expect(curve.at(-1)[0]).toBe(1);
   });
 
+  it("is a rise and a fall when the release is longer than the sample, and ends part-way up when the attack is", () => {
+    const whole = { trim: { start: 0, end: 1 }, duration: 2 };
+    expect(close(envelopeCurve({ attack: 0.5, release: 5 }, whole))).toEqual([
+      [0, 0],
+      [0.25, 1],
+      [1, 0],
+    ]);
+    expect(close(envelopeCurve({ attack: 4 }, whole))).toEqual([
+      [0, 0],
+      [1, 0.5],
+    ]);
+  });
+
+  it("covers a tiny trim, and only that part", () => {
+    const curve = envelopeCurve({ release: 0.004 }, { trim: { start: 0.5, end: 0.5025 }, duration: 2 }); // 5 ms
+    expect(curve[0][0]).toBeCloseTo(0.5);
+    expect(curve.at(-1)[0]).toBeCloseTo(0.5025);
+    for (const [x] of curve) {
+      expect(x).toBeGreaterThanOrEqual(0.5 - 1e-9);
+      expect(x).toBeLessThanOrEqual(0.5025 + 1e-9);
+    }
+  });
+
   it("starts and ends where the trim does, whatever the rate", () => {
     for (const rate of [0.5, 1, 2]) {
       const curve = envelopeCurve(envelope, { trim: { start: 0.2, end: 0.6 }, duration: 5, rate });
@@ -195,6 +218,18 @@ describe("curveLevelAt", () => {
     expect(curveLevelAt(curve, 0.2)).toBe(0);
     expect(curveLevelAt(curve, 0.4)).toBe(1);
     expect(curveLevelAt(curve, 0.8)).toBe(0.5);
+  });
+
+  it("steps at a point where two have the same x, taking the later level from there", () => {
+    const stepped = [
+      [0.2, 1],
+      [0.5, 1],
+      [0.5, 0.2],
+      [0.8, 0.2],
+    ];
+    expect(curveLevelAt(stepped, 0.4)).toBe(1);
+    expect(curveLevelAt(stepped, 0.5)).toBe(1); // at the step itself, the earlier segment
+    expect(curveLevelAt(stepped, 0.6)).toBe(0.2);
   });
 
   it("is 1, untouched, outside the part the curve covers, and for no curve", () => {

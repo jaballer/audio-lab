@@ -151,18 +151,17 @@ export function createTrimView(element, { onChange, fallbackFocus = null }) {
       }
     }
 
-    // What does not play is dimmed, and the two handles are lines.
+    // What does not play is dimmed.
     ctx.fillStyle = SHADE;
     ctx.fillRect(0, 0, start * width, HEIGHT);
     ctx.fillRect(end * width, 0, width - end * width, HEIGHT);
-    ctx.fillStyle = HANDLE;
-    ctx.fillRect(Math.min(width - 2, start * width), 0, 2, HEIGHT);
-    ctx.fillRect(Math.max(0, end * width - 2), 0, 2, HEIGHT);
 
-    // The envelope itself, as a line above the middle and its mirror below, over the part that plays.
+    // The envelope itself, as a line above the middle and its mirror below, over the part that plays. Under the handles,
+    // which stay the top thing, and with round joins so a sharp peak (a short attack) does not spike past the picture.
     if (curve) {
       ctx.strokeStyle = ENVELOPE;
       ctx.lineWidth = 1.5;
+      ctx.lineJoin = "round";
       for (const side of [-1, 1]) {
         ctx.beginPath();
         curve.forEach(([x, level], i) => {
@@ -174,6 +173,11 @@ export function createTrimView(element, { onChange, fallbackFocus = null }) {
         ctx.stroke();
       }
     }
+
+    // The two handles are lines.
+    ctx.fillStyle = HANDLE;
+    ctx.fillRect(Math.min(width - 2, start * width), 0, 2, HEIGHT);
+    ctx.fillRect(Math.max(0, end * width - 2), 0, 2, HEIGHT);
   }
 
   // The picture is drawn at the size it has on the page, so it is drawn again when that changes (the drawer
