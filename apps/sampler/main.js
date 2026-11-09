@@ -23,7 +23,7 @@ import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
-import { createPadGrid, padForKey, padPressAction } from "./pads.js";
+import { createPadGrid, padForKeyEvent, padPressAction } from "./pads.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { createSettingsSliders } from "./settings-sliders.js";
@@ -148,16 +148,22 @@ const lcd = createLcd({
   steps: STEPS,
 });
 
+// A press on a pad, by a pointer or a computer key: it plays, or (with Shift) selects the pad and opens the editor.
+// A pointer press leaves focus where it is, on the pad; a key opens the editor the way the Edit Pad button does, with
+// focus on its heading, since the keyboard has no other way into it from here.
+function pressPad(index, modifiers, { viaKey = false } = {}) {
+  if (padPressAction(modifiers) === "edit") {
+    sampler.selectPad(index);
+    if (viaKey) padDrawer.openAndFocus();
+    else padDrawer.open();
+  } else {
+    sampler.triggerPad(index);
+  }
+}
+
 const padGrid = createPadGrid($("pads"), {
   sounds: SOUNDS,
-  onTrigger(index, modifiers) {
-    if (padPressAction(modifiers) === "edit") {
-      sampler.selectPad(index);
-      padDrawer.open(); // opened by code, so focus stays on the pad
-    } else {
-      sampler.triggerPad(index);
-    }
-  },
+  onTrigger: pressPad,
 });
 // The colours saved with the song, on the pads from the start.
 for (let index = 0; index < kit.length; index++) padGrid.setColor(index, kit.settings(index).color);
@@ -388,8 +394,8 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
-  const index = padForKey(e.key.toLowerCase());
-  if (index >= 0) sampler.triggerPad(index);
+  const index = padForKeyEvent(e);
+  if (index >= 0) pressPad(index, { shift: e.shiftKey }, { viaKey: true });
 });
 
 // ---------- MIDI ----------

@@ -1,12 +1,13 @@
 // The 4 x 4 grid of pads, and the computer keys that mirror it.
 //
-//   const grid = createPadGrid(element, { sounds, onTrigger });   // onTrigger(index, { shift }) for a pointer press
+//   const grid = createPadGrid(element, { sounds, onTrigger });   // onTrigger(index, { shift }) for a pointer press; the computer keys are read by the page (padForKeyEvent)
 //   grid.flash(0);    // a pad was pressed: light it and push it down briefly
 //   grid.light(0);    // the sequence played a pad: light it, but it does not move
 //   grid.select(0);   // mark the selected pad (aria-current)
 //   grid.setColor(0, 5);   // the pad's colour: 0 for none, or a swatch (pad-colors.js); shown as its rim, and named in its label
 //   grid.setName(0, "Kick 808", true);   // a pad plays another sound now (true: a loaded sample, not the built-in one)
 //   padForKey("q")    // which pad a key plays (8), or -1
+//   padForKeyEvent(event)   // the same from a keydown event, which also reads the number row with Shift held
 
 import { setAttr } from "../../shared/dom-updates.js";
 import { createFlasher } from "../../shared/flash.js";
@@ -18,6 +19,7 @@ export const KEY_ROWS = ["1234", "qwer", "asdf", "zxcv"];
 
 // Pad 1 sits bottom-left, so the top key row plays the top pad row (pads 13-16).
 export function padForKey(key) {
+  if (!key) return -1; // indexOf("") is 0, which would be the first pad
   for (let row = 0; row < PAD_ROWS; row++) {
     const col = KEY_ROWS[row].indexOf(key);
     if (col !== -1) return padIndex(row, col);
@@ -27,10 +29,19 @@ export function padForKey(key) {
 
 const FLASH_MS = 110;
 
-// What a pointer press on a pad does. A plain press plays it. Shift is for editing: it selects the pad and opens its
-// editor without a sound, so a pad can be set up in the middle of a live take without a hit landing in it. (The
-// computer keys that mirror the pads still play, Shift or not.) The Edit Pad button is the way to the editor for a
-// touch screen, a MIDI pad or the keyboard, which have no Shift press on a pad.
+// Which pad a key press plays (or, with Shift, edits). `key` is what the key types, so it follows the keyboard layout;
+// but Shift turns the number row into symbols (Shift+1 types "!"), so a digit key is also read from its `code`.
+export function padForKeyEvent({ key = "", code = "" }) {
+  const index = padForKey(key.toLowerCase());
+  if (index >= 0) return index;
+  const digit = /^Digit(\d)$/.exec(code);
+  return digit ? padForKey(digit[1]) : -1;
+}
+
+// What a press on a pad does, by a pointer or by its computer key. A plain press plays it. Shift is for editing: it
+// selects the pad and opens its editor without a sound, so a pad can be set up in the middle of a live take without a
+// hit landing in it. (Enter and Space on a focused pad always play. A touch screen or a MIDI pad has no Shift: Edit Pad
+// is their way to the editor.)
 export const padPressAction = ({ shift = false } = {}) => (shift ? "edit" : "play");
 
 // A pad's label for a screen reader: which pad, what it plays, its key, and its colour when it has one.
@@ -70,8 +81,9 @@ export function createPadGrid(element, { sounds, onTrigger }) {
         e.preventDefault();
         onTrigger(idx, { shift: e.shiftKey });
       });
-      // Keyboard activation (Enter/Space on a focused pad) fires click with detail 0. It always plays: Shift is for the
-      // pointer, since the editor opens without moving focus into it; Edit Pad is the keyboard's way in.
+      // Keyboard activation (Enter/Space on a focused pad) fires click with detail 0. It always plays, Shift or not:
+      // Shift+Enter would open the editor with focus left on the pad. Shift with the pad's computer key is the keyboard's
+      // way to edit a pad (the page opens the editor and moves focus into it), and Edit Pad is the other.
       btn.addEventListener("click", (e) => {
         if (e.detail === 0) onTrigger(idx);
       });
