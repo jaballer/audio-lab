@@ -144,6 +144,7 @@ const lcd = createLcd({
   lines: [$("lcd-1"), $("lcd-2"), $("lcd-3")],
   message: $("lcd-msg"),
   ruler: $("ruler"),
+  progress: $("lcd-progress"),
   steps: STEPS,
 });
 
