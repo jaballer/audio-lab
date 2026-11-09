@@ -106,6 +106,25 @@ describe("createScheduler", () => {
     expect(Math.max(...longer)).toBe(7);
   });
 
+  it("carries on past the old end when made longer just after it wrapped, wherever the click lands", () => {
+    // The lookahead schedules the last step and wraps to 0 a little before that step sounds.
+    const { scheduler, played, run } = setup({ steps: 4, bpm: 120 });
+    scheduler.start();
+    while (!played.some(([step]) => step === 3)) run(0.01); // step 3 is scheduled: the next one wrapped to 0
+    played.length = 0;
+    scheduler.setSteps(8);
+    run(1);
+    expect(played.slice(0, 4).map(([step]) => step)).toEqual([4, 5, 6, 7]);
+  });
+
+  it("starts from step 0 when made longer before anything was scheduled", () => {
+    const { scheduler, played, run } = setup({ steps: 4, bpm: 120 });
+    scheduler.start();
+    scheduler.setSteps(8);
+    run(0.5);
+    expect(played[0][0]).toBe(0);
+  });
+
   it("moves the playhead into the new length at once when the loop is made shorter", () => {
     const { scheduler, run } = setup({ steps: 16, bpm: 120 });
     scheduler.start();
