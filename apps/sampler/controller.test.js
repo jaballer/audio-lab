@@ -360,6 +360,19 @@ describe("steps and clearing", () => {
     expect(songChange).toHaveBeenCalledTimes(1); // no change, no save
   });
 
+  it("drops a queued step from a bar that was removed when the sequence is shortened while playing", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, bars: 2, pattern: { 0: [18] } }) });
+    sampler.start();
+    let guard = 0;
+    while (!sounds[0].play.mock.calls.length && guard++ < 200) advance(0.05); // step 18 is queued, not started
+    expect(sounds[0].play).toHaveBeenCalledTimes(1);
+    const queued = sounds[0].play.mock.calls[0][1];
+    sampler.setBars(1);
+    expect(queued.disconnect).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 4; i++) advance(0.05);
+    expect(sounds[0].play).toHaveBeenCalledTimes(1); // the one-bar loop has nothing on step 2 (18 wrapped)
+  });
+
   it("keeps bars within 1 and the maximum", () => {
     const { sampler } = setup();
     sampler.setBars(99);
