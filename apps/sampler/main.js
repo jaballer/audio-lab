@@ -152,6 +152,8 @@ function render() {
   volInput.value = String(state.volume);
   playBtn.setAttribute("aria-pressed", String(state.playing));
   recBtn.setAttribute("aria-pressed", String(state.recording));
+  // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
+  recBtn.classList.toggle("armed", state.recording && !state.playing);
   lcd.render({ ...state, soundName, steps: STEPS });
   midi.refresh();
   if (state.playing) startPaintLoop();
