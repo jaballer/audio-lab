@@ -1,18 +1,49 @@
-// The sounds on the pads, one per pad: the built-in ones, each of which can be swapped for another (a
-// loaded sample) and put back. No DOM. A sound is { id, name, play(ctx, out, t) }, as in shared/sounds.js.
+// What each pad plays and how: the built-in sound, which can be swapped for another (a loaded sample) and put
+// back, and the pad's settings (gain, pitch). No DOM. A sound is { id, name, play(ctx, out, t) }, as in
+// shared/sounds.js.
 //
-//   const kit = createKit(SOUNDS, { onChange });
-//   kit.length;               // how many pads
-//   kit.get(3);               // the sound pad 3 plays now
-//   kit.set(3, sound);        // pad 3 plays `sound` from now on
-//   kit.reset(3);             // back to the built-in one
-//   kit.isDefault(3);         // is it the built-in one?
+//   const kit = createKit(SOUNDS, { onChange, settings });
+//   kit.length;                       // how many pads
+//   kit.get(3);                       // the sound pad 3 plays now (for its name)
+//   kit.set(3, sound);                // pad 3 plays `sound` from now on
+//   kit.reset(3);                     // back to the built-in one
+//   kit.isDefault(3);                 // is it the built-in one?
+//   kit.settings(3);                  // { gain, pitch } of pad 3 (pad-settings.js)
+//   kit.setSetting(3, "gain", -6);    // one setting; the value is clamped and rounded
+//   kit.settingsSnapshot();           // { pad: { gain, pitch } } for the pads that are not at the defaults
+//   kit.voice(3).play(ctx, out, t)    // what the sequencer and live hits call: the sound, with the pad's settings
 //
-// `onChange(index)` is called when a pad's sound actually changes, so views can show the new name. The
-// sequencer and the pads read the kit each time they play, so a swapped sound is heard at the next hit.
+// `onChange(index)` is called when a pad's sound or a setting actually changes, so views can show it. The
+// sequencer and the pads read the kit each time they play, so a change is heard at the next hit. `settings` is
+// the starting settings, in the shape settingsSnapshot gives (parsePadSettings makes it from what was saved).
+//
+// Gain applies to every sound. Pitch changes the playback rate, which only a sample has: a built-in sound is
+// synthesized with fixed frequencies and plays as it is, so the pitch setting is for loaded samples.
 
-export function createKit(defaults, { onChange } = {}) {
+import { withGain } from "../../shared/sounds.js";
+import { DEFAULT_SETTINGS, SETTING_NAMES, clampSetting, gainToLinear, pitchToRate } from "./pad-settings.js";
+
+export function createKit(defaults, { onChange, settings: initial = {} } = {}) {
   const current = [...defaults];
+  const settings = defaults.map((_, index) => ({ ...DEFAULT_SETTINGS, ...initial[index] }));
+
+  function voice(index) {
+    return {
+      get id() {
+        return current[index].id;
+      },
+      get name() {
+        return current[index].name;
+      },
+      play(ctx, out, t) {
+        const { gain, pitch } = settings[index];
+        const target = withGain(ctx, out, gainToLinear(gain));
+        // Only a changed pitch passes the option, so a sound that knows nothing of it is called as it always was.
+        if (pitch === DEFAULT_SETTINGS.pitch) current[index].play(ctx, target, t);
+        else current[index].play(ctx, target, t, { rate: pitchToRate(pitch) });
+      },
+    };
+  }
 
   return {
     length: defaults.length,
@@ -28,5 +59,20 @@ export function createKit(defaults, { onChange } = {}) {
       current[index] = defaults[index];
       onChange?.(index);
     },
+    settings: (index) => ({ ...settings[index] }),
+    setSetting(index, name, value) {
+      const next = clampSetting(name, value);
+      if (settings[index][name] === next) return;
+      settings[index][name] = next;
+      onChange?.(index);
+    },
+    settingsSnapshot() {
+      const out = {};
+      settings.forEach((entry, index) => {
+        if (SETTING_NAMES.some((name) => entry[name] !== DEFAULT_SETTINGS[name])) out[index] = { ...entry };
+      });
+      return out;
+    },
+    voice,
   };
 }

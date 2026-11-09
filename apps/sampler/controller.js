@@ -22,6 +22,7 @@
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
+//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB) or pitch (semitones), saved with the song
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
@@ -35,9 +36,9 @@
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo }
+//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
-//   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern, velocities }] }: what song.js saves
+//   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern, velocities }], padSettings }: what song.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
@@ -45,6 +46,7 @@
 import { playSound, withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
 import { createHistory } from "../../shared/history.js";
+import { SETTINGS, formatSetting } from "./pad-settings.js";
 import { FULL_VELOCITY, createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { createTapTempo, nearestStep } from "../../shared/tempo.js";
@@ -117,7 +119,7 @@ export function createSampler({
       bus.connect(master);
       for (let row = 0; row < kit.length; row++) {
         if (pattern.isOn(row, step) && !heard.has(row)) {
-          kit.get(row).play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
+          kit.voice(row).play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
           rows.push(row);
         }
       }
@@ -138,7 +140,7 @@ export function createSampler({
 
   // velocity is 0-1.
   function triggerPad(index, velocity = 1) {
-    playSound(audio, kit.get(index), velocity);
+    playSound(audio, kit.voice(index), velocity);
     onPadHit(index);
     if (recording && scheduler.playing) recordHit(index, velocity);
     selectPad(index);
@@ -195,6 +197,17 @@ export function createSampler({
 
   function toggleStep(step) {
     edit(() => pattern.toggle(selected, page * steps + step));
+    onChange();
+  }
+
+  // The one place a pad's setting (gain, pitch) changes: for the selected pad, saved with the song. The kit
+  // clamps the value and tells the views.
+  function setPadSetting(name, value) {
+    kit.setSetting(selected, name, value);
+    onMessage(
+      `PAD ${pad2(selected + 1)} ${SETTINGS[name].label.toUpperCase()} ${formatSetting(name, kit.settings(selected)[name])}`,
+    );
+    onSongChange();
     onChange();
   }
 
@@ -375,6 +388,7 @@ export function createSampler({
     triggerPad,
     toggleStep,
     setStepVelocity,
+    setPadSetting,
     setPage,
     setBars,
     setSequence,
@@ -413,6 +427,7 @@ export function createSampler({
       playheadPosition: scheduler.playheadStep,
       stepsOn: pattern.row(selected).slice(page * steps, (page + 1) * steps),
       // Their velocities, 1-127 (a step that is off reads as full).
+      padSettings: kit.settings(selected), // { gain, pitch } of the selected pad
       canUndo: history.canUndo,
       canRedo: history.canRedo,
       stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
@@ -422,6 +437,7 @@ export function createSampler({
       bpm: scheduler.bpm,
       volume,
       current,
+      padSettings: kit.settingsSnapshot(),
       sequences: slots.map((slot) => ({
         bars: slot.bars,
         pattern: slot.pattern.snapshot(),

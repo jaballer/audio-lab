@@ -8,6 +8,7 @@ const song = {
   bpm: 96.5,
   volume: 60,
   current: 1,
+  padSettings: { 1: { gain: -6, pitch: 3 } },
   sequences: [
     { bars: 2, pattern: { 0: [0, 4, 8, 12], 3: [2] }, velocities: { 0: { 4: 90, 12: 20 } } },
     { bars: 4, pattern: { 5: [1] }, velocities: {} },
@@ -284,6 +285,39 @@ describe("velocities", () => {
   });
 });
 
+describe("pad settings", () => {
+  it("come back as they were saved", () => {
+    expect(parse(serializeSong(song)).padSettings).toEqual({ 1: { gain: -6, pitch: 3 } });
+  });
+
+  it("are brought into range, and pads that are not there or are at the defaults are dropped", () => {
+    const raw = {
+      ...serializeSong(song),
+      padSettings: { 0: { gain: 40, pitch: -40 }, 2: { gain: 0, pitch: 0 }, 99: { gain: 1, pitch: 1 } },
+    };
+    expect(parse(raw).padSettings).toEqual({ 0: { gain: 6, pitch: -12 } });
+  });
+
+  it("are empty when there are none, or they are the wrong shape", () => {
+    expect(parse({ ...serializeSong(song), padSettings: undefined }).padSettings).toEqual({});
+    expect(parse({ ...serializeSong(song), padSettings: [1, 2] }).padSettings).toEqual({});
+    expect(parse({ ...serializeSong(song), padSettings: "loud" }).padSettings).toEqual({});
+  });
+});
+
+describe("songs saved by version 3", () => {
+  it("load with every pad at its defaults", () => {
+    const v3 = {
+      version: 3,
+      bpm: 100,
+      volume: 50,
+      current: 0,
+      sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
+    };
+    expect(parse(v3)).toMatchObject({ padSettings: {}, sequences: [{ pattern: { 0: [0] } }, empty, empty, empty] });
+  });
+});
+
 describe("songs saved by version 2", () => {
   it("load with every step at full velocity", () => {
     const v2 = {
@@ -306,6 +340,7 @@ describe("songs saved by version 1", () => {
       volume: 70,
       current: 0,
       sequences: [{ bars: 1, pattern: { 0: [0, 8], 2: [4] }, velocities: {} }, empty, empty, empty],
+      padSettings: {},
     });
   });
 

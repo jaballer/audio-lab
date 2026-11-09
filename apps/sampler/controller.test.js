@@ -20,10 +20,19 @@ function fakeAudio() {
 
 const SEQUENCES = 4;
 // A saved song with one sequence of the given pattern and length, the rest empty.
-const savedSong = ({ bpm = 100, volume = 50, bars = 1, pattern = {}, velocities = {}, current = 0 } = {}) => ({
+const savedSong = ({
+  bpm = 100,
+  volume = 50,
+  bars = 1,
+  pattern = {},
+  velocities = {},
+  current = 0,
+  padSettings = {},
+} = {}) => ({
   bpm,
   volume,
   current,
+  padSettings,
   sequences: Array.from({ length: SEQUENCES }, (_, i) =>
     i === 0 ? { bars, pattern, velocities } : { bars: 1, pattern: {}, velocities: {} },
   ),
@@ -134,6 +143,70 @@ describe("triggerPad", () => {
     const { audio, sampler } = setup();
     sampler.triggerPad(0, 0);
     expect(audio.ctx.createGain.mock.results[0].value.gain.value).toBe(0.05);
+  });
+});
+
+describe("pad settings", () => {
+  it("sets gain or pitch on the selected pad, says so, saves, and redraws", () => {
+    const { sampler, message, songChange, change } = setup();
+    sampler.selectPad(2);
+    songChange.mockClear();
+    change.mockClear();
+    sampler.setPadSetting("gain", -6);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 GAIN -6 dB");
+    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledTimes(1);
+    sampler.setPadSetting("pitch", 3);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 PITCH +3 st");
+    expect(sampler.getState().padSettings).toEqual({ gain: -6, pitch: 3 });
+    sampler.selectPad(0);
+    expect(sampler.getState().padSettings).toEqual({ gain: 0, pitch: 0 });
+  });
+
+  it("says the value it kept, which is the clamped one", () => {
+    const { sampler, message } = setup();
+    sampler.setPadSetting("gain", 50);
+    expect(message).toHaveBeenLastCalledWith("PAD 01 GAIN +6 dB");
+  });
+
+  it("is saved with the song, only for the pads that are not at the defaults", () => {
+    const { sampler } = setup();
+    expect(sampler.getSong().padSettings).toEqual({});
+    sampler.selectPad(1);
+    sampler.setPadSetting("pitch", -5);
+    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: -5 } });
+  });
+
+  it("changes a live hit and the sequence, from the next hit", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const kit = createKit(sounds);
+    const sampler = createSampler({
+      audio,
+      kit,
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 1: [0, 1, 2, 3] } }),
+    });
+    sampler.selectPad(1);
+    sampler.setPadSetting("pitch", 12);
+    sampler.triggerPad(1);
+    expect(sounds[1].play.mock.calls[0][3]).toEqual({ rate: 2 }); // a live hit
+    sampler.start();
+    audio.ctx.currentTime += 0.2;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    expect(sounds[1].play.mock.calls.length).toBeGreaterThan(1);
+    expect(sounds[1].play.mock.calls.slice(1).every((call) => call[3]?.rate === 2)).toBe(true); // and the steps
+  });
+
+  it("applies the gain to a live hit through a stage of its own, in front of the master", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const sampler = createSampler({ audio, kit: createKit(sounds), steps: STEPS });
+    sampler.setPadSetting("gain", -6);
+    sampler.triggerPad(0);
+    const stage = sounds[0].play.mock.calls[0][1];
+    expect(stage.gain.value).toBeCloseTo(0.501, 3);
+    expect(stage.connect).toHaveBeenCalledWith(audio.master);
   });
 });
 
