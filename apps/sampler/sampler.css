@@ -691,6 +691,7 @@
   border: 0;
   border-radius: 6px;
   background: none;
+  font-family: inherit; /* a button does not take the page's font by itself (the size and weight are the label's) */
   cursor: pointer;
   text-align: left;
 }
@@ -712,9 +713,15 @@
   outline: 3px solid var(--focus-on-light);
   outline-offset: 2px;
 }
-/* Hidden parts of the header and the body stay hidden: their own display rules would show them. */
-.step-panel [hidden] {
+/* Hidden parts of the header and the body stay hidden: the tools' and the bar arrows' own display rules would show
+   them. Only these: a step key that is not a step (a shorter sequence) is hidden another way and keeps its place. */
+.step-head > [hidden],
+#step-body[hidden] {
   display: none;
+}
+/* Hidden, the header is all there is: no room under it for what is not there. */
+.step-head:has(.step-toggle[aria-expanded="false"]) {
+  margin-bottom: 0;
 }
 @media (prefers-reduced-motion: reduce) {
   .step-toggle::before {

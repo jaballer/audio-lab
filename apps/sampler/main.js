@@ -412,13 +412,8 @@ function placeConsole() {
 placeConsole();
 narrow.addEventListener("change", placeConsole);
 
-// ---------- Where the pad editor goes ----------
-// Beside the machine when the window is wide enough, otherwise under the pads, where it takes the place the
-// Load Sample buttons used to have. The one element is moved, as the display is above. Both together want 1310px
-// (the machine's 980, the drawer's 290, a 16px gap and the page's side padding), so from 1180px up the machine
-// gives up some width while the drawer is open (850px at the breakpoint; its own layout holds down to 800) and
-// takes it back when the drawer closes. Below that the machine keeps its width and the drawer goes under the pads.
-// The step editor can be hidden, leaving its heading: its keys, velocity bars and tools. Remembered, and shown by default.
+// ---------- The step editor can be hidden ----------
+// Its heading stays: the keys, the velocity bars, the bar arrows and the edit tools go. Remembered, and shown by default.
 const STEPS_KEY = "pad-sampler:steps";
 createDisclosure({
   toggle: $("steps-toggle"),
@@ -427,6 +422,12 @@ createDisclosure({
   onToggle: (open) => saveJson(STEPS_KEY, open),
 });
 
+// ---------- Where the pad editor goes ----------
+// Beside the machine when the window is wide enough, otherwise under the pads, where it takes the place the
+// Load Sample buttons used to have. The one element is moved, as the display is above. Both together want 1310px
+// (the machine's 980, the drawer's 290, a 16px gap and the page's side padding), so from 1180px up the machine
+// gives up some width while the drawer is open (850px at the breakpoint; its own layout holds down to 800) and
+// takes it back when the drawer closes. Below that the machine keeps its width and the drawer goes under the pads.
 const dock = window.matchMedia("(min-width: 1180px)");
 function placeDrawer() {
   const home = dock.matches ? document.querySelector(".sampler-stage") : $("pads").closest(".pad-panel");
