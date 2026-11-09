@@ -156,6 +156,17 @@ describe("recording", () => {
     expect(buses[2].disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it("flashes nothing for a step the scheduler skipped after a stall", () => {
+    const { sampler, padPlayed, advance } = setup({
+      song: savedSong({ bpm: 120, pattern: { 0: Array.from({ length: 16 }, (_, i) => i) } }),
+    });
+    sampler.start();
+    advance(0.05); // step 0 is scheduled
+    advance(1.99); // a stall: the due steps are skipped, not sounded, and the next step is still ahead
+    sampler.poll();
+    expect(padPlayed).not.toHaveBeenCalled(); // the playhead is on a step that never sounded
+  });
+
   it("lights only the newest step reached, not every step that went by since the last frame", () => {
     const { sampler, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 1: [0], 2: [1] } }) });
     sampler.start();
@@ -278,6 +289,27 @@ describe("sequences", () => {
     sampler.clearAll();
     expect(sampler.getSong().sequences[0].pattern).toEqual({});
     expect(sampler.getSong().sequences[1].pattern).toEqual({ 2: [3] });
+  });
+
+  it("replaces the steps already queued with the new sequence's when it is switched while playing", () => {
+    const base = savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } });
+    const song = {
+      ...base,
+      sequences: [base.sequences[0], { bars: 1, pattern: { 1: [2] } }, ...base.sequences.slice(2)],
+    };
+    const { sounds, sampler, padPlayed, advance } = setup({ song });
+    sampler.start();
+    for (let i = 0; i < 5; i++) advance(0.05); // steps 0 and 1 have started; step 2 (0.3 s) is queued from sequence 1
+    const queued = sounds[0].play.mock.calls[2][1];
+    sampler.setSequence(1);
+    expect(queued.disconnect).toHaveBeenCalledTimes(1); // the old sequence's hit on step 2 will not sound
+    expect(sounds[1].play).not.toHaveBeenCalled();
+    for (let i = 0; i < 3; i++) advance(0.05);
+    expect(sounds[0].play).toHaveBeenCalledTimes(3); // nothing more from the old sequence
+    expect(sounds[1].play).toHaveBeenCalledTimes(1); // the new sequence's step 2, at the same moment
+    expect(sounds[1].play.mock.calls[0][2]).toBeCloseTo(0.3);
+    sampler.poll();
+    expect(padPlayed).not.toHaveBeenCalledWith(0); // the old hit on step 2 does not light either
   });
 
   it("goes back to the first bar of the new sequence", () => {
