@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 
 // The few parts of an element the drawer touches. A click or a key is a call to the listener that was added.
@@ -24,9 +24,10 @@ function setup() {
   const close = fakeElement();
   const title = fakeElement();
   const info = fakeElement();
+  const message = fakeElement();
   const onToggle = vi.fn();
-  const drawer = createPadDrawer({ element, toggle, close, title, info, onToggle });
-  return { drawer, element, toggle, close, title, info, onToggle };
+  const drawer = createPadDrawer({ element, toggle, close, title, info, message, onToggle });
+  return { drawer, element, toggle, close, title, info, message, onToggle };
 }
 
 describe("createPadDrawer", () => {
@@ -160,5 +161,38 @@ describe("moveKeepingFocus", () => {
     moveKeepingFocus(element, parent, doc);
     expect(inside.focus).not.toHaveBeenCalled();
     expect(outside.focus).not.toHaveBeenCalled();
+  });
+});
+
+describe("the message line", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("shows the LCD's message for a moment, and clears it", () => {
+    vi.useFakeTimers();
+    const { drawer, message } = setup();
+    drawer.showMessage("PAD 03 LOADED");
+    expect(message.textContent).toBe("PAD 03 LOADED");
+    vi.advanceTimersByTime(1599);
+    expect(message.textContent).toBe("PAD 03 LOADED");
+    vi.advanceTimersByTime(1);
+    expect(message.textContent).toBe("");
+  });
+
+  it("restarts the time when another message comes, and does nothing without a line to show it in", () => {
+    vi.useFakeTimers();
+    const { drawer, message } = setup();
+    drawer.showMessage("ONE");
+    vi.advanceTimersByTime(1000);
+    drawer.showMessage("TWO");
+    vi.advanceTimersByTime(1000);
+    expect(message.textContent).toBe("TWO");
+    const bare = createPadDrawer({
+      element: fakeElement({ id: "d" }),
+      toggle: fakeElement(),
+      close: fakeElement(),
+      title: fakeElement(),
+      info: fakeElement(),
+    });
+    expect(() => bare.showMessage("X")).not.toThrow();
   });
 });

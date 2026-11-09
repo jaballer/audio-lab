@@ -81,6 +81,11 @@ export function probeDuration(file, env = {}) {
 
 // Where a trimmed sample starts and stops it is faded over this long, so cutting it mid-wave does not click.
 export const EDGE_FADE_SECONDS = 0.003;
+// A trimmed sample's window is counted from the time it is told to start. A hit at the clock's "now" is already a
+// little late by the time the audio thread gets it, and a window that has started in the past is cut off at the
+// front (a 5 ms window 10 ms late was silent, in Chrome). So a trimmed hit starts at least this far ahead of the
+// clock: a few milliseconds of delay, which is under the output's own, for a window that always plays whole.
+export const TRIM_LEAD_SECONDS = 0.005;
 const PEAK_COLUMNS = 400; // the outline is made once, at a width the view can draw at any size
 
 // `bytes` is the size of the file it came from. `info` is what the pad editor shows about it: not the sample
@@ -120,7 +125,9 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
       }
       // Only the trimmed part, faded in where it starts if that is not the start of the file and out where
       // it stops if that is not the end. `length` is in the sample's own time: the rate shortens it when played.
+      // `t` is moved on to the lead where it is already behind it, and the fades and the start use the moved time.
       const { offset, length } = trimWindow(current, buffer.duration);
+      t = Math.max(t, (ctx.currentTime ?? 0) + TRIM_LEAD_SECONDS);
       const heard = length / rate;
       const fade = Math.min(EDGE_FADE_SECONDS, heard / 2);
       const stage = ctx.createGain();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FULL_VELOCITY, MIN_VELOCITY, createPattern } from "./pattern.js";
+import { FULL_VELOCITY, MIN_VELOCITY, createPattern, firstDifference } from "./pattern.js";
 
 describe("createPattern", () => {
   it("starts empty", () => {
@@ -157,6 +157,21 @@ describe("rows and state", () => {
     expect(pattern.rowState(0)).toEqual({ length: 4, on: [1], velocities: { 1: 30 } });
   });
 
+  it("ignores a negative step, which would otherwise turn on a step before the stretch pasted over", () => {
+    const pattern = createPattern(2, 8, { 0: [4] });
+    pattern.replaceRow(0, { length: 4, on: [-1, 0] }, 4); // steps 4-7: step 3 is outside them
+    expect(pattern.isOn(0, 3)).toBe(false);
+    expect(pattern.isOn(0, 4)).toBe(true);
+  });
+
+  it("ignores a negative velocity key, which would otherwise change a step before the stretch pasted over", () => {
+    const pattern = createPattern(2, 8, { 0: [3, 4] });
+    pattern.replaceRow(0, { length: 4, on: [0], velocities: { "-1": 40, 0: 50 } }, 4);
+    expect(pattern.isOn(0, 3)).toBe(true);
+    expect(pattern.velocity(0, 3)).toBe(127);
+    expect(pattern.velocity(0, 4)).toBe(50);
+  });
+
   it("copies a stretch of a row and puts it on another stretch, the rest of the row left alone", () => {
     const pattern = createPattern(2, 8, { 0: [0, 2, 5], 1: [6] }, { velocities: { 0: { 2: 40 } } });
     const bar = pattern.rowState(0, 0, 4); // steps 0-3 of pad 0
@@ -258,5 +273,40 @@ describe("onChange", () => {
     const pattern = createPattern(1, 4, {}, { onChange: () => seen.push(pattern.isOn(0, 2)) });
     pattern.toggle(0, 2);
     expect(seen).toEqual([true]);
+  });
+});
+
+describe("firstDifference", () => {
+  const state = (pattern = {}, velocities = {}) => ({ pattern, velocities });
+
+  it("is null for two states that are the same", () => {
+    expect(firstDifference(state({ 0: [1, 2] }, { 0: { 2: 40 } }), state({ 0: [1, 2] }, { 0: { 2: 40 } }))).toBeNull();
+    expect(firstDifference(state(), state())).toBeNull();
+  });
+
+  it("is the first step whose on or off is not the same", () => {
+    expect(firstDifference(state({ 0: [1, 5] }), state({ 0: [1, 5, 9] }))).toEqual({ row: 0, step: 9 });
+    expect(firstDifference(state({ 0: [1, 5] }), state({ 0: [5] }))).toEqual({ row: 0, step: 1 });
+  });
+
+  it("is the first step whose velocity is not the same, a step with none being at full", () => {
+    expect(firstDifference(state({ 2: [3] }, { 2: { 3: 40 } }), state({ 2: [3] }, { 2: { 3: 90 } }))).toEqual({
+      row: 2,
+      step: 3,
+    });
+    expect(firstDifference(state({ 2: [3] }), state({ 2: [3] }, { 2: { 3: 90 } }))).toEqual({ row: 2, step: 3 });
+    expect(firstDifference(state({ 2: [3] }), state({ 2: [3] }, { 2: { 3: FULL_VELOCITY } }))).toBeNull();
+  });
+
+  it("goes by the lowest pad first, then the earliest step, whatever order the keys come in", () => {
+    const a = state({ 5: [2], 1: [8, 3] });
+    const b = state({ 5: [], 1: [8] });
+    expect(firstDifference(a, b)).toEqual({ row: 1, step: 3 });
+    expect(firstDifference(state({ 10: [1], 9: [1] }), state({}))).toEqual({ row: 9, step: 1 });
+  });
+
+  it("works for pads that are in only one of the states", () => {
+    expect(firstDifference(state({ 4: [7] }), state({}))).toEqual({ row: 4, step: 7 });
+    expect(firstDifference(state({}), state({ 4: [7] }))).toEqual({ row: 4, step: 7 });
   });
 });

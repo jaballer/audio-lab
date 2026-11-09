@@ -7,8 +7,9 @@
 // A slider is a native range input, so it works from the keyboard (arrows, Home, End); Delete or Backspace, or
 // a double-click, puts it back to its default. Pitch is for loaded samples, so while the pad plays a built-in
 // sound its slider is disabled, shows a dash, and says why to a screen reader (the reason is described by
-// the input, so it is read with it).
+// the input, so it is read with it). Focus on it when it goes disabled moves to Gain, so the keyboard stays in the editor.
 
+import { setAttr, setDisabled, setText } from "../../shared/dom-updates.js";
 import { SETTINGS, SETTING_NAMES, formatSetting } from "./pad-settings.js";
 
 const PITCH_HINT = "Pitch applies to a loaded sample";
@@ -73,13 +74,13 @@ export function createSettingsSliders(element, { onChange }) {
         const applies = name !== "pitch" || pitchEnabled;
         // A pad that cannot use its pitch shows the slider at rest and a dash, not a value that does nothing.
         const value = applies ? settings[name] : SETTINGS[name].default;
-        input.value = String(value);
-        input.setAttribute("aria-valuetext", applies ? formatSetting(name, value) : PITCH_HINT);
-        output.textContent = applies ? formatSetting(name, value) : NOT_APPLICABLE;
+        if (input.value !== String(value)) input.value = String(value);
+        setAttr(input, "aria-valuetext", applies ? formatSetting(name, value) : PITCH_HINT);
+        setText(output, applies ? formatSetting(name, value) : NOT_APPLICABLE);
       }
       const { input, row } = rows.pitch;
-      input.disabled = !pitchEnabled;
-      row.title = pitchEnabled ? "" : PITCH_HINT;
+      setDisabled(input, !pitchEnabled, rows.gain.input);
+      setAttr(row, "title", pitchEnabled ? "" : PITCH_HINT);
       row.classList.toggle("disabled", !pitchEnabled);
     },
   };

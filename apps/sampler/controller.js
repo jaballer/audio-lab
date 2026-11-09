@@ -27,7 +27,8 @@
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
 //   sampler.start()              // from the first step, even if it is already playing
-//   sampler.stop(); sampler.toggleRec()
+//   sampler.stop()               // stops the sequence; pressed again while stopped, it cuts off all sound (tails too)
+//   sampler.toggleRec()
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.copySteps(); sampler.pasteSteps()   // the steps and velocities of the bar showing for the selected pad,
 //                                               // over the bar showing for the selected pad (another bar, pad or sequence)
@@ -47,7 +48,7 @@ import { playSound, withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
-import { FULL_VELOCITY, createPattern } from "../../shared/pattern.js";
+import { FULL_VELOCITY, createPattern, firstDifference } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { createTapTempo, nearestStep } from "../../shared/tempo.js";
 import { STARTER_BEAT } from "./starter-beat.js";
@@ -117,7 +118,9 @@ export function createSampler({
       // stopped before the step is reached, its sounds can be cut off (see cancelQueuedHits).
       const bus = ctx.createGain();
       bus.connect(master);
-      for (let row = 0; row < kit.length; row++) {
+      // With the power off nothing is built: the hits would be muted, but their tails would still be sounding when
+      // the power came on (a 10 second sample, every step) and be heard all at once. The beat goes on silently.
+      for (let row = 0; row < kit.length && audio.powered; row++) {
         if (pattern.isOn(row, step) && !heard.has(row)) {
           kit.voice(row).play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
           rows.push(row);
@@ -142,7 +145,8 @@ export function createSampler({
   function triggerPad(index, velocity = 1) {
     playSound(audio, kit.voice(index), velocity);
     onPadHit(index);
-    if (recording && scheduler.playing) recordHit(index, velocity);
+    // A hit that was not heard (the power is off: playSound dropped it) is not written into the pattern either.
+    if (recording && scheduler.playing && audio.powered) recordHit(index, velocity);
     selectPad(index);
   }
 
@@ -292,8 +296,16 @@ export function createSampler({
       onMessage(`NOTHING TO ${message}`);
       return;
     }
+    const before = pattern.state();
     pattern.restore(state);
     lastMergedAt = -Infinity;
+    // The history is of the whole sequence, so what it changes may be on a pad or a bar that is not showing. Go to
+    // the first thing that changed, so an undo is never a change to something out of sight.
+    const changed = firstDifference(before, pattern.state());
+    if (changed) {
+      selected = changed.row;
+      page = Math.min(lastPage(), Math.floor(changed.step / steps));
+    }
     onMessage(message);
     onChange();
   }
@@ -350,9 +362,14 @@ export function createSampler({
     onChange();
   }
 
+  // The first press stops the sequence and lets what is sounding ring out; a press when it is already stopped
+  // cuts off everything still sounding (a long tail, a sample), as a panic button does on hardware.
   function stop() {
+    const wasPlaying = scheduler.playing;
     scheduler.stop();
     cancelQueuedHits();
+    // Nothing to cut off before the audio exists (a fresh page), so nothing is said.
+    if (!wasPlaying && audio.killSound()) onMessage("ALL SOUND OFF");
     onChange();
   }
 

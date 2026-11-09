@@ -8,8 +8,9 @@
 //
 // Press and drag along the row to paint: the bar under the pointer takes the height of the pointer.
 // Each bar is also a slider for the keyboard (arrows, Page Up/Down, Home, End). A bar for a step that is
-// off is shown dim and does nothing: a velocity belongs to a step that sounds.
+// off is shown dim and does nothing: a velocity belongs to a step that sounds, so it is also out of the tab order.
 
+import { setAttr } from "../../shared/dom-updates.js";
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
 
 const KEY_STEP = 1;
@@ -91,7 +92,7 @@ export function createVelocityBars(element, { steps, group: groupSize = 4, onCha
       if (next !== state.value) onChange(i, next);
     });
     group.appendChild(bar);
-    bars.push({ bar, fill, on: false, value: FULL_VELOCITY });
+    bars.push({ bar, fill, on: false, value: FULL_VELOCITY, height: null });
   }
 
   function barAt(clientX, clientY) {
@@ -129,19 +130,22 @@ export function createVelocityBars(element, { steps, group: groupSize = 4, onCha
   element.addEventListener("pointercancel", stop);
 
   return {
+    // Called on every redraw, which is every step while playing: only what changed is written.
     refresh({ on, velocities, soundName, first = 0 }) {
       bars.forEach((state, i) => {
         state.on = on[i];
         state.value = velocities[i];
         state.bar.classList.toggle("on", on[i]);
-        state.bar.setAttribute("aria-disabled", String(!on[i]));
-        state.bar.setAttribute("aria-valuenow", String(velocities[i]));
-        state.bar.setAttribute(
-          "aria-label",
-          `${soundName} step ${first + i + 1} velocity${on[i] ? "" : ", step is off"}`,
-        );
+        setAttr(state.bar, "aria-disabled", String(!on[i]));
+        setAttr(state.bar, "tabindex", on[i] ? "0" : "-1");
+        setAttr(state.bar, "aria-valuenow", String(velocities[i]));
+        setAttr(state.bar, "aria-label", `${soundName} step ${first + i + 1} velocity${on[i] ? "" : ", step is off"}`);
         // A step that is off shows an empty bar: its velocity is not in use.
-        state.fill.style.height = on[i] ? `${(velocities[i] / FULL_VELOCITY) * 100}%` : "0";
+        const height = on[i] ? `${(velocities[i] / FULL_VELOCITY) * 100}%` : "0";
+        if (state.height !== height) {
+          state.height = height;
+          state.fill.style.height = height;
+        }
       });
     },
   };

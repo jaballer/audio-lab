@@ -1,13 +1,15 @@
 // The waveform of the selected pad's sample, with its Start and End, drawn into an element it is handed. It
 // shows and reports; the sampler decides (samples.setTrim). The maths is in trim.js.
 //
-//   const view = createTrimView(element, { onChange });   // onChange(trim, moved): moved is "start" or "end"
+//   const view = createTrimView(element, { onChange, fallbackFocus });   // onChange(trim, moved): moved is "start" or "end"
+//                                                          // fallbackFocus: where focus goes when the view is hidden under it
 //   view.refresh(sound);                                   // a sample (trim, duration, peaks()), or null for none
 //
 // The two sliders are native range inputs, so the keyboard and a screen reader have the whole of it (arrows,
 // Home, End; Delete or a double-click puts one back); the picture can also be pressed and dragged, which moves
 // the nearer handle. With no sample (a built-in sound has no waveform) the whole thing is hidden.
 
+import { setAttr, setHidden, setText } from "../../shared/dom-updates.js";
 import { formatTime } from "./format.js";
 import { FULL_TRIM, nearestHandle } from "./trim.js";
 
@@ -18,7 +20,7 @@ const SHADE = "rgba(15, 15, 14, 0.62)";
 const HANDLE = "#ffb347";
 const BACKGROUND = "#1c1b19";
 
-export function createTrimView(element, { onChange }) {
+export function createTrimView(element, { onChange, fallbackFocus = null }) {
   element.classList.add("sampler-trim");
   const idBase = `trim-${element.id || "view"}`;
   let sound = null;
@@ -151,7 +153,7 @@ export function createTrimView(element, { onChange }) {
   return {
     refresh(next) {
       sound = next ?? null;
-      element.hidden = !sound;
+      setHidden(element, !sound, fallbackFocus);
       if (!sound) {
         drawn = null;
         return;
@@ -161,9 +163,10 @@ export function createTrimView(element, { onChange }) {
       for (const name of ["start", "end"]) {
         const { input, output } = rows[name];
         const text = formatTime(values[name] * sound.duration);
-        input.value = String(Math.round(values[name] * STEPS));
-        input.setAttribute("aria-valuetext", text);
-        output.textContent = text;
+        const position = String(Math.round(values[name] * STEPS));
+        if (input.value !== position) input.value = position;
+        setAttr(input, "aria-valuetext", text);
+        setText(output, text);
       }
       draw();
     },

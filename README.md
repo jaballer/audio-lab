@@ -1,6 +1,6 @@
 # PAD16 Sampler
 
-A single-page drum sampler styled like a classic hardware pad sampler, built with Vite and the Web Audio API. Every sound is synthesized in the browser, so there are no sample files.
+A single-page drum sampler styled like a classic hardware pad sampler, built with Vite and the Web Audio API. The built-in sounds are synthesized in the browser, so there are no sample files to download; a pad can also play an audio file you load, which is kept in your browser.
 
 **Live demo: https://jaballer.github.io/audio-lab/**
 
@@ -13,7 +13,7 @@ A single-page drum sampler styled like a classic hardware pad sampler, built wit
 
 ## MIDI
 
-Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost` or HTTPS.
+Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost`, `127.0.0.1` or HTTPS.
 
 **Novation Launchpad, Launchpad S, and Launchpad Mini mk1/mk2** — pads are lit to mirror the app when the MIDI port name identifies a supported model:
 
@@ -31,7 +31,7 @@ Needs Node 22.13 or newer, but not 23 or 25 (`nvm use` reads `.nvmrc`).
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://127.0.0.1:5173
 npm run build    # production build in dist/
 ```
 
@@ -99,6 +99,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
 - `shared/pattern.js`, `shared/history.js` — the step grid (on/off, and a velocity per step) and undo/redo over any state that can be set aside as a value; no DOM
 - `shared/storage-budget.js` — how much room the browser gives the site (the sampler's total cap is a share of it), asking it to keep the data (`navigator.storage.persist()`), and the "4.2/32 MB" text; never throws, no DOM
+- `shared/dom-updates.js` — `setText`, `setAttr`, `setDisabled`, `setHidden`: a view writes only what changed (a redraw every step would otherwise be announced again), and a button that goes disabled or a group that is hidden hands keyboard focus to a neighbour first
 - `shared/blob-store.js` — bytes kept in IndexedDB that never throws (a failed read is `null`, a failed write is `false`), for what localStorage cannot hold: the sampler's samples
 - `shared/audio.js` — the `AudioContext`, master volume (through a soft clipper, so sounds that add up past full scale do not crackle), power on/off and first-interaction unlock, used by every app
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
@@ -121,10 +122,9 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/computer-keys.js` — the computer keyboard as a one-octave piano (takes its events from a target, so it is testable); no DOM of its own; played by the keys page and the Tone.js demo
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
-- `shared/pattern.js` — the step grid (which row plays on which step); no DOM; used by the sampler
 - `shared/tempo.js` — BPM limits, step length, tap tempo and snapping a live hit to the nearest step; no DOM
 - `shared/scheduler.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from, on whatever clock it is given (the sampler gives it the audio clock); no DOM
-- `shared/step-keys.js` + `shared/step-keys.css` — the row of step keys for one pad, in groups; the sampler uses it, and each page that uses it imports the stylesheet
+- `shared/step-keys.js` + `shared/step-keys.css` — the row of step keys for one pad, in groups; the sampler and the MPC Sample page use it, and each page that uses it imports the stylesheet
 - `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
 - `CHANGELOG.md` — what changed on the live site, by day, newest first

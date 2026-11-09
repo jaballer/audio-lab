@@ -30,6 +30,29 @@
 // `onChange()` is called after a step actually changes (not while the pattern is
 // being built, and not when a call leaves everything as it was).
 
+// The first place two states (pattern.state() shapes) differ, as { row, step }, or null when they are the same: the
+// lowest pad, and on it the earliest step, whose on/off or velocity is not the same. For showing a person where an
+// undo changed something.
+export function firstDifference(a, b) {
+  const rows = new Set([...Object.keys(a.pattern), ...Object.keys(b.pattern)].map(Number));
+  for (const row of [...rows].sort((x, y) => x - y)) {
+    const onA = new Set(a.pattern[row] ?? []);
+    const onB = new Set(b.pattern[row] ?? []);
+    const steps = new Set([
+      ...onA,
+      ...onB,
+      ...Object.keys(a.velocities[row] ?? {}),
+      ...Object.keys(b.velocities[row] ?? {}),
+    ]);
+    for (const step of [...steps].map(Number).sort((x, y) => x - y)) {
+      if (onA.has(step) !== onB.has(step)) return { row, step };
+      if ((a.velocities[row]?.[step] ?? FULL_VELOCITY) !== (b.velocities[row]?.[step] ?? FULL_VELOCITY))
+        return { row, step };
+    }
+  }
+  return null;
+}
+
 export const MIN_VELOCITY = 1;
 export const FULL_VELOCITY = 127;
 
@@ -74,9 +97,11 @@ export function createPattern(rows, steps, initial = {}, { onChange, velocities:
     for (const step of on) {
       if (Number.isInteger(step) && step >= 0 && start + step < end) grid[row][start + step] = true;
     }
-    for (const [step, value] of Object.entries(byStep)) {
-      if (grid[row][start + Number(step)] && start + Number(step) < end)
-        velocities[row][start + Number(step)] = clampVelocity(value);
+    for (const [key, value] of Object.entries(byStep)) {
+      const step = Number(key);
+      // Not a negative step: it would land on the stretch before the one being filled.
+      if (step >= 0 && start + step < end && grid[row][start + step])
+        velocities[row][start + step] = clampVelocity(value);
     }
   }
 

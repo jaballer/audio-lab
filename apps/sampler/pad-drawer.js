@@ -14,6 +14,13 @@
 // button in the tab order) or under the pads; the heading is not a tab stop of its own. Escape, pressed while
 // focus is inside it, closes it and puts focus back on the button. `onToggle(open)` is called when it opens
 // or closes, so the page can remember it and place it. Opening it by code (restoring it at startup) moves no focus.
+//
+// `message` (optional) is a line in the drawer that repeats the LCD's short messages (PAD 03 LOADED, ...) for the
+// eye: the LCD is out of sight when the drawer is under the pads, and the message is where the person is looking.
+// It is hidden from a screen reader, which already has the LCD's live region.
+//   drawer.showMessage("PAD 03 LOADED");
+
+import { setText } from "../../shared/dom-updates.js";
 
 // Moves `element` to the end of `parent`. Moving an element in the document takes keyboard focus off anything
 // inside it, so if focus was in it, it is given back to the same control afterwards.
@@ -23,8 +30,11 @@ export function moveKeepingFocus(element, parent, doc = document) {
   focused?.focus();
 }
 
-export function createPadDrawer({ element, toggle, close, title, info, onToggle }) {
+const MESSAGE_MS = 1600; // as long as the LCD shows its own
+
+export function createPadDrawer({ element, toggle, close, title, info, message = null, onToggle }) {
   let open = false;
+  let messageTimer = null;
 
   function set(next) {
     if (next === open) return;
@@ -62,8 +72,14 @@ export function createPadDrawer({ element, toggle, close, title, info, onToggle 
     },
     // Called on every redraw, which is every step while playing: only what changed is written.
     refresh(next) {
-      if (title.textContent !== next.title) title.textContent = next.title;
-      if (info.textContent !== next.info) info.textContent = next.info;
+      setText(title, next.title);
+      setText(info, next.info);
+    },
+    showMessage(text) {
+      if (!message) return;
+      message.textContent = text;
+      clearTimeout(messageTimer);
+      messageTimer = setTimeout(() => (message.textContent = ""), MESSAGE_MS);
     },
   };
 }
