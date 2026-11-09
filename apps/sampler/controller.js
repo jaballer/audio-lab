@@ -55,7 +55,7 @@ import { createTapTempo, nearestStep } from "../../shared/tempo.js";
 import { STARTER_BEAT } from "./starter-beat.js";
 
 export const DEFAULT_VOLUME = 80; // 0-100; the same as the slider's markup
-const VOLUME_SCALE = 100;
+export const VOLUME_SCALE = 100; // the volume slider's scale: 0-100 is a master gain of 0-1
 const MERGE_MS = 600; // velocity changes this close together are one gesture, and one undo
 const MAX_SCHEDULED_HITS = 64; // a page that stops polling (a hidden tab) must not grow the list for ever
 

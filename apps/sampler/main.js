@@ -14,7 +14,7 @@ import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
-import { exportSequence } from "./export-wav.js";
+import { createExportAction, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { createLcd } from "./lcd.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
@@ -318,19 +318,20 @@ const redoBtn = $("redo");
 undoBtn.addEventListener("click", sampler.undo);
 redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
-// Export WAV: the sequence showing, rendered offline and saved as a file. One at a time: a second press while it renders
-// would only do the same work again.
-let exporting = false;
-$("export").addEventListener("click", async () => {
-  if (exporting) return;
-  exporting = true;
-  try {
-    await restoring;
-    await exportSequence({ song: sampler.getSong(), kit, stepsPerBar: STEPS, onMessage: say, save: saveBlob });
-  } finally {
-    exporting = false;
-  }
-});
+// Export WAV: the sequence showing, rendered offline and saved as a file (export-wav.js decides when it may run).
+const exportBtn = $("export");
+exportBtn.addEventListener(
+  "click",
+  createExportAction({
+    ready: () => restoring,
+    run: () => exportSequence({ song: sampler.getSong(), kit, stepsPerBar: STEPS, onMessage: say, save: saveBlob }),
+    onMessage: say,
+    onBusy(busy) {
+      setText(exportBtn, busy ? "Exporting…" : "Export WAV");
+      setAttr(exportBtn, "aria-busy", String(busy));
+    },
+  }),
+);
 volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------

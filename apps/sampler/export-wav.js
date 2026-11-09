@@ -13,6 +13,7 @@
 // render does not depend on the power switch or on the audio context of the page.
 
 import { createClipper } from "../../shared/audio.js";
+import { VOLUME_SCALE } from "./controller.js";
 import { FULL_VELOCITY } from "../../shared/pattern.js";
 import { withVelocity } from "../../shared/sounds.js";
 import { stepSeconds } from "../../shared/tempo.js";
@@ -20,7 +21,6 @@ import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
 
 export const EXPORT_SAMPLE_RATE = 44100;
-export const VOLUME_SCALE = 100; // the slider's scale, as in the controller
 // The first step is not at time 0: a trimmed sample starts at least a few milliseconds into the context's time (see
 // sample-voice.js), so every step is moved on by this much, which keeps every hit where it belongs.
 export const LEAD_SECONDS = 0.01;
@@ -151,4 +151,52 @@ export async function exportSequence({
     onMessage("EXPORT FAILED");
     return false;
   }
+}
+
+export const READY_WAIT_MS = 5000; // how long a click waits for the saved samples to be back before giving up
+
+// What pressing the Export button does around exportSequence: one export at a time (a press while one runs says so,
+// instead of being dropped), `onBusy(true/false)` so the button can show it is working (the LCD's message is gone
+// after a moment, and a long export takes longer), and a wait for `ready` (the saved samples being restored, so the
+// file does not hold the built-in sounds where a sample is about to be) that gives up after READY_WAIT_MS with a
+// message rather than leave the button dead: a restore that never settles or fails is not something to render over.
+//
+//   const press = createExportAction({ ready: () => restoring, run: () => exportSequence({ ... }), onMessage, onBusy });
+//   button.addEventListener("click", press);
+export function createExportAction({
+  ready,
+  run,
+  onMessage,
+  onBusy = () => {},
+  waitMs = READY_WAIT_MS,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+}) {
+  let busy = false;
+  return async function press() {
+    if (busy) {
+      onMessage("ALREADY EXPORTING");
+      return false;
+    }
+    busy = true;
+    onBusy(true);
+    try {
+      let timer;
+      const timedOut = new Promise((resolve) => (timer = setTimer(() => resolve("late"), waitMs)));
+      const outcome = await Promise.race([Promise.resolve(ready()).then(() => "ready"), timedOut]);
+      clearTimer(timer);
+      if (outcome === "late") {
+        onMessage("SAMPLES STILL LOADING");
+        return false;
+      }
+      return await run();
+    } catch (error) {
+      console.error("Export failed:", error);
+      onMessage("EXPORT FAILED");
+      return false;
+    } finally {
+      busy = false;
+      onBusy(false);
+    }
+  };
 }

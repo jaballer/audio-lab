@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { LEAD_SECONDS, encodeWav, exportName, exportSequence, hasSteps, hitsOf, renderSequence } from "./export-wav.js";
+import {
+  LEAD_SECONDS,
+  READY_WAIT_MS,
+  createExportAction,
+  encodeWav,
+  exportName,
+  exportSequence,
+  hasSteps,
+  hitsOf,
+  renderSequence,
+} from "./export-wav.js";
 import { createKit } from "./kit.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
@@ -165,6 +175,26 @@ describe("renderSequence", () => {
     expect(master.connect).not.toHaveBeenCalledWith(offline.destination);
   });
 
+  it("is a whole number of frames long at a tempo where a bar is not, and the second pass starts where the first ends", async () => {
+    const kit = createKit([sound("a")]);
+    const offline = fakeOffline();
+    const audio = await renderSequence({
+      song: songOf(sequence({ 0: [0] }), { bpm: 123 }),
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 44100,
+      createContext: offline.createContext,
+    });
+    const loop = (16 * 60) / 123 / 4; // 1.951219... s, which is 86048.78 frames
+    const frames = Math.round(loop * 44100);
+    expect(frames).toBe(86049); // rounded up, not cut down
+    expect(audio.channels[0]).toHaveLength(frames);
+    expect(Number.isInteger(frames)).toBe(true);
+    const first = Math.round((LEAD_SECONDS + loop) * 44100);
+    expect(offline.made.frames).toBe(first + frames);
+    expect(audio.channels[0][0]).toBe(first);
+  });
+
   it("does not play steps in bars the sequence does not have", async () => {
     const sounds = [sound("a"), sound("b")];
     const { render } = setup(sequence({ 0: [0], 1: [20] }, {}, 1), {}, sounds);
@@ -306,5 +336,80 @@ describe("exportSequence", () => {
     expect(await done).toBe(false);
     expect(onMessage).toHaveBeenLastCalledWith("EXPORT FAILED");
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe("createExportAction", () => {
+  const setup = (extra = {}) => {
+    const onMessage = vi.fn();
+    const onBusy = vi.fn();
+    const run = vi.fn(async () => true);
+    const press = createExportAction({ ready: () => Promise.resolve(), run, onMessage, onBusy, ...extra });
+    return { press, run, onMessage, onBusy };
+  };
+
+  it("runs the export once the samples are back, and shows it is busy only while it works", async () => {
+    const { press, run, onBusy } = setup();
+    expect(await press()).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(onBusy.mock.calls.map((call) => call[0])).toEqual([true, false]);
+  });
+
+  it("waits for the samples before it renders", async () => {
+    let restored;
+    const { press, run } = setup({ ready: () => new Promise((resolve) => (restored = resolve)) });
+    const pressed = press();
+    await Promise.resolve();
+    expect(run).not.toHaveBeenCalled();
+    restored();
+    await pressed;
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so, and renders nothing, when the samples do not come back in time, and can be pressed again", async () => {
+    vi.useFakeTimers();
+    const { press, run, onMessage, onBusy } = setup({ ready: () => new Promise(() => {}) });
+    const pressed = press();
+    await vi.advanceTimersByTimeAsync(READY_WAIT_MS);
+    expect(await pressed).toBe(false);
+    expect(onMessage).toHaveBeenCalledWith("SAMPLES STILL LOADING");
+    expect(run).not.toHaveBeenCalled();
+    expect(onBusy).toHaveBeenLastCalledWith(false);
+    onMessage.mockClear();
+    const again = press();
+    await vi.advanceTimersByTimeAsync(READY_WAIT_MS);
+    await again;
+    expect(onMessage).toHaveBeenCalledWith("SAMPLES STILL LOADING"); // it is a new press, not a dead button
+    vi.useRealTimers();
+  });
+
+  it("says so, and renders nothing, when restoring the samples failed", async () => {
+    const { press, run, onMessage, onBusy } = setup({ ready: () => Promise.reject(new Error("blocked")) });
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenCalledWith("EXPORT FAILED");
+    expect(run).not.toHaveBeenCalled();
+    expect(onBusy).toHaveBeenLastCalledWith(false);
+  });
+
+  it("says so, and can be pressed again, when the export throws", async () => {
+    const { press, run, onMessage } = setup();
+    run.mockRejectedValueOnce(new Error("boom"));
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenCalledWith("EXPORT FAILED");
+    expect(await press()).toBe(true);
+  });
+
+  it("says it is already exporting when pressed while it works, and does not start a second", async () => {
+    let finish;
+    const run = vi.fn(() => new Promise((resolve) => (finish = resolve)));
+    const { press, onMessage } = setup({ run });
+    const first = press();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenCalledWith("ALREADY EXPORTING");
+    finish(true);
+    await first;
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });
