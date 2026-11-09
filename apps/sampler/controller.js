@@ -248,7 +248,7 @@ export function createSampler({
 
   function clearPad() {
     edit(() => pattern.clearRow(selected));
-    onMessage(`PAD ${pad2(selected + 1)} CLEARED`);
+    onMessage(`PAD ${pad2(selected + 1)} STEPS CLEARED`);
     onChange();
   }
 
@@ -285,7 +285,7 @@ export function createSampler({
 
   function clearAll() {
     edit(() => pattern.clearAll());
-    onMessage("ALL PADS CLEARED");
+    onMessage("ALL STEPS CLEARED");
     onChange();
   }
 

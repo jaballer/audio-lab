@@ -625,14 +625,14 @@ describe("steps and clearing", () => {
     expect(sampler.getState().stepsOn.some(Boolean)).toBe(true); // the starter kick
     sampler.clearPad();
     expect(sampler.getState().stepsOn.some(Boolean)).toBe(false);
-    expect(message).toHaveBeenLastCalledWith("PAD 01 CLEARED");
+    expect(message).toHaveBeenLastCalledWith("PAD 01 STEPS CLEARED");
   });
 
   it("clears every pad", () => {
     const { sampler, message } = setup();
     sampler.clearAll();
     expect(sampler.getSong().sequences[0].pattern).toEqual({});
-    expect(message).toHaveBeenLastCalledWith("ALL PADS CLEARED");
+    expect(message).toHaveBeenLastCalledWith("ALL STEPS CLEARED");
   });
 });
 
