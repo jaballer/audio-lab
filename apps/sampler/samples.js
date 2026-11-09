@@ -106,10 +106,23 @@ export function createSamples({
   // Writes the map, with this pad's entry as this tab has it. The map is read again first and only this pad's entry
   // is changed in it, so a sample another tab kept since this one started is not lost. Whether it was written: the
   // localStorage write can fail (blocked, full) when the files' bytes did not.
-  function persist(pad) {
-    const latest = parseSamples(readMap(), kit.length);
-    if (pads[pad]) latest[pad] = pads[pad];
-    else delete latest[pad];
+  //
+  // `sameSampleOnly` is for a change to the sample this tab already has on the pad (a trim): it is only written
+  // onto the entry of that same sample. If another tab has since put a different sample on the pad (or taken it off),
+  // the entry is theirs and the files' bytes are theirs, so this tab's trim must not be written over it.
+  function persist(pad, { sameSampleOnly = false } = {}) {
+    const stored = readMap();
+    // A map that cannot be read (never saved, blocked, damaged) says nothing about the other pads, so this tab's own
+    // are written; reading it as empty would drop them.
+    const latest = isSamplesMap(stored) ? parseSamples(stored, kit.length) : { ...pads };
+    if (pads[pad]) {
+      const there = latest[pad];
+      const same = there && there.name === pads[pad].name && there.bytes === pads[pad].bytes;
+      if (sameSampleOnly && !same) return false;
+      latest[pad] = pads[pad];
+    } else {
+      delete latest[pad];
+    }
     return Boolean(writeMap({ version: SAMPLES_VERSION, pads: latest }));
   }
 
@@ -209,8 +222,10 @@ export function createSamples({
         // room that can be seen, so it does not count against the cap: the entry's own claim of its size is not
         // to be trusted over the bytes themselves.
         const bytes = await store.get(keyFor(pad));
+        // Changed while the file was being read: what was read is the old sample's, and must not be counted again.
+        if (touched.has(pad)) return;
         if (!bytes) {
-          if (!touched.has(pad)) held[pad] = 0;
+          held[pad] = 0;
           return;
         }
         held[pad] = bytes.byteLength;
@@ -238,7 +253,7 @@ export function createSamples({
     const next = sound.setTrim(trim, moved);
     if (pads[pad] && owners.get(pad) === sound) {
       pads[pad] = entryFor(pads[pad].name, pads[pad].bytes, next);
-      persist(pad);
+      persist(pad, { sameSampleOnly: true });
     }
     return next;
   }

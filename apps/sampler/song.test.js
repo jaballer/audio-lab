@@ -4,6 +4,7 @@ import {
   SONG_BACKUP_KEY,
   SONG_KEY,
   SONG_VERSION,
+  backUpUnusable,
   createSongSaver,
   needsBackup,
   parseSong,
@@ -384,5 +385,20 @@ describe("needsBackup", () => {
 
   it("has a key of its own, beside the song's", () => {
     expect(SONG_BACKUP_KEY).toBe(`${SONG_KEY}:backup`);
+  });
+});
+
+describe("backUpUnusable", () => {
+  it("saves what could not be used, under the key it is given", () => {
+    const save = vi.fn();
+    expect(backUpUnusable({ version: 99 }, false, "k:backup", save)).toBe(true);
+    expect(save).toHaveBeenCalledExactlyOnceWith("k:backup", { version: 99 });
+  });
+
+  it("saves nothing for a first visit or for what was used", () => {
+    const save = vi.fn();
+    expect(backUpUnusable(null, false, "k:backup", save)).toBe(false);
+    expect(backUpUnusable({ version: SONG_VERSION }, true, "k:backup", save)).toBe(false);
+    expect(save).not.toHaveBeenCalled();
   });
 });

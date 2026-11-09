@@ -24,7 +24,7 @@ import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
-import { SONG_BACKUP_KEY, SONG_KEY, createSongSaver, needsBackup, parseSong } from "./song.js";
+import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
@@ -68,9 +68,9 @@ const song = parseSong(storedSong, {
 
 // A song this page cannot read (from a newer page, or damaged) is kept under another key before the first edit
 // saves over it, and so is a samples map. The page starts from the starter beat and no samples, as before.
-if (needsBackup(storedSong, song)) saveJson(SONG_BACKUP_KEY, storedSong);
+backUpUnusable(storedSong, song, SONG_BACKUP_KEY, saveJson);
 const storedSamples = loadJson(SAMPLES_KEY);
-if (needsBackup(storedSamples, isSamplesMap(storedSamples))) saveJson(SAMPLES_BACKUP_KEY, storedSamples);
+backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, saveJson);
 
 const saver = createSongSaver({
   read: () => sampler.getSong(),

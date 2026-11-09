@@ -923,3 +923,154 @@ describe("isSamplesMap", () => {
     }
   });
 });
+
+describe("restore, when the pad is changed while its file is being read", () => {
+  const stored = { version: SAMPLES_VERSION, pads: { 0: { name: "old", bytes: 10 } } };
+  // The store's read of pad 0 finishes when the test says, with a file of 900 bytes.
+  function slowRead() {
+    const store = fakeStore();
+    let release;
+    store.get.mockImplementation(() => new Promise((resolve) => (release = () => resolve(new ArrayBuffer(900)))));
+    return { store, release: () => release() };
+  }
+
+  it("does not read the file of a pad that was changed before the restore began", async () => {
+    const { store } = slowRead();
+    const { samples } = setup({ stored, store });
+    await samples.load(0, file("new.wav", 100)); // its entry is kept, and it is this visit's sample
+    store.get.mockClear();
+    await samples.restore();
+    expect(store.get).not.toHaveBeenCalled();
+  });
+
+  it("does not count the old file's size again after Default Sound has freed it", async () => {
+    const { store, release } = slowRead();
+    const { samples } = setup({ stored, store, maxTotalBytes: 1000 });
+    const restoring = samples.restore();
+    await vi.waitFor(() => expect(store.get).toHaveBeenCalled());
+    await samples.reset(0);
+    release();
+    await restoring;
+    expect(await samples.load(1, file("more.wav", 500))).toBe(true); // 900 left over would have refused it
+  });
+
+  it("does not count the old file's size instead of the new sample's", async () => {
+    const { store, release } = slowRead();
+    const { samples } = setup({ stored, store, maxTotalBytes: 1000 });
+    const restoring = samples.restore();
+    await vi.waitFor(() => expect(store.get).toHaveBeenCalled());
+    await samples.load(0, file("new.wav", 100));
+    release();
+    await restoring;
+    expect(await samples.load(1, file("more.wav", 800))).toBe(true); // 100 + 800, not 900 + 800
+    expect(await samples.load(2, file("too-much.wav", 200))).toBe(false); // and 100 + 800 + 200 is over
+  });
+});
+
+describe("a load that is overtaken while its bytes are being saved", () => {
+  it("does not write its entry over the newer sample's", async () => {
+    const store = fakeStore();
+    const gates = [];
+    store.set.mockImplementation(
+      (key, bytes) =>
+        new Promise((resolve) =>
+          gates.push(() => {
+            store.data.set(key, bytes);
+            resolve(true);
+          }),
+        ),
+    );
+    const { samples, kit, writes } = setup({ store });
+    const older = samples.load(0, file("older.wav", 50));
+    await vi.waitFor(() => expect(gates).toHaveLength(1));
+    const newer = samples.load(0, file("newer.wav", 70)); // takes the pad while the older is still being saved
+    await vi.waitFor(() => expect(gates).toHaveLength(2));
+    gates[1]();
+    await newer;
+    gates[0](); // the older finishes last
+    expect(await older).toBe(true); // it did play, for a moment
+    expect(kit.get(0).name).toBe("newer");
+    expect(writes.at(-1).pads[0]).toEqual({ name: "newer", bytes: 70 });
+  });
+});
+
+describe("what counts toward the total: the biggest load in flight, not the last", () => {
+  it("counts the earlier, bigger load when a smaller one is accepted after it", async () => {
+    const pending = [];
+    const decode = vi.fn((_ctx, bytes) => new Promise((resolve) => pending.push({ size: bytes.byteLength, resolve })));
+    const { samples } = setup({ decode, maxTotalBytes: 100 });
+    const a = samples.load(0, file("a.wav", 60));
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const b = samples.load(0, file("b.wav", 30)); // a smaller file, accepted after the bigger
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    expect(await samples.load(1, file("c.wav", 50))).toBe(false); // pad 0 may still end up holding 60
+    pending[0].resolve({ ok: false, reason: REASONS.notAudio });
+    pending[1].resolve({ ok: false, reason: REASONS.notAudio });
+    await Promise.all([a, b]);
+  });
+});
+
+describe("a trim, when another tab has changed the pad's entry", () => {
+  function sharedStorage(initial) {
+    const box = { map: initial };
+    return { box, readMap: () => box.map, writeMap: (map) => ((box.map = structuredClone(map)), true) };
+  }
+  const longBuffer = { ok: true, buffer: { duration: 2, numberOfChannels: 1, length: 88200 } };
+  async function loaded(initial) {
+    const storage = sharedStorage(initial);
+    const tab = setup({
+      readMap: storage.readMap,
+      writeMap: storage.writeMap,
+      decode: vi.fn(async () => longBuffer),
+    });
+    await tab.samples.load(0, file("mine.wav", 300));
+    return { storage, ...tab };
+  }
+  const empty = { version: SAMPLES_VERSION, pads: {} };
+
+  it("is not written over a different sample the other tab put on the pad", async () => {
+    const { storage, samples, kit } = await loaded(empty);
+    storage.box.map = { version: SAMPLES_VERSION, pads: { 0: { name: "theirs", bytes: 40 } } };
+    samples.setTrim(0, { start: 0.2, end: 0.6 });
+    expect(kit.get(0).trim).toEqual({ start: 0.2, end: 0.6 }); // it still plays here
+    expect(storage.box.map.pads[0]).toEqual({ name: "theirs", bytes: 40 }); // and their entry is as it was
+  });
+
+  it("does not bring back an entry the other tab removed", async () => {
+    const { storage, samples } = await loaded(empty);
+    storage.box.map = { version: SAMPLES_VERSION, pads: {} }; // the other tab reset pad 0, and deleted its bytes
+    samples.setTrim(0, { start: 0.2, end: 0.6 });
+    expect(storage.box.map.pads).toEqual({});
+  });
+
+  it("is written onto the same sample's entry, even when the other tab trimmed it differently", async () => {
+    const { storage, samples } = await loaded(empty);
+    storage.box.map = {
+      version: SAMPLES_VERSION,
+      pads: { 0: { name: "mine", bytes: 300, trim: { start: 0.5, end: 1 } } },
+    };
+    samples.setTrim(0, { start: 0.2, end: 0.6 });
+    expect(storage.box.map.pads[0].trim).toEqual({ start: 0.2, end: 0.6 });
+  });
+});
+
+describe("when the saved map cannot be read at the time of a write", () => {
+  const longBuffer = { ok: true, buffer: { duration: 2, numberOfChannels: 1, length: 88200 } };
+
+  it("writes this tab's own pads, rather than a map without them", async () => {
+    const box = { map: null };
+    const { samples } = setup({
+      readMap: () => box.map,
+      writeMap: (map) => ((box.map = structuredClone(map)), true),
+      decode: vi.fn(async () => longBuffer),
+    });
+    await samples.load(0, file("a.wav", 100));
+    await samples.load(1, file("b.wav", 100));
+    box.map = "garbage"; // damaged since
+    await samples.reset(1);
+    expect(box.map.pads).toEqual({ 0: { name: "a", bytes: 100 } });
+    box.map = null;
+    samples.setTrim(0, { start: 0.1, end: 0.9 });
+    expect(box.map.pads[0]).toEqual({ name: "a", bytes: 100, trim: { start: 0.1, end: 0.9 } });
+  });
+});

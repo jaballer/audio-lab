@@ -89,6 +89,14 @@ function cleanVelocities(velocities, pattern) {
 export const SONG_BACKUP_KEY = `${SONG_KEY}:backup`;
 export const needsBackup = (raw, usable) => raw !== null && raw !== undefined && !usable;
 
+// Keeps `raw` under `key` (with `save`) when it was in storage and could not be used; whether it did. Each page
+// load does this before its first edit can save over it.
+export function backUpUnusable(raw, usable, key, save) {
+  if (!needsBackup(raw, usable)) return false;
+  save(key, raw);
+  return true;
+}
+
 // Bring a stored song up to SONG_VERSION by applying one migration after another,
 // or give back null when it cannot be brought there (a version from the future,
 // or an old one with no migration). `migrations` is a parameter for the tests.
