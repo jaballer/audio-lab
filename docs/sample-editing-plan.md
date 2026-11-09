@@ -6,7 +6,11 @@ starts with per-step velocity, and how. The phases and their status are tracked 
 
 Editing the sounds themselves (trim, gain, pitch per pad) is a separate track, [#21](https://github.com/jaballer/audio-lab/issues/21).
 
-## What constrains the design
+## What constrained the design
+
+These describe the code when the work began. Since then (#94 and after) the pattern stores a velocity per step
+(`shared/pattern.js`, 1-127, beside the booleans), saved songs are at version 4 (velocity, then per-pad settings), the
+sequencer's hits go through `withVelocity` and `withGain`, and recording keeps the velocity of the hit.
 
 - **The pattern is on/off only.** `shared/pattern.js` is a boolean grid. The MPC Sample page uses the same module, so
   velocity is added beside it: `isOn` stays boolean and existing callers keep working.
@@ -35,7 +39,8 @@ It is added only if the Launchpad or MPC should edit velocity too.
   hardware should edit steps too.
 - **Undo is per sequence and covers the steps**, not tempo, volume, length or which sequence is showing. Velocity
   changes made within a moment of each other (a drag) are one undo.
-- **Copy and paste is one pad**, all bars, velocities included, and it can be pasted into another sequence.
+- **Copy and paste is one bar of one pad** (the bar showing), velocities included, and it can be pasted onto another
+  bar, pad or sequence; pasting onto the next bar of the same pad is how a bar is repeated (#98). It began as a whole pad.
 
 ## Later
 

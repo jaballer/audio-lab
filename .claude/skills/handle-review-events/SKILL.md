@@ -37,6 +37,9 @@ gh api graphql -f query='{repository(owner:"jaballer",name:"audio-lab"){pullRequ
 5. Reply on each inline thread, one line, saying what changed or why not, ending with the line
    `_🤖 Addressed by [Claude Code](https://claude.com/claude-code)_`:
    `gh api repos/jaballer/audio-lab/pulls/N/comments/ID/replies -f body="..."`
+   That tag is the one place this repo carries an AI attribution: the app's review-event procedure asks for it on
+   thread replies, which the user's global rule against AI attribution (written about commits and PR descriptions)
+   does not name. It never goes in a commit message or a PR body. If the user says to drop it, drop it.
 6. Resolve the thread: `gh api graphql -f query='mutation{resolveReviewThread(input:{threadId:"PRRT_..."}){thread{isResolved}}}'`
 7. Do not reply to comments you did not act on, and do not merge.
 

@@ -22,8 +22,8 @@ For each PR, note:
 
 - **Ecosystem**: npm or github-actions (from the branch name `dependabot/<ecosystem>/…` or the label).
 - **Level**: patch, minor or major (compare the versions in the title; a grouped PR takes its highest level).
-- **Kind**: dev dependency, runtime dependency, or CI-only. This repo has no runtime dependencies, so an npm
-  PR that touches `dependencies` is unexpected: say so.
+- **Kind**: dev dependency, runtime dependency, or CI-only. The one runtime dependency is `tone`, which only the Tone page bundles, so an npm
+  PR that touches `dependencies` for anything else is unexpected: say so, and check the Tone page for `tone` itself.
 - **Security**: a `security` label, or a body that mentions a CVE or advisory. Handle these first and say so
   in the report.
 - **CI**: is `check` green? Is the PR behind `main` or conflicting?
