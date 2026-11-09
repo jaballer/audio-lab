@@ -59,3 +59,74 @@ describe("renderWorker", () => {
     expect(() => new Function(renderWorker(template, ["./"], "v"))).not.toThrow();
   });
 });
+
+describe("the worker's install step", () => {
+  // Runs the real template against stand-ins for the worker's globals.
+  function load() {
+    const handlers = {};
+    const added = [];
+    const cache = { addAll: (requests) => (added.push(...requests), Promise.resolve()) };
+    const self = { addEventListener: (type, fn) => (handlers[type] = fn), location: { origin: "https://x.test" } };
+    const caches = { open: () => Promise.resolve(cache) };
+    // A worker's Request resolves "./" against the worker's own address; Node's has no base, so a stand-in records the call.
+    class Request {
+      constructor(url, init) {
+        Object.assign(this, { url, ...init });
+      }
+    }
+    new Function("self", "caches", "Request", renderWorker(template, ["./", "assets/a.js"], "v1"))(
+      self,
+      caches,
+      Request,
+    );
+    return { handlers, added };
+  }
+
+  it("fetches every file from the server, not the browser's HTTP cache, so a stale page is never kept as the new version", async () => {
+    const { handlers, added } = load();
+    let done;
+    handlers.install({ waitUntil: (promise) => (done = promise) });
+    await done;
+    expect(added).toHaveLength(2);
+    for (const request of added) expect(request.cache).toBe("reload");
+  });
+});
+
+describe("the worker's fetch step", () => {
+  function load(match) {
+    const handlers = {};
+    const cache = { match };
+    const self = { addEventListener: (type, fn) => (handlers[type] = fn), location: { origin: "https://x.test" } };
+    const caches = { open: () => Promise.resolve(cache) };
+    const fetch = (request) => Promise.resolve(`network:${request.url}`);
+    new Function("self", "caches", "fetch", renderWorker(template, [], "v1"))(self, caches, fetch);
+    return handlers.fetch;
+  }
+  const get = (url) => ({ method: "GET", url });
+  const answer = (handler, request) => {
+    let promise = null;
+    handler({ request, respondWith: (p) => (promise = p) });
+    return promise;
+  };
+
+  it("matches ignoring the query and Vary, so a script requested with an Origin header still finds its cached copy offline", async () => {
+    const match = (request, options) =>
+      Promise.resolve(options.ignoreSearch && options.ignoreVary ? "cached" : undefined);
+    expect(await answer(load(match), get("https://x.test/assets/a.js"))).toBe("cached");
+  });
+
+  it("goes to the network for a file that was not kept", async () => {
+    expect(
+      await answer(
+        load(() => Promise.resolve(undefined)),
+        get("https://x.test/other.json"),
+      ),
+    ).toBe("network:https://x.test/other.json");
+  });
+
+  it("leaves other origins and other methods alone", () => {
+    const handler = load(() => Promise.resolve("cached"));
+    expect(answer(handler, get("https://elsewhere.test/a.js"))).toBeNull();
+    expect(answer(handler, { method: "POST", url: "https://x.test/a" })).toBeNull();
+  });
+});

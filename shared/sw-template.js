@@ -12,7 +12,10 @@ const CACHE_PREFIX = "audio-lab-";
 const CACHE = CACHE_PREFIX + VERSION;
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)));
+  // `cache: "reload"` so the files come from the server, not the browser's HTTP cache: GitHub Pages lets that cache keep
+  // a page for ten minutes, and a stale index.html stored under the new version would name scripts that no longer exist.
+  const requests = PRECACHE.map((url) => new Request(url, { cache: "reload" }));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(requests)));
 });
 
 self.addEventListener("activate", (event) => {
@@ -27,6 +30,10 @@ self.addEventListener("activate", (event) => {
 });
 
 // Same-origin GETs come from the cache first. The query string is ignored so `keyboard.html?x` still finds the page.
+// `Vary` is ignored too: the page's module scripts and stylesheets are requested in CORS mode, so they carry an Origin
+// header the cached copies were not fetched with, and a host that answers `Vary: Origin` (Vite's preview server does)
+// would make every one of them miss and fail offline. Everything kept is one same-origin static file, so there is only
+// ever one version to match.
 // Anything not kept (there is nothing else on this site) goes to the network.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -34,7 +41,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches
       .open(CACHE)
-      .then((cache) => cache.match(request, { ignoreSearch: true }))
+      .then((cache) => cache.match(request, { ignoreSearch: true, ignoreVary: true }))
       .then((hit) => hit || fetch(request)),
   );
 });
