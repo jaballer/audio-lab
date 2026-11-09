@@ -196,5 +196,6 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
       return visualQueue.length;
     },
     markHeard,
+    forgetHeard,
   };
 }

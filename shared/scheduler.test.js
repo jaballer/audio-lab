@@ -359,6 +359,18 @@ describe("markHeard", () => {
     expect(plays[0][2]).toBeCloseTo(0.425 + 16 * 0.375);
   });
 
+  it("forgets a live hit that was waiting for its step, when asked (the pattern was replaced)", () => {
+    const { scheduler, pattern, sounded, run } = setupRecording({ bpm: 40 });
+    scheduler.start();
+    run(0.2);
+    pattern.add("0:1");
+    scheduler.markHeard(0, 1);
+    scheduler.forgetHeard();
+
+    run(0.3);
+    expect(soundedAt(sounded, 0, 1)).toHaveLength(1); // not suppressed: it was never heard in this pattern
+  });
+
   it("changes nothing when the step was already scheduled", () => {
     const { scheduler, pattern, sounded, run } = setupRecording({ bpm: 120 }); // a step is 0.125 s
     scheduler.start();

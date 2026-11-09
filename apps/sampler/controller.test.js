@@ -12,7 +12,7 @@ function fakeAudio() {
   const master = { id: "master" };
   const ctx = {
     currentTime: 0,
-    createGain: vi.fn(() => ({ gain: { value: 1 }, connect: vi.fn() })),
+    createGain: vi.fn(() => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() })),
   };
   return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn() };
 }
@@ -132,6 +132,28 @@ describe("recording", () => {
     expect(padPlayed).toHaveBeenCalledWith(2);
     expect(padHit).not.toHaveBeenCalled(); // not a live hit: those are the ones that push a pad down
     expect(sampler.getState().selected).toBe(0);
+  });
+
+  it("cuts off the hits queued but not yet started when Play restarts, and leaves the sounding ones", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
+    sampler.start();
+    for (let i = 0; i < 5; i++) advance(0.05); // steps at 0.05 and 0.175 have started; the one at 0.3 is queued (one big jump would look like a stall and skip steps)
+    const buses = sounds[0].play.mock.calls.map((call) => call[1]);
+    expect(buses).toHaveLength(3);
+    sampler.start();
+    expect(buses[0].disconnect).not.toHaveBeenCalled(); // already sounding: left to ring out
+    expect(buses[1].disconnect).not.toHaveBeenCalled();
+    expect(buses[2].disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("cuts off the hits queued but not yet started when Stop is pressed", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
+    sampler.start();
+    for (let i = 0; i < 5; i++) advance(0.05);
+    const buses = sounds[0].play.mock.calls.map((call) => call[1]);
+    sampler.stop();
+    expect(buses[1].disconnect).not.toHaveBeenCalled();
+    expect(buses[2].disconnect).toHaveBeenCalledTimes(1);
   });
 
   it("lights the pads that were scheduled, even if the pattern changed before the playhead got there", () => {
@@ -370,7 +392,9 @@ describe("transport", () => {
     sampler.start();
     advance(0);
     // The starter beat: kick on step 0, closed hat (pad 2) on step 0, snare not yet.
-    expect(sounds[0].play).toHaveBeenCalledWith(audio.ctx, audio.master, expect.closeTo(0.05));
+    const bus = sounds[0].play.mock.calls[0][1]; // each step plays through a gain of its own, into the master
+    expect(sounds[0].play).toHaveBeenCalledWith(audio.ctx, bus, expect.closeTo(0.05));
+    expect(bus.connect).toHaveBeenCalledWith(audio.master);
     expect(sounds[2].play).toHaveBeenCalledTimes(1);
     expect(sounds[1].play).not.toHaveBeenCalled();
   });

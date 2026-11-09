@@ -86,7 +86,7 @@ export function createSampler({
   const lastPage = () => bars - 1;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
-  const scheduledHits = []; // { time, rows } for each step handed to the scheduler, until its light is shown
+  const scheduledHits = []; // { time, rows, bus } for each step handed to the scheduler, until its light is shown
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -95,15 +95,19 @@ export function createSampler({
     onStep(step, time, heard) {
       const { ctx, master } = audio;
       const rows = [];
+      // The step's hits go through a gain of their own, so that if playback is restarted or
+      // stopped before the step is reached, its sounds can be cut off (see cancelQueuedHits).
+      const bus = ctx.createGain();
+      bus.connect(master);
       sounds.forEach((sound, row) => {
         if (pattern.isOn(row, step) && !heard.has(row)) {
-          sound.play(ctx, master, time);
+          sound.play(ctx, bus, time);
           rows.push(row);
         }
       });
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
-      scheduledHits.push({ time, rows });
+      scheduledHits.push({ time, rows, bus });
       if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
     },
   });
@@ -189,6 +193,7 @@ export function createSampler({
     bars = slots[current].bars;
     page = 0;
     scheduler.setSteps(totalSteps());
+    scheduler.forgetHeard(); // a live hit still waiting for its step was recorded into the old sequence
     onMessage(`SEQ ${pad2(current + 1)}`);
     onChange();
     onSongChange();
@@ -207,18 +212,30 @@ export function createSampler({
   }
 
   // ---------- Play and stop ----------
+  // Hits are handed to the audio clock up to the lookahead (about 120 ms) early, and the scheduler
+  // cannot take them back. Silence the ones that have not started yet, so a restart or Stop does
+  // not let the old run sound after the new one has begun (or after Stop). Sounds already
+  // playing are left to ring out.
+  function cancelQueuedHits() {
+    if (scheduledHits.length) {
+      const now = clock.now();
+      for (const hit of scheduledHits) if (hit.time > now) hit.bus.disconnect();
+    }
+    scheduledHits.length = 0;
+  }
+
   // Play always begins at the first step, as the button does on hardware: pressed while the
   // sequence is running, it starts again from the top.
   function start() {
     scheduler.stop();
-    scheduledHits.length = 0;
+    cancelQueuedHits();
     scheduler.start();
     onChange();
   }
 
   function stop() {
     scheduler.stop();
-    scheduledHits.length = 0;
+    cancelQueuedHits();
     onChange();
   }
 
