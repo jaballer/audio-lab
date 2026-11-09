@@ -51,6 +51,9 @@ export function createSampleLoader({ pads, input, loadButton, resetButton, getSe
 
   return {
     setResetEnabled(enabled) {
+      // A disabled button cannot keep focus, and focus that drops to the page would take Escape (which closes the
+      // pad editor) out of reach: move it to the neighbouring button first.
+      if (!enabled && document.activeElement === resetButton) loadButton.focus();
       resetButton.disabled = !enabled;
     },
   };

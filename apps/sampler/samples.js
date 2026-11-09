@@ -137,7 +137,7 @@ export function createSamples({
     }
 
     const name = sampleName(file.name);
-    kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer }));
+    kit.set(pad, createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength }));
     kit.setSetting(pad, "pitch", 0); // pitch tunes a sample, so a new one starts at its own pitch (gain is the pad's)
     touched.add(pad);
     held[pad] = bytes.byteLength;
@@ -189,7 +189,10 @@ export function createSamples({
         if (!bytes) return;
         const result = await decode(ctx, bytes);
         if (!result.ok || touched.has(pad)) return;
-        kit.set(pad, createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer }));
+        kit.set(
+          pad,
+          createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer, bytes: bytes.byteLength }),
+        );
       }),
     );
   }

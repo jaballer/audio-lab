@@ -42,3 +42,22 @@ It is added only if the Launchpad or MPC should edit velocity too.
 More per-step settings (nudge, probability, ratchets) should not be ruled out by the velocity data shape: they would
 be more sparse maps beside `velocities`, in the same version of the song. Banks, only if more than 16 sounds are
 wanted. See the epic for what is left.
+
+## The pad editor drawer
+
+Options for a pad (its sound, gain, pitch, and what comes next) live in a drawer of their own, not around the pads,
+as on a hardware sampler where they are on a screen of their own.
+
+- **Opened with an Edit Pad button, not by clicking a pad.** Clicking a pad plays it, and a panel that opened on
+  every hit would be in the way of playing. While it is open, hitting any pad selects it and the drawer follows.
+  Dropping a file on a pad works with it closed. Whether it is open is remembered.
+- **Beside the machine when the window is at least 1180px wide, under the pads otherwise.** It never covers the pads
+  or the step keys, which are what you are listening to while you edit. `main.js` moves the one element, as it
+  does the display.
+- **Not a dialog.** Playing goes on while it is open, so focus is not trapped. It is a labelled region opened by a
+  button that says whether it is open. Opening it with the button moves focus to its heading (so a keyboard user
+  is in it however far it sits from the button); Escape, with focus inside it, closes it and returns to the
+  button. Moving it between its two places keeps focus on the control that had it.
+- **Sections, not tabs, for now.** Sound and Tune. Tabs when there are enough sections to need them.
+- **Where later features go.** Waveform and trim, reverse, one-shot or hold, choke groups, a voice limit, an amp
+  envelope and pan each become a section drawn into the drawer by a view of its own.

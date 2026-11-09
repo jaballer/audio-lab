@@ -2,7 +2,7 @@
 //
 //   const seconds = await probeDuration(file);            // a file's length from its header, or null: before decoding
 //   const result = await decodeSample(ctx, arrayBuffer);   // { ok: true, buffer } or { ok: false, reason }
-//   const sound = createSampleSound({ id, name, buffer }); // the same shape as the built-in sounds: play(ctx, out, t)
+//   const sound = createSampleSound({ id, name, buffer, bytes }); // the shape of the built-in sounds: play(ctx, out, t)
 //
 // A sample plays once, to its end; hitting the pad again lets the earlier hit ring out beside the new one,
 // as the built-in sounds do. The decoded buffer is shared; each hit makes a source of its own (they are
@@ -76,10 +76,13 @@ export function probeDuration(file, env = {}) {
   });
 }
 
-export function createSampleSound({ id, name, buffer }) {
+// `bytes` is the size of the file it came from. `info` is what the pad editor shows about it: not the sample
+// rate, which the decoded buffer reports as the audio context's and not the file's.
+export function createSampleSound({ id, name, buffer, bytes }) {
   return {
     id,
     name,
+    info: { seconds: buffer.duration, channels: buffer.numberOfChannels, bytes },
     // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
     play(ctx, out, t, { rate = 1 } = {}) {
       const source = ctx.createBufferSource();
