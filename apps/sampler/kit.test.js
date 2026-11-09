@@ -64,8 +64,8 @@ describe("pad settings", () => {
 
   it("starts every pad at the defaults, or at the settings it is given", () => {
     const kit = createKit(defaults, { settings: { 1: { gain: -6, pitch: 2 } } });
-    expect(kit.settings(0)).toEqual({ gain: 0, pitch: 0 });
-    expect(kit.settings(1)).toEqual({ gain: -6, pitch: 2 });
+    expect(kit.settings(0)).toEqual({ gain: 0, pitch: 0, choke: 0 });
+    expect(kit.settings(1)).toEqual({ gain: -6, pitch: 2, choke: 0 });
   });
 
   it("changes one setting, clamped, and tells the views only when it changed", () => {
@@ -92,11 +92,11 @@ describe("pad settings", () => {
     expect(kit.settingsSnapshot()).toEqual({});
     kit.setSetting(2, "pitch", -5);
     kit.setSetting(1, "gain", 3);
-    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0 }, 2: { gain: 0, pitch: -5 } });
+    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0, choke: 0 }, 2: { gain: 0, pitch: -5, choke: 0 } });
     kit.setSetting(2, "pitch", 0);
-    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0 } });
+    expect(kit.settingsSnapshot()).toEqual({ 1: { gain: 3, pitch: 0, choke: 0 } });
     const copy = createKit(defaults, { settings: kit.settingsSnapshot() });
-    expect(copy.settings(1)).toEqual({ gain: 3, pitch: 0 });
+    expect(copy.settings(1)).toEqual({ gain: 3, pitch: 0, choke: 0 });
   });
 
   describe("the voice a pad plays with", () => {
@@ -168,5 +168,27 @@ describe("pad settings", () => {
       kit.reset(0);
       expect(kit.settings(0).gain).toBe(-9);
     });
+  });
+});
+
+describe("a pad's choke group", () => {
+  it("is set like the other settings, clamped, and reported once when it changes", () => {
+    const onChange = vi.fn();
+    const kit = createKit(defaults, { onChange });
+    kit.setSetting(1, "choke", 3);
+    kit.setSetting(1, "choke", 3);
+    expect(kit.settings(1).choke).toBe(3);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(1, "setting");
+    kit.setSetting(1, "choke", 99);
+    expect(kit.settings(1).choke).toBe(8);
+  });
+
+  it("is listed for a pad that has nothing else set, and left out when it goes back to none", () => {
+    const kit = createKit(defaults);
+    kit.setSetting(2, "choke", 1);
+    expect(kit.settingsSnapshot()).toEqual({ 2: { gain: 0, pitch: 0, choke: 1 } });
+    kit.setSetting(2, "choke", 0);
+    expect(kit.settingsSnapshot()).toEqual({});
   });
 });

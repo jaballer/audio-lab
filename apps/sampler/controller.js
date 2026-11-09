@@ -108,7 +108,7 @@ export function createSampler({
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
   const scheduledHits = []; // { time, step, rows, bus, chokes } for each step handed to the scheduler, until its light is shown
   // A pad plays one voice at a time: a hit cuts off what the pad was still playing (voices.js).
-  const voices = createVoices(kit.length);
+  const voices = createVoices(kit.length, { groupOf: (pad) => kit.settings(pad).choke });
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -219,7 +219,7 @@ export function createSampler({
     onChange();
   }
 
-  // The one place a pad's setting (gain, pitch) changes: for the selected pad, saved with the song. The kit
+  // The one place a pad's setting (gain, pitch, choke group) changes: for the selected pad, saved with the song. The kit
   // clamps the value and tells the views.
   function setPadSetting(name, value) {
     kit.setSetting(selected, name, value);
@@ -345,8 +345,8 @@ export function createSampler({
     scheduler.rewindTo(step, time);
   }
 
-  // The kit changed: `what` is "sound" (a sample was loaded, restored or removed) or "setting" (a pad's gain or
-  // pitch). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
+  // The kit changed: `what` is "sound" (a sample was loaded, restored or removed) or "setting" (a pad's gain, pitch
+  // or choke group). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
   // the ones that have not started are built again from the new ones. A setting does not rebuild them: the next
   // step built picks it up, at most the lookahead (about 120 ms) later, and rebuilding for every tick of a slider
   // made steps late. It is saved, though, for a setting changed from elsewhere (a sample's pitch cleared).
@@ -472,7 +472,7 @@ export function createSampler({
       canRedo: history.canRedo,
       // The velocities of the steps shown, 1-127 (a step that is off reads as full).
       stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
-      padSettings: kit.settings(selected), // { gain, pitch } of the selected pad
+      padSettings: kit.settings(selected), // { gain, pitch, choke } of the selected pad
     }),
 
     getSong: () => ({

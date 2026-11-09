@@ -312,7 +312,7 @@
   touch-action: none; /* dragging the handles must not scroll the page */
 }
 
-/* Gain and pitch of the selected pad, under its Load Sample button: a label, a slider and its value on a row. */
+/* Gain, pitch and choke group of the selected pad, under its Load Sample button: a label, a slider and its value on a row. */
 .sampler-settings {
   display: grid;
   gap: 2px;

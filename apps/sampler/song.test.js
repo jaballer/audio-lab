@@ -18,7 +18,7 @@ const song = {
   bpm: 96.5,
   volume: 60,
   current: 1,
-  padSettings: { 1: { gain: -6, pitch: 3 } },
+  padSettings: { 1: { gain: -6, pitch: 3, choke: 2 } },
   sequences: [
     { bars: 2, pattern: { 0: [0, 4, 8, 12], 3: [2] }, velocities: { 0: { 4: 90, 12: 20 } } },
     { bars: 4, pattern: { 5: [1] }, velocities: {} },
@@ -302,7 +302,7 @@ describe("velocities", () => {
 
 describe("pad settings", () => {
   it("come back as they were saved", () => {
-    expect(parse(serializeSong(song)).padSettings).toEqual({ 1: { gain: -6, pitch: 3 } });
+    expect(parse(serializeSong(song)).padSettings).toEqual({ 1: { gain: -6, pitch: 3, choke: 2 } });
   });
 
   it("are brought into range, and pads that are not there or are at the defaults are dropped", () => {
@@ -310,13 +310,33 @@ describe("pad settings", () => {
       ...serializeSong(song),
       padSettings: { 0: { gain: 40, pitch: -40 }, 2: { gain: 0, pitch: 0 }, 99: { gain: 1, pitch: 1 } },
     };
-    expect(parse(raw).padSettings).toEqual({ 0: { gain: 6, pitch: -12 } });
+    expect(parse(raw).padSettings).toEqual({ 0: { gain: 6, pitch: -12, choke: 0 } });
   });
 
   it("are empty when there are none, or they are the wrong shape", () => {
     expect(parse({ ...serializeSong(song), padSettings: undefined }).padSettings).toEqual({});
     expect(parse({ ...serializeSong(song), padSettings: [1, 2] }).padSettings).toEqual({});
     expect(parse({ ...serializeSong(song), padSettings: "loud" }).padSettings).toEqual({});
+  });
+});
+
+describe("songs saved by version 4", () => {
+  it("load with every pad in no choke group, keeping the gain and pitch that were saved", () => {
+    const v4 = {
+      version: 4,
+      bpm: 100,
+      volume: 50,
+      current: 0,
+      padSettings: { 1: { gain: -6, pitch: 3 } },
+      sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
+    };
+    expect(parse(v4).padSettings).toEqual({ 1: { gain: -6, pitch: 3, choke: 0 } });
+  });
+
+  it("keep a choke group through saving and loading", () => {
+    const saved = serializeSong({ ...song, padSettings: { 4: { gain: 0, pitch: 0, choke: 5 } } });
+    expect(saved.version).toBe(5);
+    expect(parse(saved).padSettings).toEqual({ 4: { gain: 0, pitch: 0, choke: 5 } });
   });
 });
 

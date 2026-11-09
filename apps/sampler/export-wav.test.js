@@ -72,7 +72,7 @@ function fakeOffline() {
     destination,
     createGain: () => {
       const node = {
-        gain: { value: 1, setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+        gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
         connect: vi.fn(),
         disconnect: vi.fn(),
       };
@@ -220,6 +220,15 @@ describe("renderSequence", () => {
 
   it("cuts a pad's earlier hit when it is hit again, as it does on the page", async () => {
     const { render, sounds } = setup(sequence({ 0: [0, 4] }));
+    await render();
+    const first = sounds[0].play.mock.calls[0][1];
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, expect.any(Number));
+  });
+
+  it("cuts a pad's hit when another pad in its choke group starts, as it does on the page", async () => {
+    const { render, kit, sounds } = setup(sequence({ 0: [0], 1: [4] }));
+    kit.setSetting(0, "choke", 2);
+    kit.setSetting(1, "choke", 2);
     await render();
     const first = sounds[0].play.mock.calls[0][1];
     expect(first.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 0.5, expect.any(Number));

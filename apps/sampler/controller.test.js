@@ -14,7 +14,7 @@ function fakeAudio() {
   const ctx = {
     currentTime: 0,
     createGain: vi.fn(() => ({
-      gain: { value: 1, setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+      gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
       connect: vi.fn(),
       disconnect: vi.fn(),
     })),
@@ -176,9 +176,9 @@ describe("pad settings", () => {
     expect(change).toHaveBeenCalledTimes(1);
     sampler.setPadSetting("pitch", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 PITCH +3 st");
-    expect(sampler.getState().padSettings).toEqual({ gain: -6, pitch: 3 });
+    expect(sampler.getState().padSettings).toEqual({ gain: -6, pitch: 3, choke: 0 });
     sampler.selectPad(0);
-    expect(sampler.getState().padSettings).toEqual({ gain: 0, pitch: 0 });
+    expect(sampler.getState().padSettings).toEqual({ gain: 0, pitch: 0, choke: 0 });
   });
 
   it("says the value it kept, which is the clamped one", () => {
@@ -192,7 +192,7 @@ describe("pad settings", () => {
     expect(sampler.getSong().padSettings).toEqual({});
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", -5);
-    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: -5 } });
+    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: -5, choke: 0 } });
   });
 
   it("changes a live hit and the sequence, from the next hit", () => {
@@ -1177,6 +1177,79 @@ describe("a pad plays one voice at a time", () => {
     sampler.setSequence(1);
     expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0);
     expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("choke groups", () => {
+  const voiceOf = (sound, call) => sound.play.mock.calls[call][1];
+
+  it("sets a pad's group like gain and pitch: says so, saves it, and tells the views", () => {
+    const { sampler, message, songChange, change } = setup();
+    sampler.selectPad(2);
+    songChange.mockClear();
+    change.mockClear();
+    sampler.setPadSetting("choke", 3);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE GROUP 3");
+    expect(sampler.getState().padSettings.choke).toBe(3);
+    expect(sampler.getSong().padSettings).toEqual({ 2: { gain: 0, pitch: 0, choke: 3 } });
+    expect(songChange).toHaveBeenCalled();
+    expect(change).toHaveBeenCalled();
+    sampler.setPadSetting("choke", 0);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE OFF");
+  });
+
+  it("cuts a live hit on another pad in the same group, and leaves a pad in another group", () => {
+    const { audio, sounds, sampler } = setup();
+    for (const [pad, group] of [
+      [0, 1],
+      [1, 1],
+      [2, 2],
+    ]) {
+      sampler.selectPad(pad);
+      sampler.setPadSetting("choke", group);
+    }
+    audio.ctx.currentTime = 1;
+    sampler.triggerPad(2); // group 2
+    sampler.triggerPad(0); // group 1
+    audio.ctx.currentTime = 1.5;
+    sampler.triggerPad(1); // group 1: cuts pad 0
+    expect(voiceOf(sounds[0], 0).gain.setTargetAtTime).toHaveBeenCalledWith(0, 1.5, expect.any(Number));
+    expect(voiceOf(sounds[2], 0).gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+
+  it("cuts a sequenced hit of another pad in the group when this pad's step starts", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [4] } }) });
+    for (const pad of [0, 1]) {
+      sampler.selectPad(pad);
+      sampler.setPadSetting("choke", 1);
+    }
+    sampler.start();
+    for (let i = 0; i < 10; i++) advance(0.05); // pad 1's step 4 is at 0.55 s, queued within the lookahead
+    const [, , cutTime] = sounds[1].play.mock.calls[0];
+    expect(voiceOf(sounds[0], 0).gain.setTargetAtTime).toHaveBeenCalledWith(0, cutTime, expect.any(Number));
+  });
+
+  it("lets another pad's voice carry on when the step that was going to cut it is cancelled by Stop", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [3] } }) });
+    for (const pad of [0, 1]) {
+      sampler.selectPad(pad);
+      sampler.setPadSetting("choke", 1);
+    }
+    sampler.start();
+    for (let i = 0; i < 7; i++) advance(0.05); // pad 0's step 0 sounds; pad 1's step 3 (0.425 s) is queued, and will cut it
+    const first = voiceOf(sounds[0], 0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
+    sampler.stop();
+    expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1); // and not cut again
+  });
+
+  it("does not cut pads in no group", () => {
+    const { sounds, sampler, audio } = setup();
+    audio.ctx.currentTime = 1;
+    sampler.triggerPad(0);
+    sampler.triggerPad(1);
+    expect(voiceOf(sounds[0], 0).gain.setTargetAtTime).not.toHaveBeenCalled();
   });
 });
 
