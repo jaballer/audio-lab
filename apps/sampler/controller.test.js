@@ -156,6 +156,14 @@ describe("recording", () => {
     expect(buses[2].disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it("lights only the newest step reached, not every step that went by since the last frame", () => {
+    const { sampler, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 1: [0], 2: [1] } }) });
+    sampler.start();
+    for (let i = 0; i < 4; i++) advance(0.05); // steps 0 (0.05) and 1 (0.175) are both reached before one poll
+    sampler.poll();
+    expect(padPlayed.mock.calls.map(([row]) => row)).toEqual([2]);
+  });
+
   it("lights the pads that were scheduled, even if the pattern changed before the playhead got there", () => {
     const { sampler, sounds, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 2: [1] } }) });
     sampler.start();

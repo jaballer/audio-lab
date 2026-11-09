@@ -220,5 +220,19 @@ const midi = createMidi({
 
 wireMidiButton(site.midiButton, midi);
 
+// ---------- Reading order ----------
+// Side by side the pads come first (left), in one column the display does (top). Keyboard and
+// screen-reader order follow the document, not CSS `order`, so the markup is moved to match.
+// 800px is the same breakpoint as in sampler.css.
+const narrow = window.matchMedia("(max-width: 800px)");
+function placeConsole() {
+  const body = $("pads").closest(".body");
+  const consolePanel = body.querySelector(".console");
+  if (narrow.matches) body.prepend(consolePanel);
+  else body.append(consolePanel);
+}
+placeConsole();
+narrow.addEventListener("change", placeConsole);
+
 // ---------- Init ----------
 sampler.selectPad(0);

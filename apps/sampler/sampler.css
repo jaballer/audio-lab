@@ -354,10 +354,6 @@
   .body {
     grid-template-columns: 1fr;
   }
-  /* One column: keep the display on top, as before the pads moved left. */
-  .console {
-    order: -1;
-  }
 }
 
 @media (max-width: 480px) {

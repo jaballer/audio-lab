@@ -48,6 +48,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
   let timer = null;
   let nextStep = 0;
   let nextTime = 0;
+  let scheduledAny = false; // has this run scheduled a step yet? (nextStep === 0 can mean "not yet" or "just wrapped")
   let playheadStep = -1;
   let playheadTime = 0;
   const visualQueue = []; // { step, time } for each scheduled step, until the playhead reaches it
@@ -118,6 +119,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
       visualQueue.push({ step: nextStep, time: nextTime });
       nextTime += stepSeconds(bpm);
       nextStep = (nextStep + 1) % steps;
+      scheduledAny = true;
     }
   }
 
@@ -129,6 +131,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     playing = true;
     forgetHeard();
     nextStep = 0;
+    scheduledAny = false;
     nextTime = at ?? clock.now() + START_DELAY_S;
     playheadStep = -1;
     timer = setInterval(schedule, SCHEDULER_TICK_MS);
@@ -140,6 +143,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     clearInterval(timer);
     visualQueue.length = 0;
     forgetHeard();
+    scheduledAny = false;
     playheadStep = -1;
   }
 
@@ -161,9 +165,15 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
   // The loop got longer or shorter. A step that no longer exists cannot be next, so the count
   // wraps; the steps already queued for the playhead wrap the same way, and so does the step
   // the playhead is on now (until the next step arrives it would name a step that is gone).
+  //
+  // The lookahead may already have scheduled the last step of the old loop and wrapped to 0. Made
+  // longer, the loop carries on past that step (into the new bars) instead of going back to the
+  // start, so the result does not depend on the moment of the click.
   function setSteps(value) {
+    const wrappedJustNow = scheduledAny && nextStep === 0;
+    const oldSteps = steps;
     steps = value;
-    nextStep %= steps;
+    nextStep = value > oldSteps && wrappedJustNow ? oldSteps : nextStep % steps;
     if (playheadStep >= steps) playheadStep %= steps;
     for (const queued of visualQueue) queued.step %= steps;
     if (heardStep >= steps) forgetHeard();

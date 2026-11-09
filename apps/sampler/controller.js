@@ -147,11 +147,11 @@ export function createSampler({
   // steps, to line up with what is heard. They light for the hits that were scheduled, not for what
   // the pattern says now. Only the light: the selected pad stays.
   function lightReachedSteps() {
-    const lit = new Set();
-    while (scheduledHits.length && scheduledHits[0].time <= scheduler.playheadTime) {
-      for (const row of scheduledHits.shift().rows) lit.add(row);
-    }
-    for (const row of lit) onPadPlayed(row);
+    // Like the scheduler's own playhead, show only the newest step reached: after a stall (a hidden
+    // tab stops the frames, not the scheduler) the ones before it are over and must not all flash.
+    let reached = null;
+    while (scheduledHits.length && scheduledHits[0].time <= scheduler.playheadTime) reached = scheduledHits.shift();
+    if (reached) for (const row of reached.rows) onPadPlayed(row);
   }
 
   // The step keys show one bar; the playhead is only on them while it is in that bar.
