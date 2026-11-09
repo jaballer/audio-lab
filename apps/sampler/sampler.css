@@ -283,6 +283,25 @@
   margin-top: 0;
 }
 
+/* The waveform of a loaded sample, with its Start and End sliders under it. */
+.sampler-trim {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.sampler-trim[hidden] {
+  display: none;
+}
+.sampler-trim-canvas {
+  display: block;
+  width: 100%;
+  height: 64px;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 3px #000;
+  cursor: ew-resize;
+  touch-action: none; /* dragging the handles must not scroll the page */
+}
+
 /* Gain and pitch of the selected pad, under its Load Sample button: a label, a slider and its value on a row. */
 .sampler-settings {
   display: grid;

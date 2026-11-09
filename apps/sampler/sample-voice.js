@@ -8,6 +8,9 @@
 // as the built-in sounds do. The decoded buffer is shared; each hit makes a source of its own (they are
 // single-use).
 
+import { FULL_TRIM, clampTrim, isFullTrim, parseTrim, trimWindow } from "./trim.js";
+import { computePeaks } from "./waveform.js";
+
 // Why these numbers. Decoded audio is 4-byte floats at the audio context's rate, so a sample costs
 // seconds x rate x channels x 4 bytes of memory: 10 s of stereo at 48 kHz is about 3.7 MiB, and the 16 pads at
 // the cap are about 59 MiB, which is the most the kit can ever take whatever the files are (a typical drum hit
@@ -76,20 +79,60 @@ export function probeDuration(file, env = {}) {
   });
 }
 
+// Where a trimmed sample starts and stops it is faded over this long, so cutting it mid-wave does not click.
+export const EDGE_FADE_SECONDS = 0.003;
+const PEAK_COLUMNS = 400; // the outline is made once, at a width the view can draw at any size
+
 // `bytes` is the size of the file it came from. `info` is what the pad editor shows about it: not the sample
-// rate, which the decoded buffer reports as the audio context's and not the file's.
-export function createSampleSound({ id, name, buffer, bytes }) {
+// rate, which the decoded buffer reports as the audio context's and not the file's. `trim` is the part that
+// plays (trim.js): all of it unless given.
+export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM }) {
+  let current = clampTrim(parseTrim(trim), buffer.duration);
+  let peaks = null;
   return {
     id,
     name,
     info: { seconds: buffer.duration, channels: buffer.numberOfChannels, bytes },
+    duration: buffer.duration,
+    get trim() {
+      return current;
+    },
+    // Sets the part that plays and gives back what it became (kept possible: see clampTrim). `moved` is the
+    // handle being dragged.
+    setTrim(next, moved) {
+      current = clampTrim(next, buffer.duration, moved);
+      return current;
+    },
+    // The sample's outline, for drawing: made the first time it is asked for.
+    peaks() {
+      peaks ??= computePeaks(buffer, PEAK_COLUMNS);
+      return peaks;
+    },
     // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
     play(ctx, out, t, { rate = 1 } = {}) {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       if (rate !== 1) source.playbackRate.value = rate;
-      source.connect(out);
-      source.start(t);
+      if (isFullTrim(current)) {
+        source.connect(out);
+        source.start(t);
+        return;
+      }
+      // Only the trimmed part, faded in where it starts if that is not the start of the file and out where
+      // it stops if that is not the end. `length` is in the sample's own time: the rate shortens it when played.
+      const { offset, length } = trimWindow(current, buffer.duration);
+      const heard = length / rate;
+      const fade = Math.min(EDGE_FADE_SECONDS, heard / 2);
+      const stage = ctx.createGain();
+      stage.gain.setValueAtTime(current.start > 0 ? 0 : 1, t);
+      if (current.start > 0) stage.gain.linearRampToValueAtTime(1, t + fade);
+      if (current.end < 1) {
+        stage.gain.setValueAtTime(1, t + heard - fade);
+        stage.gain.linearRampToValueAtTime(0, t + heard);
+      }
+      source.connect(stage);
+      stage.connect(out);
+      source.start(t, offset, length);
     },
   };
 }

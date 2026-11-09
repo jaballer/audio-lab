@@ -11,6 +11,7 @@
 //   });
 //   await samples.load(3, file);   // true when pad 3 plays the file now
 //   await samples.reset(3);        // the built-in sound again
+//   samples.setTrim(3, { start, end }, "end");   // the part of pad 3's sample that plays; kept with the sample
 //   await samples.restore();       // at the start of a visit: put back what was kept
 //
 // The file's original bytes are what is kept, not the decoded audio: they are smaller. They are decoded again
@@ -20,6 +21,7 @@
 // Whatever storage does, the sample plays in this visit: a failed save only means it is gone next time.
 
 import { formatSpace } from "../../shared/storage-budget.js";
+import { isFullTrim, parseTrim } from "./trim.js";
 import { pad2, sampleName } from "./format.js";
 import {
   MAX_SAMPLE_BYTES,
@@ -38,7 +40,8 @@ export const MEMORY_FULL = "SAMPLE MEMORY FULL";
 const keyFor = (pad) => `sample-${pad}`;
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// What was stored, as { pad: { name, bytes } } for the pads that exist; anything unusable is left out.
+// What was stored, as { pad: { name, bytes, trim? } } for the pads that exist; anything unusable is left out.
+// `trim` (trim.js) is only there for a sample that has been trimmed.
 export function parseSamples(stored, padCount) {
   const pads = {};
   if (!isObject(stored) || stored.version !== SAMPLES_VERSION || !isObject(stored.pads)) return pads;
@@ -46,7 +49,10 @@ export function parseSamples(stored, padCount) {
     const pad = Number(key);
     if (!Number.isInteger(pad) || String(pad) !== key || pad < 0 || pad >= padCount) continue;
     if (!isObject(info) || typeof info.name !== "string" || !Number.isFinite(info.bytes) || info.bytes < 0) continue;
-    pads[pad] = { name: info.name, bytes: info.bytes };
+    const trim = parseTrim(info.trim);
+    pads[pad] = isFullTrim(trim)
+      ? { name: info.name, bytes: info.bytes }
+      : { name: info.name, bytes: info.bytes, trim };
   }
   return pads;
 }
@@ -191,14 +197,35 @@ export function createSamples({
         if (!result.ok || touched.has(pad)) return;
         kit.set(
           pad,
-          createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer, bytes: bytes.byteLength }),
+          createSampleSound({
+            id: keyFor(pad),
+            name: info.name,
+            buffer: result.buffer,
+            bytes: bytes.byteLength,
+            trim: info.trim,
+          }),
         );
       }),
     );
   }
 
+  // Sets which part of the pad's sample plays, and keeps it with the sample. `moved` is the handle being dragged
+  // (see trim.js). Gives back the trim it became, or null for a pad with no sample to trim. It is written for
+  // every change, which is a small JSON; whether it could be kept is not reported, since the trim plays either way.
+  function setTrim(pad, trim, moved) {
+    const sound = kit.get(pad);
+    if (typeof sound.setTrim !== "function") return null;
+    const next = sound.setTrim(trim, moved);
+    if (pads[pad]) {
+      if (isFullTrim(next)) delete pads[pad].trim;
+      else pads[pad].trim = next;
+      persist();
+    }
+    return next;
+  }
+
   // Is there a sample kept for this pad, whether or not it is playing (a restore that failed leaves the entry)?
   const isKept = (pad) => pad in pads;
 
-  return { load, reset, restore, isKept };
+  return { load, reset, restore, isKept, setTrim };
 }

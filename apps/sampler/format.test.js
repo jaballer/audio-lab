@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPadTitle, formatSampleInfo, formatSize, pad2, sampleName } from "./format.js";
+import { formatPadTitle, formatSampleInfo, formatSize, formatTime, pad2, sampleName } from "./format.js";
 
 describe("pad2", () => {
   it("zero-pads to two digits", () => {
@@ -67,5 +67,19 @@ describe("formatPadTitle", () => {
   it("is the pad's number and what it plays", () => {
     expect(formatPadTitle(2, "Snare")).toBe("PAD 03 \u00b7 Snare");
     expect(formatPadTitle(15, "My Sample")).toBe("PAD 16 \u00b7 My Sample");
+  });
+});
+
+describe("formatTime", () => {
+  it("is milliseconds under a second and seconds from there", () => {
+    expect(formatTime(0)).toBe("0 ms");
+    expect(formatTime(0.1234)).toBe("123 ms");
+    expect(formatTime(0.9996)).toBe("1000 ms");
+    expect(formatTime(1)).toBe("1.00 s");
+    expect(formatTime(2.456)).toBe("2.46 s");
+  });
+
+  it("is empty for what is not a time", () => {
+    for (const value of [undefined, null, NaN, -1, Infinity, "x"]) expect(formatTime(value)).toBe("");
   });
 });

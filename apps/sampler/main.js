@@ -23,6 +23,7 @@ import { createPadGrid, padForKey } from "./pads.js";
 import { SAMPLES_KEY, createSamples } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { createSettingsSliders } from "./settings-sliders.js";
+import { createTrimView } from "./trim-view.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
@@ -151,6 +152,13 @@ const padDrawer = createPadDrawer({
 const settingsSliders = createSettingsSliders($("pad-settings"), {
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
+// The waveform and the Start and End of the selected pad's sample, in the pad editor.
+const trimView = createTrimView($("pad-trim"), {
+  onChange(trim, moved) {
+    samples.setTrim(sampler.getState().selected, trim, moved);
+    render();
+  },
+});
 const sampleLoader = createSampleLoader({
   pads: $("pads"),
   input: $("sample-file"),
@@ -216,6 +224,8 @@ function render() {
     title: formatPadTitle(state.selected, soundName),
     info: formatSampleInfo(kit.get(state.selected).info),
   });
+  const sound = kit.get(state.selected);
+  trimView.refresh(typeof sound.setTrim === "function" ? sound : null); // a built-in sound has no waveform
   settingsSliders.refresh({ settings: state.padSettings, pitchEnabled: !kit.isDefault(state.selected) });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));

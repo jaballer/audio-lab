@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MAX_SAMPLE_BYTES,
+  EDGE_FADE_SECONDS,
   MAX_SAMPLE_SECONDS,
   REASONS,
   createSampleSound,
@@ -69,6 +70,137 @@ describe("createSampleSound", () => {
     sound.play(ctx, {}, 0.1);
     expect(sources).toHaveLength(2);
     expect(sources[0].buffer).toBe(sources[1].buffer);
+  });
+});
+
+describe("a trimmed sample", () => {
+  // A context that records the source and the gain stage between it and the output.
+  function recordingContext() {
+    const sources = [];
+    const stages = [];
+    return {
+      sources,
+      stages,
+      ctx: {
+        createBufferSource: () => {
+          const source = { buffer: null, playbackRate: { value: 1 }, connect: vi.fn(), start: vi.fn() };
+          sources.push(source);
+          return source;
+        },
+        createGain: () => {
+          const stage = {
+            gain: { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
+            connect: vi.fn(),
+          };
+          stages.push(stage);
+          return stage;
+        },
+      },
+    };
+  }
+  const buffer = (seconds = 2) => ({
+    duration: seconds,
+    numberOfChannels: 1,
+    length: seconds * 100,
+    getChannelData: () => new Float32Array(seconds * 100),
+  });
+  const make = (trim, seconds) => createSampleSound({ id: "s", name: "S", buffer: buffer(seconds), bytes: 10, trim });
+
+  it("plays all of it, straight to the output, with no extra node, until it is trimmed", () => {
+    const { ctx, sources, stages } = recordingContext();
+    const out = { name: "out" };
+    make().play(ctx, out, 1);
+    expect(stages).toHaveLength(0);
+    expect(sources[0].connect).toHaveBeenCalledWith(out);
+    expect(sources[0].start).toHaveBeenCalledWith(1);
+  });
+
+  it("starts the source at the trim's offset and plays only its length", () => {
+    const { ctx, sources } = recordingContext();
+    make({ start: 0.25, end: 0.75 }, 2).play(ctx, {}, 3);
+    expect(sources[0].start).toHaveBeenCalledWith(3, 0.5, 1);
+  });
+
+  it("plays through a stage of its own into the output, faded in where it starts and out where it stops", () => {
+    const { ctx, sources, stages } = recordingContext();
+    const out = { name: "out" };
+    make({ start: 0.25, end: 0.75 }, 2).play(ctx, out, 3);
+    const [stage] = stages;
+    expect(sources[0].connect).toHaveBeenCalledWith(stage);
+    expect(stage.connect).toHaveBeenCalledWith(out);
+    expect(stage.gain.setValueAtTime.mock.calls).toEqual([
+      [0, 3], // silent as it starts
+      [1, 3 + 1 - EDGE_FADE_SECONDS], // full until the fade out begins
+    ]);
+    expect(stage.gain.linearRampToValueAtTime.mock.calls).toEqual([
+      [1, 3 + EDGE_FADE_SECONDS],
+      [0, 3 + 1],
+    ]);
+  });
+
+  it("fades in only when it does not start at the start of the file, and out only when it does not end at the end", () => {
+    const fromStart = recordingContext();
+    make({ start: 0, end: 0.5 }, 2).play(fromStart.ctx, {}, 0);
+    expect(fromStart.stages[0].gain.setValueAtTime.mock.calls[0]).toEqual([1, 0]); // no fade in: it starts as the file does
+    expect(fromStart.stages[0].gain.linearRampToValueAtTime.mock.calls).toEqual([[0, 1]]);
+    const toEnd = recordingContext();
+    make({ start: 0.5, end: 1 }, 2).play(toEnd.ctx, {}, 0);
+    expect(toEnd.stages[0].gain.linearRampToValueAtTime.mock.calls).toEqual([[1, EDGE_FADE_SECONDS]]); // no fade out
+  });
+
+  it("takes the pitch into account: a sample played faster is over sooner", () => {
+    const { ctx, sources, stages } = recordingContext();
+    make({ start: 0, end: 0.5 }, 2).play(ctx, {}, 0, { rate: 2 });
+    expect(sources[0].playbackRate.value).toBe(2);
+    expect(sources[0].start).toHaveBeenCalledWith(0, 0, 1); // the length is in the sample's own time
+    expect(stages[0].gain.linearRampToValueAtTime.mock.calls).toEqual([[0, 0.5]]); // heard for half a second
+  });
+
+  it("keeps a fade short enough to fit a very short window", () => {
+    const { ctx, stages } = recordingContext();
+    make({ start: 0.5, end: 0.5025 }, 2).play(ctx, {}, 0); // a 5 ms window
+    const [[, fadeInEnd]] = stages[0].gain.linearRampToValueAtTime.mock.calls;
+    expect(fadeInEnd).toBeLessThanOrEqual(0.0025 + 1e-9);
+  });
+
+  it("is changed with setTrim, which gives back what it became, kept possible, and plays that from then on", () => {
+    const { ctx, sources } = recordingContext();
+    const sound = make(undefined, 2);
+    expect(sound.setTrim({ start: -3, end: 0.5 })).toEqual({ start: 0, end: 0.5 });
+    expect(sound.trim).toEqual({ start: 0, end: 0.5 });
+    sound.play(ctx, {}, 0);
+    expect(sources[0].start).toHaveBeenCalledWith(0, 0, 1);
+  });
+
+  it("holds back the handle that is being moved", () => {
+    const sound = make({ start: 0.2, end: 0.6 }, 2);
+    expect(sound.setTrim({ start: 0.9, end: 0.6 }, "start").end).toBe(0.6);
+    expect(sound.setTrim({ start: 0.2, end: 0.1 }, "end").start).toBe(0.2);
+  });
+
+  it("starts from a saved trim, and from all of it when that is not usable", () => {
+    expect(make({ start: 0.1, end: 0.4 }, 2).trim).toEqual({ start: 0.1, end: 0.4 });
+    expect(make({ start: 0.9, end: 0.1 }, 2).trim).toEqual({ start: 0, end: 1 });
+    expect(make("junk", 2).trim).toEqual({ start: 0, end: 1 });
+  });
+
+  it("makes its outline once, when asked, and gives the same one again", () => {
+    const getChannelData = vi.fn(() => new Float32Array(200));
+    const sound = createSampleSound({
+      id: "s",
+      name: "S",
+      buffer: { duration: 2, numberOfChannels: 1, length: 200, getChannelData },
+      bytes: 1,
+    });
+    expect(getChannelData).not.toHaveBeenCalled();
+    const first = sound.peaks();
+    expect(first).toHaveLength(800);
+    expect(sound.peaks()).toBe(first);
+    expect(getChannelData).toHaveBeenCalledTimes(1);
+  });
+
+  it("knows its length, for the view", () => {
+    expect(make(undefined, 3).duration).toBe(3);
   });
 });
 

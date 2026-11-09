@@ -460,6 +460,90 @@ describe("what a loaded sample says about itself", () => {
   });
 });
 
+describe("trimming a sample", () => {
+  // A decode that gives a buffer with a real length, so a trim can be kept possible.
+  const longBuffer = () => ({
+    ok: true,
+    buffer: { duration: 2, numberOfChannels: 1, sampleRate: 44100, length: 88200 },
+  });
+  const withSample = async (options = {}) => {
+    const context = setup({ decode: vi.fn(async () => longBuffer()), ...options });
+    await context.samples.load(0, file("a.wav", 500));
+    return context;
+  };
+
+  it("sets the part that plays and keeps it with the sample", async () => {
+    const { samples, kit, writes } = await withSample();
+    expect(samples.setTrim(0, { start: 0.25, end: 0.75 }, "end")).toEqual({ start: 0.25, end: 0.75 });
+    expect(kit.get(0).trim).toEqual({ start: 0.25, end: 0.75 });
+    expect(writes.at(-1).pads[0]).toEqual({ name: "a", bytes: 500, trim: { start: 0.25, end: 0.75 } });
+  });
+
+  it("gives back what the trim became, kept possible, and keeps that", async () => {
+    const { samples, writes } = await withSample();
+    expect(samples.setTrim(0, { start: -1, end: 9 })).toEqual({ start: 0, end: 1 });
+    expect(writes.at(-1).pads[0]).toEqual({ name: "a", bytes: 500 });
+  });
+
+  it("leaves nothing in the map for all of the sample, once it has been put back", async () => {
+    const { samples, writes } = await withSample();
+    samples.setTrim(0, { start: 0.1, end: 0.9 });
+    samples.setTrim(0, { start: 0, end: 1 });
+    expect(writes.at(-1).pads[0]).toEqual({ name: "a", bytes: 500 });
+  });
+
+  it("is null for a pad that plays a built-in sound, and changes nothing", async () => {
+    const { samples, writes } = await withSample();
+    writes.length = 0;
+    expect(samples.setTrim(2, { start: 0.1, end: 0.9 })).toBeNull();
+    expect(writes).toHaveLength(0);
+  });
+
+  it("comes back after a restore, applied to the sample", async () => {
+    const stored = {
+      version: SAMPLES_VERSION,
+      pads: { 0: { name: "Kept", bytes: 500, trim: { start: 0.2, end: 0.6 } } },
+    };
+    const { kit, samples } = setup({
+      stored,
+      store: fakeStore({ initial: { "sample-0": new ArrayBuffer(500) } }),
+      decode: vi.fn(async () => longBuffer()),
+    });
+    await samples.restore();
+    expect(kit.get(0).trim).toEqual({ start: 0.2, end: 0.6 });
+  });
+
+  it("starts at all of a sample when a new one is loaded over a trimmed one", async () => {
+    const { samples, kit, writes } = await withSample();
+    samples.setTrim(0, { start: 0.3, end: 0.4 });
+    await samples.load(0, file("b.wav", 600));
+    expect(kit.get(0).trim).toEqual({ start: 0, end: 1 });
+    expect(writes.at(-1).pads[0]).toEqual({ name: "b", bytes: 600 });
+  });
+
+  it("is dropped, with the sample, by Default Sound", async () => {
+    const { samples, writes } = await withSample();
+    samples.setTrim(0, { start: 0.3, end: 0.4 });
+    await samples.reset(0);
+    expect(writes.at(-1).pads).toEqual({});
+  });
+});
+
+describe("parseSamples and a trim", () => {
+  const entry = (trim) => ({ version: SAMPLES_VERSION, pads: { 0: { name: "a", bytes: 5, trim } } });
+
+  it("keeps a trim that is usable, and leaves it off for all of the sample", () => {
+    expect(parseSamples(entry({ start: 0.1, end: 0.5 }), 4)[0].trim).toEqual({ start: 0.1, end: 0.5 });
+    expect(parseSamples(entry({ start: 0, end: 1 }), 4)[0]).toEqual({ name: "a", bytes: 5 });
+  });
+
+  it("drops a trim that is not usable, but keeps the sample", () => {
+    for (const trim of ["x", { start: 0.9, end: 0.1 }, { start: -1, end: 2 }, { start: "a" }, null]) {
+      expect(parseSamples(entry(trim), 4)[0]).toEqual({ name: "a", bytes: 5 });
+    }
+  });
+});
+
 describe("a sample's pitch", () => {
   it("starts at the sample's own pitch when a sample is loaded, and the pad's gain stays", async () => {
     const { kit, samples } = setup();

@@ -61,3 +61,23 @@ as on a hardware sampler where they are on a screen of their own.
 - **Sections, not tabs, for now.** Sound and Tune. Tabs when there are enough sections to need them.
 - **Where later features go.** Waveform and trim, reverse, one-shot or hold, choke groups, a voice limit, an amp
   envelope and pan each become a section drawn into the drawer by a view of its own.
+
+## Trim
+
+A loaded sample has a start and an end, set in the pad editor from the waveform: drag the picture (the nearer handle
+follows) or use the Start and End sliders, which are native range inputs so the keyboard and a screen reader have all
+of it. Delete or a double-click puts a handle back.
+
+- **Fractions of the sample's length, not seconds**, so a trim means the same whatever rate the file was decoded at.
+  Kept possible: inside the sample, and never shorter than 5 ms (a shorter window is a click, not a sound). The handle
+  being dragged is the one held back when the two would meet.
+- **Kept with the sample, not the song:** in the map `samples.js` already keeps (`trim` beside `name` and `bytes`),
+  and only for a sample that is trimmed. A new sample starts at all of it; Default Sound drops it.
+- **Played with `start(when, offset, length)`** on the buffer source, so nothing is copied or re-decoded. The length is
+  in the sample's own time, so a pitched sample is over sooner (the fade is worked out from the time it is heard).
+- **Fades of 3 ms where it is cut:** in where the start is not the start of the file, out where the end is not the end
+  of it, through a gain stage of the hit's own. A window shorter than twice the fade shortens it to fit. An untrimmed
+  sample plays exactly as before, with no extra node.
+- **The waveform is made once per sample** (400 columns of the lowest and highest value, all channels) and drawn at
+  whatever size the drawer has, again when that changes.
+- Built-in sounds are synthesized, so they have no waveform and the trim controls are hidden for them.
