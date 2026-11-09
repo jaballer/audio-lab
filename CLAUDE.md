@@ -36,6 +36,10 @@ failing check blocks the deploy.
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.
+- **Views write only what changed, through `shared/dom-updates.js`.** The sampler redraws on every step while playing, and
+  assigning the same text or attribute again can be announced again by a screen reader. A control that is disabled or
+  hidden while it has keyboard focus hands the focus to a neighbour first (`setDisabled`, `setHidden`), so keys
+  such as Escape keep working where the person was.
 - **`main.js` only wires.** It finds the elements, builds the synth and views, and connects inputs (MIDI,
   computer keyboard) to them. Page state that several views read lives there.
 - **All audio goes through `shared/audio.js`.** Use `audio.ensure()` to get the context and `audio.master` as

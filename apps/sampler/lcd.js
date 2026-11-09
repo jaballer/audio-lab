@@ -10,6 +10,7 @@
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 
+import { setText } from "../../shared/dom-updates.js";
 import { pad2 } from "./format.js";
 
 const MESSAGE_MS = 1600;
@@ -53,9 +54,9 @@ export function createLcd({ lines, message, ruler, steps }) {
   return {
     render(state) {
       const text = formatLcd(state);
-      lines[0].textContent = text.line1;
-      lines[1].textContent = text.line2;
-      lines[2].textContent = text.line3;
+      setText(lines[0], text.line1);
+      setText(lines[1], text.line2);
+      setText(lines[2], text.line3);
       cells.forEach((cell, i) => {
         cell.classList.toggle("on", text.ruler[i].on);
         cell.classList.toggle("now", text.ruler[i].now);

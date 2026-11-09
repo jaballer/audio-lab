@@ -3,10 +3,11 @@
 //   const grid = createPadGrid(element, { sounds, onTrigger });
 //   grid.flash(0);    // a pad was pressed: light it and push it down briefly
 //   grid.light(0);    // the sequence played a pad: light it, but it does not move
-//   grid.select(0);   // mark the selected pad
+//   grid.select(0);   // mark the selected pad (aria-current)
 //   grid.setName(0, "Kick 808", true);   // a pad plays another sound now (true: a loaded sample, not the built-in one)
 //   padForKey("q")    // which pad a key plays (8), or -1
 
+import { setAttr } from "../../shared/dom-updates.js";
 import { createFlasher } from "../../shared/flash.js";
 import { PAD_COLUMNS, PAD_ROWS, padIndex } from "./layout.js";
 
@@ -47,6 +48,7 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       btn.querySelector(".name").textContent = sounds[idx].name; // text, not markup: a file's name goes here
       keys[idx] = key;
       btn.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return; // a right or middle press is not a hit (a right press opens the context menu)
         e.preventDefault();
         onTrigger(idx);
       });
@@ -75,8 +77,13 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       el.setAttribute("aria-label", `Pad ${idx + 1}, ${name}, key ${keys[idx].toUpperCase()}`);
     },
 
+    // The selected pad is what the pad editor and the step keys are for, so a screen reader is told which it is.
     select(idx) {
-      padEls.forEach((el, i) => el.classList.toggle("selected", i === idx));
+      padEls.forEach((el, i) => {
+        el.classList.toggle("selected", i === idx);
+        if (i === idx) setAttr(el, "aria-current", "true");
+        else if (el.hasAttribute("aria-current")) el.removeAttribute("aria-current");
+      });
     },
   };
 }
