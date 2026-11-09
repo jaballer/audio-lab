@@ -132,6 +132,7 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
     // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
     // `options.envelope` is { attack, decay, sustain, release } (pad-envelope.js): a gain stage of its own, ramped through
     // the shape over the time the sample is heard for, between the sample and `out`; left out, there is no such stage.
+    // Gives back `{ stop(time) }`, to end the source before its buffer does.
     play(ctx, out, t, { rate = 1, envelope = null } = {}) {
       const source = ctx.createBufferSource();
       source.buffer = buffer;
@@ -146,10 +147,13 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
       if (trimmed) t = Math.max(t, (ctx.currentTime ?? 0) + TRIM_LEAD_SECONDS);
       const heard = length / rate;
       if (envelope) out = envelopeStage(ctx, out, t, envelope, heard);
+      // What a render can use to end the source early: a sample cut after a tenth of a second would otherwise run on, silent,
+      // to the end of its buffer.
+      const handle = { stop: (time) => source.stop(time) };
       if (!trimmed) {
         source.connect(out);
         source.start(t);
-        return;
+        return handle;
       }
       const fade = Math.min(EDGE_FADE_SECONDS, heard / 2);
       const stage = ctx.createGain();
@@ -162,6 +166,7 @@ export function createSampleSound({ id, name, buffer, bytes, trim = FULL_TRIM })
       source.connect(stage);
       stage.connect(out);
       source.start(t, offset, length);
+      return handle;
     },
   };
 }

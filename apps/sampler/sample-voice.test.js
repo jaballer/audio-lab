@@ -86,7 +86,7 @@ describe("a trimmed sample", () => {
       ctx: {
         currentTime,
         createBufferSource: () => {
-          const source = { buffer: null, playbackRate: { value: 1 }, connect: vi.fn(), start: vi.fn() };
+          const source = { buffer: null, playbackRate: { value: 1 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() };
           sources.push(source);
           return source;
         },
@@ -250,6 +250,25 @@ describe("a trimmed sample", () => {
     const sound = createSampleSound({ id: "s", name: "S", buffer: shared, bytes: 10 });
     sound.snapshot().play(ctx, {}, 0);
     expect(sources[0].buffer).toBe(shared);
+  });
+
+  it("gives back a way to stop the source, which a render uses when the hit is cut", () => {
+    const { ctx, sources } = recordingContext();
+    const played = make(undefined, 2).play(ctx, {}, 0);
+    played.stop(3);
+    expect(sources[0].stop).toHaveBeenCalledWith(3);
+  });
+
+  it("gives that for a trimmed sample and one with an envelope too, and stops the sample's own source", () => {
+    const { ctx, sources } = recordingContext();
+    const trimmed = make({ start: 0.25, end: 0.75 }, 2).play(ctx, {}, 0);
+    const enveloped = make(undefined, 2).play(ctx, {}, 0, {
+      envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.2 },
+    });
+    trimmed.stop(2);
+    enveloped.stop(4);
+    expect(sources[0].stop).toHaveBeenCalledWith(2);
+    expect(sources[1].stop).toHaveBeenCalledWith(4);
   });
 
   it("holds back the handle that is being moved", () => {

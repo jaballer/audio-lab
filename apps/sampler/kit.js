@@ -58,8 +58,9 @@ export function createKit(defaults, { onChange, settings: initial = {} } = {}) {
         if (pitch !== DEFAULT_SETTINGS.pitch) options.rate = pitchToRate(pitch);
         const envelope = envelopeOf(index);
         if (envelope) options.envelope = envelope;
-        if (Object.keys(options).length === 0) current[index].play(ctx, target, t);
-        else current[index].play(ctx, target, t, options);
+        // What the sound gives back (a sample, a way to stop its source) is passed on.
+        if (Object.keys(options).length === 0) return current[index].play(ctx, target, t);
+        return current[index].play(ctx, target, t, options);
       },
     };
   }

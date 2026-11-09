@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LEAD_SECONDS,
   MAX_WARM_UP_PASSES,
-  PROGRESS_PAUSES,
   READY_WAIT_MS,
   canRenderOffline,
   createExportAction,
@@ -12,14 +11,16 @@ import {
   exportSequence,
   hasSteps,
   hitsOf,
-  pauseFrames,
   planRender,
   renderSequence,
   toMono,
   wasCancelled,
+  WINDOW_SECONDS,
+  windowPauses,
 } from "./export-wav.js";
 import { exportInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
+import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
 // A loaded sample's shape, as far as the export looks at it.
@@ -131,6 +132,7 @@ function fakeOffline({ pausable = false } = {}) {
     startRendering: async () => {
       for (const pause of [...pauses].sort((a, b) => a.time - b.time)) {
         const before = resumes.count;
+        ctx.currentTime = pause.time; // the clock is where the render has got to, as a real context's is
         pause.reach();
         await new Promise((resolve) => setTimeout(resolve, 0));
         if (resumes.count === before) await new Promise(() => {}); // paused for good
@@ -772,22 +774,181 @@ describe("wasCancelled", () => {
   });
 });
 
-describe("pauseFrames", () => {
-  it("spreads the pauses over the render, on whole blocks of 128 frames, none at the start or the end", () => {
-    const total = 1_000_000;
-    const frames = pauseFrames(total);
-    expect(frames).toHaveLength(PROGRESS_PAUSES);
+describe("windowPauses", () => {
+  it("puts a pause at the end of each window, on whole blocks of 128 frames, none at the start or the end", () => {
+    const total = 44100 * 10;
+    const frames = windowPauses(total, 44100, 1);
+    expect(frames).toHaveLength(9); // 10 seconds in windows of 1: 9 inside
     expect(frames.every((frame) => frame % 128 === 0 && frame > 0 && frame < total)).toBe(true);
     expect(frames).toEqual([...frames].sort((a, b) => a - b));
-    expect(frames[0]).toBeLessThan(total / 10);
-    expect(frames.at(-1)).toBeGreaterThan(total * 0.9);
+    frames.forEach((frame, i) => expect(Math.abs(frame - (i + 1) * 44100)).toBeLessThanOrEqual(64)); // to the nearest block
   });
 
-  it("never pauses twice in one block, so a short render has fewer pauses", () => {
-    const frames = pauseFrames(1000);
+  it("never pauses twice in one block, however short the window", () => {
+    const frames = windowPauses(100_000, 44100, 0.001);
     expect(new Set(frames).size).toBe(frames.length);
-    expect(frames.length).toBeLessThan(PROGRESS_PAUSES);
-    expect(pauseFrames(100)).toEqual([]);
+  });
+
+  it("has no pause for a render that fits in one window", () => {
+    expect(windowPauses(44100, 44100, 1)).toEqual([]);
+    expect(windowPauses(100, 44100, 1)).toEqual([]);
+  });
+
+  it("is a window of a second unless told otherwise", () => {
+    expect(WINDOW_SECONDS).toBe(1);
+    expect(windowPauses(44100 * 3, 44100)).toHaveLength(2);
+  });
+});
+
+describe("renderSequence, in windows", () => {
+  // 120 BPM, 16 steps a bar: a bar is 2 s and a sixteenth 0.125 s; at 1000 Hz, a window of 1 s is 1000 frames.
+  const run = ({ pausable = true, windowSeconds = 1, loops = 3, steps = [0, 4, 8, 12], extra = {} } = {}) => {
+    const scheduled = [];
+    const played = {
+      id: "a",
+      name: "a",
+      play: vi.fn((ctx, _out, time) => scheduled.push({ time, at: ctx.currentTime })),
+    };
+    const offline = fakeOffline({ pausable });
+    let ended = false;
+    const start = offline.ctx.startRendering;
+    offline.ctx.startRendering = () => start().then((rendered) => ((ended = true), rendered)); // the render ran to its end
+    const done = renderSequence({
+      song: songOf(sequence({ 0: steps })),
+      kit: createKit([played]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      loops,
+      windowSeconds,
+      ...extra,
+    });
+    return { done, offline, scheduled, hasEnded: () => ended };
+  };
+
+  it("starts the hits a little at a time, about a window or more before they sound, once it is going", async () => {
+    const { done, scheduled } = run();
+    await done;
+    expect(scheduled.length).toBe(16); // one warm-up pass and three loops of four hits
+    for (const { time, at } of scheduled.filter((hit) => hit.at > 0)) {
+      // about a window ahead of where the render is, to the nearest block of 128 frames (0.128 s at this rate), and in any
+      // case further than the 5 ms a late sample is moved on by
+      expect(time - at).toBeGreaterThanOrEqual(1 - 128 / 1000);
+      expect(time - at).toBeGreaterThan(TRIM_LEAD_SECONDS);
+    }
+    expect(scheduled.filter(({ at }) => at === 0).every(({ time }) => time < 2 + 1e-9)).toBe(true); // before the start: two windows
+    expect(scheduled.some(({ at }) => at > 0)).toBe(true); // and the rest as it goes
+  });
+
+  it("never has more than a few windows' worth of hits waiting to sound", async () => {
+    const { done, scheduled } = run({ steps: Array.from({ length: 16 }, (_, i) => i), loops: 4 });
+    await done;
+    expect(scheduled.length).toBe(16 * 5);
+    let waiting = 0;
+    for (const { at } of scheduled)
+      waiting = Math.max(waiting, scheduled.filter((hit) => hit.at <= at && hit.time > at).length);
+    expect(waiting).toBeLessThanOrEqual(24); // two windows of eight sixteenths a second, with the one in hand; not all 80
+  });
+
+  it("starts exactly the hits, at the same times and in the same order, as a render that is scheduled in one go", async () => {
+    const windowed = run();
+    const whole = run({ pausable: false });
+    await Promise.all([windowed.done, whole.done]);
+    expect(windowed.scheduled.map(({ time }) => time)).toEqual(whole.scheduled.map(({ time }) => time));
+  });
+
+  it("schedules everything before it starts when the browser cannot pause an offline context", async () => {
+    const { done, scheduled } = run({ pausable: false });
+    await done;
+    expect(scheduled.every(({ at }) => at === 0)).toBe(true);
+    expect(scheduled).toHaveLength(16);
+  });
+
+  it("fails, rather than leave the rest of the sequence unscheduled and silent, when a pause cannot be set", async () => {
+    const offline = fakeOffline({ pausable: true });
+    const set = offline.ctx.suspend.getMockImplementation();
+    let calls = 0;
+    offline.ctx.suspend.mockImplementation((time) =>
+      calls++ === 1 ? Promise.reject(new Error("too late")) : set(time),
+    );
+    await expect(
+      renderSequence({
+        song: songOf(sequence({ 0: [0, 4, 8, 12] })),
+        kit: createKit([sound("a")]),
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        createContext: offline.createContext,
+        loops: 3,
+        windowSeconds: 1,
+      }),
+    ).rejects.toThrow("too late");
+  });
+
+  it("has a pad's source stopped when the pad's next hit cuts it, a little after, and no earlier", async () => {
+    const stops = [];
+    const sample = { id: "s", name: "s", play: vi.fn(() => ({ stop: (time) => stops.push(time) })), setTrim() {} };
+    const offline = fakeOffline({ pausable: true });
+    await renderSequence({
+      song: songOf(sequence({ 0: [0, 8] })), // 120 BPM: two hits a second apart, in a loop of two seconds
+      kit: createKit([sample]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      loops: 1,
+      windowSeconds: 1,
+    });
+    // the hit at 0.01 is cut at 1.01, and so on; a stop is 0.1 s after the cut (the pad has no release)
+    expect(stops.slice(0, 2)).toEqual([1.01 + 0.1, 2.01 + 0.1]);
+    expect(stops).toHaveLength(3); // four hits, the last not cut by any
+  });
+
+  it("starts nothing more once the render has failed: a sound that throws does not throw again every window", async () => {
+    const calls = [];
+    const failing = {
+      id: "a",
+      name: "a",
+      play: vi.fn((_ctx, _out, time) => {
+        calls.push(time);
+        if (calls.length === 6) throw new Error("a sound that broke");
+      }),
+    };
+    const offline = fakeOffline({ pausable: true });
+    const done = renderSequence({
+      song: songOf(sequence({ 0: [0, 4, 8, 12] })),
+      kit: createKit([failing]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      loops: 8,
+      windowSeconds: 1,
+    });
+    await expect(done).rejects.toThrow("a sound that broke");
+    await new Promise((resolve) => setTimeout(resolve, 30)); // the render runs out; its remaining pauses only resume
+    expect(calls).toHaveLength(6);
+  });
+
+  it("stops scheduling when cancelled, lets the render go with nothing to hear, and rejects as cancelled", async () => {
+    const controller = new AbortController();
+    const reports = [];
+    const { done, offline, scheduled, hasEnded } = run({
+      loops: 8,
+      extra: {
+        signal: controller.signal,
+        onProgress: (fraction) => {
+          reports.push(fraction);
+          if (reports.length === 2) controller.abort();
+        },
+      },
+    });
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    const scheduledAtAbort = scheduled.length;
+    await new Promise((resolve) => setTimeout(resolve, 30)); // the render goes on to its end, unheard
+    expect(scheduled).toHaveLength(scheduledAtAbort); // nothing more was started
+    expect(reports).toHaveLength(2); // nor reported
+    const master = offline.nodes[0];
+    expect(master.disconnect).toHaveBeenCalled(); // so that what is left of the graph does no work
+    await vi.waitFor(() => expect(hasEnded()).toBe(true)); // and it is not left paused for good: a browser never frees that
+    expect(scheduled.length).toBeLessThan(16 + 4 * 8); // and most of it never existed
   });
 });
 
@@ -820,7 +981,7 @@ describe("renderSequence, progress and cancel", () => {
     const { done, offline } = render();
     await done;
     const times = offline.ctx.suspend.mock.calls.map((call) => call[0]);
-    const frames = pauseFrames(offline.made.frames);
+    const frames = windowPauses(offline.made.frames, 44100);
     expect(times).toHaveLength(frames.length);
     times.forEach((time, i) => {
       expect(time * 44100).toBeGreaterThan(frames[i] - 128);
@@ -828,10 +989,10 @@ describe("renderSequence, progress and cancel", () => {
     });
   });
 
-  it("stops at the next pause when cancelled: rejects as cancelled, and never resumes the render", async () => {
+  it("stops at the next pause when cancelled: rejects as cancelled, and reports nothing more", async () => {
     const controller = new AbortController();
     const reports = [];
-    const { done, offline } = render({
+    const { done } = render({
       signal: controller.signal,
       onProgress: (fraction) => {
         reports.push(fraction);
@@ -843,10 +1004,9 @@ describe("renderSequence, progress and cancel", () => {
     expect(reports).toHaveLength(2);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(reports).toHaveLength(2); // nothing is reported after it
-    expect(offline.ctx.resume).toHaveBeenCalledTimes(2);
   });
 
-  it("when cancelled between pauses, is not over until the render has stopped at the next one", async () => {
+  it("when cancelled between pauses, is not over until the render has reached the next one", async () => {
     const offline = fakeOffline({ pausable: true });
     const reaches = [];
     // the pauses are driven by hand, and the render never ends by itself: it is only ever at a pause or running
@@ -861,6 +1021,7 @@ describe("renderSequence, progress and cancel", () => {
       sampleRate: 1000,
       createContext: offline.createContext,
       signal: controller.signal,
+      windowSeconds: 1,
     });
     done.catch(() => {}).then(() => (settled = true));
     reaches[0](); // the first pause is reached and resumed
@@ -871,7 +1032,6 @@ describe("renderSequence, progress and cancel", () => {
     expect(settled).toBe(false); // still rendering, so still busy: another export may not start beside it
     reaches[1](); // the second pause is reached
     await expect(done).rejects.toMatchObject({ name: "AbortError" });
-    expect(offline.ctx.resume).toHaveBeenCalledTimes(1); // and not resumed
   });
 
   it("does not start when it is already cancelled", async () => {
@@ -931,28 +1091,6 @@ describe("renderSequence, progress and cancel", () => {
     expect(audio.channels).toHaveLength(2);
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
-  });
-
-  it("goes on rendering, without that report, when a pause could not be set", async () => {
-    const reports = [];
-    const offline = fakeOffline({ pausable: true });
-    const set = offline.ctx.suspend.getMockImplementation();
-    let calls = 0;
-    // the pauses are set as the render starts, so the failing one is in place before it does
-    offline.ctx.suspend.mockImplementation((time) =>
-      calls++ === 2 ? Promise.reject(new Error("too late")) : set(time),
-    );
-    const audio = await renderSequence({
-      song: songOf(sequence({ 0: [0] }, {}, 2)),
-      kit: createKit([sound("a")]),
-      stepsPerBar: 16,
-      sampleRate: 44100,
-      createContext: offline.createContext,
-      onProgress: (fraction) => reports.push(fraction),
-    });
-    expect(audio.channels).toHaveLength(2);
-    expect(reports.at(-1)).toBe(1);
-    expect(reports).toHaveLength(pauseFrames(offline.made.frames).length); // one pause fewer, and the end
   });
 
   it("works with no progress callback and no signal", async () => {

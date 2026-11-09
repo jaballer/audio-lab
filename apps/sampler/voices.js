@@ -11,7 +11,11 @@
 //   voices.undo(chokes);   // the hit was cancelled before it began (Stop, a sequence switch): what it was going to
 //                          // cut off carries on, unless another hit cuts it too
 //
-// (`cleanUp: false` is for an offline render, which has no use for the timers.) A pad always cuts its own earlier voices,
+// (`cleanUp: false` is for an offline render, which has no use for the timers. It can also pass `stopCut: true`: a sound
+// that gives back a way to stop its source (`voice.stopWith(fn)`, with what `play` returned) has it stopped a little after
+// the cut, once the fade is far below hearing. A source that runs on after its voice is cut makes no sound, but the render
+// still does the work of it: a ten second sample cut after a tenth of a second is nine and nine tenths of silence to
+// compute. The page does not ask for it: its sources are the browser's to run, and a cut there is a fade only.) A pad always cuts its own earlier voices,
 // in a group or not. Another pad's voices are cut only when both are in the same group, which is looked at when the hit
 // starts, and group 0 is no group. When two pads of a group start at the same moment (the same step), each cuts the
 // other from that moment, so the one handled last is the one heard (the higher pad number): the order a step's pads
@@ -24,7 +28,7 @@
 // nodes can be freed (a timer for that clean-up only: the cut itself is on the audio clock).
 
 export const CHOKE_TIME_CONSTANT = 0.004; // seconds: fast, and still a fade
-const CLEAN_UP_AFTER_S = 0.1; // after the cut, once it is far below hearing
+export const CLEAN_UP_AFTER_S = 0.1; // after the cut, once it is far below hearing
 
 // How fast a cut fades: the pad's release spread over seven time constants (so it is about 60 dB down at the end of it,
 // and the node is disconnected later still, with no step to hear),
@@ -34,7 +38,7 @@ const fadeConstant = (voice) => Math.max(CHOKE_TIME_CONSTANT, voice.release / RE
 
 const cutTime = (voice) => (voice.cuts.length ? Math.min(...voice.cuts.map((cut) => cut.time)) : undefined);
 
-export function createVoices(pads, { cleanUp = true, groupOf = () => 0, releaseOf = () => 0 } = {}) {
+export function createVoices(pads, { cleanUp = true, stopCut = false, groupOf = () => 0, releaseOf = () => 0 } = {}) {
   const lists = Array.from({ length: pads }, () => []); // per pad, the voices that have not been cut off long ago
 
   // Makes the voice's gain and its clean-up match its cut requests: the earliest one is the cut.
@@ -47,6 +51,12 @@ export function createVoices(pads, { cleanUp = true, groupOf = () => 0, releaseO
     // not heard at all: a fade would let its first few milliseconds through.
     if (at <= voice.time) voice.out.gain.setValueAtTime(0, at);
     else voice.out.gain.setTargetAtTime(0, at, fadeConstant(voice));
+    // The fade is a time constant of a seventh of the release (at least a few milliseconds): twice the release is fourteen
+    // of them, and the sound is a hundred dB down or more when the source ends.
+    if (stopCut && voice.stop) {
+      voice.stop(at + 2 * voice.release + CLEAN_UP_AFTER_S);
+      voice.stop = null; // once: the earliest cut is the one that counts, and a later one finds it gone already
+    }
     if (!cleanUp) return; // an offline render has no use for it: nothing is playing in the meantime
     const wait = Math.max(0, at - ctx.currentTime) + voice.release + CLEAN_UP_AFTER_S;
     voice.timer = setTimeout(() => voice.out.disconnect(), wait * 1000);
@@ -84,9 +94,18 @@ export function createVoices(pads, { cleanUp = true, groupOf = () => 0, releaseO
         lists[other] = list;
       }
       const list = lists[pad];
-      list.push({ out, time, cuts: [], timer: null, release: Math.max(0, releaseOf(pad)) });
+      const voice = { out, time, cuts: [], timer: null, release: Math.max(0, releaseOf(pad)), stop: null };
+      list.push(voice);
       lists[pad] = list;
-      return { out, chokes };
+      return {
+        out,
+        chokes,
+        // `stop(time)` ends the sound's source at `time` (what `play` gave back, if it gave anything back). Handed over
+        // right after the voice is started, before any later hit can cut it, which is when it is wanted.
+        stopWith(stop) {
+          if (typeof stop === "function") voice.stop = stop;
+        },
+      };
     },
 
     undo(chokes) {
