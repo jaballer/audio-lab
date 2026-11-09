@@ -21,6 +21,7 @@
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
+//   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
 //   sampler.start()              // from the first step, even if it is already playing
@@ -36,9 +37,9 @@
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
 
-import { playSound } from "../../shared/sounds.js";
+import { playSound, withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
-import { createPattern } from "../../shared/pattern.js";
+import { FULL_VELOCITY, createPattern } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { createTapTempo, nearestStep } from "../../shared/tempo.js";
 import { STARTER_BEAT } from "./starter-beat.js";
@@ -101,7 +102,7 @@ export function createSampler({
       bus.connect(master);
       sounds.forEach((sound, row) => {
         if (pattern.isOn(row, step) && !heard.has(row)) {
-          sound.play(ctx, bus, time);
+          sound.play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
           rows.push(row);
         }
       });
@@ -164,6 +165,12 @@ export function createSampler({
 
   function toggleStep(step) {
     pattern.toggle(selected, page * steps + step);
+    onChange();
+  }
+
+  // The one place a step's velocity (1-127) changes. Nothing happens for a step that is off.
+  function setStepVelocity(step, value) {
+    pattern.setVelocity(selected, page * steps + step, value);
     onChange();
   }
 
@@ -293,6 +300,7 @@ export function createSampler({
     selectPad,
     triggerPad,
     toggleStep,
+    setStepVelocity,
     setPage,
     setBars,
     setSequence,

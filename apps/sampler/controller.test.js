@@ -452,6 +452,31 @@ describe("transport", () => {
     expect(sounds[1].play).not.toHaveBeenCalled();
   });
 
+  it("plays a step with a lower velocity through a gain stage of its own, in front of the step's gain", () => {
+    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [0] } }) });
+    sampler.selectPad(0);
+    sampler.setStepVelocity(0, 64);
+    sampler.start();
+    advance(0);
+    const quiet = sounds[0].play.mock.calls[0][1];
+    expect(quiet.gain.value).toBeCloseTo(64 / 127);
+    const bus = quiet.connect.mock.calls[0][0]; // the stage feeds the step's own gain, which feeds the master
+    expect(bus.connect).toHaveBeenCalledWith(audio.master);
+    expect(sounds[1].play.mock.calls[0][1]).toBe(bus); // a step left at full velocity plays straight into it
+  });
+
+  it("changes a step's velocity only for a step that is on, and tells the views", () => {
+    const { sampler, change, songChange } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
+    sampler.selectPad(0);
+    change.mockClear();
+    songChange.mockClear();
+    sampler.setStepVelocity(2, 50);
+    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledTimes(1);
+    sampler.setStepVelocity(3, 50); // off: nothing to change
+    expect(songChange).toHaveBeenCalledTimes(1);
+  });
+
   it("starts again from the first step when Play is pressed while playing", () => {
     const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0] } }) });
     sampler.start();
