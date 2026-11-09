@@ -7,6 +7,7 @@ import "../../shared/step-keys.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAudioNotice } from "../../shared/audio-notice.js";
+import { setAttr, setDisabledMany, setText } from "../../shared/dom-updates.js";
 import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { createSiteHeader } from "../../shared/site-header.js";
@@ -105,7 +106,7 @@ const sampler = createSampler({
   sequenceCount: SEQUENCE_COUNT,
   song,
   onChange: render,
-  onMessage: (text) => lcd.showMessage(text),
+  onMessage: say,
   onPadHit(index) {
     padGrid.flash(index);
     midi.padHit(index);
@@ -118,6 +119,13 @@ const sampler = createSampler({
 });
 
 // ---------- Views ----------
+// A short message goes on the LCD, and, for the eye, in the pad editor too: the LCD is out of sight when the editor
+// is under the pads. (Both are declared below; this is only called once the page is running.)
+function say(text) {
+  lcd.showMessage(text);
+  padDrawer.showMessage(text);
+}
+
 const lcd = createLcd({
   lines: [$("lcd-1"), $("lcd-2"), $("lcd-3")],
   message: $("lcd-msg"),
@@ -136,7 +144,7 @@ const samples = createSamples({
   budget: createStorageBudget(),
   readMap: () => loadJson(SAMPLES_KEY),
   writeMap: (map) => saveJson(SAMPLES_KEY, map),
-  onMessage: (text) => lcd.showMessage(text),
+  onMessage: say,
 });
 // The pad editor: a drawer for the selected pad's sound and settings, opened with Edit Pad and remembered.
 const DRAWER_KEY = "pad-sampler:drawer";
@@ -146,6 +154,7 @@ const padDrawer = createPadDrawer({
   close: $("pad-drawer-close"),
   title: $("pad-drawer-title"),
   info: $("pad-drawer-info"),
+  message: $("pad-drawer-msg"),
   onToggle: (open) => saveJson(DRAWER_KEY, open),
 });
 
@@ -154,6 +163,7 @@ const settingsSliders = createSettingsSliders($("pad-settings"), {
 });
 // The waveform and the Start and End of the selected pad's sample, in the pad editor.
 const trimView = createTrimView($("pad-trim"), {
+  fallbackFocus: $("load-sample"), // where focus goes if the view is hidden (a sample was taken off) while it is in it
   onChange(trim, moved) {
     samples.setTrim(sampler.getState().selected, trim, moved);
     render();
@@ -230,8 +240,13 @@ function render() {
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
-  undoBtn.disabled = !state.canUndo;
-  redoBtn.disabled = !state.canRedo;
+  // Focus on a button that goes disabled moves to a neighbour (see dom-updates.js), so keys keep working.
+  setDisabledMany([
+    [undoBtn, !state.canUndo, [redoBtn, $("copy")]],
+    [redoBtn, !state.canRedo, [undoBtn, $("copy")]],
+  ]);
+  setAttr(undoBtn, "title", state.canUndo ? "" : "Nothing to undo");
+  setAttr(redoBtn, "title", state.canRedo ? "" : "Nothing to redo");
   velocityBars.refresh({
     on: state.stepsOn,
     velocities: state.stepVelocities,
@@ -240,16 +255,20 @@ function render() {
   });
   stepKeys.paintPlayhead(state.playing, state.playheadStep);
   knob.render(state.bpm);
-  seqNumber.textContent = pad2(state.sequence + 1);
-  seqPrev.disabled = state.sequence === 0;
-  seqNext.disabled = state.sequence === state.sequenceCount - 1;
-  for (const { bars, button } of barButtons) button.setAttribute("aria-pressed", String(bars === state.bars));
-  stepsRange.textContent = `Bar ${state.page + 1} of ${state.bars}`;
-  stepsPrev.disabled = state.page === 0;
-  stepsNext.disabled = state.page === state.bars - 1;
-  volInput.value = String(state.volume);
-  playBtn.setAttribute("aria-pressed", String(state.playing));
-  recBtn.setAttribute("aria-pressed", String(state.recording));
+  setText(seqNumber, pad2(state.sequence + 1));
+  setDisabledMany([
+    [seqPrev, state.sequence === 0, seqNext],
+    [seqNext, state.sequence === state.sequenceCount - 1, seqPrev],
+  ]);
+  for (const { bars, button } of barButtons) setAttr(button, "aria-pressed", String(bars === state.bars));
+  setText(stepsRange, `Bar ${state.page + 1} of ${state.bars}`);
+  setDisabledMany([
+    [stepsPrev, state.page === 0, [stepsNext, barButtons[0].button]],
+    [stepsNext, state.page === state.bars - 1, [stepsPrev, barButtons[0].button]],
+  ]);
+  if (volInput.value !== String(state.volume)) volInput.value = String(state.volume);
+  setAttr(playBtn, "aria-pressed", String(state.playing));
+  setAttr(recBtn, "aria-pressed", String(state.recording));
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
   recBtn.classList.toggle("armed", state.recording && !state.playing);
   lcd.render({ ...state, soundName, steps: STEPS });
