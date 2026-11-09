@@ -10,7 +10,7 @@
 // the input, so it is read with it). Focus on it when it goes disabled moves to Gain, so the keyboard stays in the editor.
 
 import { setAttr, setDisabled, setText } from "../../shared/dom-updates.js";
-import { SETTINGS, SETTING_NAMES, formatSetting } from "./pad-settings.js";
+import { SETTINGS, SLIDER_NAMES, formatSetting } from "./pad-settings.js";
 
 const PITCH_HINT = "Pitch applies to a loaded sample";
 const RESET_KEYS = ["Delete", "Backspace"];
@@ -21,7 +21,7 @@ export function createSettingsSliders(element, { onChange }) {
   element.classList.add("sampler-settings");
   const idBase = `setting-${element.id || "sliders"}`;
 
-  for (const name of SETTING_NAMES) {
+  for (const name of SLIDER_NAMES) {
     const { min, max, label } = SETTINGS[name];
     const id = `${idBase}-${name}`;
     const row = document.createElement("div");
@@ -69,7 +69,7 @@ export function createSettingsSliders(element, { onChange }) {
 
   return {
     refresh({ settings, pitchEnabled }) {
-      for (const name of SETTING_NAMES) {
+      for (const name of SLIDER_NAMES) {
         const { input, output } = rows[name];
         const applies = name !== "pitch" || pitchEnabled;
         // A pad that cannot use its pitch shows the slider at rest and a dash, not a value that does nothing.

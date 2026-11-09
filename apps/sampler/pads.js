@@ -4,12 +4,14 @@
 //   grid.flash(0);    // a pad was pressed: light it and push it down briefly
 //   grid.light(0);    // the sequence played a pad: light it, but it does not move
 //   grid.select(0);   // mark the selected pad (aria-current)
+//   grid.setColor(0, 5);   // the pad's colour: 0 for none, or a swatch (pad-colors.js); shown as its rim, and named in its label
 //   grid.setName(0, "Kick 808", true);   // a pad plays another sound now (true: a loaded sample, not the built-in one)
 //   padForKey("q")    // which pad a key plays (8), or -1
 
 import { setAttr } from "../../shared/dom-updates.js";
 import { createFlasher } from "../../shared/flash.js";
 import { PAD_COLUMNS, PAD_ROWS, padIndex } from "./layout.js";
+import { padColorCss, padColorName } from "./pad-colors.js";
 
 // Keyboard rows mirror the pad grid: top row of keys = top row of pads.
 export const KEY_ROWS = ["1234", "qwer", "asdf", "zxcv"];
@@ -25,11 +27,19 @@ export function padForKey(key) {
 
 const FLASH_MS = 110;
 
+// A pad's label for a screen reader: which pad, what it plays, its key, and its colour when it has one.
+export function padLabel({ index, name, key, color = 0 }) {
+  return `Pad ${index + 1}, ${name}, key ${key.toUpperCase()}${color ? `, ${padColorName(color).toLowerCase()}` : ""}`;
+}
+
 // `sounds` is a list of { name }; `onTrigger(index)` is called for a pointer
 // press or a keyboard activation (Enter/Space on a focused pad).
 export function createPadGrid(element, { sounds, onTrigger }) {
   const padEls = [];
   const keys = []; // each pad's computer key, for its label
+  const names = []; // what each pad plays now
+  const colors = []; // each pad's colour (0 for none)
+  const labelOf = (idx) => padLabel({ index: idx, name: names[idx], key: keys[idx], color: colors[idx] });
   const flash = createFlasher("hit", FLASH_MS);
   const light = createFlasher("lit", FLASH_MS);
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
@@ -42,11 +52,13 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       btn.type = "button";
       btn.className = "sampler-pad";
       btn.dataset.pad = String(idx); // which pad a dropped file is for (sample-loader.js)
-      btn.setAttribute("aria-label", `Pad ${idx + 1}, ${sounds[idx].name}, key ${key.toUpperCase()}`);
+      keys[idx] = key;
+      names[idx] = sounds[idx].name;
+      colors[idx] = 0;
+      btn.setAttribute("aria-label", labelOf(idx));
       btn.innerHTML =
         `<span class="num">${idx + 1}</span>` + `<span class="key">${key}</span>` + `<span class="name"></span>`;
       btn.querySelector(".name").textContent = sounds[idx].name; // text, not markup: a file's name goes here
-      keys[idx] = key;
       btn.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return; // a right or middle press is not a hit (a right press opens the context menu)
         e.preventDefault();
@@ -74,7 +86,23 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       const el = padEls[idx];
       el.querySelector(".name").textContent = name;
       el.classList.toggle("custom", custom);
-      el.setAttribute("aria-label", `Pad ${idx + 1}, ${name}, key ${keys[idx].toUpperCase()}`);
+      names[idx] = name;
+      el.setAttribute("aria-label", labelOf(idx));
+    },
+
+    setColor(idx, color) {
+      if (colors[idx] === color) return;
+      colors[idx] = color;
+      const el = padEls[idx];
+      const css = padColorCss(color);
+      if (css) {
+        el.style.setProperty("--pad-color", css);
+        el.title = padColorName(color); // a cue that is not the colour alone, for anyone who cannot tell two apart
+      } else {
+        el.style.removeProperty("--pad-color");
+        el.removeAttribute("title");
+      }
+      el.setAttribute("aria-label", labelOf(idx));
     },
 
     // The selected pad is what the pad editor and the step keys are for, so a screen reader is told which it is.

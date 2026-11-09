@@ -21,6 +21,7 @@ import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
+import { createColorSwatches } from "./color-swatches.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
@@ -100,9 +101,10 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 // is fine because the sampler reports nothing until something happens.
 // What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
 const kit = createKit(SOUNDS, {
-  settings: song ? song.padSettings : {}, // each pad's gain, pitch and choke group, kept with the song
+  settings: song ? song.padSettings : {}, // each pad's gain, pitch, choke group and colour, kept with the song
   onChange(index, what) {
     if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
+    if (what === "setting") padGrid.setColor(index, kit.settings(index).color);
     sampler.kitChanged(what); // rebuilds the queued steps for a new sound, saves for a setting (see the controller)
     render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
   },
@@ -144,6 +146,8 @@ const lcd = createLcd({
 });
 
 const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (index) => sampler.triggerPad(index) });
+// The colours saved with the song, on the pads from the start.
+for (let index = 0; index < kit.length; index++) padGrid.setColor(index, kit.settings(index).color);
 
 // Samples on the pads: kept in this browser (IndexedDB for the files, localStorage for which pad has which).
 const samples = createSamples({
@@ -168,6 +172,9 @@ const padDrawer = createPadDrawer({
   onToggle: (open) => saveJson(DRAWER_KEY, open),
 });
 
+const colorSwatches = createColorSwatches($("pad-colors"), {
+  onChange: (index) => sampler.setPadSetting("color", index),
+});
 const settingsSliders = createSettingsSliders($("pad-settings"), {
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
@@ -247,6 +254,7 @@ function render() {
   const sound = kit.get(state.selected);
   trimView.refresh(typeof sound.setTrim === "function" ? sound : null); // a built-in sound has no waveform
   settingsSliders.refresh({ settings: state.padSettings, pitchEnabled: !kit.isDefault(state.selected) });
+  colorSwatches.refresh({ color: state.padSettings.color });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });

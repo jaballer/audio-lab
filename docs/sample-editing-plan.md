@@ -97,3 +97,14 @@ A pad has a choke group, 0 (none) or 1 to 8, set with a Choke slider in the pad 
 - **Read when the hit starts:** the group a pad is in when a hit begins decides what it cuts, so moving a pad into a group takes effect from the next hit (for a step already handed to the audio clock, up to about 120 ms ahead, from the one after it). A step queued ahead does not cut a live tap made after it was queued, within that window; the pad's own retrigger cut has the same limit.
 - **Same machinery as the retrigger cut:** a fade on the audio clock, from the new hit's start time, with the earliest-cut bookkeeping and the undo for a queued step that is cancelled (Stop, a sequence switch). Live hits, the sequence and the WAV export all use it.
 - **Not decided here:** default groups for the built-in kit (the hats) are not set, so a fresh kit behaves as before; showing the group on the pad, and sharing swatches with pad colours (#122), are separate.
+
+## Pad colours
+
+A pad can be given a colour in the pad editor (a row of swatches under Tune), to tell pads apart by your own grouping: drums, loops, bass, one-shots (#122).
+
+- **A fixed set of eight colours, plus none** (`pad-colors.js`), not a free picker. Each is chosen to be seen against a pad's face (at least 3:1, checked by a test) and kept clear of the orange selection ring and the red hit light, so it can never be mistaken for either. The value kept is the swatch number, so a colour can be added at the end of the list but not reordered.
+- **How it shows:** the pad's rim (the ring just inside its edge) takes the colour, and the face stays dark, so the number, key and name keep their contrast. The selection ring and the hit light sit inside the rim, and the rim stays through a hit's light.
+- **Not the colour alone:** the pad's tooltip says the colour's name, and the swatches have names; the chosen swatch has a thick dark ring, apart from the blue focus ring, and is marked with the system highlight in forced-colours mode.
+- **For a screen reader:** the pad's label ends with the colour's name (`Pad 3, Kick, key C, blue`), and each swatch has its name; the group of swatches is a radio group (arrow keys, Home and End).
+- **A pad setting like Gain, Pitch and Choke** (`pad-settings.js`, the kit, the song's `padSettings`; song version 6, a version 5 song has no colours), shown on the LCD (`PAD 03 COLOR BLUE`), not part of the step undo history. It belongs to the pad, so Default Sound does not clear it. It has no effect on playback or the export.
+- **Not decided here:** default colours for the built-in kit, a swatch beside the pad editor's heading, mapping a colour to a Launchpad's LEDs (only red, green and amber), and naming a group.

@@ -176,9 +176,9 @@ describe("pad settings", () => {
     expect(change).toHaveBeenCalledTimes(1);
     sampler.setPadSetting("pitch", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 PITCH +3 st");
-    expect(sampler.getState().padSettings).toEqual({ gain: -6, pitch: 3, choke: 0 });
+    expect(sampler.getState().padSettings).toEqual({ gain: -6, pitch: 3, choke: 0, color: 0 });
     sampler.selectPad(0);
-    expect(sampler.getState().padSettings).toEqual({ gain: 0, pitch: 0, choke: 0 });
+    expect(sampler.getState().padSettings).toEqual({ gain: 0, pitch: 0, choke: 0, color: 0 });
   });
 
   it("says the value it kept, which is the clamped one", () => {
@@ -192,7 +192,7 @@ describe("pad settings", () => {
     expect(sampler.getSong().padSettings).toEqual({});
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", -5);
-    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: -5, choke: 0 } });
+    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: -5, choke: 0, color: 0 } });
   });
 
   it("changes a live hit and the sequence, from the next hit", () => {
@@ -1180,6 +1180,40 @@ describe("a pad plays one voice at a time", () => {
   });
 });
 
+describe("pad colours", () => {
+  it("sets a pad's colour like the other settings: says so, saves it, and tells the views", () => {
+    const { sampler, message, songChange, change } = setup();
+    sampler.selectPad(1);
+    songChange.mockClear();
+    change.mockClear();
+    sampler.setPadSetting("color", 5);
+    expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
+    expect(sampler.getState().padSettings.color).toBe(5);
+    expect(sampler.getSong().padSettings).toEqual({ 1: { gain: 0, pitch: 0, choke: 0, color: 5 } });
+    expect(songChange).toHaveBeenCalled();
+    expect(change).toHaveBeenCalled();
+    sampler.setPadSetting("color", 0);
+    expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR NONE");
+    expect(sampler.getSong().padSettings).toEqual({});
+  });
+
+  it("has no effect on how a pad plays: the same call, to the same kind of node, at the same time", () => {
+    const plain = setup();
+    plain.audio.ctx.currentTime = 1;
+    plain.sampler.triggerPad(0, 0.5);
+    const coloured = setup();
+    coloured.sampler.setPadSetting("color", 3);
+    coloured.audio.ctx.currentTime = 1;
+    coloured.sampler.triggerPad(0, 0.5);
+    const [, plainOut, plainTime, ...plainRest] = plain.sounds[0].play.mock.calls[0];
+    const [, colouredOut, colouredTime, ...colouredRest] = coloured.sounds[0].play.mock.calls[0];
+    expect(colouredTime).toBe(plainTime);
+    expect(colouredRest).toEqual(plainRest);
+    expect(colouredOut.gain.value).toBe(plainOut.gain.value);
+    expect(coloured.audio.ctx.createGain).toHaveBeenCalledTimes(plain.audio.ctx.createGain.mock.calls.length);
+  });
+});
+
 describe("choke groups", () => {
   const voiceOf = (sound, call) => sound.play.mock.calls[call][1];
 
@@ -1191,7 +1225,7 @@ describe("choke groups", () => {
     sampler.setPadSetting("choke", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE GROUP 3");
     expect(sampler.getState().padSettings.choke).toBe(3);
-    expect(sampler.getSong().padSettings).toEqual({ 2: { gain: 0, pitch: 0, choke: 3 } });
+    expect(sampler.getSong().padSettings).toEqual({ 2: { gain: 0, pitch: 0, choke: 3, color: 0 } });
     expect(songChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
     sampler.setPadSetting("choke", 0);
