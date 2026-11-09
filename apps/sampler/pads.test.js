@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEY_ROWS, padForKey, padLabel, padPressAction } from "./pads.js";
+import { KEY_ROWS, padForKey, padForKeyEvent, padLabel, padPressAction } from "./pads.js";
 
 describe("padForKey", () => {
   it("maps the bottom key row to pads 1-4 (indexes 0-3)", () => {
@@ -23,6 +23,7 @@ describe("padForKey", () => {
   it("returns -1 for keys that are not pads", () => {
     expect(padForKey("p")).toBe(-1);
     expect(padForKey(" ")).toBe(-1);
+    expect(padForKey("")).toBe(-1); // not the first pad: "1234".indexOf("") is 0
     expect(padForKey("Q")).toBe(-1); // callers lower-case first
   });
 });
@@ -48,5 +49,26 @@ describe("padPressAction", () => {
 
   it("edits the pad, without playing it, when Shift is held", () => {
     expect(padPressAction({ shift: true })).toBe("edit");
+  });
+});
+
+describe("padForKeyEvent", () => {
+  it("reads a pad from the key it types, in either case", () => {
+    expect(padForKeyEvent({ key: "q", code: "KeyQ" })).toBe(8);
+    expect(padForKeyEvent({ key: "Q", code: "KeyQ" })).toBe(8); // Shift or Caps Lock
+  });
+
+  it("reads the number row from its code when Shift has turned it into a symbol", () => {
+    expect(padForKeyEvent({ key: "!", code: "Digit1" })).toBe(12);
+    expect(padForKeyEvent({ key: "$", code: "Digit4" })).toBe(15);
+    expect(padForKeyEvent({ key: "1", code: "Digit1" })).toBe(12);
+  });
+
+  it("is -1 for a key that is not a pad, including a digit with no pad", () => {
+    expect(padForKeyEvent({ key: "p", code: "KeyP" })).toBe(-1);
+    expect(padForKeyEvent({ key: ")", code: "Digit0" })).toBe(-1);
+    expect(padForKeyEvent({ key: "Shift", code: "ShiftLeft" })).toBe(-1);
+    expect(padForKeyEvent({ key: "q" })).toBe(8); // a caller with no code
+    expect(padForKeyEvent({ code: "KeyQ" })).toBe(-1); // an event with no key (some autofill events) does not throw
   });
 });

@@ -5,6 +5,7 @@
 //
 //   const drawer = createPadDrawer({ element, toggle, close, title, info, onToggle });
 //   drawer.toggle(); drawer.open(); drawer.close();
+//   drawer.openAndFocus();   // opens it and, if it was closed, moves focus to its heading (a keyboard shortcut opened it)
 //   drawer.isOpen;
 //   drawer.refresh({ title: "PAD 03 · Snare", info: "0.40 s, mono, 22 KB" });   // for the selected pad
 //
@@ -65,6 +66,13 @@ export function createPadDrawer({ element, toggle, close, title, info, message =
 
   return {
     open: () => set(true),
+    // Opened by a key that is not the button: focus goes where the button would have put it. Already open, it is
+    // left alone, so a person working in the editor is not pulled back to its heading by every press.
+    openAndFocus() {
+      const wasOpen = open;
+      set(true);
+      if (!wasOpen) title.focus();
+    },
     close: () => set(false),
     toggle: () => set(!open),
     get isOpen() {

@@ -53,6 +53,29 @@ describe("createPadDrawer", () => {
     expect(onToggle).toHaveBeenLastCalledWith(false);
   });
 
+  it("openAndFocus opens it and moves focus to the heading, once", () => {
+    const { drawer, title, toggle, onToggle } = setup();
+    drawer.openAndFocus();
+    expect(drawer.isOpen).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(onToggle).toHaveBeenLastCalledWith(true);
+    expect(title.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("openAndFocus on an open editor leaves focus alone, so switching pads does not pull it back", () => {
+    const { drawer, title } = setup();
+    drawer.open();
+    drawer.openAndFocus();
+    expect(drawer.isOpen).toBe(true);
+    expect(title.focus).not.toHaveBeenCalled();
+  });
+
+  it("open() by code moves no focus", () => {
+    const { drawer, title } = setup();
+    drawer.open();
+    expect(title.focus).not.toHaveBeenCalled();
+  });
+
   it("moves focus to its heading when the button opens it, and not when the button closes it", () => {
     const { title, toggle } = setup();
     toggle.fire("click");
