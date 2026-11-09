@@ -20,8 +20,11 @@
 //
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
-//   sampler.toggleStep(5)
-//   sampler.start(); sampler.stop(); sampler.toggleRec()
+//   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
+//   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
+//   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
+//   sampler.start()              // from the first step, even if it is already playing
+//   sampler.stop(); sampler.toggleRec()
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
@@ -191,8 +194,11 @@ export function createSampler({
   }
 
   // ---------- Play and stop ----------
+  // Play always begins at the first step, as the button does on hardware: pressed while the
+  // sequence is running, it starts again from the top.
   function start() {
-    if (!scheduler.start()) return; // already playing
+    scheduler.stop();
+    scheduler.start();
     onChange();
   }
 
