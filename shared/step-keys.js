@@ -9,6 +9,13 @@
 
 import { setAttr, setHidden, setText } from "./dom-updates.js";
 
+// The index of the last step key that is shown (its `on` is not undefined), or -1: where focus goes from a key
+// that is hidden.
+export function lastShownIndex(on, count = on.length) {
+  for (let i = count - 1; i >= 0; i--) if (on[i] !== undefined) return i;
+  return -1;
+}
+
 export function createStepKeys(element, { steps, group: groupSize = 4, onToggle }) {
   const cells = [];
   element.classList.add("step-keys");
@@ -41,7 +48,7 @@ export function createStepKeys(element, { steps, group: groupSize = 4, onToggle 
     // Called on every redraw, which is every step while playing: only what changed is written.
     refresh({ on, soundName, first = 0 }) {
       // A key that goes away (a shorter sequence) hands its focus to the last one that stays.
-      const lastShown = cells.findLastIndex((_, i) => on[i] !== undefined);
+      const lastShown = lastShownIndex(on, cells.length);
       const fallback = lastShown >= 0 ? cells[lastShown].btn : null;
       cells.forEach(({ cell, btn }, i) => {
         const hidden = on[i] === undefined;
