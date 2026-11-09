@@ -25,8 +25,8 @@ import { CHANNEL_CHOICES, LOOP_CHOICES, renderingLabel } from "./export-options.
 
 const CHANNEL_NAMES = { stereo: "Stereo", mono: "Mono" };
 const PERCENT = 100;
-// A press this soon after a render stopped was meant for the button that was there while it ran (a double click on
-// Cancel export), and not for the one in its place now.
+// A press this soon after a render started or stopped was meant for the button that was there before it (a double
+// click on Export WAV, or on Cancel export), and not for the one in its place now.
 const SETTLE_MS = 500;
 
 export function createExportDialog(root, { onChange, onExport, onCancel, opener = null }) {
@@ -47,7 +47,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
   let busy = false;
   let cancelling = false;
   let empty = false;
-  let settledAt = -Infinity; // when the last render stopped, in the clock of event.timeStamp
+  let changedAt = -Infinity; // when a render last started or stopped, in the clock of event.timeStamp
   let latest = ""; // the last message said while it renders, shown when it stops: "EXPORTING..." is the progress bar's job
   let current = { loops: LOOP_CHOICES[0], channels: CHANNEL_CHOICES[0] };
 
@@ -122,12 +122,12 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
 
   closeButton.addEventListener("click", close);
   cancelButton.addEventListener("click", (event) => {
-    if (event.timeStamp - settledAt < SETTLE_MS) return;
+    if (event.timeStamp - changedAt < SETTLE_MS) return;
     if (busy) onCancel();
     else close();
   });
   goButton.addEventListener("click", (event) => {
-    if (event.timeStamp - settledAt < SETTLE_MS) return;
+    if (event.timeStamp - changedAt < SETTLE_MS) return;
     onExport();
   });
   // Escape, while it renders, stops the render and leaves the dialog where it is. The key's own default (a close
@@ -172,7 +172,10 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
       for (const { value, button } of loopButtons) setAttr(button, "aria-pressed", String(value === next.loops));
       for (const { value, button } of channelButtons) setAttr(button, "aria-pressed", String(value === next.channels));
     },
+    // What it says is what was pressed: not while it renders, when the song may move under it (a tempo knob on a
+    // controller) and the file is already being made from the song as it was.
     refresh(next) {
+      if (busy) return;
       setText(title, next.title);
       setText(readout, next.readout);
       setText(format, next.format);
@@ -182,6 +185,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     },
     setBusy(next) {
       busy = next;
+      changedAt = performance.now();
       if (busy) {
         latest = "";
         setText(message, "");
@@ -189,7 +193,6 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
         draw();
       } else {
         cancelling = false;
-        settledAt = performance.now();
         draw(); // first, so that the message is not written into a region that still says it is busy
         setText(message, latest);
       }

@@ -433,7 +433,10 @@ const pressExport = createExportAction({
   onMessage: sayExport,
   onProgress: (fraction) => exportDialog.setProgress(fraction),
   onCancel: () => exportDialog.setCancelling(), // a browser that cannot pause the render finishes it first
-  onBusy: (busy) => exportDialog.setBusy(busy),
+  onBusy(busy) {
+    exportDialog.setBusy(busy);
+    if (!busy) refreshExportDialog(); // the song may have moved while it rendered
+  },
 });
 
 function openExport() {

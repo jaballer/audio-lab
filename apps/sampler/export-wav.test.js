@@ -394,6 +394,28 @@ describe("renderSequence, loops and channels", () => {
     expect(audio.channels[0]).toHaveLength(4000);
   });
 
+  it("hands back views of the render, not copies of it: a long export is hundreds of megabytes", async () => {
+    const offline = fakeOffline();
+    let data;
+    const audio = await renderSequence({
+      song: songOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: (frames, rate) => {
+        const ctx = offline.createContext(frames, rate);
+        ctx.startRendering = async () => {
+          data = [new Float32Array(frames), new Float32Array(frames)];
+          return { numberOfChannels: 2, sampleRate: rate, getChannelData: (channel) => data[channel] };
+        };
+        return ctx;
+      },
+    });
+    expect(audio.channels[0].buffer).toBe(data[0].buffer);
+    expect(audio.channels[1].buffer).toBe(data[1].buffer);
+    expect(audio.channels[0]).toHaveLength(2000); // the window, not the whole render with its warm-up
+  });
+
   it("is as long and as big as the dialog said it would be", async () => {
     const song = songOf(sequence({ 0: [0] }, {}, 2));
     for (const options of [

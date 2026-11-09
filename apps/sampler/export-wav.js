@@ -160,8 +160,10 @@ export async function renderSequence({
   }
 
   const rendered = await renderWithProgress(ctx, first + frames, sampleRate, { onProgress, signal });
+  // Views of the kept window, not copies: a long render is hundreds of megabytes, and a copy of each channel is as
+  // much again at the moment the most is held (stereo, or both channels and then the mono mix).
   const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) =>
-    rendered.getChannelData(i).slice(first, first + frames),
+    rendered.getChannelData(i).subarray(first, first + frames),
   );
   return { sampleRate: rendered.sampleRate, channels: channelMode === "mono" ? [toMono(channels)] : channels };
 }
