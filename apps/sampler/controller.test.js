@@ -13,9 +13,24 @@ function fakeAudio() {
   const master = { id: "master" };
   const ctx = {
     currentTime: 0,
-    createGain: vi.fn(() => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() })),
+    createGain: vi.fn(() => ({
+      gain: { value: 1, setTargetAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    })),
   };
   return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn(), killSound: vi.fn(() => true) };
+}
+
+// What a step plays through: its own gain, the last node before the master. A hit's sound goes through a voice of
+// its pad (voices.js) and perhaps a velocity stage first, and each node says where it sends its sound.
+function busOf(node) {
+  let current = node;
+  for (;;) {
+    const next = current.connect.mock.calls[0]?.[0];
+    if (!next || next.id === "master") return current;
+    current = next;
+  }
 }
 
 const SEQUENCES = 4;
@@ -123,8 +138,10 @@ describe("triggerPad", () => {
     const { audio, sounds, sampler, padHit, change } = setup();
     audio.ctx.currentTime = 1.5;
     sampler.triggerPad(2);
-    expect(sounds[2].play).toHaveBeenCalledWith(audio.ctx, audio.master, 1.5);
-    expect(audio.ctx.createGain).not.toHaveBeenCalled();
+    const voice = sounds[2].play.mock.calls[0][1]; // the pad's voice, which goes to the master
+    expect(sounds[2].play).toHaveBeenCalledWith(audio.ctx, voice, 1.5);
+    expect(voice.connect).toHaveBeenCalledWith(audio.master);
+    expect(audio.ctx.createGain).toHaveBeenCalledTimes(1);
     expect(padHit).toHaveBeenCalledWith(2);
     expect(sampler.getState().selected).toBe(2);
     expect(change).toHaveBeenCalled();
@@ -133,16 +150,17 @@ describe("triggerPad", () => {
   it("plays a quieter hit through its own gain stage", () => {
     const { audio, sounds, sampler } = setup();
     sampler.triggerPad(1, 0.5);
-    const gain = audio.ctx.createGain.mock.results[0].value;
+    const [voice, gain] = audio.ctx.createGain.mock.results.map((result) => result.value); // the voice, then the stage
     expect(gain.gain.value).toBe(0.5);
-    expect(gain.connect).toHaveBeenCalledWith(audio.master);
+    expect(gain.connect).toHaveBeenCalledWith(voice);
+    expect(voice.connect).toHaveBeenCalledWith(audio.master);
     expect(sounds[1].play.mock.calls[0][1]).toBe(gain);
   });
 
   it("never lets a hit go fully silent", () => {
     const { audio, sampler } = setup();
     sampler.triggerPad(0, 0);
-    expect(audio.ctx.createGain.mock.results[0].value.gain.value).toBe(0.05);
+    expect(audio.ctx.createGain.mock.results[1].value.gain.value).toBe(0.05); // the stage, after the pad's voice
   });
 });
 
@@ -236,7 +254,7 @@ describe("pad settings", () => {
     audio.ctx.currentTime += 0.2;
     vi.advanceTimersByTime(SCHEDULER_TICK_MS);
     const last = sounds[0].play.mock.calls.at(-1)[1]; // the stage the last queued step plays through
-    const bus = last.connect.mock.calls[0][0]; // ... which feeds the step's own gain
+    const bus = busOf(last); // ... which feeds, by way of the pad's voice, the step's own gain
     expect(bus.connect).toHaveBeenCalledWith(audio.master);
     sampler.stop();
     expect(bus.disconnect).toHaveBeenCalled(); // a step not yet started is cut off, stage and all
@@ -259,7 +277,7 @@ describe("pad settings", () => {
       sampler.start();
       audio.ctx.currentTime += 0.2;
       vi.advanceTimersByTime(SCHEDULER_TICK_MS);
-      const buses = sounds[0].play.mock.calls.map((call) => call[1]);
+      const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
       expect(buses.length).toBeGreaterThan(1);
       return { sounds, sampler, audio, kit, buses, songChange };
     }
@@ -302,7 +320,7 @@ describe("pad settings", () => {
     sampler.triggerPad(0);
     const [, stage, , options] = sounds[0].play.mock.calls[0];
     expect(stage.gain.value).toBeCloseTo(0.501, 3);
-    expect(stage.connect).toHaveBeenCalledWith(audio.master);
+    expect(stage.connect.mock.calls[0][0].connect).toHaveBeenCalledWith(audio.master); // into the pad's voice
     expect(options).toEqual({ rate: 2 });
   });
 
@@ -314,7 +332,7 @@ describe("pad settings", () => {
     sampler.triggerPad(0);
     const stage = sounds[0].play.mock.calls[0][1];
     expect(stage.gain.value).toBeCloseTo(0.501, 3);
-    expect(stage.connect).toHaveBeenCalledWith(audio.master);
+    expect(stage.connect.mock.calls[0][0].connect).toHaveBeenCalledWith(audio.master); // into the pad's voice
   });
 });
 
@@ -332,7 +350,7 @@ describe("the kit", () => {
     sampler.start();
     audio.ctx.currentTime += 0.2;
     vi.advanceTimersByTime(SCHEDULER_TICK_MS);
-    const queued = sounds[0].play.mock.calls.map((call) => call[1]);
+    const queued = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
     expect(queued.length).toBeGreaterThan(1);
     const swapped = { id: "loaded", name: "Loaded", play: vi.fn() };
     kit.set(0, swapped);
@@ -783,7 +801,7 @@ describe("recording", () => {
     const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
     sampler.start();
     for (let i = 0; i < 5; i++) advance(0.05); // steps at 0.05 and 0.175 have started; the one at 0.3 is queued (one big jump would look like a stall and skip steps)
-    const buses = sounds[0].play.mock.calls.map((call) => call[1]);
+    const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
     expect(buses).toHaveLength(3);
     sampler.start();
     expect(buses[0].disconnect).not.toHaveBeenCalled(); // already sounding: left to ring out
@@ -795,7 +813,7 @@ describe("recording", () => {
     const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
     sampler.start();
     for (let i = 0; i < 5; i++) advance(0.05);
-    const buses = sounds[0].play.mock.calls.map((call) => call[1]);
+    const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
     sampler.stop();
     expect(buses[1].disconnect).not.toHaveBeenCalled();
     expect(buses[2].disconnect).toHaveBeenCalledTimes(1);
@@ -958,10 +976,10 @@ describe("sequences", () => {
     const { sounds, sampler, padPlayed, advance } = setup({ song });
     sampler.start();
     for (let i = 0; i < 5; i++) advance(0.05); // steps 0 and 1 have started; step 2 (0.3 s) is queued from sequence 1
-    const queued = sounds[0].play.mock.calls[2][1];
+    const queued = busOf(sounds[0].play.mock.calls[2][1]);
     sampler.setSequence(1);
     expect(queued.disconnect).toHaveBeenCalledTimes(1); // the old sequence's hit on step 2 will not sound
-    const started = sounds[0].play.mock.calls.slice(0, 2).map((call) => call[1]);
+    const started = sounds[0].play.mock.calls.slice(0, 2).map((call) => busOf(call[1]));
     for (const bus of started) expect(bus.disconnect).not.toHaveBeenCalled(); // those already sounding ring out
     expect(sounds[1].play).not.toHaveBeenCalled();
     for (let i = 0; i < 3; i++) advance(0.05);
@@ -1026,7 +1044,7 @@ describe("steps and clearing", () => {
     let guard = 0;
     while (!sounds[0].play.mock.calls.length && guard++ < 200) advance(0.05); // step 18 is queued, not started
     expect(sounds[0].play).toHaveBeenCalledTimes(1);
-    const queued = sounds[0].play.mock.calls[0][1];
+    const queued = busOf(sounds[0].play.mock.calls[0][1]);
     sampler.setBars(1);
     expect(queued.disconnect).toHaveBeenCalledTimes(1);
     for (let i = 0; i < 4; i++) advance(0.05);
@@ -1084,6 +1102,81 @@ describe("steps and clearing", () => {
     sampler.clearAll();
     expect(sampler.getSong().sequences[0].pattern).toEqual({});
     expect(message).toHaveBeenLastCalledWith("ALL STEPS CLEARED");
+  });
+});
+
+describe("a pad plays one voice at a time", () => {
+  const voiceOf = (sound, call) => sound.play.mock.calls[call][1]; // the node a hit plays into, at full velocity
+
+  it("cuts off the pad's last hit when it is tapped again, from the moment of the new hit", () => {
+    const { audio, sounds, sampler } = setup();
+    audio.ctx.currentTime = 1;
+    sampler.triggerPad(2);
+    audio.ctx.currentTime = 1.4;
+    sampler.triggerPad(2);
+    expect(voiceOf(sounds[2], 0).gain.setTargetAtTime).toHaveBeenCalledWith(0, 1.4, expect.any(Number));
+    expect(voiceOf(sounds[2], 1).gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+
+  it("leaves other pads playing", () => {
+    const { sounds, sampler } = setup();
+    sampler.triggerPad(0);
+    sampler.triggerPad(1);
+    expect(voiceOf(sounds[0], 0).gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+
+  it("cuts off the pad's last hit in the sequence when the next step on that pad starts", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1] } }) });
+    sampler.start();
+    for (let i = 0; i < 4; i++) advance(0.05);
+    expect(sounds[0].play).toHaveBeenCalledTimes(2);
+    const [, , secondTime] = sounds[0].play.mock.calls[1];
+    expect(voiceOf(sounds[0], 0).gain.setTargetAtTime).toHaveBeenCalledWith(0, secondTime, expect.any(Number));
+  });
+
+  it("cuts off a sequenced hit that is still sounding when the pad is tapped", () => {
+    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0] } }) });
+    sampler.start();
+    for (let i = 0; i < 4; i++) advance(0.05);
+    const stepVoice = voiceOf(sounds[0], 0);
+    sampler.triggerPad(0);
+    expect(stepVoice.gain.setTargetAtTime).toHaveBeenCalledWith(0, audio.ctx.currentTime, expect.any(Number));
+  });
+
+  it("lets the earlier hit carry on when the step that was going to cut it off is cancelled by Stop", () => {
+    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 3] } }) });
+    sampler.start();
+    for (let i = 0; i < 7; i++) advance(0.05); // step 0 has started; step 3 (at 0.425 s) is queued
+    expect(sounds[0].play).toHaveBeenCalledTimes(2);
+    const first = voiceOf(sounds[0], 0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1); // it was going to be cut off by the queued step
+    sampler.stop();
+    expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0); // and now it is not: the cut is taken back
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1); // and not set again
+  });
+
+  it("keeps a pad cut off by a live tap when the queued step that also cut it is cancelled", () => {
+    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 3] } }) });
+    sampler.start();
+    for (let i = 0; i < 7; i++) advance(0.05); // step 0 sounds; step 3 (at 0.425 s) is queued and will cut it
+    const first = voiceOf(sounds[0], 0);
+    audio.ctx.currentTime = 0.36;
+    sampler.triggerPad(0); // a tap before that
+    sampler.stop();
+    // the queued step is gone, but the tap still cuts the long hit, from its own moment
+    expect(first.gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0.36, expect.any(Number));
+  });
+
+  it("does the same when the queued step is rebuilt because the sequence was switched", () => {
+    const base = savedSong({ bpm: 120, pattern: { 0: [0, 3] } });
+    const song = { ...base, sequences: [base.sequences[0], { bars: 1, pattern: {} }, ...base.sequences.slice(2)] };
+    const { sounds, sampler, advance } = setup({ song });
+    sampler.start();
+    for (let i = 0; i < 7; i++) advance(0.05);
+    const first = voiceOf(sounds[0], 0);
+    sampler.setSequence(1);
+    expect(first.gain.cancelScheduledValues).toHaveBeenLastCalledWith(0);
+    expect(first.gain.setTargetAtTime).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1154,8 +1247,8 @@ describe("transport", () => {
     sampler.start();
     advance(0);
     // The starter beat: kick on step 0, closed hat (pad 2) on step 0, snare not yet.
-    const bus = sounds[0].play.mock.calls[0][1]; // each step plays through a gain of its own, into the master
-    expect(sounds[0].play).toHaveBeenCalledWith(audio.ctx, bus, expect.closeTo(0.05));
+    const bus = busOf(sounds[0].play.mock.calls[0][1]); // each step plays through a gain of its own, into the master
+    expect(sounds[0].play).toHaveBeenCalledWith(audio.ctx, expect.anything(), expect.closeTo(0.05));
     expect(bus.connect).toHaveBeenCalledWith(audio.master);
     expect(sounds[2].play).toHaveBeenCalledTimes(1);
     expect(sounds[1].play).not.toHaveBeenCalled();
@@ -1169,9 +1262,9 @@ describe("transport", () => {
     advance(0);
     const quiet = sounds[0].play.mock.calls[0][1];
     expect(quiet.gain.value).toBeCloseTo(64 / 127);
-    const bus = quiet.connect.mock.calls[0][0]; // the stage feeds the step's own gain, which feeds the master
+    const bus = busOf(quiet); // the stage feeds the pad's voice, which feeds the step's own gain, which feeds the master
     expect(bus.connect).toHaveBeenCalledWith(audio.master);
-    expect(sounds[1].play.mock.calls[0][1]).toBe(bus); // a step left at full velocity plays straight into it
+    expect(sounds[1].play.mock.calls[0][1].connect).toHaveBeenCalledWith(bus); // a step left at full velocity plays straight into its pad's voice
   });
 
   it("changes a step's velocity only for a step that is on, and tells the views and the LCD", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SOUNDS, playSound, withGain, withVelocity } from "./sounds.js";
+import { SOUNDS, withGain, withVelocity } from "./sounds.js";
 
 // How a sound sounds can only be judged by ear. What can be checked here is that
 // each one schedules cleanly: starts nothing before its time, stops everything
@@ -206,55 +206,5 @@ describe("withGain", () => {
     expect(gains[0].gain.value).toBe(0.5);
     expect(gains[0].connect).toHaveBeenCalledWith(out);
     expect(withGain(ctx, out, 2).gain.value).toBe(2); // above 1 is allowed, unlike a velocity
-  });
-});
-
-describe("playSound", () => {
-  // A stand-in engine: ensure() hands back a context whose gains record their level and target.
-  function fakeEngine() {
-    const master = { name: "master" };
-    const gains = [];
-    const ctx = {
-      currentTime: 4,
-      createGain: () => {
-        const gain = { gain: { value: 1 }, connect: vi.fn() };
-        gains.push(gain);
-        return gain;
-      },
-    };
-    return { audio: { ensure: () => ctx, master, powered: true }, ctx, master, gains };
-  }
-  const probe = () => ({ play: vi.fn() });
-
-  it("plays at the context's current time straight into the master at full velocity", () => {
-    const { audio, ctx, master, gains } = fakeEngine();
-    const sound = probe();
-    playSound(audio, sound);
-    expect(sound.play).toHaveBeenCalledWith(ctx, master, 4);
-    expect(gains).toHaveLength(0);
-  });
-
-  it("routes a softer hit through its own gain stage into the master", () => {
-    const { audio, master, gains } = fakeEngine();
-    const sound = probe();
-    playSound(audio, sound, 0.4);
-    expect(gains).toHaveLength(1);
-    expect(gains[0].gain.value).toBe(0.4);
-    expect(gains[0].connect).toHaveBeenCalledWith(master);
-    expect(sound.play.mock.calls[0][1]).toBe(gains[0]);
-  });
-
-  it("drops a hit while the power is off, so it cannot queue up and sound at power on", () => {
-    const { audio } = fakeEngine();
-    audio.powered = false;
-    const sound = probe();
-    playSound(audio, sound);
-    expect(sound.play).not.toHaveBeenCalled();
-  });
-
-  it("never lets a hit go fully silent", () => {
-    const { audio, gains } = fakeEngine();
-    playSound(audio, probe(), 0);
-    expect(gains[0].gain.value).toBeGreaterThan(0);
   });
 });

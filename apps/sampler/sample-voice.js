@@ -4,8 +4,8 @@
 //   const result = await decodeSample(ctx, arrayBuffer);   // { ok: true, buffer } or { ok: false, reason }
 //   const sound = createSampleSound({ id, name, buffer, bytes }); // the shape of the built-in sounds: play(ctx, out, t)
 //
-// A sample plays once, to its end; hitting the pad again lets the earlier hit ring out beside the new one,
-// as the built-in sounds do. The decoded buffer is shared; each hit makes a source of its own (they are
+// A sample plays once, to its end; hitting the pad again cuts the earlier hit off (voices.js), so a pad plays one
+// copy at a time. The decoded buffer is shared; each hit makes a source of its own (they are
 // single-use).
 
 import { FULL_TRIM, clampTrim, isFullTrim, parseTrim, trimWindow } from "./trim.js";

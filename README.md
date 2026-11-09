@@ -55,6 +55,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
   - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's gain and pitch settings (`voice(i).play` is what the sequencer and live hits call); no DOM
+  - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing (a fade on the audio clock), live or in the sequence; no DOM
   - `trim.js` — which part of a sample plays: a start and an end as fractions of its length, kept possible (inside the sample, never shorter than 5 ms), and which handle a press would move; no DOM
   - `waveform.js` — a sample's outline for drawing, the lowest and highest value of each slice; no DOM
   - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the text, and reading them back from a saved song; no DOM
@@ -95,7 +96,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `main.js` — wires the page: points Tone at the shared `AudioContext`, builds the synth and delay, draws the keys and controls
   - `params.js` — the controls' ranges, defaults and readout formats
   - `tone-demo.css` — demo-only styles
-- `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and `playSound` (one hit at a velocity); played by the sampler
+- `shared/sounds.js` — the 16 drum sounds, the kit that lists them in pad order, and the gain stages a hit goes through (`withVelocity`, `withGain`); played by the sampler
 - `shared/dsp.js` — what the sounds are built from: noise, a decay envelope, a filter
 - `shared/pattern.js`, `shared/history.js` — the step grid (on/off, and a velocity per step) and undo/redo over any state that can be set aside as a value; no DOM
 - `shared/storage-budget.js` — how much room the browser gives the site (the sampler's total cap is a share of it), asking it to keep the data (`navigator.storage.persist()`), and the "4.2/32 MB" text; never throws, no DOM
