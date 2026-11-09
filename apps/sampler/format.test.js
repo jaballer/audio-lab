@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatPadTitle, formatSampleInfo, formatSize, formatTime, pad2, sampleName } from "./format.js";
+import {
+  formatPadTitle,
+  formatSampleInfo,
+  formatStepsHeading,
+  formatSize,
+  formatTime,
+  pad2,
+  sampleName,
+} from "./format.js";
 
 describe("pad2", () => {
   it("zero-pads to two digits", () => {
@@ -81,5 +89,12 @@ describe("formatTime", () => {
 
   it("is empty for what is not a time", () => {
     for (const value of [undefined, null, NaN, -1, Infinity, "x"]) expect(formatTime(value)).toBe("");
+  });
+});
+
+describe("formatStepsHeading", () => {
+  it("names the pad whose steps are showing", () => {
+    expect(formatStepsHeading("Kick")).toBe("Steps: Kick");
+    expect(formatStepsHeading("My Sample")).toBe("Steps: My Sample");
   });
 });

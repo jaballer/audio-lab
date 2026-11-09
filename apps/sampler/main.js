@@ -19,7 +19,7 @@ import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
-import { formatPadTitle, formatSampleInfo, pad2 } from "./format.js";
+import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
@@ -288,6 +288,7 @@ function render() {
   colorSwatches.refresh({ color: state.padSettings.color });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
+  setText($("steps-toggle"), formatStepsHeading(soundName));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
   // Focus on a button that goes disabled moves to a neighbour (see dom-updates.js), so keys keep working.
   setDisabledMany([
