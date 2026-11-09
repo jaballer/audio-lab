@@ -30,6 +30,7 @@ import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
 import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
+import { createDisclosure } from "../../shared/disclosure.js";
 import { saveBlob } from "../../shared/download.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
@@ -410,6 +411,30 @@ function placeConsole() {
 }
 placeConsole();
 narrow.addEventListener("change", placeConsole);
+
+// ---------- The step editor can be hidden ----------
+// Its heading stays: the keys, the velocity bars, the bar arrows and the edit tools go. Remembered, and shown by default.
+const STEPS_KEY = "pad-sampler:steps";
+createDisclosure({
+  toggle: $("steps-toggle"),
+  regions: [$("step-tools"), $("step-nav"), $("step-body")],
+  open: loadJson(STEPS_KEY, true) !== false,
+  onToggle: (open) => saveJson(STEPS_KEY, open),
+});
+
+// The pad editor's Tune and Envelope sections can be hidden too, each remembered, and shown by default. The button is
+// the section's heading, and what it hides is the sliders.
+for (const [toggle, region, key] of [
+  ["tune-toggle", "pad-settings", "pad-sampler:tune"],
+  ["envelope-toggle", "pad-envelope", "pad-sampler:envelope"],
+]) {
+  createDisclosure({
+    toggle: $(toggle),
+    regions: [$(region)],
+    open: loadJson(key, true) !== false,
+    onToggle: (open) => saveJson(key, open),
+  });
+}
 
 // ---------- Where the pad editor goes ----------
 // Beside the machine when the window is wide enough, otherwise under the pads, where it takes the place the
