@@ -18,13 +18,21 @@ import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportDialog } from "./export-dialog.js";
 import {
   emptyBarsNote,
+  exportBlockedReason,
   exportFormat,
   exportInfo,
   exportReadout,
   exportTitle,
   normalizeExportOptions,
 } from "./export-options.js";
-import { EXPORT_SAMPLE_RATE, createExportAction, emptyBars, exportSequence, hasSteps } from "./export-wav.js";
+import {
+  EXPORT_SAMPLE_RATE,
+  canRenderOffline,
+  createExportAction,
+  emptyBars,
+  exportSequence,
+  hasSteps,
+} from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -405,7 +413,7 @@ function refreshExportDialog() {
     format: exportFormat(EXPORT_SAMPLE_RATE),
     // A sequence with nothing in it is said already; this is for one with steps in some bars and not others.
     note: nothing ? "" : emptyBarsNote(emptyBars(current, STEPS)),
-    empty: nothing,
+    blocked: exportBlockedReason({ supported: canRenderOffline(), hasSteps: !nothing }),
   });
 }
 

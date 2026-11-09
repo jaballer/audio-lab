@@ -4,6 +4,7 @@ import {
   MAX_WARM_UP_PASSES,
   PROGRESS_PAUSES,
   READY_WAIT_MS,
+  canRenderOffline,
   createExportAction,
   emptyBars,
   encodeWav,
@@ -51,6 +52,16 @@ describe("hitsOf", () => {
 
   it("is empty for an empty sequence", () => {
     expect(hitsOf(sequence({}), 16)).toEqual([]);
+  });
+});
+
+describe("canRenderOffline", () => {
+  it("is whether the browser has an OfflineAudioContext, asked each time", () => {
+    vi.stubGlobal("OfflineAudioContext", undefined);
+    expect(canRenderOffline()).toBe(false);
+    vi.stubGlobal("OfflineAudioContext", class {});
+    expect(canRenderOffline()).toBe(true);
+    vi.unstubAllGlobals();
   });
 });
 
@@ -911,6 +922,62 @@ describe("createExportAction", () => {
     return { press, run, onMessage, onBusy };
   };
 
+  it("recovers, and can be pressed again, when taking the snapshot throws", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    let fail = true;
+    const snapshot = vi.fn(() => {
+      if (fail) throw new Error("no song");
+      return "song";
+    });
+    const { press, run, onMessage, onBusy } = setup({ snapshot });
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT FAILED");
+    expect(onBusy).toHaveBeenLastCalledWith(false);
+    fail = false;
+    expect(await press()).toBe(true); // not stuck "working" on an export that never started
+    expect(run).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it("recovers, and can be pressed again, when the button's busy callback throws", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    let fail = true;
+    const onBusy = vi.fn((busy) => {
+      if (busy && fail) throw new Error("no button");
+    });
+    const { press, run, onMessage } = setup({ onBusy });
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT FAILED");
+    fail = false;
+    expect(await press()).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it("says the samples could not be loaded, rather than that the export failed, when restoring them failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const clearTimer = vi.fn();
+    const { press, run, onMessage } = setup({ ready: () => Promise.reject(new Error("db")), clearTimer });
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenLastCalledWith("SAMPLES FAILED TO LOAD");
+    expect(run).not.toHaveBeenCalled();
+    expect(clearTimer).toHaveBeenCalled(); // the wait's timer is not left running
+    expect(error).toHaveBeenCalled(); // for the eye: the reason is in the console
+    error.mockRestore();
+  });
+
+  it("says the same when asking whether they are back throws", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { press, onMessage } = setup({
+      ready: () => {
+        throw new Error("no store");
+      },
+    });
+    expect(await press()).toBe(false);
+    expect(onMessage).toHaveBeenLastCalledWith("SAMPLES FAILED TO LOAD");
+    error.mockRestore();
+  });
+
   it("takes its snapshot when it is pressed, before it waits for the samples, and hands the run that one", async () => {
     let state = "as pressed";
     let samplesBack;
@@ -969,9 +1036,11 @@ describe("createExportAction", () => {
   });
 
   it("says so, and renders nothing, when restoring the samples failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { press, run, onMessage, onBusy } = setup({ ready: () => Promise.reject(new Error("blocked")) });
     expect(await press()).toBe(false);
-    expect(onMessage).toHaveBeenCalledWith("EXPORT FAILED");
+    expect(onMessage).toHaveBeenCalledWith("SAMPLES FAILED TO LOAD"); // the reason, not a bare "failed"
+    error.mockRestore();
     expect(run).not.toHaveBeenCalled();
     expect(onBusy).toHaveBeenLastCalledWith(false);
   });

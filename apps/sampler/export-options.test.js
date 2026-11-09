@@ -6,6 +6,7 @@ import {
   channelCount,
   emptyBarsNote,
   exportFrames,
+  exportBlockedReason,
   exportFormat,
   exportInfo,
   exportReadout,
@@ -200,5 +201,27 @@ describe("emptyBarsNote", () => {
     expect(emptyBarsNote([1, 3, 5, 6, 8])).toBe(
       "Bars 1, 3, 5–6 and 8 have no steps: nothing plays in them but what is still ringing.",
     );
+  });
+});
+
+describe("exportBlockedReason", () => {
+  it("is nothing when the export can be made", () => {
+    expect(exportBlockedReason({ supported: true, hasSteps: true })).toBe("");
+  });
+
+  it("says why when the browser cannot render audio to a file, before anything is pressed", () => {
+    expect(exportBlockedReason({ supported: false, hasSteps: true })).toBe(
+      "This browser cannot render audio to a file, so Export is not available.",
+    );
+  });
+
+  it("says when the sequence has no steps", () => {
+    expect(exportBlockedReason({ supported: true, hasSteps: false })).toBe(
+      "This sequence has no steps yet, so there is nothing to export.",
+    );
+  });
+
+  it("puts the browser first when both are true: an empty sequence is not the problem to fix", () => {
+    expect(exportBlockedReason({ supported: false, hasSteps: false })).toMatch(/browser/);
   });
 });

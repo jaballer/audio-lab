@@ -230,6 +230,10 @@ export function emptyBars(song, stepsPerBar) {
     .map((bar) => bar + 1);
 }
 
+// Can this browser render audio to a file at all? Firefox, Chrome and current Safari can; the dialog asks before it offers
+// an export, and exportSequence asks again before it starts one.
+export const canRenderOffline = () => typeof OfflineAudioContext === "function";
+
 // Is there anything in the sequence showing to export (in the bars it has)?
 export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.current], stepsPerBar).length > 0;
 
@@ -247,7 +251,7 @@ export async function exportSequence({
   onProgress,
   signal,
   render = renderSequence,
-  supported = typeof OfflineAudioContext === "function",
+  supported = canRenderOffline(),
 }) {
   if (!supported) {
     onMessage("EXPORT NOT SUPPORTED");
@@ -322,18 +326,32 @@ export function createExportAction({
     }
     controller = new AbortController();
     const { signal } = controller;
-    // What is being exported is what there was when it was pressed: the wait for the samples can be long, and the song
-    // can move in it (a tempo knob on a controller), so it is not read again after.
-    const taken = snapshot();
-    onBusy(true);
+    let timer;
     try {
-      let timer;
+      // What is being exported is what there was when it was pressed: the wait for the samples can be long, and the song
+      // can move in it (a tempo knob on a controller), so it is not read again after. All of this is inside the try, so
+      // that a callback that throws cannot leave `controller` set with nothing running (every press would then only
+      // "cancel" an export that never started).
+      const taken = snapshot();
+      onBusy(true);
       const timedOut = new Promise((resolve) => (timer = setTimer(() => resolve("late"), waitMs)));
       const stopped = new Promise((resolve) => signal.addEventListener("abort", () => resolve("cancelled")));
-      const outcome = await Promise.race([Promise.resolve(ready()).then(() => "ready"), timedOut, stopped]);
+      // `new Promise` so that a `ready` that throws is a failed restore too, and not an export that failed.
+      const restored = new Promise((resolve) => resolve(ready())).then(
+        () => "ready",
+        (error) => {
+          console.error("Saved samples did not come back:", error);
+          return "failed";
+        },
+      );
+      const outcome = await Promise.race([restored, timedOut, stopped]);
       clearTimer(timer);
       if (outcome === "late") {
         onMessage("SAMPLES STILL LOADING");
+        return false;
+      }
+      if (outcome === "failed") {
+        onMessage("SAMPLES FAILED TO LOAD");
         return false;
       }
       if (outcome === "cancelled") {

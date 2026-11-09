@@ -104,3 +104,11 @@ export function emptyBarsNote(bars) {
   const one = bars.length === 1;
   return `${one ? "Bar" : "Bars"} ${joinList(runsOf(bars))} ${one ? "has" : "have"} no steps: nothing plays in ${one ? "it" : "them"} but what is still ringing.`;
 }
+
+// Why the dialog's Export WAV is off, or nothing when it can be pressed. The browser comes first: there is no fixing
+// an empty sequence in a browser that cannot render a file.
+export function exportBlockedReason({ supported, hasSteps }) {
+  if (!supported) return "This browser cannot render audio to a file, so Export is not available.";
+  if (!hasSteps) return "This sequence has no steps yet, so there is nothing to export.";
+  return "";
+}
