@@ -138,6 +138,30 @@ describe("triggerPad", () => {
 });
 
 describe("the kit", () => {
+  it("builds the steps already queued again when the sounds change, so the next hit is the new sound", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const kit = createKit(sounds);
+    const audio = fakeAudio();
+    const sampler = createSampler({
+      audio,
+      kit,
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3] } }),
+    });
+    sampler.start();
+    audio.ctx.currentTime += 0.2;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    const queued = sounds[0].play.mock.calls.map((call) => call[1]);
+    expect(queued.length).toBeGreaterThan(1);
+    const swapped = { id: "loaded", name: "Loaded", play: vi.fn() };
+    kit.set(0, swapped);
+    sampler.soundsChanged();
+    expect(queued.at(-1).disconnect).toHaveBeenCalled(); // the last step queued has not started: silenced
+    audio.ctx.currentTime += 0.05;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    expect(swapped.play).toHaveBeenCalled(); // and built again with the new sound
+  });
+
   it("plays a sound swapped onto a pad, live and in the sequence, from the next hit", () => {
     const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
     const kit = createKit(sounds);

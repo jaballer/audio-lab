@@ -29,6 +29,7 @@
 //   sampler.stop(); sampler.toggleRec()
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.copyPad(); sampler.pastePad()   // the selected pad's steps and velocities, over the selected pad (any sequence)
+//   sampler.soundsChanged()                  // the kit's sounds changed: steps already queued are built again
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
@@ -302,6 +303,12 @@ export function createSampler({
     scheduler.rewindTo(step, time);
   }
 
+  // The kit changed (a sample was loaded, restored or removed). The steps already handed to the audio clock
+  // were built with the sounds it had, so the ones that have not started are built again from the new ones.
+  function soundsChanged() {
+    rescheduleQueuedHits();
+  }
+
   // ---------- Play and stop ----------
   // Hits are handed to the audio clock up to the lookahead (about 120 ms) early, and the scheduler
   // cannot take them back. Silence the ones that have not started yet, so a restart or Stop does
@@ -371,6 +378,7 @@ export function createSampler({
     setSequence,
     clearPad,
     clearAll,
+    soundsChanged,
     copyPad,
     pastePad,
     undo,

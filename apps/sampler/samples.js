@@ -73,7 +73,6 @@ export function createSamples({
   }
 
   async function load(pad, file) {
-    const ticket = ++latest[pad];
     if (file.size > MAX_SAMPLE_BYTES) return fail(pad, REASONS.bytes);
     let bytes;
     try {
@@ -83,7 +82,10 @@ export function createSamples({
     }
     if (bytesElsewhere(pad) + bytes.byteLength > maxTotalBytes) return fail(pad, MEMORY_FULL);
 
-    // Counted from here, so loads that overlap cannot together go over the cap.
+    // From here the file is accepted: it takes the pad over from an earlier load still in progress (one that
+    // is refused above leaves that earlier load alone), and it is counted, so loads that overlap cannot
+    // together go over the cap.
+    const ticket = ++latest[pad];
     const before = counted[pad];
     counted[pad] = bytes.byteLength;
     const result = await decode(audio.ensure(), bytes);
@@ -132,16 +134,19 @@ export function createSamples({
     restored = true;
     const ctx = restoreContext();
     if (!ctx) return;
-    for (const [key, info] of Object.entries(pads)) {
-      const pad = Number(key);
-      if (touched.has(pad)) continue;
-      // A missing file leaves the entry alone: storage may only be unavailable for this visit.
-      const bytes = await store.get(keyFor(pad));
-      if (!bytes) continue;
-      const result = await decode(ctx, bytes);
-      if (!result.ok || touched.has(pad)) continue;
-      kit.set(pad, createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer }));
-    }
+    // All the pads at once, so the time before the last one is back is the slowest one's, not the sum.
+    await Promise.all(
+      Object.entries(pads).map(async ([key, info]) => {
+        const pad = Number(key);
+        if (touched.has(pad)) return;
+        // A missing file leaves the entry alone: storage may only be unavailable for this visit.
+        const bytes = await store.get(keyFor(pad));
+        if (!bytes) return;
+        const result = await decode(ctx, bytes);
+        if (!result.ok || touched.has(pad)) return;
+        kit.set(pad, createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer }));
+      }),
+    );
   }
 
   // Is there a sample kept for this pad, whether or not it is playing (a restore that failed leaves the entry)?

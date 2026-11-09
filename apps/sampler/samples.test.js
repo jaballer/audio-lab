@@ -144,6 +144,20 @@ describe("load", () => {
     expect(store.delete).toHaveBeenCalledWith("sample-0");
   });
 
+  it("lets an earlier load carry on when the newer file is refused", async () => {
+    let finishFirst;
+    const decode = vi.fn().mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)));
+    const { kit, samples, messages } = setup({ decode, maxTotalBytes: 100 });
+    const first = samples.load(0, file("first.wav", 60));
+    await vi.waitFor(() => expect(finishFirst).toBeTypeOf("function"));
+    expect(await samples.load(0, file("big.wav", 6 * 1024 * 1024))).toBe(false); // refused: too big
+    expect(messages.at(-1)).toBe("PAD 01 FILE OVER 5 MB");
+    finishFirst(decoded());
+    expect(await first).toBe(true);
+    expect(kit.get(0).name).toBe("first");
+    expect(samples.isKept(0)).toBe(true); // and it was kept
+  });
+
   it("lets the later of two loads onto a pad win", async () => {
     let finishFirst;
     const decode = vi

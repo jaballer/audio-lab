@@ -87,6 +87,7 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 const kit = createKit(SOUNDS, {
   onChange(index) {
     padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
+    sampler.soundsChanged(); // a step already queued would otherwise play the sound the pad had
     render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
   },
 });
