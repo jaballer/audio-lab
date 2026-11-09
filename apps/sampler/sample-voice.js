@@ -76,12 +76,13 @@ export function probeDuration(file, env = {}) {
   });
 }
 
-// `bytes` is the size of the file it came from. `info` is what the pad editor shows about it.
+// `bytes` is the size of the file it came from. `info` is what the pad editor shows about it: not the sample
+// rate, which the decoded buffer reports as the audio context's and not the file's.
 export function createSampleSound({ id, name, buffer, bytes }) {
   return {
     id,
     name,
-    info: { seconds: buffer.duration, channels: buffer.numberOfChannels, sampleRate: buffer.sampleRate, bytes },
+    info: { seconds: buffer.duration, channels: buffer.numberOfChannels, bytes },
     // `options.rate` is the playbackRate (2 is an octave up); left out, the sample plays at its own pitch.
     play(ctx, out, t, { rate = 1 } = {}) {
       const source = ctx.createBufferSource();

@@ -55,7 +55,9 @@ as on a hardware sampler where they are on a screen of their own.
   or the step keys, which are what you are listening to while you edit. `main.js` moves the one element, as it
   does the display.
 - **Not a dialog.** Playing goes on while it is open, so focus is not trapped. It is a labelled region opened by a
-  button that says whether it is open; Escape, with focus inside it, closes it and returns to the button.
+  button that says whether it is open. Opening it with the button moves focus to its heading (so a keyboard user
+  is in it however far it sits from the button); Escape, with focus inside it, closes it and returns to the
+  button. Moving it between its two places keeps focus on the control that had it.
 - **Sections, not tabs, for now.** Sound and Tune. Tabs when there are enough sections to need them.
 - **Where later features go.** Waveform and trim, reverse, one-shot or hold, choke groups, a voice limit, an amp
   envelope and pan each become a section drawn into the drawer by a view of its own.

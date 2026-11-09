@@ -444,19 +444,19 @@ describe("what a loaded sample says about itself", () => {
   it("is its length, channels and the file's size, when it is loaded", async () => {
     const { kit, samples } = setup({ decode: vi.fn(async () => buffered()) });
     await samples.load(0, file("a.wav", 4321));
-    expect(kit.get(0).info).toEqual({ seconds: 1.5, channels: 2, sampleRate: 44100, bytes: 4321 });
+    expect(kit.get(0).info).toEqual({ seconds: 1.5, channels: 2, bytes: 4321 });
     expect(kit.get(1).info).toBeUndefined(); // a built-in sound has none
   });
 
-  it("is the same after a restore, with the size that was kept", async () => {
+  it("is the same after a restore, with the size of the bytes that were read, not what the map says", async () => {
     const stored = { version: SAMPLES_VERSION, pads: { 0: { name: "Kept", bytes: 777 } } };
     const { kit, samples } = setup({
       stored,
-      store: fakeStore({ initial: { "sample-0": new ArrayBuffer(777) } }),
+      store: fakeStore({ initial: { "sample-0": new ArrayBuffer(1234) } }), // the map is out of date
       decode: vi.fn(async () => buffered({ numberOfChannels: 1 })),
     });
     await samples.restore();
-    expect(kit.get(0).info).toEqual({ seconds: 1.5, channels: 1, sampleRate: 44100, bytes: 777 });
+    expect(kit.get(0).info).toEqual({ seconds: 1.5, channels: 1, bytes: 1234 });
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSampleInfo, formatSize, pad2, sampleName } from "./format.js";
+import { formatPadTitle, formatSampleInfo, formatSize, pad2, sampleName } from "./format.js";
 
 describe("pad2", () => {
   it("zero-pads to two digits", () => {
@@ -34,6 +34,11 @@ describe("formatSize", () => {
     expect(formatSize(5 * 1024 * 1024)).toBe("5 MB");
   });
 
+  it("goes to megabytes just under a megabyte, instead of saying 1024 KB", () => {
+    expect(formatSize(1024 * 1024 - 1)).toBe("1 MB");
+    expect(formatSize(1023 * 1024)).toBe("1023 KB");
+  });
+
   it("is empty for what is not a size", () => {
     for (const value of [undefined, null, NaN, -1, "big"]) expect(formatSize(value)).toBe("");
   });
@@ -55,5 +60,12 @@ describe("formatSampleInfo", () => {
     expect(formatSampleInfo({ bytes: 2048 })).toBe("2 KB");
     expect(formatSampleInfo({ seconds: 0.001, channels: 1 })).toBe("<0.01 s, mono");
     expect(formatSampleInfo({})).toBe("Sample");
+  });
+});
+
+describe("formatPadTitle", () => {
+  it("is the pad's number and what it plays", () => {
+    expect(formatPadTitle(2, "Snare")).toBe("PAD 03 \u00b7 Snare");
+    expect(formatPadTitle(15, "My Sample")).toBe("PAD 16 \u00b7 My Sample");
   });
 });

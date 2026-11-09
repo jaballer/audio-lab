@@ -189,7 +189,10 @@ export function createSamples({
         if (!bytes) return;
         const result = await decode(ctx, bytes);
         if (!result.ok || touched.has(pad)) return;
-        kit.set(pad, createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer, bytes: info.bytes }));
+        kit.set(
+          pad,
+          createSampleSound({ id: keyFor(pad), name: info.name, buffer: result.buffer, bytes: bytes.byteLength }),
+        );
       }),
     );
   }

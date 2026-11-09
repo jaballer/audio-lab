@@ -22,7 +22,7 @@ const MB = KB * 1024;
 export function formatSize(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
   if (bytes < KB) return `${Math.round(bytes)} B`;
-  if (bytes < MB) return `${Math.round(bytes / KB)} KB`;
+  if (Math.round(bytes / KB) < KB) return `${Math.round(bytes / KB)} KB`; // not "1024 KB" just under a megabyte
   return `${Number((bytes / MB).toFixed(1))} MB`;
 }
 
@@ -39,3 +39,6 @@ export function formatSampleInfo(info) {
   if (size) parts.push(size);
   return parts.length ? parts.join(", ") : "Sample";
 }
+
+// The pad editor's heading: the pad's number and what it plays, "PAD 03 \u00b7 Snare".
+export const formatPadTitle = (index, soundName) => `PAD ${pad2(index + 1)} \u00b7 ${soundName}`;

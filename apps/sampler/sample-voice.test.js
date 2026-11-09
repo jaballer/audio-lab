@@ -24,10 +24,10 @@ describe("createSampleSound", () => {
     return { ctx, sources };
   };
 
-  it("carries what the pad editor shows about it: length, channels, sample rate and the file's size", () => {
+  it("carries what the pad editor shows about it: length, channels and the file's size (not a sample rate, which is the context's)", () => {
     const buffer = { duration: 0.5, numberOfChannels: 2, sampleRate: 48000, length: 24000 };
     const sound = createSampleSound({ id: "s", name: "S", buffer, bytes: 1234 });
-    expect(sound.info).toEqual({ seconds: 0.5, channels: 2, sampleRate: 48000, bytes: 1234 });
+    expect(sound.info).toEqual({ seconds: 0.5, channels: 2, bytes: 1234 });
   });
 
   it("has the shape of a built-in sound", () => {
