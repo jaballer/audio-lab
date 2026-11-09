@@ -1,20 +1,17 @@
 // Every synth parameter the page lets you change, in one table. Each entry says
-// how a control maps to a value and how to display it, so the sliders, the
-// select and the hardware knobs are all wired from this list instead of each
-// being written out by hand. No DOM in here.
+// how a knob maps to a value and how to display it, so the on-screen dials, the
+// hardware knobs and the LCD are all wired from this list instead of each being
+// written out by hand. No DOM in here.
 //
 // An entry is either
-//   a range:  { name, group, toValue(position), toSlider(value), format(value) }
-//             position is the slider position, 0-100 (see shared/scales.js)
-//   a choice: { name, group, choices: [...] }   shown as a <select>
-//
-// `group` and `name` give the control's element id: `${group}-${name}` is the
-// slider or select, and `out-${name}` is its readout.
+//   a range:  { name, toValue(position), toSlider(value), format(value) }
+//             position is a 0-100 scale of the knob's travel (see shared/scales.js)
+//   a choice: { name, choices: [...] }   a knob picks one by splitting its travel
 //
 // The order is the knob order: entry 0 is knob K1, entry 1 is K2, and so on.
 //
 // To add a parameter: give it a default in synth.js (DEFAULT_PARAMS) and add one
-// entry here. The page draws its control from the entry (synth-panel.js).
+// entry here. The page labels its dial from the entry.
 
 import { exp, linear, squared } from "../../shared/scales.js";
 import { WAVES } from "./synth.js";
@@ -31,35 +28,25 @@ const CUTOFF_MAX = 16000; // Hz
 const RESONANCE_MAX = 24; // dB
 
 export const PARAMS = [
-  { name: "attack", group: "env", ...timeScale, format: formatTime },
-  { name: "decay", group: "env", ...timeScale, format: formatTime },
-  { name: "sustain", group: "env", ...linear(0, 1), format: (s) => `${Math.round(s * 100)}%` },
-  { name: "release", group: "env", ...timeScale, format: formatTime },
+  { name: "attack", ...timeScale, format: formatTime },
+  { name: "decay", ...timeScale, format: formatTime },
+  { name: "sustain", ...linear(0, 1), format: (s) => `${Math.round(s * 100)}%` },
+  { name: "release", ...timeScale, format: formatTime },
   // A choice, not a range: a knob picks one by splitting its travel into equal parts.
-  { name: "wave", group: "tone", choices: WAVES },
+  { name: "wave", choices: WAVES },
   // Exponential, because pitch is: equal slider steps should be equal musical steps.
   {
     name: "cutoff",
-    group: "tone",
     ...exp(CUTOFF_MIN, CUTOFF_MAX),
     format: (hz) => (hz < 1000 ? `${Math.round(hz)} Hz` : `${(hz / 1000).toFixed(1)} kHz`),
   },
-  { name: "resonance", group: "tone", ...linear(0, RESONANCE_MAX), format: (db) => `${db.toFixed(1)} dB` },
-  { name: "volume", group: "tone", ...squared(), format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%` },
-];
-
-// The sections the panel draws, in order: `id` matches a param's `group`.
-export const GROUPS = [
-  { id: "env", label: "Envelope", title: "Envelope \u00b7 ADSR" },
-  { id: "tone", label: "Tone", title: "Tone \u00b7 K5\u2013K8" },
+  { name: "resonance", ...linear(0, RESONANCE_MAX), format: (db) => `${db.toFixed(1)} dB` },
+  { name: "volume", ...squared(), format: (gain) => `${Math.round(Math.sqrt(gain) * 100)}%` },
 ];
 
 const capitalize = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
-// What a control is called on the page.
-export const labelFor = (param) => capitalize(param.name);
-
-// What a choice is called in its select. Only the odd ones are listed.
+// What a choice is called on the display. Only the odd ones are listed.
 const CHOICE_LABELS = { sawtooth: "Saw" };
 export const choiceLabel = (choice) => CHOICE_LABELS[choice] ?? capitalize(choice);
 
