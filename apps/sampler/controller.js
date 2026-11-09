@@ -255,16 +255,16 @@ export function createSampler({
   // may be in another sequence.
   function copyPad() {
     clipboard = pattern.rowState(selected);
-    onMessage(`PAD ${pad2(selected + 1)} COPIED`);
+    onMessage(`PAD ${pad2(selected + 1)} STEPS COPIED`);
   }
 
   function pastePad() {
     if (!clipboard) {
-      onMessage("NOTHING COPIED");
+      onMessage("NO STEPS COPIED");
       return;
     }
     edit(() => pattern.replaceRow(selected, clipboard));
-    onMessage(`PASTED TO PAD ${pad2(selected + 1)}`);
+    onMessage(`STEPS PASTED TO PAD ${pad2(selected + 1)}`);
     onChange();
   }
 

@@ -252,7 +252,7 @@ describe("copy and paste", () => {
   it("says there is nothing to paste before something is copied", () => {
     const { sampler, message } = setup();
     sampler.pastePad();
-    expect(message).toHaveBeenLastCalledWith("NOTHING COPIED");
+    expect(message).toHaveBeenLastCalledWith("NO STEPS COPIED");
     expect(sampler.getState().canUndo).toBe(false);
   });
 
@@ -262,10 +262,10 @@ describe("copy and paste", () => {
     });
     sampler.selectPad(0);
     sampler.copyPad();
-    expect(message).toHaveBeenLastCalledWith("PAD 01 COPIED");
+    expect(message).toHaveBeenLastCalledWith("PAD 01 STEPS COPIED");
     sampler.selectPad(2);
     sampler.pastePad();
-    expect(message).toHaveBeenLastCalledWith("PASTED TO PAD 03");
+    expect(message).toHaveBeenLastCalledWith("STEPS PASTED TO PAD 03");
     expect(sampler.getSong().sequences[0]).toMatchObject({
       pattern: { 0: [0, 4], 2: [0, 4] },
       velocities: { 0: { 4: 50 }, 2: { 4: 50 } },
