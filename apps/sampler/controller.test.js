@@ -342,16 +342,16 @@ describe("steps and clearing", () => {
 });
 
 describe("transport", () => {
-  it("start and stop report a change; a second start does not", () => {
+  it("start and stop report a change, and a second start (a restart) reports one too", () => {
     const { sampler, change } = setup();
     sampler.start();
     expect(sampler.getState().playing).toBe(true);
     expect(change).toHaveBeenCalledTimes(1);
     sampler.start();
-    expect(change).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledTimes(2);
     sampler.stop();
     expect(sampler.getState().playing).toBe(false);
-    expect(change).toHaveBeenCalledTimes(2);
+    expect(change).toHaveBeenCalledTimes(3);
   });
 
   it("plays the pads that are on at each step, at the time the scheduler gives", () => {
@@ -362,6 +362,21 @@ describe("transport", () => {
     expect(sounds[0].play).toHaveBeenCalledWith(audio.ctx, audio.master, expect.closeTo(0.05));
     expect(sounds[2].play).toHaveBeenCalledTimes(1);
     expect(sounds[1].play).not.toHaveBeenCalled();
+  });
+
+  it("starts again from the first step when Play is pressed while playing", () => {
+    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0] } }) });
+    sampler.start();
+    advance(0.5); // a few steps in: the playhead has moved on from step 0
+    sampler.poll();
+    expect(sampler.getState().playheadStep).toBeGreaterThan(0);
+    sounds[0].play.mockClear();
+    sampler.start();
+    expect(sampler.getState().playheadStep).toBe(-1); // nothing played yet in the new run
+    advance(0);
+    expect(sounds[0].play).toHaveBeenCalledTimes(1); // step 0 sounds again, a short run-up after now
+    expect(sounds[0].play.mock.calls[0][2]).toBeGreaterThan(audio.ctx.currentTime);
+    expect(sampler.getState().playing).toBe(true);
   });
 
   it("does not sound a pad again at the step it was just played live and recorded into", () => {
