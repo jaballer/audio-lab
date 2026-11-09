@@ -13,12 +13,16 @@ import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
+import { createKit } from "./kit.js";
 import { createLcd } from "./lcd.js";
 import { pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
+import { SAMPLES_KEY, createSamples } from "./samples.js";
+import { createSampleLoader } from "./sample-loader.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
+import { createBlobStore } from "../../shared/blob-store.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "../../shared/step-keys.js";
 import { createTempoKnob } from "./tempo-knob.js";
@@ -26,6 +30,12 @@ import { createVelocityBars } from "./velocity-bars.js";
 import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
+
+// Kept samples are decoded at the start of the visit, with an offline context: the real one only exists after the
+// first click or key, and until then (or until it had decoded them) the pads would play their built-in sounds.
+// A browser without OfflineAudioContext waits for the real one.
+const decodesEarly = typeof OfflineAudioContext === "function";
+const RESTORE_SAMPLE_RATE = 48000; // a typical output rate; the real context resamples when it plays
 
 const site = createSiteHeader($("site-header"), { current: "sampler" });
 const header = createAppHeader($("header"), {
@@ -65,15 +75,26 @@ const audio = createAudioEngine({
   onStateChange: (state) => {
     audioNotice.update(state);
     header.setPowered(state === "running");
+    // Where kept samples cannot be decoded before the first click (see `samples` below), do it then.
+    if (state === "running" && !decodesEarly) samples.restore();
   },
 });
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
 
 // The callbacks below use the views and `midi`, which are built after this. That
 // is fine because the sampler reports nothing until something happens.
+// What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
+const kit = createKit(SOUNDS, {
+  onChange(index) {
+    padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
+    sampler.soundsChanged(); // a step already queued would otherwise play the sound the pad had
+    render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
+  },
+});
+
 const sampler = createSampler({
   audio,
-  sounds: SOUNDS,
+  kit,
   steps: STEPS,
   maxBars: MAX_BARS,
   sequenceCount: SEQUENCE_COUNT,
@@ -100,6 +121,33 @@ const lcd = createLcd({
 });
 
 const padGrid = createPadGrid($("pads"), { sounds: SOUNDS, onTrigger: (index) => sampler.triggerPad(index) });
+
+// Samples on the pads: kept in this browser (IndexedDB for the files, localStorage for which pad has which).
+const samples = createSamples({
+  kit,
+  audio,
+  restoreContext: () => (decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure()),
+  store: createBlobStore(),
+  readMap: () => loadJson(SAMPLES_KEY),
+  writeMap: (map) => saveJson(SAMPLES_KEY, map),
+  onMessage: (text) => lcd.showMessage(text),
+});
+const sampleLoader = createSampleLoader({
+  pads: $("pads"),
+  input: $("sample-file"),
+  loadButton: $("load-sample"),
+  resetButton: $("reset-sound"),
+  getSelected: () => sampler.getState().selected,
+  onFile: (index, file) => {
+    // The pad it was meant for is the one to show and to hit next, chosen now: loads can finish in any order.
+    sampler.selectPad(index);
+    return samples.load(index, file);
+  },
+  onReset: async (index) => {
+    await samples.reset(index);
+    render(); // Default Sound goes dim, even when the pad was already playing its built-in sound
+  },
+});
 const stepKeys = createStepKeys($("steps"), {
   steps: STEPS,
   group: STEP_GROUP,
@@ -143,8 +191,10 @@ const knob = createTempoKnob($("knob"), {
 // Every view is drawn from the sampler's state, so it cannot disagree with it.
 function render() {
   const state = sampler.getState();
-  const soundName = SOUNDS[state.selected].name;
+  const soundName = kit.get(state.selected).name;
   padGrid.select(state.selected);
+  // A sample that is kept but could not be restored this visit can still be removed.
+  sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   stepKeys.refresh({ on: state.stepsOn, soundName, first: state.page * STEPS });
   undoBtn.disabled = !state.canUndo;
   redoBtn.disabled = !state.canRedo;
@@ -264,4 +314,5 @@ placeConsole();
 narrow.addEventListener("change", placeConsole);
 
 // ---------- Init ----------
+if (decodesEarly) samples.restore(); // kept samples back on their pads, before the first click or key
 sampler.selectPad(0);

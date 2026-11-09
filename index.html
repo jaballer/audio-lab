@@ -27,6 +27,11 @@
       <div class="body">
         <section class="pad-panel" aria-label="Pads">
           <div id="pads" class="sampler-pads"></div>
+          <div class="pad-tools" role="group" aria-label="Sound on the selected pad">
+            <button id="load-sample" class="btn btn-small" type="button">Load Sample</button>
+            <button id="reset-sound" class="btn btn-small" type="button" disabled>Default Sound</button>
+            <input id="sample-file" type="file" accept="audio/*" hidden />
+          </div>
         </section>
 
         <section class="console" aria-label="Display and controls">
@@ -111,6 +116,10 @@
           <kbd>A</kbd>–<kbd>F</kbd> <kbd>Z</kbd>–<kbd>V</kbd>
         </li>
         <li><kbd>Space</kbd> plays or stops the sequence</li>
+        <li>
+          Drop an audio file on a pad, or press Load Sample for the selected pad, to play it there (up to 10 seconds and
+          5 MB). Samples are kept in this browser; Default Sound puts the built-in one back
+        </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;
           Copy Steps and Paste Steps copy the selected pad's steps and velocities onto another pad, in any sequence
