@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1d1b19" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>PAD16 Sampler</title>
     <link rel="stylesheet" href="/shared/loading.css" />
     <noscript
@@ -20,6 +25,7 @@
       <span class="loading-text">Loading</span>
     </div>
     <header id="site-header"></header>
+    <div id="update-notice" class="update-notice" role="status" hidden></div>
     <div id="audio-notice" class="audio-notice" role="status" hidden></div>
     <div class="sampler-stage">
       <main class="device">
