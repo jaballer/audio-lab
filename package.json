@@ -2,6 +2,15 @@
   "name": "audio-lab",
   "private": true,
   "version": "0.1.0",
+  "description": "Audio Lab: a browser drum sampler and MIDI tools built with Vite, the Web Audio API and Web MIDI",
+  "homepage": "https://jaballer.github.io/audio-lab/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaballer/audio-lab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jaballer/audio-lab/issues"
+  },
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {

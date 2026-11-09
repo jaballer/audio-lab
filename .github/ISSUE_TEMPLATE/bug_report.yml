@@ -16,7 +16,9 @@ body:
       options:
         - Sampler (index.html)
         - Keys (keyboard.html)
+        - MPC Sample companion (mpc-sample.html)
         - MIDI monitor (monitor.html)
+        - Tone.js demo (tone-demo.html)
         - Not page-specific
     validations:
       required: true

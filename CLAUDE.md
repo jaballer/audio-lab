@@ -22,7 +22,10 @@ failing check blocks the deploy.
 
 ## Layout
 
-- `index.html` + `apps/sampler/`: the pad sampler. `keyboard.html` + `apps/keys/`: the MIDI keyboard page.
+- Five pages, each an HTML file plus `apps/<name>/`: `index.html` + `apps/sampler/` (the pad sampler),
+  `keyboard.html` + `apps/keys/` (MIDI keyboard), `monitor.html` + `apps/monitor/` (MIDI monitor),
+  `mpc-sample.html` + `apps/mpc-sample/` (Akai MPC Sample companion), `tone-demo.html` + `apps/tone-demo/` (Tone.js).
+  `public/` holds files served as they are (the favicon). `README.md` has the file-by-file Layout.
 - `shared/`: code used by more than one app. App-only code stays under `apps/<name>/`.
 - A new page needs an entry in `vite.config.js` (`build.rollupOptions.input`) and in `shared/pages.js` (the site header's links); the test checks they agree. Copy the loading overlay (`#loading` markup, `shared/loading.css` link and `shared/loading-screen.js` script) from another page's HTML.
 

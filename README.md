@@ -1,19 +1,35 @@
-# PAD16 Sampler
+# Audio Lab
 
-A single-page drum sampler styled like a classic hardware pad sampler, built with Vite and the Web Audio API. The built-in sounds are synthesized in the browser, so there are no sample files to download; a pad can also play an audio file you load, which is kept in your browser.
+A small set of browser audio tools built with Vite, the Web Audio API and Web MIDI: a 16-pad drum sampler and step sequencer, a MIDI keyboard test page, a MIDI monitor, a companion page for the Akai MPC Sample, and a Tone.js synth demo. The built-in sounds are synthesized in the browser, so there are no sample files to download. There are no accounts and no server: the sampler keeps your work in your browser (the MPC Sample page's step pattern is not saved between visits).
 
 **Live demo: https://jaballer.github.io/audio-lab/**
 
-- 4×4 grid of 16 pads (Kick, Snare, hats, Clap, Rim, toms, Cowbell, Conga, Shaker, Bass, Crash, Ride, Zap, Blip)
-- Play pads by clicking or with the keyboard; the keys mirror the pad grid: `1 2 3 4` / `Q W E R` / `A S D F` / `Z X C V`
-- LCD display, 16 step keys for the selected pad, and a looping sequencer (Space toggles play/stop)
+## The pages
+
+| Page                                                               | What it is                                                                                                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Sampler (PAD16)](https://jaballer.github.io/audio-lab/)           | The pad sampler and sequencer, described below                                                                                                                     |
+| [Keys](https://jaballer.github.io/audio-lab/keyboard.html)         | A polyphonic synth to test a MIDI keyboard: notes, velocity, pitch bend, mod, sustain, knobs and CCs, with an adjustable ADSR envelope                             |
+| [MPC Sample](https://jaballer.github.io/audio-lab/mpc-sample.html) | A companion for the Akai MPC Sample: live pads, banks, velocity and pressure, play state and tempo from its MIDI clock, and a step sequencer that plays the device |
+| [Monitor](https://jaballer.github.io/audio-lab/monitor.html)       | Every message a MIDI device sends, with its raw bytes, and which notes were hit on which channel                                                                   |
+| [Tone demo](https://jaballer.github.io/audio-lab/tone-demo.html)   | A small synth with a feedback delay, built with [Tone.js](https://tonejs.github.io/)                                                                               |
+
+## The sampler
+
+- 4×4 grid of 16 pads (Kick, Snare, closed and open hats, Clap, Rim, toms, Cowbell, Conga, Shaker, Bass, Crash, Ride, Zap, Blip)
+- Play pads by clicking, with the keyboard (the keys mirror the pad grid: `1 2 3 4` / `Q W E R` / `A S D F` / `Z X C V`), or with a MIDI controller. Hold Shift to select a pad and open its editor without playing it
+- A looping 16-step sequencer: 8 sequences of 1, 2, 4 or 8 bars, a velocity for every step, Undo and Redo (Ctrl/Cmd + Z), and Copy and Paste for a bar. Space toggles play/stop
+- REC mode: press Rec while playing and hit pads to record them, quantized to 16th notes, with the velocity of the hit
+- Your own sounds: drop an audio file on a pad (up to 10 seconds and 5 MB) or load one in the pad editor, which also trims it and sets each pad's gain, pitch, choke group, amplitude envelope and colour
+- Export WAV saves the sequence showing as a looping audio file
 - Tempo knob (drag, scroll, or arrow keys), tap tempo, and a volume fader
-- REC mode: press Rec while playing and hit pads to record them, quantized to 16th notes
-- MIDI controller support (see below)
+- Your sequences, tempo, volume, pad settings and samples are kept in your browser between visits (nothing is uploaded)
+
+[CHANGELOG.md](CHANGELOG.md) lists what has changed, by day.
 
 ## MIDI
 
-Click **Connect MIDI** and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost`, `127.0.0.1` or HTTPS.
+Click **Connect MIDI** (in the bar at the top of every page) and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost`, `127.0.0.1` or HTTPS.
 
 **Novation Launchpad, Launchpad S, and Launchpad Mini mk1/mk2** — pads are lit to mirror the app when the MIDI port name identifies a supported model:
 
@@ -145,8 +161,9 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/register-sw.js` — registers `sw.js` and reports a waiting build; reloads only after the person applies the update; never throws, no DOM
 - `shared/update-notice.js` — the "A new version is ready" strip with Reload and Later
 - `shared/precache.js` + `shared/sw-template.js` — the service worker: the template is filled in at build time (the files to keep, from `precache.js`, and a fingerprint of the build) and emitted as `sw.js`; it is not imported by any page
-- `public/` — `manifest.webmanifest` and the icons, copied to the site's root as they are
+- `public/manifest.webmanifest` + `public/icons/` — the web app manifest and its icons, served as they are
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
+- `public/favicon.svg` — the site icon, served as it is (every page's `<head>` also carries its description and share tags)
 - `CHANGELOG.md` — what changed on the live site, by day, newest first
 - `LICENSE` — the PolyForm Noncommercial License 1.0.0 (see License below)
 - `.claude/skills/dependabot/` — a Claude Code skill for triaging, verifying and merging Dependabot PRs
