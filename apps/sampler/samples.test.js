@@ -1133,3 +1133,47 @@ describe("a sample's envelope", () => {
     expect(kit.settings(0)).toMatchObject({ attack: 30, decay: 20, sustain: 40, release: 60 });
   });
 });
+
+describe("the settings a sample has, when the sound changes", () => {
+  // What the pad's settings are at the moment the kit is told the sound changed: that is when a playing sequence builds
+  // its queued steps again, from the sound and the settings as they are then, so they must already be the new ones.
+  function watchSoundChanges(kit) {
+    const seen = [];
+    const set = kit.set;
+    const reset = kit.reset;
+    kit.set = (pad, sound) => {
+      seen.push(kit.settings(pad));
+      set(pad, sound);
+    };
+    kit.reset = (pad) => {
+      seen.push(kit.settings(pad));
+      reset(pad);
+    };
+    return seen;
+  }
+  const flat = { pitch: 0, attack: 0, decay: 0, sustain: 100, release: 0 };
+  const dirty = (kit) => {
+    kit.setSetting(0, "pitch", 7);
+    kit.setSetting(0, "attack", 30);
+    kit.setSetting(0, "release", 60);
+    kit.setSetting(0, "gain", -6);
+  };
+
+  it("are already back to flat when a new sample is installed, so the steps built again for it use none of the old ones", async () => {
+    const { samples, kit } = setup();
+    dirty(kit);
+    const seen = watchSoundChanges(kit);
+    await samples.load(0, file("a.wav"));
+    expect(seen[0]).toMatchObject(flat);
+    expect(seen[0].gain).toBe(-6); // the pad's gain stays
+  });
+
+  it("are already back to flat when the built-in sound comes back", async () => {
+    const { samples, kit } = setup();
+    await samples.load(0, file("a.wav"));
+    dirty(kit);
+    const seen = watchSoundChanges(kit);
+    await samples.reset(0);
+    expect(seen[0]).toMatchObject(flat);
+  });
+});

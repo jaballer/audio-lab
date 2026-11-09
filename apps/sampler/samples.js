@@ -173,8 +173,11 @@ export function createSamples({
       const name = sampleName(file.name);
       const sound = createSampleSound({ id: keyFor(pad), name, buffer: result.buffer, bytes: bytes.byteLength });
       installed[pad] = request;
+      // Pitch and envelope shape a sample, so a new one starts as it is (gain is the pad's). Before the sound changes,
+      // not after: the change makes a playing sequence build its queued steps again, from the sound and the settings as
+      // they are at that moment, and a setting changed afterwards does not rebuild them.
+      resetSampleSettings(pad);
       kit.set(pad, sound);
-      resetSampleSettings(pad); // pitch and envelope shape a sample, so a new one starts as it is (gain is the pad's)
       touched.add(pad);
       held[pad] = bytes.byteLength;
 
@@ -206,8 +209,8 @@ export function createSamples({
     delete held[pad];
     owners.delete(pad);
     persist(pad);
-    kit.reset(pad);
     resetSampleSettings(pad); // the built-in sound has none of them, so none is left behind to reappear with the next sample
+    kit.reset(pad); // (after the settings, for the same reason as in load: the steps built again see them already reset)
     await store.delete(keyFor(pad));
     onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
   }
