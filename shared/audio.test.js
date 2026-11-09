@@ -343,12 +343,13 @@ describe("softClipCurve", () => {
   const at = (x) => curve[Math.round(((x + CLIP.reach) / (2 * CLIP.reach)) * (size - 1))];
 
   it("leaves what is below the knee alone, either side of zero", () => {
-    for (const x of [0, 0.1, -0.3, 0.5, -0.69]) expect(at(x)).toBeCloseTo(x, 2);
+    for (const x of [0, 0.1, -0.3, 0.5, -0.69, 0.699]) expect(at(x)).toBeCloseTo(x, 3);
+    expect(at(CLIP.knee)).toBeCloseTo(CLIP.knee, 3);
   });
 
   it("bends what is above it towards the ceiling, and never reaches it", () => {
     for (const x of [0.8, 1, 1.5, 2, -1.2, -2]) {
-      expect(Math.abs(at(x))).toBeLessThan(CLIP.ceiling + 1e-6);
+      expect(Math.abs(at(x))).toBeLessThan(CLIP.ceiling);
       expect(Math.abs(at(x))).toBeGreaterThan(CLIP.knee);
     }
     expect(at(2)).toBeGreaterThan(at(1));
@@ -357,7 +358,7 @@ describe("softClipCurve", () => {
 
   it("is symmetric, and has no step where it leaves the knee", () => {
     for (let i = 0; i < size; i++) expect(curve[i]).toBeCloseTo(-curve[size - 1 - i], 5);
-    for (let i = 1; i < size; i++) expect(Math.abs(curve[i] - curve[i - 1])).toBeLessThan(0.002);
+    for (let i = 1; i < size; i++) expect(Math.abs(curve[i] - curve[i - 1])).toBeLessThan(0.0011); // the steepest part is 0.00098 a point
   });
 
   it("keeps the ceiling under full scale", () => {

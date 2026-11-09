@@ -20,7 +20,7 @@
 //
 // The master gain feeds a soft clipper before the speakers: several loud sounds on one step (kick, snare and hat
 // together, or a hit at a higher gain) add up past full scale, which the speakers would clip into a crackle. Below
-// the clipper's knee the signal passes unchanged, so a single sound is not touched; above it the signal is bent
+// the clipper's knee the signal passes unchanged, so a sound whose peak stays below 0.7 is not touched (a full-scale hit comes out at about 0.92); above it the signal is bent
 // towards a ceiling just under full scale. (A compressor is not used: Web Audio's lowers quiet sounds too.) If the
 // context cannot make one, the master goes straight to the speakers as before.
 //
