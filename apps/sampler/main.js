@@ -14,7 +14,8 @@ import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createLcd } from "./lcd.js";
-import { PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
+import { pad2 } from "./format.js";
+import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createPadGrid, padForKey } from "./pads.js";
 import { SONG_KEY, createSongSaver, parseSong } from "./song.js";
@@ -41,7 +42,12 @@ const recBtn = $("rec");
 // because the audio engine takes its starting level from the saved volume.
 // With nothing usable saved (first visit, blocked storage), the page starts
 // from the starter beat as it always did.
-const song = parseSong(loadJson(SONG_KEY), { rows: PAD_COUNT, steps: STEPS });
+const song = parseSong(loadJson(SONG_KEY), {
+  rows: PAD_COUNT,
+  steps: STEPS,
+  maxBars: MAX_BARS,
+  sequenceCount: SEQUENCE_COUNT,
+});
 
 const saver = createSongSaver({
   read: () => sampler.getSong(),
@@ -68,6 +74,8 @@ const sampler = createSampler({
   audio,
   sounds: SOUNDS,
   steps: STEPS,
+  maxBars: MAX_BARS,
+  sequenceCount: SEQUENCE_COUNT,
   song,
   onChange: render,
   onMessage: (text) => lcd.showMessage(text),
@@ -92,6 +100,29 @@ const stepKeys = createStepKeys($("steps"), {
   group: STEP_GROUP,
   onToggle: (step) => sampler.toggleStep(step),
 });
+const seqPrev = $("seq-prev");
+const seqNext = $("seq-next");
+const seqNumber = $("seq-number");
+seqPrev.addEventListener("click", () => sampler.setSequence(sampler.getState().sequence - 1));
+seqNext.addEventListener("click", () => sampler.setSequence(sampler.getState().sequence + 1));
+const stepsPrev = $("steps-prev");
+const stepsNext = $("steps-next");
+const stepsRange = $("steps-range");
+stepsPrev.addEventListener("click", () => sampler.setPage(sampler.getState().page - 1));
+stepsNext.addEventListener("click", () => sampler.setPage(sampler.getState().page + 1));
+
+// One button per length, the chosen one lit, like the length keys on a sampler.
+const barButtons = BAR_CHOICES.map((bars) => {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn btn-small btn-led";
+  button.textContent = String(bars);
+  button.setAttribute("aria-label", bars === 1 ? "1 bar" : `${bars} bars`);
+  button.addEventListener("click", () => sampler.setBars(bars));
+  $("bars").appendChild(button);
+  return { bars, button };
+});
+
 const knob = createTempoKnob($("knob"), {
   min: BPM_MIN,
   max: BPM_MAX,
@@ -107,6 +138,13 @@ function render() {
   stepKeys.refresh({ on: state.stepsOn, soundName });
   stepKeys.paintPlayhead(state.playing, state.playheadStep);
   knob.render(state.bpm);
+  seqNumber.textContent = pad2(state.sequence + 1);
+  seqPrev.disabled = state.sequence === 0;
+  seqNext.disabled = state.sequence === state.sequenceCount - 1;
+  for (const { bars, button } of barButtons) button.setAttribute("aria-pressed", String(bars === state.bars));
+  stepsRange.textContent = `Bar ${state.page + 1} of ${state.bars}`;
+  stepsPrev.disabled = state.page === 0;
+  stepsNext.disabled = state.page === state.bars - 1;
   volInput.value = String(state.volume);
   playBtn.setAttribute("aria-pressed", String(state.playing));
   recBtn.setAttribute("aria-pressed", String(state.recording));

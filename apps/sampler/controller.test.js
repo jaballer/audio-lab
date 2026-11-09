@@ -17,6 +17,15 @@ function fakeAudio() {
   return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn() };
 }
 
+const SEQUENCES = 4;
+// A saved song with one sequence of the given pattern and length, the rest empty.
+const savedSong = ({ bpm = 100, volume = 50, bars = 1, pattern = {}, current = 0 } = {}) => ({
+  bpm,
+  volume,
+  current,
+  sequences: Array.from({ length: SEQUENCES }, (_, i) => (i === 0 ? { bars, pattern } : { bars: 1, pattern: {} })),
+});
+
 function setup({ song = null, bpm } = {}) {
   const audio = fakeAudio();
   const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
@@ -26,7 +35,9 @@ function setup({ song = null, bpm } = {}) {
     audio,
     sounds,
     steps: STEPS,
-    song: song ?? (bpm ? { bpm, volume: 50, pattern: {} } : null),
+    maxBars: 4,
+    sequenceCount: SEQUENCES,
+    song: song ?? (bpm ? savedSong({ bpm }) : null),
     now: () => clock,
     onChange: calls.change,
     onMessage: calls.message,
@@ -51,12 +62,14 @@ afterEach(() => vi.useRealTimers());
 describe("starting state", () => {
   it("starts from the starter beat, the default volume and nothing selected but pad 1", () => {
     const { sampler } = setup();
-    expect(sampler.getSong()).toMatchObject({ bpm: 100, volume: DEFAULT_VOLUME, pattern: STARTER_BEAT });
+    expect(sampler.getSong()).toMatchObject({ bpm: 100, volume: DEFAULT_VOLUME, current: 0 });
+    expect(sampler.getSong().sequences[0].pattern).toEqual(STARTER_BEAT);
+    expect(sampler.getSong().sequences[1].pattern).toEqual({}); // only the first has the starter beat
     expect(sampler.getState()).toMatchObject({ selected: 0, recording: false, playing: false, playheadStep: -1 });
   });
 
   it("starts from a saved song", () => {
-    const song = { bpm: 133.5, volume: 35, pattern: { 1: [2, 6] } };
+    const song = savedSong({ bpm: 133.5, volume: 35, bars: 2, pattern: { 1: [2, 6, 20] }, current: 2 });
     const { sampler } = setup({ song });
     expect(sampler.getSong()).toEqual(song);
   });
@@ -164,6 +177,78 @@ describe("recording", () => {
   });
 });
 
+describe("sequences", () => {
+  it("starts on the saved one, and says how many there are", () => {
+    const { sampler } = setup({ song: savedSong({ current: 2 }) });
+    expect(sampler.getState()).toMatchObject({ sequence: 2, sequenceCount: SEQUENCES });
+  });
+
+  it("switches to another, names it and asks for a save", () => {
+    const { sampler, message, songChange } = setup();
+    sampler.setSequence(1);
+    expect(sampler.getState().sequence).toBe(1);
+    expect(message).toHaveBeenLastCalledWith("SEQ 02");
+    expect(songChange).toHaveBeenCalledTimes(1);
+    sampler.setSequence(1);
+    expect(songChange).toHaveBeenCalledTimes(1); // no change, no save
+  });
+
+  it("stays within the sequences there are", () => {
+    const { sampler } = setup();
+    sampler.setSequence(99);
+    expect(sampler.getState().sequence).toBe(SEQUENCES - 1);
+    sampler.setSequence(-3);
+    expect(sampler.getState().sequence).toBe(0);
+  });
+
+  it("gives each its own steps and length", () => {
+    const { sampler } = setup();
+    sampler.selectPad(2);
+    sampler.setSequence(1);
+    expect(sampler.getState()).toMatchObject({ bars: 1, stepsOn: new Array(STEPS).fill(false) });
+    sampler.toggleStep(3);
+    sampler.setBars(3);
+    sampler.setSequence(0);
+    expect(sampler.getState().bars).toBe(1);
+    expect(sampler.getState().stepsOn[3]).toBe(false);
+    sampler.setSequence(1);
+    expect(sampler.getState().bars).toBe(3);
+    expect(sampler.getState().stepsOn[3]).toBe(true);
+  });
+
+  it("clears only the sequence it is on", () => {
+    const { sampler } = setup();
+    sampler.setSequence(1);
+    sampler.selectPad(2);
+    sampler.toggleStep(3);
+    sampler.setSequence(0);
+    sampler.clearAll();
+    expect(sampler.getSong().sequences[0].pattern).toEqual({});
+    expect(sampler.getSong().sequences[1].pattern).toEqual({ 2: [3] });
+  });
+
+  it("goes back to the first bar of the new sequence", () => {
+    const { sampler } = setup({ song: savedSong({ bars: 3 }) });
+    sampler.setPage(2);
+    sampler.setSequence(1);
+    expect(sampler.getState().page).toBe(0);
+  });
+
+  it("plays the steps of the sequence it switched to", () => {
+    const { sounds, sampler, advance } = setup({
+      song: {
+        ...savedSong({ bpm: 120 }),
+        sequences: [savedSong().sequences[0], { bars: 1, pattern: { 3: [0] } }].concat(savedSong().sequences.slice(2)),
+      },
+    });
+    sampler.setSequence(1);
+    sampler.start();
+    advance(0);
+    expect(sounds[3].play).toHaveBeenCalled();
+    expect(sounds[0].play).not.toHaveBeenCalled(); // the first sequence is empty here
+  });
+});
+
 describe("steps and clearing", () => {
   it("toggles a step of the selected pad and asks for a save", () => {
     const { sampler, songChange, change } = setup();
@@ -173,6 +258,59 @@ describe("steps and clearing", () => {
     expect(sampler.getState().stepsOn[5]).toBe(true);
     expect(songChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts at one bar and keeps a saved length", () => {
+    expect(setup().sampler.getState()).toMatchObject({ bars: 1, page: 0 });
+    expect(setup({ song: savedSong({ bars: 3 }) }).sampler.getState().bars).toBe(3);
+  });
+
+  it("lengthens the sequence, names it and asks for a save", () => {
+    const { sampler, message, songChange } = setup();
+    sampler.setBars(2);
+    expect(sampler.getState().bars).toBe(2);
+    expect(message).toHaveBeenLastCalledWith("2 BARS");
+    expect(songChange).toHaveBeenCalledTimes(1);
+    sampler.setBars(2);
+    expect(songChange).toHaveBeenCalledTimes(1); // no change, no save
+  });
+
+  it("keeps bars within 1 and the maximum", () => {
+    const { sampler } = setup();
+    sampler.setBars(99);
+    expect(sampler.getState().bars).toBe(4);
+    sampler.setBars(0);
+    expect(sampler.getState().bars).toBe(1);
+  });
+
+  it("edits the bar being shown, and the other bars keep their steps", () => {
+    const { sampler } = setup();
+    sampler.setBars(2);
+    sampler.setPage(1);
+    sampler.selectPad(3);
+    sampler.toggleStep(5);
+    expect(sampler.getSong().sequences[0].pattern[3]).toEqual([21]);
+    expect(sampler.getState().stepsOn[5]).toBe(true);
+    sampler.setPage(0);
+    expect(sampler.getState().stepsOn[5]).toBe(false);
+  });
+
+  it("does not move past the first or last bar, and follows the sequence when it gets shorter", () => {
+    const { sampler } = setup();
+    sampler.setBars(3);
+    sampler.setPage(9);
+    expect(sampler.getState().page).toBe(2);
+    sampler.setPage(-1);
+    expect(sampler.getState().page).toBe(0);
+    sampler.setPage(2);
+    sampler.setBars(2);
+    expect(sampler.getState().page).toBe(1);
+  });
+
+  it("keeps the steps of a bar that was dropped, for when it comes back", () => {
+    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 0: [20] } }) });
+    sampler.setBars(1);
+    expect(sampler.getSong().sequences[0].pattern[0]).toEqual([20]);
   });
 
   it("clears the selected pad and names it", () => {
@@ -186,7 +324,7 @@ describe("steps and clearing", () => {
   it("clears every pad", () => {
     const { sampler, message } = setup();
     sampler.clearAll();
-    expect(sampler.getSong().pattern).toEqual({});
+    expect(sampler.getSong().sequences[0].pattern).toEqual({});
     expect(message).toHaveBeenLastCalledWith("ALL PADS CLEARED");
   });
 });
@@ -205,7 +343,7 @@ describe("transport", () => {
   });
 
   it("plays the pads that are on at each step, at the time the scheduler gives", () => {
-    const { audio, sounds, sampler, advance } = setup({ song: { bpm: 120, volume: 50, pattern: STARTER_BEAT } });
+    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: STARTER_BEAT }) });
     sampler.start();
     advance(0);
     // The starter beat: kick on step 0, closed hat (pad 2) on step 0, snare not yet.

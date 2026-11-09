@@ -6,7 +6,10 @@
 // behind one set of methods, means no input has to remember those follow-ups.
 //
 //   const sampler = createSampler({
-//     audio, sounds, steps,
+//     audio, sounds,
+//     steps,               // steps in one bar (the pattern is up to maxBars of them)
+//     maxBars,
+//     sequenceCount,       // how many sequences there are to choose from
 //     song,                // a parseSong() result to start from, or null for the starter beat
 //     onChange,            // something on screen is out of date: read getState() and redraw
 //     onMessage,           // (text) a short note for the LCD
@@ -44,6 +47,8 @@ export function createSampler({
   audio,
   sounds,
   steps,
+  maxBars = 1,
+  sequenceCount = 1,
   song = null,
   now = () => performance.now(),
   onChange = noop,
@@ -54,16 +59,30 @@ export function createSampler({
   let selected = 0;
   let recording = false;
   let volume = song ? song.volume : DEFAULT_VOLUME;
+  let page = 0;
+  let current = song?.current ?? 0;
 
-  const pattern = createPattern(sounds.length, steps, song ? song.pattern : STARTER_BEAT, {
-    onChange: onSongChange,
+  // Each sequence has its own steps and length; tempo and volume are shared. With no saved song the
+  // first sequence is the starter beat and the rest are empty. A pattern has room for every bar, so
+  // shortening a sequence keeps what was in the bars it drops.
+  const slots = Array.from({ length: sequenceCount }, (_, i) => {
+    const saved = song?.sequences[i];
+    const initial = saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {};
+    return {
+      bars: Math.min(maxBars, saved?.bars ?? 1),
+      pattern: createPattern(sounds.length, steps * maxBars, initial, { onChange: onSongChange }),
+    };
   });
+  let pattern = slots[current].pattern;
+  let bars = slots[current].bars;
+  const totalSteps = () => bars * steps;
+  const lastPage = () => bars - 1;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
-    steps,
+    steps: totalSteps(),
     bpm: song?.bpm,
     onStep(step, time, heard) {
       const { ctx, master } = audio;
@@ -96,7 +115,7 @@ export function createSampler({
       playheadTime: scheduler.playheadTime,
       playheadStep: scheduler.playheadStep,
       bpm: scheduler.bpm,
-      steps,
+      steps: totalSteps(),
     });
     if (step < 0) return;
     pattern.set(index, step, true);
@@ -104,9 +123,48 @@ export function createSampler({
   }
 
   // ---------- Steps ----------
+  // The step keys show one bar; the playhead is only on them while it is in that bar.
+  function playheadOnPage(step) {
+    const local = step - page * steps;
+    return local >= 0 && local < steps ? local : -1;
+  }
+
   function toggleStep(step) {
-    pattern.toggle(selected, step);
+    pattern.toggle(selected, page * steps + step);
     onChange();
+  }
+
+  function setPage(value) {
+    const next = Math.min(lastPage(), Math.max(0, value));
+    if (next === page) return;
+    page = next;
+    onChange();
+  }
+
+  function setBars(value) {
+    const next = Math.min(maxBars, Math.max(1, Math.round(value)));
+    if (next === bars) return;
+    bars = next;
+    slots[current].bars = bars;
+    scheduler.setSteps(totalSteps());
+    page = Math.min(page, lastPage());
+    onMessage(`${bars} ${bars === 1 ? "BAR" : "BARS"}`);
+    onChange();
+    onSongChange();
+  }
+
+  // Switch to another sequence. If it is playing, the playhead carries on into the new one.
+  function setSequence(value) {
+    const next = Math.min(sequenceCount - 1, Math.max(0, Math.round(value)));
+    if (next === current) return;
+    current = next;
+    pattern = slots[current].pattern;
+    bars = slots[current].bars;
+    page = 0;
+    scheduler.setSteps(totalSteps());
+    onMessage(`SEQ ${pad2(current + 1)}`);
+    onChange();
+    onSongChange();
   }
 
   function clearPad() {
@@ -167,6 +225,9 @@ export function createSampler({
     selectPad,
     triggerPad,
     toggleStep,
+    setPage,
+    setBars,
+    setSequence,
     clearPad,
     clearAll,
     start,
@@ -184,10 +245,21 @@ export function createSampler({
       playing: scheduler.playing,
       bpm: scheduler.bpm,
       volume,
-      playheadStep: scheduler.playheadStep,
-      stepsOn: pattern.row(selected),
+      sequence: current,
+      sequenceCount,
+      bars,
+      page,
+      playheadStep: playheadOnPage(scheduler.playheadStep),
+      // The step number in the whole sequence, for the LCD.
+      playheadPosition: scheduler.playheadStep,
+      stepsOn: pattern.row(selected).slice(page * steps, (page + 1) * steps),
     }),
 
-    getSong: () => ({ bpm: scheduler.bpm, volume, pattern: pattern.snapshot() }),
+    getSong: () => ({
+      bpm: scheduler.bpm,
+      volume,
+      current,
+      sequences: slots.map((slot) => ({ bars: slot.bars, pattern: slot.pattern.snapshot() })),
+    }),
   };
 }

@@ -40,6 +40,15 @@
             </div>
           </div>
 
+          <div class="seq-bar" role="group" aria-label="Sequence and its length">
+            <span class="small-label">Seq</span>
+            <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">&lt;</button>
+            <span id="seq-number" class="small-label" aria-live="polite"></span>
+            <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
+            <span class="small-label">Bars</span>
+            <div id="bars" class="seq-lengths" role="group" aria-label="Sequence length in bars"></div>
+          </div>
+
           <div class="controls">
             <div class="ctl">
               <div
@@ -73,7 +82,14 @@
       </div>
 
       <section class="step-panel" aria-label="Step keys for the selected pad">
-        <div class="small-label step-title">Step keys &middot; selected pad</div>
+        <div class="step-head">
+          <div class="small-label">Step keys &middot; selected pad</div>
+          <div class="step-nav" role="group" aria-label="Which bar is shown">
+            <button id="steps-prev" class="btn btn-small" type="button" aria-label="Previous bar">&lt;</button>
+            <span id="steps-range" class="small-label" aria-live="polite"></span>
+            <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
+          </div>
+        </div>
         <div id="steps"></div>
       </section>
     </main>
