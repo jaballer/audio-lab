@@ -15,7 +15,7 @@ function fakeAudio() {
     currentTime: 0,
     createGain: vi.fn(() => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() })),
   };
-  return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn() };
+  return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn(), killSound: vi.fn(() => true) };
 }
 
 const SEQUENCES = 4;
@@ -1084,6 +1084,55 @@ describe("steps and clearing", () => {
     sampler.clearAll();
     expect(sampler.getSong().sequences[0].pattern).toEqual({});
     expect(message).toHaveBeenLastCalledWith("ALL STEPS CLEARED");
+  });
+});
+
+describe("Stop pressed again", () => {
+  it("stops the sequence the first time, and leaves what is sounding to ring out", () => {
+    const { audio, sampler, message } = setup();
+    sampler.start();
+    sampler.stop();
+    expect(sampler.getState().playing).toBe(false);
+    expect(audio.killSound).not.toHaveBeenCalled();
+    expect(message).not.toHaveBeenCalledWith("ALL SOUND OFF");
+  });
+
+  it("cuts off all sound when it is pressed while already stopped, and says so", () => {
+    const { audio, sampler, message } = setup();
+    sampler.start();
+    sampler.stop();
+    sampler.stop();
+    expect(audio.killSound).toHaveBeenCalledTimes(1);
+    expect(message).toHaveBeenLastCalledWith("ALL SOUND OFF");
+    sampler.stop();
+    expect(audio.killSound).toHaveBeenCalledTimes(2); // and every press after it
+  });
+
+  it("does so from a fresh page too, where Stop has nothing to stop but a pad may still be ringing", () => {
+    const { audio, sampler } = setup();
+    sampler.stop();
+    expect(audio.killSound).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when there was no sound to cut off, as on a fresh page before the audio exists", () => {
+    const { audio, sampler, message } = setup();
+    audio.killSound.mockReturnValue(false);
+    sampler.stop();
+    expect(message).not.toHaveBeenCalledWith("ALL SOUND OFF");
+  });
+
+  it("is not triggered by Play, which restarts the sequence without a Stop", () => {
+    const { audio, sampler } = setup();
+    sampler.start();
+    sampler.start();
+    expect(audio.killSound).not.toHaveBeenCalled();
+  });
+
+  it("still reports a change, so the display follows", () => {
+    const { sampler, change } = setup();
+    change.mockClear();
+    sampler.stop();
+    expect(change).toHaveBeenCalledTimes(1);
   });
 });
 

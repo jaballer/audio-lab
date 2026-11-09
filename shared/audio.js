@@ -13,6 +13,7 @@
 //   audio.powered                  // false while off: a page should not start sounds then (they are
 //                                  // inaudible, but a held note would be heard again at power on)
 //   audio.running                  // true only while sound can be heard: powered, and the context running
+//   audio.killSound()              // cut off everything sounding now, tails and all; sounds made after it are heard
 //
 // Power off mutes the master gain and leaves the context running. Suspending it would freeze
 // every sounding note and its release against a stopped clock, and a power cycle would bring
@@ -28,6 +29,9 @@
 export const POWER_SWITCH = "[data-power-switch]";
 
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
+// Killing sound is a faster fade (still no click), and the cut-off master is disconnected once it is inaudible.
+const KILL_TIME_CONSTANT = 0.004;
+const KILL_DISCONNECT_MS = 60;
 
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
@@ -39,15 +43,21 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
   // While the power is off the engine says so, whatever the context's own state is.
   const notify = () => onStateChange?.(!powered ? "off" : ctx ? ctx.state : "closed");
 
+  // A master gain wired to the speakers, at the level the engine is at now.
+  function createMaster() {
+    const gain = ctx.createGain();
+    gain.gain.value = powered ? level : 0;
+    gain.connect(ctx.destination);
+    return gain;
+  }
+
   function ensure() {
     if (!ctx) {
       ctx = createContext();
       // A listener, not `onstatechange`: Tone.js assigns that property on the context it uses,
       // which would replace ours and leave the status stuck on "suspended".
       ctx.addEventListener("statechange", notify);
-      master = ctx.createGain();
-      master.gain.value = powered ? level : 0;
-      master.connect(ctx.destination);
+      master = createMaster();
     }
     // "interrupted" is Safari after a phone call or a locked screen; resume() ends it too.
     // Off stays off: a click, a key or a note must not wake a context the browser holds suspended.
@@ -77,6 +87,20 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
     if (master && powered) master.gain.setTargetAtTime(level, ctx.currentTime, FADE_TIME_CONSTANT);
   }
 
+  // Sound that is already playing cannot be taken back by the page that started it (a long sample, a crash, the
+  // tail of a held note), so the engine does it: every sound is connected to the master gain, so the master is
+  // faded out and cut off, and a new one takes its place for whatever is played next. A page must read
+  // `audio.master` each time it plays to pick the new one up: one that connects to it once (the Tone page's delay)
+  // must not call this. Whether anything was cut off: false before the context exists.
+  function killSound() {
+    if (!ctx) return false;
+    const old = master;
+    master = createMaster();
+    old.gain.setTargetAtTime(0, ctx.currentTime, KILL_TIME_CONSTANT);
+    setTimeout(() => old.disconnect(), KILL_DISCONNECT_MS);
+    return true;
+  }
+
   // Browsers only start audio after a click or key press on the page, and a
   // MIDI message doesn't count. So unlock it on the first real interaction,
   // ahead of the first sound: otherwise a MIDI controller can play silently.
@@ -94,6 +118,7 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
     ensure,
     setVolume,
     unlockOnInteraction,
+    killSound,
     get ctx() {
       return ctx; // null until ensure() has run
     },
