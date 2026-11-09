@@ -208,6 +208,7 @@ export function createSampler({
     const next = Math.min(lastPage(), Math.max(0, value));
     if (next === page) return;
     page = next;
+    lastMergedAt = -Infinity; // a change on another bar is another undo
     onChange();
   }
 

@@ -218,6 +218,19 @@ describe("undo and redo", () => {
     expect(sampler.getState().stepVelocities[0]).toBe(127);
   });
 
+  it("does not merge velocity changes made on different bars, however close together", () => {
+    const { sampler, setClock } = setup({ song: savedSong({ bars: 2, pattern: { 0: [0, 16] } }) });
+    setClock(1000);
+    sampler.setStepVelocity(0, 40);
+    setClock(1100);
+    sampler.setPage(1);
+    sampler.setStepVelocity(0, 60);
+    sampler.undo();
+    expect(sampler.getState().stepVelocities[0]).toBe(127); // bar 2 back to full
+    sampler.setPage(0);
+    expect(sampler.getState().stepVelocities[0]).toBe(40); // bar 1's change is still there
+  });
+
   it("ends the redo line when something new is done after an undo", () => {
     const { sampler } = withBeat();
     sampler.toggleStep(1);
