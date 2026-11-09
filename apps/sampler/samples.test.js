@@ -741,7 +741,7 @@ describe("a sample's pitch", () => {
     kit.setSetting(0, "pitch", 7);
     kit.setSetting(0, "gain", -6);
     await samples.load(0, file("a.wav"));
-    expect(kit.settings(0)).toEqual({ gain: -6, pitch: 0, choke: 0 });
+    expect(kit.settings(0)).toEqual({ gain: -6, pitch: 0, choke: 0, color: 0 });
   });
 
   it("goes with the sample: Default Sound leaves no pitch to come back with the next one", async () => {
@@ -750,7 +750,7 @@ describe("a sample's pitch", () => {
     kit.setSetting(0, "pitch", 5);
     kit.setSetting(0, "gain", 3);
     await samples.reset(0);
-    expect(kit.settings(0)).toEqual({ gain: 3, pitch: 0, choke: 0 });
+    expect(kit.settings(0)).toEqual({ gain: 3, pitch: 0, choke: 0, color: 0 });
     await samples.load(0, file("b.wav"));
     expect(kit.settings(0).pitch).toBe(0);
   });

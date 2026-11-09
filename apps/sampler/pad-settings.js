@@ -5,22 +5,30 @@
 //   gain:  decibels, -24 to +6 in whole steps (0 leaves the sound as it is)
 //   pitch: semitones, -12 to +12 in whole steps (0 plays the sample at its own pitch)
 //   choke: a choke group, 0 (none) or 1 to 8: pads in the same group cut each other off (voices.js)
+//   color: a colour for the pad, 0 (none) or 1 to 8 (pad-colors.js); only for looks, and chosen with swatches, not a slider
 //
 //   clampSetting("gain", 9.4)            // 6
 //   gainToLinear(-6)                     // 0.501...: what to multiply the signal by
 //   pitchToRate(12)                      // 2: the playbackRate that sounds an octave up
 //   formatSetting("pitch", 2)            // "+2 st"
 //   formatSetting("choke", 0)            // "OFF"; 3 is "GROUP 3"
-//   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke } } for the pads that differ from the default
+//   formatSetting("color", 5)            // "BLUE"
+//   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke, color } } for the pads that differ from the default
+
+import { COLOR_COUNT, padColorName } from "./pad-colors.js";
 
 export const SETTINGS = {
   gain: { min: -24, max: 6, default: 0, unit: "dB", label: "Gain" },
   pitch: { min: -12, max: 12, default: 0, unit: "st", label: "Pitch" },
   // A whole-number group, not a quantity: 0 is "no group". Eight is enough to keep hats, cymbals and a few more apart.
   choke: { min: 0, max: 8, default: 0, unit: "", label: "Choke" },
+  // Which swatch: not a quantity, so it has no slider (`swatches`): the pad editor draws it as a row of colours.
+  color: { min: 0, max: COLOR_COUNT, default: 0, unit: "", label: "Color", swatches: true },
 };
 
 export const SETTING_NAMES = Object.keys(SETTINGS);
+// The ones drawn as sliders: the rest have a control of their own.
+export const SLIDER_NAMES = SETTING_NAMES.filter((name) => !SETTINGS[name].swatches);
 export const DEFAULT_SETTINGS = Object.freeze(
   Object.fromEntries(SETTING_NAMES.map((name) => [name, SETTINGS[name].default])),
 );
@@ -40,6 +48,7 @@ export const pitchToRate = (semitones) => 2 ** (semitones / 12);
 // "-3 dB", "+2 st", "0 dB": the sign shown so a positive value reads as one. A choke group is "OFF" or "GROUP 3".
 export function formatSetting(name, value) {
   if (name === "choke") return value === 0 ? "OFF" : `GROUP ${value}`;
+  if (name === "color") return padColorName(value).toUpperCase();
   return `${value > 0 ? "+" : ""}${value} ${SETTINGS[name].unit}`;
 }
 

@@ -29,10 +29,10 @@ failing check blocks the deploy.
 ## Architecture rules
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
-  `notes.js`, `holds.js`, `pointer-notes.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `song.js`, `kit.js`, `voices.js`, `export-wav.js`, `pad-settings.js`, `trim.js`, `waveform.js`, `samples.js`, `sample-voice.js`, `blob-store.js`, `storage-budget.js`, `history.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
+  `notes.js`, `holds.js`, `pointer-notes.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `song.js`, `kit.js`, `voices.js`, `pad-colors.js`, `export-wav.js`, `pad-settings.js`, `trim.js`, `waveform.js`, `samples.js`, `sample-voice.js`, `blob-store.js`, `storage-budget.js`, `history.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `scales.js`,
   `midi-messages.js`, `mpc-sample.js`, `board.js`, `storage.js`, `console-log.js`, `pages.js`, `page-ready.js`, `dsp.js`, `sounds.js`, `power.js`, `describe.js` and `audio.js` only export functions, factories or plain data. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
-  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `trim-view.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `site-header.js`, `console-drawer.js`, `audio-notice.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
+  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `color-swatches.js`, `pad-drawer.js`, `trim-view.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `site-header.js`, `console-drawer.js`, `audio-notice.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.

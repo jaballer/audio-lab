@@ -8,9 +8,9 @@
 //   kit.set(3, sound);                // pad 3 plays `sound` from now on
 //   kit.reset(3);                     // back to the built-in one
 //   kit.isDefault(3);                 // is it the built-in one?
-//   kit.settings(3);                  // { gain, pitch, choke } of pad 3 (pad-settings.js)
+//   kit.settings(3);                  // { gain, pitch, choke, color } of pad 3 (pad-settings.js)
 //   kit.setSetting(3, "gain", -6);    // one setting; the value is clamped and rounded
-//   kit.settingsSnapshot();           // { pad: { gain, pitch, choke } } for the pads that are not at the defaults
+//   kit.settingsSnapshot();           // { pad: { gain, pitch, choke, color } } for the pads that are not at the defaults
 //   kit.voice(3).play(ctx, out, t)    // what the sequencer and live hits call: the sound, with the pad's settings
 //
 // `onChange(index, what)` is called when a pad's sound ("sound") or a setting ("setting") actually changes, so views
