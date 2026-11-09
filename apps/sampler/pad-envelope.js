@@ -15,6 +15,7 @@
 // leaves nothing to decay to. Stages that run into each other are cut where the next begins (a release that starts
 // before the decay has finished cuts the decay short, from the level it had reached), except that the release never
 // begins before the attack has reached full, so a release as long as the sample still plays it, rising and falling.
+// An attack as long as the sample or longer, with a release, shares the sample's time with it in proportion.
 
 import { trimWindow } from "./trim.js";
 
@@ -34,6 +35,15 @@ function levelAt(points, time) {
 }
 
 export function envelopeShape({ attack = 0, decay = 0, sustain = 1, release = 0 }, length) {
+  // An attack that does not fit in the sample, with a release to make as well: there is no time for both, so they share
+  // it in proportion (a rise to full, then a fall to silence at the end), rather than the release leaving no attack.
+  if (release > 0 && length > 0 && attack >= length) {
+    return [
+      [0, 0],
+      [(length * attack) / (attack + release), 1],
+      [length, 0],
+    ];
+  }
   const points = [[0, attack > 0 ? 0 : 1]];
   if (attack > 0) points.push([attack, 1]);
   if (sustain < 1) points.push([attack + Math.max(decay, MIN_DECAY), sustain]);

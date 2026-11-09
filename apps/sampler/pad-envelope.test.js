@@ -96,11 +96,27 @@ describe("envelopeShape", () => {
     ]);
   });
 
-  it("still fades out at the end when the attack is longer than the sample, from where the attack had got to", () => {
-    // the attack would take 3 s on a 2 s sample: a release of 0.5 s starts at 1.5 s, when it is half way up
-    expect(close(envelopeShape({ attack: 3, release: 0.5 }, 2))).toEqual([
+  it("shares the sample's time between an attack that does not fit and a release, in proportion, so it still rises and falls", () => {
+    // the attack would take 3 s and the release 1 s on a 2 s sample: three quarters of it rising, one quarter falling
+    expect(close(envelopeShape({ attack: 3, release: 1 }, 2))).toEqual([
       [0, 0],
-      [1.5, 0.5],
+      [1.5, 1],
+      [2, 0],
+    ]);
+  });
+
+  it("does not play a hit silent when both the attack and the release are longer than it", () => {
+    const shape = envelopeShape({ attack: 0.5, release: 1 }, 0.2);
+    expect(Math.max(...shape.map(([, level]) => level))).toBe(1);
+    expect(shape[0]).toEqual([0, 0]);
+    expect(shape.at(-1)).toEqual([0.2, 0]);
+    expect(close(shape)[1][0]).toBeCloseTo(0.066667);
+  });
+
+  it("gives a rise and a fall also when the attack is exactly as long as the sample", () => {
+    expect(close(envelopeShape({ attack: 2, release: 2 }, 2))).toEqual([
+      [0, 0],
+      [1, 1],
       [2, 0],
     ]);
   });
@@ -180,6 +196,12 @@ describe("envelopeCurve", () => {
     expect(close(envelopeCurve({ attack: 4 }, whole))).toEqual([
       [0, 0],
       [1, 0.5],
+    ]);
+    // an attack longer than the sample, with a release: they share it
+    expect(close(envelopeCurve({ attack: 3, release: 1 }, whole))).toEqual([
+      [0, 0],
+      [0.75, 1],
+      [1, 0],
     ]);
   });
 
