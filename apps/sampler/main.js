@@ -10,6 +10,7 @@ import { createAudioNotice } from "../../shared/audio-notice.js";
 import { setAttr, setDisabledMany, setText } from "../../shared/dom-updates.js";
 import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
+import { enableOffline } from "../../shared/offline.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
@@ -49,6 +50,7 @@ const decodesEarly = typeof OfflineAudioContext === "function";
 const RESTORE_SAMPLE_RATE = 48000; // a typical output rate; the real context resamples when it plays
 
 const site = createSiteHeader($("site-header"), { current: "sampler" });
+enableOffline($("update-notice"));
 const header = createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
   sub: "Digital Sampler & Sequencer",

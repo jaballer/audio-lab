@@ -33,9 +33,9 @@ failing check blocks the deploy.
 
 - **Logic modules have no DOM and no work at import time.** `synth.js`, `envelope.js`, `params.js`,
   `notes.js`, `holds.js`, `pointer-notes.js`, `pattern.js`, `starter-beat.js`, `sequencer.js`, `song.js`, `kit.js`, `voices.js`, `pad-envelope.js`, `pad-colors.js`, `export-wav.js`, `pad-settings.js`, `trim.js`, `waveform.js`, `samples.js`, `sample-voice.js`, `blob-store.js`, `storage-budget.js`, `history.js`, `transport.js`, `scheduler.js`, `tempo.js`, `controller.js`, `layout.js`, `computer-keys.js`, `format.js`, `knob-moves.js`, `scales.js`,
-  `midi-messages.js`, `mpc-sample.js`, `board.js`, `storage.js`, `console-log.js`, `pages.js`, `page-ready.js`, `dsp.js`, `sounds.js`, `power.js`, `describe.js` and `audio.js` only export functions, factories or plain data. This is what makes them testable.
+  `midi-messages.js`, `precache.js`, `register-sw.js`, `mpc-sample.js`, `board.js`, `storage.js`, `console-log.js`, `pages.js`, `page-ready.js`, `dsp.js`, `sounds.js`, `power.js`, `describe.js` and `audio.js` only export functions, factories or plain data. This is what makes them testable.
 - **View modules draw into an element they are handed.** `piano.js`, `pad-grid.js`, `knob-dials.js`,
-  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `color-swatches.js`, `pad-drawer.js`, `trim-view.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `site-header.js`, `console-drawer.js`, `audio-notice.js`, `disclosure.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
+  `pads.js`, `step-keys.js`, `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `color-swatches.js`, `pad-drawer.js`, `trim-view.js`, `tempo-knob.js`, `app-header.js`, `bank-strip.js`, `transport-lights.js`, `stick.js`, `site-header.js`, `update-notice.js`, `console-drawer.js`, `audio-notice.js`, `disclosure.js` and `lcd.js` export a `create…(element, options)` factory (the LCD
   takes a set of elements): no `getElementById`, nothing at import time. They
   show and report (a pad flashed, a key was pressed); they do not decide. Anything worth testing (such as the
   LCD text in `formatLcd`) is a pure function next to the DOM code.
@@ -45,6 +45,11 @@ failing check blocks the deploy.
   assigning the same text or attribute again can be announced again by a screen reader. A control that is disabled or
   hidden while it has keyboard focus hands the focus to a neighbour first (`setDisabled`, `setHidden`), so keys
   such as Escape keep working where the person was.
+- **The service worker is built, not imported.** `shared/sw-template.js` is filled in by the `emit-service-worker` plugin in
+  `vite.config.js` (the files to keep come from `precache.js`) and emitted as `sw.js`; no page imports it. Everything is
+  relative (`./sw.js`, manifest `start_url` `./`) so the site works from any subpath. A new build waits until the
+  person presses Reload; never `skipWaiting` on its own. Each page's `main.js` calls `enableOffline` and has an
+  `#update-notice` element, and a new page's `<head>` copies the manifest, theme-color and apple-touch-icon lines.
 - **`main.js` only wires.** It finds the elements, builds the synth and views, and connects inputs (MIDI,
   computer keyboard) to them. Page state that several views read lives there.
 - **All audio goes through `shared/audio.js`.** Use `audio.ensure()` to get the context and `audio.master` as

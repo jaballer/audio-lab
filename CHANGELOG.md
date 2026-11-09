@@ -48,6 +48,8 @@ Numbers link to the pull request.
   ([#129](https://github.com/jaballer/audio-lab/pull/129)).
 - Sampler: the step editor's heading names the selected pad
   ([#132](https://github.com/jaballer/audio-lab/pull/132)).
+- Every page works offline and can be installed as an app. A newer version of the site waits until you press Reload
+  on the "A new version is ready" strip, so an update never interrupts playing.
 - Tone page: the keys as a piano, value readouts, and Release, Echo time and Feedback controls
   ([#78](https://github.com/jaballer/audio-lab/pull/78), [#82](https://github.com/jaballer/audio-lab/pull/82)).
 

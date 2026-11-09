@@ -59,6 +59,14 @@ docker build -t audio-lab .
 docker run --rm -p 8080:80 audio-lab   # http://localhost:8080
 ```
 
+## Install and offline
+
+The site is a progressive web app. In a production build a service worker keeps every page and script, so all of it
+works with no connection and can be installed from the browser (Install in Chrome and Edge, Add to Home Screen on
+iOS). A new build never replaces the running one by itself: the page shows "A new version is ready" with Reload and
+Later, because reloading in the middle of playing would lose the person's place. It is off in `npm run dev`, so cached
+files never hide edits; try it with `npm run build && npm run preview`.
+
 ## Layout
 
 Each app is its own page with its own code; shared code lives in `shared/`.
@@ -149,6 +157,11 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/scheduler.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from, on whatever clock it is given (the sampler gives it the audio clock); no DOM
 - `shared/step-keys.js` + `shared/step-keys.css` — the row of step keys for one pad, in groups; the sampler and the MPC Sample page use it, and each page that uses it imports the stylesheet
 - `shared/storage.js` — JSON in `localStorage` that never throws
+- `shared/offline.js` — what each page's `main.js` calls to work offline: registers the service worker (production builds only) and shows the update notice when a newer build is waiting
+- `shared/register-sw.js` — registers `sw.js` and reports a waiting build; reloads only after the person applies the update; never throws, no DOM
+- `shared/update-notice.js` — the "A new version is ready" strip with Reload and Later
+- `shared/precache.js` + `shared/sw-template.js` — the service worker: the template is filled in at build time (the files to keep, from `precache.js`, and a fingerprint of the build) and emitted as `sw.js`; it is not imported by any page
+- `public/manifest.webmanifest` + `public/icons/` — the web app manifest and its icons, served as they are
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
 - `public/favicon.svg` — the site icon, served as it is (every page's `<head>` also carries its description and share tags)
 - `CHANGELOG.md` — what changed on the live site, by day, newest first

@@ -10,6 +10,7 @@ import "../../shared/base.css";
 import "../../shared/step-keys.css";
 import "./mpc-sample.css";
 import { createAppHeader } from "../../shared/app-header.js";
+import { enableOffline } from "../../shared/offline.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createStepKeys } from "../../shared/step-keys.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
@@ -29,6 +30,7 @@ import { createTransportLights } from "./transport-lights.js";
 const $ = (id) => document.getElementById(id);
 
 const site = createSiteHeader($("site-header"), { current: "mpc-sample" });
+enableOffline($("update-notice"));
 createAppHeader($("header"), {
   brand: { name: "MPC ", accent: "SAMPLE" },
   sub: "Companion",
