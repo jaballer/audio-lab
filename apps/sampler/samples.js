@@ -7,6 +7,7 @@
 //     readMap, writeMap,     // () => stored map | null, and (map) => saved: which pads have a sample, by name
 //     onMessage,             // (text) a short note for the LCD
 //     restoreContext,        // () => an OfflineAudioContext to decode kept samples with, before any click
+//     budget,                // shared/storage-budget.js: { limit(maxBytes), persist() }; optional
 //   });
 //   await samples.load(3, file);   // true when pad 3 plays the file now
 //   await samples.reset(3);        // the built-in sound again
@@ -18,6 +19,7 @@
 // the context that made it, so the real one plays it (resampling to its own rate).
 // Whatever storage does, the sample plays in this visit: a failed save only means it is gone next time.
 
+import { formatSpace } from "../../shared/storage-budget.js";
 import { pad2, sampleName } from "./format.js";
 import { MAX_SAMPLE_BYTES, REASONS, createSampleSound, decodeSample } from "./sample-voice.js";
 
@@ -50,6 +52,7 @@ export function createSamples({
   writeMap,
   onMessage = () => {},
   restoreContext = () => audio.ensure(),
+  budget = { limit: async (maxBytes) => maxBytes, persist: async () => false },
   decode = decodeSample,
   maxTotalBytes = MAX_TOTAL_BYTES,
 }) {
@@ -57,10 +60,12 @@ export function createSamples({
   const touched = new Set(); // pads changed in this visit, which a restore must not overwrite
   const latest = new Array(kit.length).fill(0); // a later load or reset of the same pad wins over an earlier one
   let restored = false;
+  let persistAsked = false; // the browser is asked once per visit to keep the samples, after the first one is saved
 
   // What counts toward the total cap: every pad that has a sample, kept or only playing in this visit, and
   // a load that has been accepted but not finished. Not the same as `pads`, which is what was kept.
   const counted = Object.fromEntries(Object.entries(pads).map(([pad, info]) => [pad, info.bytes]));
+  const countedTotal = () => Object.values(counted).reduce((sum, bytes) => sum + bytes, 0);
   const bytesElsewhere = (pad) =>
     Object.entries(counted).reduce((sum, [key, bytes]) => (Number(key) === pad ? sum : sum + bytes), 0);
 
@@ -80,7 +85,10 @@ export function createSamples({
     } catch {
       return fail(pad, REASONS.notAudio);
     }
-    if (bytesElsewhere(pad) + bytes.byteLength > maxTotalBytes) return fail(pad, MEMORY_FULL);
+    // The most the samples may take: the cap, or less when the browser's quota is small. Nothing between this
+    // check and counting the file below is awaited, so loads that overlap cannot together get past it.
+    const limit = await budget.limit(maxTotalBytes);
+    if (bytesElsewhere(pad) + bytes.byteLength > limit) return fail(pad, MEMORY_FULL);
 
     // From here the file is accepted: it takes the pad over from an earlier load still in progress (one that
     // is refused above leaves that earlier load alone), and it is counted, so loads that overlap cannot
@@ -104,7 +112,11 @@ export function createSamples({
     if (ticket !== latest[pad]) return true; // it played, but something newer has taken the pad since
     pads[pad] = { name, bytes: bytes.byteLength };
     if (bytesKept && persist()) {
-      onMessage(`PAD ${pad2(pad + 1)} SAMPLE LOADED`);
+      onMessage(`PAD ${pad2(pad + 1)} LOADED ${formatSpace(countedTotal(), limit)}`);
+      if (!persistAsked) {
+        persistAsked = true;
+        budget.persist(); // not awaited: the answer changes nothing here, and Firefox waits for the visitor
+      }
     } else {
       // Not kept, in the files or in the map, so what was kept before for this pad is not what the pad plays
       // any more, and bytes with no map entry would only take up room.

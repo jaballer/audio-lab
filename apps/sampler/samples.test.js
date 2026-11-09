@@ -94,7 +94,7 @@ describe("load", () => {
     expect(kit.get(0)).toBe(defaults[0]);
     expect(store.data.get("sample-1")).toHaveProperty("byteLength", 50);
     expect(writes.at(-1)).toEqual({ version: SAMPLES_VERSION, pads: { 1: { name: "My Snare", bytes: 50 } } });
-    expect(messages.at(-1)).toBe("PAD 02 SAMPLE LOADED");
+    expect(messages.at(-1)).toBe("PAD 02 LOADED <0.1/32 MB");
   });
 
   it("decodes in the audio context, which it makes if there is none yet", async () => {
@@ -208,6 +208,63 @@ describe("load, when storage fails in part or the cap is close", () => {
     const { samples } = setup({ maxTotalBytes: 100, decode });
     expect(await samples.load(0, file("bad.txt", 80))).toBe(false);
     expect(await samples.load(1, file("b.wav", 80))).toBe(true);
+  });
+});
+
+describe("the browser's storage budget", () => {
+  const MB = 1024 * 1024;
+  const budget = (limit = 32 * MB) => ({
+    limit: vi.fn(async (maxBytes) => Math.min(limit, maxBytes)),
+    persist: vi.fn(async () => true),
+  });
+
+  it("takes the cap from the budget, so a small quota allows less than the fixed cap", async () => {
+    const { samples, messages, kit } = setup({ budget: budget(100), maxTotalBytes: MB });
+    expect(await samples.load(0, file("a.wav", 60))).toBe(true);
+    expect(await samples.load(1, file("b.wav", 60))).toBe(false); // 120 bytes against a limit of 100
+    expect(messages.at(-1)).toBe(MEMORY_FULL);
+    expect(kit.isDefault(1)).toBe(true);
+  });
+
+  it("asks the budget for room each time, and gives it the fixed cap", async () => {
+    const b = budget();
+    const { samples } = setup({ budget: b, maxTotalBytes: 5 * MB });
+    await samples.load(0, file("a.wav"));
+    await samples.load(1, file("b.wav"));
+    expect(b.limit).toHaveBeenCalledTimes(2);
+    expect(b.limit).toHaveBeenCalledWith(5 * MB);
+  });
+
+  it("says how much of the room the samples use when one is loaded", async () => {
+    const { samples, messages } = setup({ budget: budget(32 * MB) });
+    await samples.load(0, file("a.wav", 2 * MB));
+    expect(messages.at(-1)).toBe("PAD 01 LOADED 2/32 MB");
+    await samples.load(1, file("b.wav", 1.5 * MB));
+    expect(messages.at(-1)).toBe("PAD 02 LOADED 3.5/32 MB");
+  });
+
+  it("asks the browser to keep the samples once, after the first one is saved", async () => {
+    const b = budget();
+    const { samples } = setup({ budget: b });
+    await samples.load(0, file("a.wav"));
+    await samples.load(1, file("b.wav"));
+    expect(b.persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask for a sample that was not saved, and asks at the next that is", async () => {
+    const b = budget();
+    const store = fakeStore({ failWrites: true });
+    const { samples } = setup({ budget: b, store });
+    await samples.load(0, file("a.wav"));
+    expect(b.persist).not.toHaveBeenCalled();
+    store.set.mockImplementation(async (key, bytes) => (store.data.set(key, bytes), true));
+    await samples.load(1, file("b.wav"));
+    expect(b.persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("works with no budget given", async () => {
+    const { samples } = setup();
+    expect(await samples.load(0, file("a.wav"))).toBe(true);
   });
 });
 
