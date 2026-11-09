@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
+import { createKit } from "./kit.js";
 import { SCHEDULER_TICK_MS } from "../../shared/scheduler.js";
 import { STARTER_BEAT } from "./starter-beat.js";
 
@@ -35,7 +36,7 @@ function setup({ song = null, bpm } = {}) {
   let clock = 0;
   const sampler = createSampler({
     audio,
-    sounds,
+    kit: createKit(sounds),
     steps: STEPS,
     maxBars: 4,
     sequenceCount: SEQUENCES,
@@ -133,6 +134,57 @@ describe("triggerPad", () => {
     const { audio, sampler } = setup();
     sampler.triggerPad(0, 0);
     expect(audio.ctx.createGain.mock.results[0].value.gain.value).toBe(0.05);
+  });
+});
+
+describe("the kit", () => {
+  it("builds the steps already queued again when the sounds change, so the next hit is the new sound", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const kit = createKit(sounds);
+    const audio = fakeAudio();
+    const sampler = createSampler({
+      audio,
+      kit,
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3] } }),
+    });
+    sampler.start();
+    audio.ctx.currentTime += 0.2;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    const queued = sounds[0].play.mock.calls.map((call) => call[1]);
+    expect(queued.length).toBeGreaterThan(1);
+    const swapped = { id: "loaded", name: "Loaded", play: vi.fn() };
+    kit.set(0, swapped);
+    sampler.soundsChanged();
+    expect(queued.at(-1).disconnect).toHaveBeenCalled(); // the last step queued has not started: silenced
+    audio.ctx.currentTime += 0.05;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    expect(swapped.play).toHaveBeenCalled(); // and built again with the new sound
+  });
+
+  it("plays a sound swapped onto a pad, live and in the sequence, from the next hit", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const kit = createKit(sounds);
+    const audio = fakeAudio();
+    const sampler = createSampler({
+      audio,
+      kit,
+      steps: STEPS,
+      song: savedSong({ bpm: 120, pattern: { 1: [0, 1] } }),
+    });
+    const swapped = { id: "loaded", name: "Loaded", play: vi.fn() };
+    kit.set(1, swapped);
+    sampler.triggerPad(1);
+    expect(swapped.play).toHaveBeenCalledTimes(1);
+    expect(sounds[1].play).not.toHaveBeenCalled();
+    sampler.start();
+    audio.ctx.currentTime += 0.2;
+    vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    expect(swapped.play.mock.calls.length).toBeGreaterThan(1);
+    expect(sounds[1].play).not.toHaveBeenCalled();
+    kit.reset(1);
+    sampler.triggerPad(1);
+    expect(sounds[1].play).toHaveBeenCalledTimes(1);
   });
 });
 

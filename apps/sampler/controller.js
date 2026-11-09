@@ -6,7 +6,8 @@
 // behind one set of methods, means no input has to remember those follow-ups.
 //
 //   const sampler = createSampler({
-//     audio, sounds,
+//     audio,
+//     kit,                 // the sounds on the pads (kit.js)
 //     steps,               // steps in one bar (the pattern is up to maxBars of them)
 //     maxBars,
 //     sequenceCount,       // how many sequences there are to choose from
@@ -29,6 +30,7 @@
 //   sampler.clearPad(); sampler.clearAll()
 //   sampler.copySteps(); sampler.pasteSteps()   // the steps and velocities of the bar showing for the selected pad,
 //                                               // over the bar showing for the selected pad (another bar, pad or sequence)
+//   sampler.soundsChanged()                  // the kit's sounds changed: steps already queued are built again
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setVolume(80)        // 0-100, the slider's scale
@@ -57,7 +59,7 @@ const noop = () => {};
 
 export function createSampler({
   audio,
-  sounds,
+  kit,
   steps,
   maxBars = 1,
   sequenceCount = 1,
@@ -84,7 +86,7 @@ export function createSampler({
     return {
       bars: Math.min(maxBars, saved?.bars ?? 1),
       history: createHistory(), // undo and redo are per sequence
-      pattern: createPattern(sounds.length, steps * maxBars, initial, {
+      pattern: createPattern(kit.length, steps * maxBars, initial, {
         onChange: onSongChange,
         velocities: saved?.velocities,
       }),
@@ -113,12 +115,12 @@ export function createSampler({
       // stopped before the step is reached, its sounds can be cut off (see cancelQueuedHits).
       const bus = ctx.createGain();
       bus.connect(master);
-      sounds.forEach((sound, row) => {
+      for (let row = 0; row < kit.length; row++) {
         if (pattern.isOn(row, step) && !heard.has(row)) {
-          sound.play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
+          kit.get(row).play(ctx, withVelocity(ctx, bus, pattern.velocity(row, step) / FULL_VELOCITY), time);
           rows.push(row);
         }
-      });
+      }
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
       scheduledHits.push({ time, step, rows, bus });
@@ -136,7 +138,7 @@ export function createSampler({
 
   // velocity is 0-1.
   function triggerPad(index, velocity = 1) {
-    playSound(audio, sounds[index], velocity);
+    playSound(audio, kit.get(index), velocity);
     onPadHit(index);
     if (recording && scheduler.playing) recordHit(index, velocity);
     selectPad(index);
@@ -303,6 +305,12 @@ export function createSampler({
     scheduler.rewindTo(step, time);
   }
 
+  // The kit changed (a sample was loaded, restored or removed). The steps already handed to the audio clock
+  // were built with the sounds it had, so the ones that have not started are built again from the new ones.
+  function soundsChanged() {
+    rescheduleQueuedHits();
+  }
+
   // ---------- Play and stop ----------
   // Hits are handed to the audio clock up to the lookahead (about 120 ms) early, and the scheduler
   // cannot take them back. Silence the ones that have not started yet, so a restart or Stop does
@@ -372,6 +380,7 @@ export function createSampler({
     setSequence,
     clearPad,
     clearAll,
+    soundsChanged,
     copySteps,
     pasteSteps,
     undo,
