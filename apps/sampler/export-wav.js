@@ -1,0 +1,163 @@
+// Exporting a sequence as an audio file: the sequence is played into an offline audio context, as fast as the
+// computer can, with the same sounds, velocities, pad settings, retrigger cuts, master volume and clipper as the page
+// plays them, and the result is written as a 16-bit WAV. No DOM, and nothing at import time.
+//
+//   const audio = await renderSequence({ song, kit, stepsPerBar: 16 });   // { sampleRate, channels: [Float32Array, ...] }
+//   const bytes = encodeWav(audio.channels, audio.sampleRate);              // an ArrayBuffer: the .wav file
+//   exportName(song)                                                        // "pad16-seq-01-100bpm.wav"
+//
+// `song` is what the sampler saves (controller.getSong()): the sequence exported is the one showing (`current`), one
+// pass from the first step to the last, followed by a tail long enough for the longest sound used to ring out, so
+// the last hit is not cut off. It is not looped. The render does not depend on the power switch or on the audio
+// context of the page.
+
+import { createClipper } from "../../shared/audio.js";
+import { FULL_VELOCITY } from "../../shared/pattern.js";
+import { withVelocity } from "../../shared/sounds.js";
+import { stepSeconds } from "../../shared/tempo.js";
+import { pad2 } from "./format.js";
+import { pitchToRate } from "./pad-settings.js";
+import { trimWindow } from "./trim.js";
+import { createVoices } from "./voices.js";
+
+export const EXPORT_SAMPLE_RATE = 44100;
+export const VOLUME_SCALE = 100; // the slider's scale, as in the controller
+// The first step is not at time 0: a trimmed sample starts at least a few milliseconds into the context's time (see
+// sample-voice.js), so every step is moved on by this much and the lead is cut from the front of the result, which
+// keeps every hit where it belongs and the file starting on step 1.
+export const LEAD_SECONDS = 0.01;
+const BUILT_IN_TAIL_SECONDS = 1.5; // the longest of the built-in sounds is the crash, at about 1.25 s
+export const MAX_TAIL_SECONDS = 15; // a 10 s sample played an octave down is 20 s: long enough is enough
+
+// The steps that are on, as { step, row, velocity }, in the order they sound (and per step by pad).
+export function hitsOf(sequence) {
+  const hits = [];
+  for (const [rowKey, on] of Object.entries(sequence.pattern)) {
+    const row = Number(rowKey);
+    for (const step of on) {
+      hits.push({ step, row, velocity: sequence.velocities?.[rowKey]?.[step] ?? FULL_VELOCITY });
+    }
+  }
+  return hits.sort((a, b) => a.step - b.step || a.row - b.row);
+}
+
+// How long a hit on this pad is heard, for working out the tail: a sample for its trimmed length at its pitch, a
+// built-in sound for the longest of them.
+export function heardSeconds(sound, pitch = 0) {
+  if (typeof sound.setTrim !== "function") return BUILT_IN_TAIL_SECONDS;
+  return trimWindow(sound.trim, sound.duration).length / pitchToRate(pitch);
+}
+
+export function tailSeconds(hits, kit) {
+  const longest = Math.max(
+    0,
+    ...[...new Set(hits.map((hit) => hit.row))].map((row) => heardSeconds(kit.get(row), kit.settings(row).pitch)),
+  );
+  return Math.min(MAX_TAIL_SECONDS, longest);
+}
+
+export async function renderSequence({
+  song,
+  kit,
+  stepsPerBar,
+  sampleRate = EXPORT_SAMPLE_RATE,
+  createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
+}) {
+  const sequence = song.sequences[song.current];
+  const hits = hitsOf(sequence);
+  const stepLength = stepSeconds(song.bpm);
+  const playing = sequence.bars * stepsPerBar * stepLength;
+  const frames = Math.ceil((LEAD_SECONDS + playing + tailSeconds(hits, kit)) * sampleRate);
+  const ctx = createContext(frames, sampleRate);
+
+  const master = ctx.createGain();
+  master.gain.value = song.volume / VOLUME_SCALE;
+  const clipper = createClipper(ctx);
+  if (clipper) {
+    master.connect(clipper.input);
+    clipper.output.connect(ctx.destination);
+  } else {
+    master.connect(ctx.destination);
+  }
+
+  const voices = createVoices(kit.length, { cleanUp: false });
+  for (const { step, row, velocity } of hits) {
+    const time = LEAD_SECONDS + step * stepLength;
+    const { out } = voices.start(ctx, row, master, time);
+    kit.voice(row).play(ctx, withVelocity(ctx, out, velocity / FULL_VELOCITY), time);
+  }
+
+  const rendered = await ctx.startRendering();
+  const lead = Math.round(LEAD_SECONDS * sampleRate);
+  const channels = Array.from({ length: rendered.numberOfChannels }, (_, i) => rendered.getChannelData(i).slice(lead));
+  return { sampleRate: rendered.sampleRate, channels };
+}
+
+// A 16-bit PCM WAV file: the channels interleaved, each sample clamped to full scale and rounded.
+export function encodeWav(channels, sampleRate) {
+  const count = channels.length;
+  const frames = channels[0]?.length ?? 0;
+  const dataBytes = frames * count * 2;
+  const bytes = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(bytes);
+  const text = (offset, value) => [...value].forEach((char, i) => view.setUint8(offset + i, char.charCodeAt(0)));
+  text(0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  text(8, "WAVE");
+  text(12, "fmt ");
+  view.setUint32(16, 16, true); // the size of this part
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, count, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * count * 2, true); // bytes a second
+  view.setUint16(32, count * 2, true); // bytes a frame
+  view.setUint16(34, 16, true);
+  text(36, "data");
+  view.setUint32(40, dataBytes, true);
+  let offset = 44;
+  for (let frame = 0; frame < frames; frame++) {
+    for (let channel = 0; channel < count; channel++) {
+      const sample = Math.max(-1, Math.min(1, channels[channel][frame]));
+      view.setInt16(offset, Math.round(sample < 0 ? sample * 0x8000 : sample * 0x7fff), true);
+      offset += 2;
+    }
+  }
+  return bytes;
+}
+
+export const exportName = (song) => `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm.wav`;
+
+// Is there anything in the sequence showing to export?
+export const hasSteps = (song) => Object.values(song.sequences[song.current].pattern).some((on) => on.length > 0);
+
+// What the Export button does: checks there is something to export, renders it, and hands the file to `save`
+// (shared/download.js). Says how it went on the LCD through `onMessage`. Whether a file was saved.
+export async function exportSequence({
+  song,
+  kit,
+  stepsPerBar,
+  onMessage,
+  save,
+  render = renderSequence,
+  supported = typeof OfflineAudioContext === "function",
+}) {
+  if (!supported) {
+    onMessage("EXPORT NOT SUPPORTED");
+    return false;
+  }
+  if (!hasSteps(song)) {
+    onMessage("NOTHING TO EXPORT");
+    return false;
+  }
+  onMessage("EXPORTING...");
+  try {
+    const audio = await render({ song, kit, stepsPerBar });
+    const name = exportName(song);
+    save(new Blob([encodeWav(audio.channels, audio.sampleRate)], { type: "audio/wav" }), name);
+    onMessage(`EXPORTED ${name}`);
+    return true;
+  } catch {
+    onMessage("EXPORT FAILED");
+    return false;
+  }
+}

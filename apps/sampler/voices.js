@@ -2,7 +2,7 @@
 // instead of layering a second copy over the first (a long sample would play over itself). No DOM, and nothing is
 // built until a hit asks for it.
 //
-//   const voices = createVoices(16);
+//   const voices = createVoices(16);          // { cleanUp: false } for an offline render, which has no use for the timers
 //   const { out, chokes } = voices.start(ctx, pad, destination, time);
 //   //   `out` is a gain node to play the sound into; it is connected to `destination`. Whatever the pad was still
 //   //   playing from before `time` is faded out from `time`. `chokes` says which, for undo().
@@ -20,7 +20,7 @@ const CLEAN_UP_AFTER_S = 0.1; // after the cut, once it is far below hearing
 
 const cutTime = (voice) => (voice.cuts.length ? Math.min(...voice.cuts.map((cut) => cut.time)) : undefined);
 
-export function createVoices(pads) {
+export function createVoices(pads, { cleanUp = true } = {}) {
   const lists = Array.from({ length: pads }, () => []); // per pad, the voices that have not been cut off long ago
 
   // Makes the voice's gain and its clean-up match its cut requests: the earliest one is the cut.
@@ -30,6 +30,7 @@ export function createVoices(pads) {
     const at = cutTime(voice);
     if (at === undefined) return;
     voice.out.gain.setTargetAtTime(0, at, CHOKE_TIME_CONSTANT);
+    if (!cleanUp) return; // an offline render has no use for it: nothing is playing in the meantime
     const wait = Math.max(0, at - ctx.currentTime) + CLEAN_UP_AFTER_S;
     voice.timer = setTimeout(() => voice.out.disconnect(), wait * 1000);
   }

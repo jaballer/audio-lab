@@ -14,6 +14,7 @@ import { createSiteHeader } from "../../shared/site-header.js";
 import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
+import { exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { createLcd } from "./lcd.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
@@ -27,6 +28,7 @@ import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
 import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
 import { createBlobStore } from "../../shared/blob-store.js";
+import { saveBlob } from "../../shared/download.js";
 import { createStorageBudget } from "../../shared/storage-budget.js";
 import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "../../shared/step-keys.js";
@@ -316,6 +318,18 @@ const redoBtn = $("redo");
 undoBtn.addEventListener("click", sampler.undo);
 redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
+// Export WAV: the sequence showing, rendered offline and saved as a file. One at a time: a second press while it renders
+// would only do the same work again.
+let exporting = false;
+$("export").addEventListener("click", async () => {
+  if (exporting) return;
+  exporting = true;
+  try {
+    await exportSequence({ song: sampler.getSong(), kit, stepsPerBar: STEPS, onMessage: say, save: saveBlob });
+  } finally {
+    exporting = false;
+  }
+});
 volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------
