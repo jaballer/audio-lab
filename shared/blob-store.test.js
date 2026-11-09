@@ -59,6 +59,15 @@ const withStore = (idb) => {
 };
 
 describe("createBlobStore", () => {
+  it("creates its object store, by its own name, when the database is new", async () => {
+    const idb = fakeIndexedDB();
+    const created = [];
+    idb.db.createObjectStore = (name) => created.push(name);
+    const store = createBlobStore({ factory: idb.factory, storeName: "samples" });
+    await store.get("a");
+    expect(created).toEqual(["samples"]);
+  });
+
   it("keeps bytes and gives them back", async () => {
     const store = withStore(fakeIndexedDB());
     const bytes = new ArrayBuffer(4);

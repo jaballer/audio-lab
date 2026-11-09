@@ -74,9 +74,11 @@ export function createPattern(rows, steps, initial = {}, { onChange, velocities:
     for (const step of on) {
       if (Number.isInteger(step) && step >= 0 && start + step < end) grid[row][start + step] = true;
     }
-    for (const [step, value] of Object.entries(byStep)) {
-      if (grid[row][start + Number(step)] && start + Number(step) < end)
-        velocities[row][start + Number(step)] = clampVelocity(value);
+    for (const [key, value] of Object.entries(byStep)) {
+      const step = Number(key);
+      // Not a negative step: it would land on the stretch before the one being filled.
+      if (step >= 0 && start + step < end && grid[row][start + step])
+        velocities[row][start + step] = clampVelocity(value);
     }
   }
 

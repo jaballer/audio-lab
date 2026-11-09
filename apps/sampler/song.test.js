@@ -125,6 +125,11 @@ describe("parseSong", () => {
     expect(parse(raw).sequences[0].pattern).toEqual({ 0: [1] });
   });
 
+  it("drops a pad key that is not written the way a number is, even when it reads as one", () => {
+    const raw = withPattern({ 0: [1], "01": [2], "1e0": [3], " 2": [4], "+3": [5] });
+    expect(parse(raw).sequences[0].pattern).toEqual({ 0: [1] });
+  });
+
   it("drops steps that don't exist, and anything that is not a step", () => {
     const raw = withPattern({ 0: [0, 15, 16, -1, 2.5, "3", null, 7] });
     expect(parse(raw).sequences[0].pattern).toEqual({ 0: [0, 7, 15, 16] }); // 16 is bar 2 of 8
