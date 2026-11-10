@@ -223,6 +223,9 @@
       </main>
     </div>
 
+    <!-- Open: the machine header's Open button clicks this; project.js reads what it is given. -->
+    <input id="project-file" type="file" accept=".audiolab" hidden />
+
     <!-- Export: the machine header's button opens it. A native dialog, so the page behind it is out of reach while it is open;
        export-dialog.js draws the choices into the three groups and decides nothing. -->
     <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-dialog-label export-dialog-title">

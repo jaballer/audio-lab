@@ -32,6 +32,15 @@ import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } f
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
 import { createPadGrid, padForKeyEvent, padPressAction } from "./pads.js";
+import {
+  MAX_PROJECT_BYTES,
+  REASONS as PROJECT_REASONS,
+  collectSamples,
+  installProject,
+  parseProject,
+  projectBlob,
+  projectFileName,
+} from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { createSettingsSliders } from "./settings-sliders.js";
@@ -66,6 +75,12 @@ const header = createAppHeader($("header"), {
   onPower: () => togglePower(audio),
   actions: [
     { label: "Export", title: "Save the sequence as a WAV file", popup: "dialog", onPress: () => openExport() },
+    {
+      label: "Save",
+      title: "Save the whole beat and its samples as a project file you can open again",
+      onPress: () => saveProject(),
+    },
+    { label: "Open", title: "Open a project file, replacing the beat on the page", onPress: () => openProjectPicker() },
   ],
 });
 
@@ -227,6 +242,59 @@ const sampler = createSampler({
   },
 });
 
+// ---------- Project file ----------
+// The browser's own storage can be cleared (by the person, or under disk pressure), so the whole beat can also be
+// kept as a file (project.js): Save downloads it, Open replaces what is on the page with one. Open writes the project
+// where the page keeps its own and starts the page again, which reads it as it does on any visit, so nothing that
+// is live (a playing sequence, the sounds on the pads, the undo history) has to be taken apart and put back.
+async function saveProject() {
+  const { samples: kept } = await collectSamples({ map: loadJson(SAMPLES_KEY), store: blobs, padCount: PAD_COUNT });
+  // A pad that plays a sample which is not in the page's storage (it was loaded with storage blocked or full, or
+  // the browser cleared the bytes) cannot go in the file: say so rather than let a person think it did.
+  const included = new Set(kept.map(({ pad }) => pad));
+  const left = Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter(
+    (pad) => !kit.isDefault(pad) && !included.has(pad),
+  );
+  saveBlob(projectBlob({ song: sampler.getSong(), samples: kept }), projectFileName(new Date()));
+  say(left.length ? `PROJECT SAVED, ${left.length} SAMPLE${left.length === 1 ? "" : "S"} NOT KEPT` : "PROJECT SAVED");
+}
+
+const projectInput = $("project-file");
+const openProjectPicker = () => projectInput.click();
+async function openProject(file) {
+  if (file.size > MAX_PROJECT_BYTES) return say(PROJECT_REASONS.tooBig);
+  let bytes;
+  try {
+    bytes = await file.arrayBuffer();
+  } catch {
+    return say(PROJECT_REASONS.damaged);
+  }
+  const project = parseProject(bytes, {
+    rows: PAD_COUNT,
+    steps: STEPS,
+    maxBars: MAX_BARS,
+    sequenceCount: SEQUENCE_COUNT,
+  });
+  if (!project.ok) return say(project.reason);
+  // Nothing is undoable once the page starts again, so ask first.
+  if (!window.confirm("Open this project? The beat and samples on the page now will be replaced.")) return;
+  saver.cancel(); // a change still waiting would be saved over the project
+  const kept = await installProject(project, {
+    store: blobs,
+    writeMap: (map) => saveJson(SAMPLES_KEY, map),
+    writeSong: (song) => saveJson(SONG_KEY, song),
+    padCount: PAD_COUNT,
+  });
+  if (!kept) return say("PROJECT NOT OPENED: STORAGE FULL");
+  saver.cancel(); // (again: a change made while it was being written would be flushed as the page unloads)
+  location.reload();
+}
+projectInput.addEventListener("change", () => {
+  const [file] = projectInput.files;
+  projectInput.value = ""; // so the same file can be chosen again
+  if (file) openProject(file);
+});
+
 // ---------- Views ----------
 // A short message goes on the LCD, and, for the eye, in the pad editor too: the LCD is out of sight when the editor
 // is under the pads. (Both are declared below; this is only called once the page is running.)
@@ -264,11 +332,12 @@ const padGrid = createPadGrid($("pads"), {
 for (let index = 0; index < kit.length; index++) padGrid.setColor(index, kit.settings(index).color);
 
 // Samples on the pads: kept in this browser (IndexedDB for the files, localStorage for which pad has which).
+const blobs = createBlobStore();
 const samples = createSamples({
   kit,
   audio,
   restoreContext: () => (decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure()),
-  store: createBlobStore(),
+  store: blobs,
   budget: createStorageBudget(),
   readMap: () => loadJson(SAMPLES_KEY),
   writeMap: (map) => saveJson(SAMPLES_KEY, map),

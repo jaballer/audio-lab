@@ -38,7 +38,9 @@ export const SAMPLES_VERSION = 1;
 export const MAX_TOTAL_BYTES = 32 * 1024 * 1024; // across all the pads, so a full kit stays reasonable
 export const MEMORY_FULL = "SAMPLE MEMORY FULL";
 
-const keyFor = (pad) => `sample-${pad}`;
+// Where a pad's file is kept in the blob store.
+export const sampleKey = (pad) => `sample-${pad}`;
+const keyFor = sampleKey;
 
 // A pad's entry in the saved map; the trim is only there when the sample is trimmed.
 const entryFor = (name, bytes, trim) => (isFullTrim(trim) ? { name, bytes } : { name, bytes, trim });
