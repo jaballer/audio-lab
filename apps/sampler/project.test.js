@@ -334,6 +334,26 @@ describe("installProject", () => {
     expect(store.data.has(sampleKey(5))).toBe(false);
   });
 
+  it("reads a mapped pad again when the first read finds nothing, so a failed read is not taken for no sample", async () => {
+    const oldBytes = new ArrayBuffer(7);
+    const store = fakeStore({ failSet: sampleKey(5) });
+    store.data.set(sampleKey(0), oldBytes);
+    let reads = 0;
+    store.get.mockImplementation(async (key) =>
+      key === sampleKey(0) && reads++ === 0 ? null : (store.data.get(key) ?? null),
+    );
+    const oldMap = { version: SAMPLES_VERSION, pads: { 0: { name: "Old", bytes: 7 } } };
+    const ok = await installProject(project(), {
+      store,
+      readMap: () => oldMap,
+      writeMap: () => true,
+      writeSong: () => true,
+      padCount: 16,
+    });
+    expect(ok).toBe(false);
+    expect(store.data.get(sampleKey(0))).toBe(oldBytes); // rolled back to what the second read found
+  });
+
   it("puts the map back when the song cannot be written", async () => {
     const store = fakeStore();
     const oldMap = { version: SAMPLES_VERSION, pads: { 0: { name: "Old", bytes: 1 } } };

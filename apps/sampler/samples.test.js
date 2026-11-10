@@ -1214,6 +1214,30 @@ describe("freeze, for a project that is replacing what is kept", () => {
     expect(writes.at(-1).pads[0].trim).toEqual({ start: 0.1, end: 0.9 });
   });
 
+  it("idle() waits for a byte write that was already under way when it froze, and that load then leaves the store alone", async () => {
+    let finishWrite;
+    const store = fakeStore();
+    const write = store.set.getMockImplementation();
+    store.set.mockImplementation(async (key, bytes) => {
+      await new Promise((resolve) => (finishWrite = resolve));
+      return write(key, bytes);
+    });
+    const { samples, writes } = setup({ store });
+    const loading = samples.load(0, file("a.wav"));
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf("function"));
+    samples.freeze();
+    let idle = false;
+    const waiting = samples.idle().then(() => (idle = true));
+    await Promise.resolve();
+    expect(idle).toBe(false); // the write has not finished
+    finishWrite();
+    await waiting;
+    await loading;
+    // Once it has finished, nothing more of the old page reaches the store or the map: no cleanup delete, no map write.
+    expect(store.delete).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
   it("does not write a trim while frozen, and works again once thawed", async () => {
     const { samples, writes } = setup();
     await samples.load(0, file("a.wav"));

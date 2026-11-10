@@ -319,6 +319,7 @@ const openProject = (file) =>
     saver.cancel();
     samples.freeze();
     replacingSong = true;
+    await samples.idle(); // a sample write that was already under way has finished before the old state is read
     // The writes below are several, and a page that goes away between them leaves the old map over other bytes. They take
     // a moment, so the browser is asked to confirm leaving rather than made atomic: a crash is not covered.
     const keepOpen = (event) => event.preventDefault();

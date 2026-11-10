@@ -183,7 +183,14 @@ export function padsNotSaved({ playing, samples, missing }) {
 export async function installProject(project, { store, readMap, writeMap, writeSong, padCount }) {
   const oldMap = readMap();
   const old = new Map(); // pad -> the bytes it had (null for none)
-  for (let pad = 0; pad < padCount; pad++) old.set(pad, await store.get(sampleKey(pad)));
+  const mapped = parseSamples(oldMap, padCount);
+  for (let pad = 0; pad < padCount; pad++) {
+    let bytes = await store.get(sampleKey(pad));
+    // The store gives null both for no record and for a read that failed. A pad the map lists is read a second time, so
+    // a read that failed once is not taken for no sample (which would leave nothing to put back).
+    if (!bytes && pad in mapped) bytes = await store.get(sampleKey(pad));
+    old.set(pad, bytes);
+  }
   const used = new Set(project.samples.map(({ pad }) => pad));
   const written = [];
 

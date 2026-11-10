@@ -14,6 +14,7 @@
 //   samples.setTrim(3, { start, end }, "end");   // the part of pad 3's sample that plays; kept with the sample
 //   await samples.restore();       // at the start of a visit: put back what was kept
 //   samples.freeze();              // a project is being opened: write nothing more (freeze(false) undoes it)
+//   await samples.idle();          // ...and wait for a write that was already under way
 //
 // The file's original bytes are what is kept, not the decoded audio: they are smaller. They are decoded again
 // at the start of each visit, with an offline context, because the real audio context only exists after the
@@ -94,6 +95,7 @@ export function createSamples({
   const installed = new Array(kit.length).fill(0);
   let restored = false;
   const trimsWhileFrozen = new Set(); // pads whose trim was moved while frozen: written when it thaws, if it does
+  const inFlight = new Set(); // byte writes and deletes under way: a project being opened waits for them (idle)
   let frozen = false; // a project is replacing what is kept: this page writes nothing more of its own (see freeze)
   let persistAsked = false; // the browser is asked once per visit to keep the samples
 
@@ -136,6 +138,14 @@ export function createSamples({
   // The settings only a sample has (pad-settings.js: pitch and the envelope) go with the sample.
   function resetSampleSettings(pad) {
     for (const name of SAMPLE_SETTING_NAMES) kit.setSetting(pad, name, DEFAULT_SETTINGS[name]);
+  }
+
+  // Runs a store call and counts it as under way until it is done. The store never rejects (blob-store.js).
+  function tracked(promise) {
+    inFlight.add(promise);
+    const done = () => inFlight.delete(promise);
+    promise.then(done, done);
+    return promise;
   }
 
   function fail(pad, reason) {
@@ -189,7 +199,8 @@ export function createSamples({
       touched.add(pad);
       held[pad] = bytes.byteLength;
 
-      const bytesKept = await store.set(keyFor(pad), bytes);
+      const bytesKept = await tracked(store.set(keyFor(pad), bytes));
+      if (frozen) return true; // a project is opening: its writes decide what is kept, so no map entry or clean-up from this page
       if (installed[pad] !== request) return true; // it played, but something newer has taken the pad since
       // Made from the sound as it is now: it may have been trimmed while it was being saved.
       pads[pad] = entryFor(name, bytes.byteLength, sound.trim);
@@ -220,7 +231,7 @@ export function createSamples({
     persist(pad);
     resetSampleSettings(pad); // the built-in sound has none of them, so none is left behind to reappear with the next sample
     kit.reset(pad); // (after the settings, for the same reason as in load: the steps built again see them already reset)
-    await store.delete(keyFor(pad));
+    await tracked(store.delete(keyFor(pad)));
     onMessage(`PAD ${pad2(pad + 1)} DEFAULT SOUND`);
   }
 
@@ -283,6 +294,12 @@ export function createSamples({
   // For the moment a project is opened: it writes the bytes and the map itself and the page starts again, and a load
   // that finishes after that, or a trim, must not write the old page's pad over it. `freeze(false)` if opening fails.
   // (A byte write already under way when this is called is not taken back.)
+  // Resolves when no byte write or delete this page started is still under way. Call it after `freeze()` and before reading
+  // what is kept, so that a write already past the freeze check cannot land in the middle of a project being opened.
+  async function idle() {
+    while (inFlight.size) await Promise.allSettled([...inFlight]);
+  }
+
   function freeze(on = true) {
     frozen = on;
     if (on) return;
@@ -291,5 +308,5 @@ export function createSamples({
     trimsWhileFrozen.clear();
   }
 
-  return { load, reset, restore, isKept, setTrim, freeze };
+  return { load, reset, restore, isKept, setTrim, freeze, idle };
 }
