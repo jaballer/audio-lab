@@ -44,7 +44,7 @@ import {
   projectBlob,
   projectFileName,
 } from "./project.js";
-import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
+import { SAMPLES_KEY, createSamples, isSamplesMap, parseSamples } from "./samples.js";
 import { STARTERS, starterSong } from "./starters.js";
 import { createTabSync } from "./tab-sync.js";
 import { createUpdateNotice } from "../../shared/update-notice.js";
@@ -395,15 +395,34 @@ projectInput.addEventListener("change", () => {
 const starterSelect = $("starter-select");
 const starterStart = $("starter-start");
 for (const { id, name, bpm } of STARTERS) starterSelect.append(new Option(`${name} \u00b7 ${bpm} BPM`, id));
-// Pads playing a sample that is not kept (it loaded, but could not be saved): the page starting again would lose it.
-const unsavedSamplePads = () =>
-  Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter((pad) => !kit.isDefault(pad) && !samples.isKept(pad));
+// Pads playing a sample that the saved map does not hold as it sounds here: one that loaded but could not be kept, or whose
+// trim could not be written. The page starting again would put the saved one back (as Save, below, says of a project).
+function unsavedSamplePads() {
+  const saved = Object.entries(parseSamples(loadJson(SAMPLES_KEY), PAD_COUNT)).map(([pad, info]) => ({
+    pad: Number(pad),
+    name: info.name,
+    bytes: { byteLength: info.bytes },
+    trim: info.trim,
+  }));
+  const playing = [];
+  for (let pad = 0; pad < PAD_COUNT; pad++) {
+    const sound = kit.get(pad);
+    if (!kit.isDefault(pad)) playing.push({ pad, name: sound.name, bytes: sound.info?.bytes, trim: sound.trim });
+  }
+  return padsNotSaved({ playing, samples: saved, missing: [] });
+}
 const unsavedWarning = (pads) =>
-  `${pads.length} sample${pads.length === 1 ? "" : "s"} on the pads could not be saved and will be lost.`;
+  `${pads.length} sample${pads.length === 1 ? "" : "s"} on the pads ${pads.length === 1 ? "is" : "are"} not saved as ${pads.length === 1 ? "it sounds" : "they sound"} now, and will change after the reload.`;
 // Long enough for the events a dialog held back (the other tab's `storage`) to be delivered: a timer, as a resolved promise
 // would carry on before them. Not a guarantee, but those events are already queued when the dialog closes.
 const EVENTS_SETTLE_MS = 50;
 const eventsSettle = () => new Promise((resolve) => setTimeout(resolve, EVENTS_SETTLE_MS));
+// The events a dialog held back can start a load (a file chosen or dropped meanwhile), so once they have been let in, what is
+// under way is waited for again: the last thing before the song is written is a wait that found nothing left.
+const quiet = async () => {
+  await eventsSettle();
+  await samples.idle();
+};
 const loadStarter = (starter) =>
   withProjectLock(async () => {
     if (tabSync.isStale) return sayStale("NOT LOADED");
@@ -435,13 +454,13 @@ const loadStarter = (starter) =>
     // Another tab may have saved while a confirm was up: the page's events (its `storage`) are held while a dialog is open
     // and arrive after it, so the check has to wait a moment for them before it can see. The stale guard the saver has
     // applies here too, or this write would put the starter over its newer beat.
-    await eventsSettle();
+    await quiet();
     if (staleNow()) return false;
     // A load that finished while waiting may have played but not been kept: that is only known now.
     const lost = unsavedSamplePads().filter((pad) => !unsavedBefore.includes(pad));
     if (lost.length) {
       if (!window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
-      await eventsSettle(); // (and again after this dialog)
+      await quiet(); // (and again after this dialog)
       if (staleNow()) return false;
     }
     // Read now, not before the wait: a load that finished meanwhile put its own sample on its pad and reset the pad's settings.
