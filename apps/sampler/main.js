@@ -331,6 +331,9 @@ const projectInput = $("project-file");
 const openProjectPicker = () => projectInput.click();
 const openProject = (file) =>
   withProjectLock(async () => {
+    // What this tab shows is behind what is kept (see tabSync): opening a project would replace the other tab's newer beat,
+    // which the confirm below would not be describing. Reload first.
+    if (tabSync.isStale) return sayStale("NOT OPENED");
     if (file.size > MAX_PROJECT_BYTES) return say(PROJECT_REASONS.tooBig);
     let bytes;
     try {
@@ -371,7 +374,7 @@ const openProject = (file) =>
     });
     if (!kept) {
       window.removeEventListener("beforeunload", keepOpen);
-      samples.freeze(tabSync.isStale); // a stale tab stays frozen
+      samples.freeze(false);
       replacingSong = false;
       saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
       say("PROJECT NOT OPENED: STORAGE FULL");
