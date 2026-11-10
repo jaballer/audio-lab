@@ -1,5 +1,13 @@
 // The tempo knob's arithmetic: how far each kind of input moves the tempo. No DOM, so it can be tested.
-// Every move lands on a whole BPM, except a Shift+drag, which is the way to a decimal.
+// Every move lands on a whole BPM, except a Shift+drag, which is the way to a decimal. The volume knob moves a whole
+// step at a time with the same functions (volume-knob.js): a "BPM" there is one step of the 0 to 100 scale.
+
+export const DIAL_SWEEP = 270; // degrees from the minimum to the maximum of a knob, centred on straight up
+
+// Where a knob's pointer turns to for `value`: 0 is straight up, negative is to the left. Both knobs draw from this.
+export function dialAngle(value, min, max) {
+  return ((value - min) / (max - min)) * DIAL_SWEEP - DIAL_SWEEP / 2;
+}
 
 export const DRAG_BPM_PER_PX = 0.5;
 export const FINE_BPM_PER_PX = 0.1; // Shift while dragging: one tenth of a BPM per pixel, for an exact tempo

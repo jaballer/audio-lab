@@ -45,12 +45,87 @@
       <main class="device">
         <header id="header" class="top"></header>
 
+        <!-- The controls that act on the whole machine, in one row above the display and the pads: volume, tempo and its
+           tap, the sequence, and Edit Pad, at the end of the row, on the side of the pads. -->
+        <div class="quick-bar" role="group" aria-label="Volume, tempo, sequence and pad">
+          <div class="quick-group">
+            <span class="small-label">Volume</span>
+            <div
+              id="vol"
+              class="knob knob-small"
+              role="slider"
+              tabindex="0"
+              aria-label="Master volume"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="80"
+            ></div>
+          </div>
+
+          <div class="quick-group">
+            <span class="small-label">Tempo</span>
+            <div class="quick-row">
+              <div
+                id="knob"
+                class="knob knob-small"
+                role="slider"
+                tabindex="0"
+                aria-label="Tempo in beats per minute"
+                aria-valuemin="40"
+                aria-valuemax="240"
+                aria-valuenow="100"
+              ></div>
+              <button id="tap" class="btn quick-tap" type="button" aria-label="Tap tempo">Tap</button>
+            </div>
+          </div>
+
+          <div class="quick-group" role="group" aria-label="Sequence">
+            <span class="small-label">Seq</span>
+            <div class="btn-group">
+              <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">&lt;</button>
+              <span id="seq-number" class="btn-group-readout small-label" aria-live="polite"></span>
+              <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
+            </div>
+          </div>
+
+          <div class="quick-group quick-end">
+            <button id="edit-pad" class="btn btn-small btn-led" type="button">Edit Pad</button>
+          </div>
+        </div>
+
+        <!-- The display and its controls come first, so the pads sit on the right, next to the pad editor, which opens on
+           their side. In one column (a narrow window) they are still first: the document order is the reading order. -->
         <div class="body">
+          <section class="console" aria-label="Display and controls">
+            <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
+            <div class="lcd" role="group" aria-label="Display">
+              <div class="lcd-screen">
+                <!-- How far through the whole sequence the playhead is; the bar the step keys show is marked under it. -->
+                <div class="lcd-progress" id="lcd-progress" aria-hidden="true"></div>
+                <div class="lcd-line" id="lcd-1"></div>
+                <div class="lcd-line" id="lcd-2"></div>
+                <div class="lcd-line" id="lcd-3"></div>
+                <div class="ruler" id="ruler" aria-hidden="true"></div>
+                <div class="lcd-line lcd-msg" id="lcd-msg" role="status"></div>
+              </div>
+            </div>
+
+            <div class="console-lower">
+              <div class="seq-bar" role="group" aria-label="Sequence length">
+                <span class="small-label">Bars</span>
+                <div id="bars" class="seq-lengths btn-group" role="group" aria-label="Sequence length in bars"></div>
+              </div>
+
+              <div class="buttons">
+                <button id="stop" class="btn btn-stop" type="button">Stop</button>
+                <button id="play" class="btn btn-led btn-play" type="button" aria-pressed="false">Play</button>
+                <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
+              </div>
+            </div>
+          </section>
+
           <section class="pad-panel" aria-label="Pads">
             <div id="pads" class="sampler-pads"></div>
-            <div class="pad-tools">
-              <button id="edit-pad" class="btn btn-small btn-led" type="button">Edit Pad</button>
-            </div>
             <!-- The pad editor. It sits beside the machine when there is room, and under the pads when there is not
                (main.js moves it); closed, it is not there. -->
             <aside id="pad-drawer" class="pad-drawer" aria-labelledby="pad-drawer-title" hidden>
@@ -102,58 +177,6 @@
                 <div id="pad-colors"></div>
               </section>
             </aside>
-          </section>
-
-          <section class="console" aria-label="Display and controls">
-            <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
-            <div class="lcd" role="group" aria-label="Display">
-              <div class="lcd-screen">
-                <!-- How far through the whole sequence the playhead is; the bar the step keys show is marked under it. -->
-                <div class="lcd-progress" id="lcd-progress" aria-hidden="true"></div>
-                <div class="lcd-line" id="lcd-1"></div>
-                <div class="lcd-line" id="lcd-2"></div>
-                <div class="lcd-line" id="lcd-3"></div>
-                <div class="ruler" id="ruler" aria-hidden="true"></div>
-                <div class="lcd-line lcd-msg" id="lcd-msg" role="status"></div>
-              </div>
-            </div>
-
-            <div class="seq-bar" role="group" aria-label="Sequence and its length">
-              <span class="small-label">Seq</span>
-              <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">&lt;</button>
-              <span id="seq-number" class="small-label" aria-live="polite"></span>
-              <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
-              <span class="small-label">Bars</span>
-              <div id="bars" class="seq-lengths" role="group" aria-label="Sequence length in bars"></div>
-            </div>
-
-            <div class="controls">
-              <div class="ctl">
-                <div
-                  id="knob"
-                  class="knob"
-                  role="slider"
-                  tabindex="0"
-                  aria-label="Tempo in beats per minute"
-                  aria-valuemin="40"
-                  aria-valuemax="240"
-                  aria-valuenow="100"
-                ></div>
-                <span class="small-label">Tempo</span>
-              </div>
-
-              <div class="ctl ctl-fader">
-                <input id="vol" class="fader" type="range" min="0" max="100" value="80" aria-label="Master volume" />
-                <span class="small-label">Volume</span>
-              </div>
-
-              <div class="buttons">
-                <button id="play" class="btn btn-led btn-play" type="button" aria-pressed="false">Play</button>
-                <button id="stop" class="btn btn-stop" type="button">Stop</button>
-                <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
-                <button id="tap" class="btn" type="button">Tap Tempo</button>
-              </div>
-            </div>
           </section>
         </div>
 

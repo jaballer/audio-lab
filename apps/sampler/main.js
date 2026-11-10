@@ -41,6 +41,7 @@ import { SOUNDS } from "../../shared/sounds.js";
 import { createStepKeys } from "../../shared/step-keys.js";
 import { createTempoKnob } from "./tempo-knob.js";
 import { createVelocityBars } from "./velocity-bars.js";
+import { createVolumeKnob } from "./volume-knob.js";
 import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
@@ -66,7 +67,6 @@ const header = createAppHeader($("header"), {
 // The Export dialog, built below with the rest of export; the song can change (a MIDI knob) before it exists.
 let exportDialog = null;
 
-const volInput = $("vol");
 const playBtn = $("play");
 const recBtn = $("rec");
 
@@ -269,11 +269,11 @@ const stepsRange = $("steps-range");
 stepsPrev.addEventListener("click", () => sampler.setPage(sampler.getState().page - 1));
 stepsNext.addEventListener("click", () => sampler.setPage(sampler.getState().page + 1));
 
-// One button per length, the chosen one lit, like the length keys on a sampler.
+// One button per length, in a joined group, the chosen one pressed in (a dark face: see .seq-lengths in sampler.css).
 const barButtons = BAR_CHOICES.map((bars) => {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "btn btn-small btn-led";
+  button.className = "btn btn-small";
   button.textContent = String(bars);
   button.setAttribute("aria-label", bars === 1 ? "1 bar" : `${bars} bars`);
   button.addEventListener("click", () => sampler.setBars(bars));
@@ -286,6 +286,13 @@ const knob = createTempoKnob($("knob"), {
   max: BPM_MAX,
   getBpm: () => sampler.getState().bpm,
   onChange: (bpm) => sampler.setBpm(bpm),
+});
+
+const volumeKnob = createVolumeKnob($("vol"), {
+  min: 0,
+  max: 100,
+  getValue: () => sampler.getState().volume,
+  onChange: (volume) => sampler.setVolume(volume),
 });
 
 // Every view is drawn from the sampler's state, so it cannot disagree with it.
@@ -336,7 +343,7 @@ function render() {
     [stepsPrev, state.page === 0, [stepsNext, barButtons[0].button]],
     [stepsNext, state.page === state.bars - 1, [stepsPrev, barButtons[0].button]],
   ]);
-  if (volInput.value !== String(state.volume)) volInput.value = String(state.volume);
+  volumeKnob.render(state.volume);
   setAttr(playBtn, "aria-pressed", String(state.playing));
   setAttr(recBtn, "aria-pressed", String(state.recording));
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
@@ -466,7 +473,6 @@ function openExport() {
   refreshExportDialog();
   exportDialog.open();
 }
-volInput.addEventListener("input", () => sampler.setVolume(Number(volInput.value)));
 
 // ---------- Keyboard ----------
 window.addEventListener("keydown", (e) => {
@@ -510,20 +516,6 @@ const midi = createMidi({
 });
 
 wireMidiButton(site.midiButton, midi);
-
-// ---------- Reading order ----------
-// Side by side the pads come first (left), in one column the display does (top). Keyboard and
-// screen-reader order follow the document, not CSS `order`, so the markup is moved to match.
-// 800px is the same breakpoint as in sampler.css.
-const narrow = window.matchMedia("(max-width: 800px)");
-function placeConsole() {
-  const body = $("pads").closest(".body");
-  const consolePanel = body.querySelector(".console");
-  if (narrow.matches) body.prepend(consolePanel);
-  else body.append(consolePanel);
-}
-placeConsole();
-narrow.addEventListener("change", placeConsole);
 
 // ---------- The step editor can be hidden ----------
 // Its heading stays: the keys, the velocity bars, the bar arrows and the edit tools go. Remembered, and shown by default.
