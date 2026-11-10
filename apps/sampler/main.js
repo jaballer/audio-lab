@@ -192,7 +192,7 @@ const saver = createSongSaver({
     if (replacingSong) return false;
     if (tabSync.isStale) {
       // The strip may have been put away with Later, and an edit made since would be lost when the tab closes: say so each time.
-      say("NOT SAVED: CHANGED IN ANOTHER TAB");
+      sayStale("NOT SAVED");
       return false;
     }
     return saveJson(SONG_KEY, data);
@@ -202,6 +202,10 @@ window.addEventListener("pagehide", () => saver.flush());
 
 // Another tab of the sampler saved (or opened a project): what this tab holds is behind it, and saving it would write the old
 // beat over the new one. It stops saving and says so; Reload reads what the other tab kept (tab-sync.js).
+const sayStale = (what) => {
+  say(`${what}: CHANGED IN ANOTHER TAB`);
+  return false;
+};
 // A page restored from the back/forward cache missed the `storage` events of the time it was away, so it cannot know
 // whether another tab saved: it starts again and reads what is kept.
 window.addEventListener("pageshow", (event) => {
@@ -213,6 +217,9 @@ const tabSync = createTabSync({
   keys: [SONG_KEY, SAMPLES_KEY],
   onStale() {
     saver.cancel();
+    // A sample loaded here would store its bytes but not the pad settings that go with it (they are in the song), so the next
+    // visit would pair them with the other tab's older ones: samples are left as they are until this tab reloads.
+    samples.freeze();
     tabNotice.show(
       () => location.reload(),
       "Changed in another tab. This tab will not save the beat until you reload.",
@@ -364,7 +371,7 @@ const openProject = (file) =>
     });
     if (!kept) {
       window.removeEventListener("beforeunload", keepOpen);
-      samples.freeze(false);
+      samples.freeze(tabSync.isStale); // a stale tab stays frozen
       replacingSong = false;
       saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
       say("PROJECT NOT OPENED: STORAGE FULL");
@@ -482,9 +489,11 @@ const sampleLoader = createSampleLoader({
   onFile: (index, file) => {
     // The pad it was meant for is the one to show and to hit next, chosen now: loads can finish in any order.
     sampler.selectPad(index);
+    if (tabSync.isStale) return sayStale("NOT LOADED");
     return samples.load(index, file);
   },
   onReset: async (index) => {
+    if (tabSync.isStale) return void sayStale("NOT CHANGED");
     await samples.reset(index);
     render(); // Default Sound goes dim, even when the pad was already playing its built-in sound
   },
