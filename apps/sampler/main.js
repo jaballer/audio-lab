@@ -12,6 +12,7 @@ import { setAttr, setDisabledMany, setText } from "../../shared/dom-updates.js";
 import { createLightShow } from "../../shared/light-show-view.js";
 import { bandLevels, beatPhase, rmsLevel, smoothLevel } from "../../shared/light-show.js";
 import { togglePower } from "../../shared/power.js";
+import { createPowerSequence } from "../../shared/power-sequence.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { enableOffline } from "../../shared/offline.js";
 import { createSiteHeader } from "../../shared/site-header.js";
@@ -171,12 +172,14 @@ window.addEventListener("pagehide", () => saver.flush());
 // ---------- Audio and sequencer ----------
 // The notice comes first: the engine reports its state as soon as it is told to
 // listen, and that first report is what shows the notice on a fresh load.
+let powerSequence = null; // built once the LCD and pads exist (below); the engine can report before that
 const audioNotice = createAudioNotice($("audio-notice"));
 const audio = createAudioEngine({
   volume: (song ? song.volume : DEFAULT_VOLUME) / 100,
   onStateChange: (state) => {
     audioNotice.update(state);
     header.setPowered(state === "running");
+    powerSequence?.set(state === "running"); // the screen and pads boot or shut down with the switch's lamp
     // Where kept samples cannot be decoded before the first click (see `samples` below), do it then.
     if (state === "running" && !decodesEarly) samples.restore();
     // The export is made at the rate the context runs at, which is known once it exists.
@@ -240,6 +243,7 @@ const lcd = createLcd({
   message: $("lcd-msg"),
   ruler: $("ruler"),
   progress: $("lcd-progress"),
+  screen: $("lcd-screen"),
   steps: STEPS,
 });
 
@@ -262,6 +266,16 @@ const padGrid = createPadGrid($("pads"), {
 });
 // The colours saved with the song, on the pads from the start.
 for (let index = 0; index < kit.length; index++) padGrid.setColor(index, kit.settings(index).color);
+
+// The page starts powered off (dark display, unlit pads, as the HTML has them); the first interaction unlocks audio
+// and the machine boots.
+powerSequence = createPowerSequence({
+  onPhase(phase) {
+    lcd.setPower(phase);
+    padGrid.setPower(phase);
+  },
+});
+powerSequence.set(audio.running);
 
 // Samples on the pads: kept in this browser (IndexedDB for the files, localStorage for which pad has which).
 const samples = createSamples({

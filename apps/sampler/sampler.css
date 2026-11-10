@@ -1058,3 +1058,127 @@
     background: Highlight;
   }
 }
+
+/* ---------- Power: the display and pads boot and shut down ---------- */
+/* power-sequence.js sets data-power ("off", "booting", "on", "shutdown") on the pad grid and on the LCD screen. Off, the
+   glass is dark and the pads unlit; booting, the display comes up under its boot lines while light sweeps across the
+   pads from pad 1; shutdown runs the same backwards. Durations match BOOT_MS and SHUTDOWN_MS in power-sequence.js. */
+.lcd-screen {
+  transition:
+    background-color 0.35s,
+    box-shadow 0.35s,
+    color 0.35s;
+}
+.lcd-screen[data-power="off"] {
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 3px), #4a5440;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6);
+  color: transparent;
+}
+.lcd-screen[data-power="booting"] .lcd-line {
+  animation: lcd-boot-line 0.5s steps(6, end) both;
+}
+.lcd-screen[data-power="booting"] #lcd-2 {
+  animation-delay: 0.25s;
+}
+.lcd-screen[data-power="booting"] #lcd-3 {
+  animation-delay: 0.5s;
+}
+.lcd-screen[data-power="booting"] {
+  animation: lcd-warm-up 0.9s ease-out both;
+}
+.lcd-screen[data-power="shutdown"] {
+  animation: lcd-fade-out 0.6s ease-in forwards;
+}
+.lcd-screen[data-power="shutdown"] .lcd-progress,
+.lcd-screen[data-power="off"] .lcd-progress,
+.lcd-screen[data-power="shutdown"] .ruler,
+.lcd-screen[data-power="off"] .ruler {
+  opacity: 0;
+}
+/* The boot lines type themselves across. */
+@keyframes lcd-boot-line {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+/* The glass warms from dark to its normal green, flickering once as it catches. */
+@keyframes lcd-warm-up {
+  0% {
+    filter: brightness(0.5);
+  }
+  35% {
+    filter: brightness(1.18);
+  }
+  50% {
+    filter: brightness(0.85);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+@keyframes lcd-fade-out {
+  0% {
+    filter: brightness(1);
+  }
+  25% {
+    filter: brightness(1.15);
+  }
+  100% {
+    filter: brightness(0.7);
+  }
+}
+
+.sampler-pads[data-power="off"] .sampler-pad {
+  filter: brightness(0.5) saturate(0.4);
+}
+.sampler-pads[data-power="off"] .sampler-pad .num,
+.sampler-pads[data-power="off"] .sampler-pad .key,
+.sampler-pads[data-power="off"] .sampler-pad .name {
+  opacity: 0.35;
+}
+.sampler-pads[data-power="booting"] .sampler-pad {
+  animation: pad-boot 0.6s ease-out calc(var(--sweep, 0) * 55ms) backwards;
+}
+/* Shutdown: the sweep runs from the far corner back to pad 1, then each pad goes dark and stays so. */
+.sampler-pads[data-power="shutdown"] .sampler-pad {
+  animation: pad-shutdown 0.35s ease-in calc((var(--sweep-last, 6) - var(--sweep, 0)) * 35ms) forwards;
+}
+@keyframes pad-boot {
+  0% {
+    filter: brightness(0.5) saturate(0.4);
+  }
+  30% {
+    filter: brightness(1.9) saturate(1.2);
+    background: radial-gradient(circle at 50% 45%, #ff6a57 0%, #c91f12 55%, #6c0d06 100%);
+  }
+  100% {
+    filter: none;
+  }
+}
+@keyframes pad-shutdown {
+  0% {
+    filter: none;
+  }
+  30% {
+    filter: brightness(1.9) saturate(1.2);
+    background: radial-gradient(circle at 50% 45%, #ff6a57 0%, #c91f12 55%, #6c0d06 100%);
+  }
+  100% {
+    filter: brightness(0.5) saturate(0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lcd-screen,
+  .lcd-screen .lcd-line,
+  .sampler-pads .sampler-pad {
+    animation: none !important;
+    transition: none;
+  }
+  .sampler-pads[data-power="shutdown"] .sampler-pad {
+    filter: brightness(0.5) saturate(0.4);
+  }
+}
