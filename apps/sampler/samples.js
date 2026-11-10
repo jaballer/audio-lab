@@ -14,7 +14,7 @@
 //   samples.setTrim(3, { start, end }, "end");   // the part of pad 3's sample that plays; kept with the sample
 //   await samples.restore();       // at the start of a visit: put back what was kept
 //   samples.freeze();              // a project is being opened: write nothing more (freeze(false) undoes it)
-//   await samples.idle();          // ...and wait for a write that was already under way
+//   await samples.idle();          // ...and wait for a load or a write that was already under way
 //
 // The file's original bytes are what is kept, not the decoded audio: they are smaller. They are decoded again
 // at the start of each visit, with an offline context, because the real audio context only exists after the
@@ -96,6 +96,7 @@ export function createSamples({
   let restored = false;
   const trimsWhileFrozen = new Set(); // pads whose trim was moved while frozen: written when it thaws, if it does
   const inFlight = new Set(); // byte writes and deletes under way: a project being opened waits for them (idle)
+  const loading = new Set(); // loads under way, from reading the file to the map entry: idle waits for these too
   let frozen = false; // a project is replacing what is kept: this page writes nothing more of its own (see freeze)
   let persistAsked = false; // the browser is asked once per visit to keep the samples
 
@@ -153,7 +154,17 @@ export function createSamples({
     return false;
   }
 
-  async function load(pad, file) {
+  // A load is counted from the moment it is asked for until it has done everything it will (read, decode, save, map entry),
+  // so a page about to start again (a project, a starter) can wait for it rather than cut it off half done.
+  function load(pad, file) {
+    const promise = loadFile(pad, file);
+    loading.add(promise);
+    const done = () => loading.delete(promise);
+    promise.then(done, done);
+    return promise;
+  }
+
+  async function loadFile(pad, file) {
     if (frozen) return false;
     const request = ++requested[pad];
     if (file.size > MAX_SAMPLE_BYTES) return fail(pad, REASONS.bytes);
@@ -294,10 +305,11 @@ export function createSamples({
   // For the moment a project is opened: it writes the bytes and the map itself and the page starts again, and a load
   // that finishes after that, or a trim, must not write the old page's pad over it. `freeze(false)` if opening fails.
   // (A byte write already under way when this is called is not taken back.)
-  // Resolves when no byte write or delete this page started is still under way. Call it after `freeze()` and before reading
-  // what is kept, so that a write already past the freeze check cannot land in the middle of a project being opened.
+  // Resolves when no load, and no byte write or delete this page started, is still under way. Call it after `freeze()` and
+  // before reading what is kept, so that a write already past the freeze check cannot land in the middle of a project being
+  // opened; and, with no freeze, before a page starts again that leaves the samples as they are, so a load is not lost.
   async function idle() {
-    while (inFlight.size) await Promise.allSettled([...inFlight]);
+    while (inFlight.size || loading.size) await Promise.allSettled([...inFlight, ...loading]);
   }
 
   function freeze(on = true) {

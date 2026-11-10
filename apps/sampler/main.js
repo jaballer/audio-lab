@@ -419,11 +419,15 @@ const loadStarter = (starter) =>
       return false;
     saver.cancel(); // a change that is waiting would otherwise be written over the starter
     replacingSong = true;
-    // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still being saved
-    // should finish and keep its map entry, or it would be gone after the reload. Wait for the byte writes under way, and a
-    // turn more for the loads that were waiting on them to write their entries.
+    // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still under way should
+    // finish and keep its map entry, or it would be gone after the reload. Wait for the loads and writes under way.
     await samples.idle();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Another tab may have saved while those were finished (its event arrives between turns): the stale guard the saver has
+    // applies here too, or this write would put the starter over its newer beat.
+    if (tabSync.isStale) {
+      replacingSong = false;
+      return sayStale("NOT LOADED");
+    }
     if (!saveJson(SONG_KEY, song)) {
       replacingSong = false;
       saver.schedule();
@@ -795,7 +799,8 @@ window.addEventListener("keydown", (e) => {
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
 
   if (e.code === "Space") {
-    if (document.activeElement?.tagName === "BUTTON") return; // let the button click
+    // Let a button click, and a select open, on Space: it is theirs while they have focus.
+    if (["BUTTON", "SELECT"].includes(document.activeElement?.tagName)) return;
     e.preventDefault();
     if (sampler.getState().playing) sampler.stop();
     else sampler.start();

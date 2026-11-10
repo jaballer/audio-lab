@@ -1254,6 +1254,29 @@ describe("freeze, for a project that is replacing what is kept", () => {
     await loading;
   });
 
+  it("idle() waits for a load that is still being decoded, and that load then keeps its sample and its map entry", async () => {
+    let finishDecode;
+    const decode = vi.fn(() => new Promise((resolve) => (finishDecode = resolve)));
+    const { kit, samples, writes } = setup({ decode });
+    const loading = samples.load(0, file("a.wav"));
+    await vi.waitFor(() => expect(finishDecode).toBeTypeOf("function"));
+    let idle = false;
+    const waiting = samples.idle().then(() => (idle = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(idle).toBe(false); // nothing has been written yet, but the load is under way
+    finishDecode(decoded());
+    await waiting;
+    expect(await loading).toBe(true);
+    expect(kit.isDefault(0)).toBe(false);
+    expect(writes.at(-1).pads[0]).toMatchObject({ name: expect.any(String) }); // its entry is in the map when idle() is done
+  });
+
+  it("idle() is at once when no load or write is under way", async () => {
+    const { samples } = setup();
+    await samples.load(0, file("a.wav"));
+    await expect(samples.idle()).resolves.toBeUndefined();
+  });
+
   it("does not write a trim while frozen, and works again once thawed", async () => {
     const { samples, writes } = setup();
     await samples.load(0, file("a.wav"));
