@@ -141,28 +141,51 @@ export function projectFileName(date) {
   return `pad16-beat-${day[0]}-${day[1]}-${day[2]}${PROJECT_EXTENSION}`;
 }
 
+// The pads that would not come back as they sound in this tab: one that plays a sample the file does not hold, or holds
+// differently (another tab put a different one in storage, a trim could not be kept), and the pads whose bytes were
+// `missing` from storage. `playing` is [{ pad, name, bytes (a size), trim }] for the pads on a sample, `samples` is what
+// `collectSamples` gave. Sorted, one of each.
+export function padsNotSaved({ playing, samples, missing }) {
+  const lost = new Set(missing);
+  const sameTrim = (a, b) => (a?.start ?? 0) === (b?.start ?? 0) && (a?.end ?? 1) === (b?.end ?? 1);
+  for (const one of playing) {
+    const saved = samples.find((sample) => sample.pad === one.pad);
+    const same =
+      saved && saved.name === one.name && saved.bytes.byteLength === one.bytes && sameTrim(saved.trim, one.trim);
+    if (!same) lost.add(one.pad);
+  }
+  return [...lost].sort((a, b) => a - b);
+}
+
 // Puts a parsed project where the page keeps its own: each pad's bytes in `store`, the map of which pad has which with
 // `writeMap` (`readMap` gives what is there now), and the song with `writeSong` (the page then starts again, and reads
-// them as it does on any visit). The bytes go first and nothing is deleted until the end, and what a write replaced is
-// read before it is, so that a store that fails part way (the quota is the likely one) or a map or song that cannot be
-// written puts back what was there and gives false: the page is as it was, not half a project. Pads the project has no
-// sample for are emptied last, once it is certain; a delete that fails only leaves bytes the map does not mention.
+// them as it does on any visit). A browser's quota can be too small for the old samples and the new ones together, so
+// the pads the project does not use are emptied first; every pad's old bytes are read before anything is changed, so
+// that a failed write, map or song puts all of it back and gives false: the page is as it was, not half a project. Putting
+// back frees what this call wrote before it returns the old bytes, so that they have the room they had.
 export async function installProject(project, { store, readMap, writeMap, writeSong, padCount }) {
   const oldMap = readMap();
-  const previous = new Map(); // pad -> the bytes it had (null for none), for the pads this call wrote
-  const pads = {};
+  const old = new Map(); // pad -> the bytes it had (null for none)
+  for (let pad = 0; pad < padCount; pad++) old.set(pad, await store.get(sampleKey(pad)));
+  const used = new Set(project.samples.map(({ pad }) => pad));
+  const written = [];
 
   const rollBack = async () => {
-    for (const [pad, bytes] of previous)
-      await (bytes ? store.set(sampleKey(pad), bytes) : store.delete(sampleKey(pad)));
+    for (const pad of written) await store.delete(sampleKey(pad));
+    for (const [pad, bytes] of old) {
+      if (bytes) await store.set(sampleKey(pad), bytes);
+      else if (used.has(pad)) await store.delete(sampleKey(pad));
+    }
   };
 
+  for (const [pad, bytes] of old) if (bytes && !used.has(pad)) await store.delete(sampleKey(pad));
+  const pads = {};
   for (const sample of project.samples) {
-    previous.set(sample.pad, await store.get(sampleKey(sample.pad)));
     if (!(await store.set(sampleKey(sample.pad), sample.bytes))) {
       await rollBack();
       return false;
     }
+    written.push(sample.pad);
     pads[sample.pad] = { name: sample.name, bytes: sample.bytes.byteLength };
     if (sample.trim && !isFullTrim(sample.trim)) pads[sample.pad].trim = sample.trim;
   }
@@ -175,6 +198,5 @@ export async function installProject(project, { store, readMap, writeMap, writeS
     await rollBack();
     return false;
   }
-  for (let pad = 0; pad < padCount; pad++) if (!(pad in pads)) await store.delete(sampleKey(pad));
   return true;
 }

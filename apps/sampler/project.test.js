@@ -8,6 +8,7 @@ import {
   buildProject,
   collectSamples,
   installProject,
+  padsNotSaved,
   parseProject,
   projectFileName,
   projectBlob,
@@ -276,7 +277,7 @@ describe("installProject", () => {
     expect(writeSong).not.toHaveBeenCalled();
   });
 
-  it("puts every pad back as it was when the bytes cannot all be kept, and does not delete first", async () => {
+  it("puts every pad back as it was when the bytes cannot all be kept", async () => {
     const store = fakeStore({ failSet: sampleKey(5) });
     const before = new Map(store.data);
     const writeMap = vi.fn(() => true);
@@ -284,6 +285,52 @@ describe("installProject", () => {
     await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 });
     expect([...store.data.keys()].sort()).toEqual([...before.keys()].sort());
     for (const [key, bytes] of before) expect(store.data.get(key)).toBe(bytes);
+  });
+
+  // A store with room for `capacity` bytes in all, as a browser's quota is.
+  function limitedStore(capacity, initial) {
+    const data = new Map(Object.entries(initial));
+    const used = () => [...data.values()].reduce((sum, bytes) => sum + bytes.byteLength, 0);
+    return {
+      data,
+      get: async (key) => data.get(key) ?? null,
+      set: async (key, bytes) => {
+        if (used() - (data.get(key)?.byteLength ?? 0) + bytes.byteLength > capacity) return false;
+        data.set(key, bytes);
+        return true;
+      },
+      delete: async (key) => data.delete(key) || true,
+    };
+  }
+
+  it("makes room by emptying the pads the project does not use before it writes, so two near-full kits can swap", async () => {
+    // The project is 40 + 10 bytes, the page holds 45 on pad 3 and nothing else fits beside it in 60.
+    const store = limitedStore(60, { [sampleKey(3)]: new ArrayBuffer(45) });
+    const ok = await installProject(project(), {
+      store,
+      readMap: () => null,
+      writeMap: () => true,
+      writeSong: () => true,
+      padCount: 16,
+    });
+    expect(ok).toBe(true);
+    expect([...store.data.keys()].sort()).toEqual([sampleKey(0), sampleKey(5)].sort());
+  });
+
+  it("gives the old bytes back in full when a swap fails near the quota: new blobs are freed before old ones return", async () => {
+    // Room for 60. Old: pad 0 holds 55. The project needs 40 on pad 0 and 10 on pad 5, then its song fails to write.
+    const old = new ArrayBuffer(55);
+    const store = limitedStore(60, { [sampleKey(0)]: old });
+    const ok = await installProject(project(), {
+      store,
+      readMap: () => null,
+      writeMap: () => true,
+      writeSong: () => false,
+      padCount: 16,
+    });
+    expect(ok).toBe(false);
+    expect(store.data.get(sampleKey(0))).toBe(old);
+    expect(store.data.has(sampleKey(5))).toBe(false);
   });
 
   it("puts the map back when the song cannot be written", async () => {
@@ -364,5 +411,40 @@ describe("projectFileName", () => {
   it("is the local date, padded, with the project extension", () => {
     expect(projectFileName(new Date(2026, 0, 5))).toBe("pad16-beat-2026-01-05.audiolab");
     expect(projectFileName(new Date(2026, 10, 19))).toBe("pad16-beat-2026-11-19.audiolab");
+  });
+});
+
+describe("padsNotSaved", () => {
+  const sample = (pad, name, bytes, trim) => ({ pad, name, bytes: new ArrayBuffer(bytes), trim });
+  const playing = (pad, name, bytes, trim = { start: 0, end: 1 }) => ({ pad, name, bytes, trim });
+
+  it("is empty when each pad that plays a sample is in the file as it sounds here", () => {
+    expect(
+      padsNotSaved({
+        playing: [playing(0, "Kick", 4, { start: 0.1, end: 0.9 }), playing(2, "Hat", 3)],
+        samples: [sample(0, "Kick", 4, { start: 0.1, end: 0.9 }), sample(2, "Hat", 3, undefined)],
+        missing: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("names a pad that plays a sample the file does not have, or has differently (another tab, a trim not kept)", () => {
+    expect(
+      padsNotSaved({
+        playing: [
+          playing(0, "Kick", 4),
+          playing(1, "Snare", 5),
+          playing(2, "Hat", 3),
+          playing(3, "Rim", 2, { start: 0.2, end: 0.8 }),
+        ],
+        samples: [sample(0, "Other", 4), sample(2, "Hat", 9), sample(3, "Rim", 2, undefined)],
+        missing: [],
+      }),
+    ).toEqual([0, 1, 2, 3]);
+  });
+
+  it("includes a pad the map has but whose bytes are gone, even when the pad plays its built-in sound", () => {
+    expect(padsNotSaved({ playing: [], samples: [], missing: [4] })).toEqual([4]);
+    expect(padsNotSaved({ playing: [playing(4, "A", 1)], samples: [], missing: [4] })).toEqual([4]);
   });
 });

@@ -36,6 +36,7 @@ import {
   MAX_PROJECT_BYTES,
   REASONS as PROJECT_REASONS,
   collectSamples,
+  padsNotSaved,
   installProject,
   parseProject,
   projectBlob,
@@ -177,9 +178,12 @@ backUpUnusable(storedSong, song, SONG_BACKUP_KEY, saveJson);
 const storedSamples = loadJson(SAMPLES_KEY);
 backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, saveJson);
 
+// True while a project is being written over what is kept: the page being replaced saves no song of its own then, so that
+// an edit made meanwhile cannot land after the project's song (see openProject).
+let replacingSong = false;
 const saver = createSongSaver({
   read: () => sampler.getSong(),
-  save: (data) => saveJson(SONG_KEY, data),
+  save: (data) => !replacingSong && saveJson(SONG_KEY, data),
 });
 window.addEventListener("pagehide", () => saver.flush());
 
@@ -262,13 +266,20 @@ async function withProjectLock(work) {
 
 const saveProject = () =>
   withProjectLock(async () => {
-    const { samples: kept } = await collectSamples({ map: loadJson(SAMPLES_KEY), store: blobs, padCount: PAD_COUNT });
-    // A pad that plays a sample which is not in the page's storage (it was loaded with storage blocked or full, or
-    // the browser cleared the bytes) cannot go in the file: say so rather than let a person think it did.
-    const included = new Set(kept.map(({ pad }) => pad));
-    const left = Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter(
-      (pad) => !kit.isDefault(pad) && !included.has(pad),
-    );
+    const { samples: kept, missing } = await collectSamples({
+      map: loadJson(SAMPLES_KEY),
+      store: blobs,
+      padCount: PAD_COUNT,
+    });
+    // What the file holds is what the page's storage holds, which is not always what this tab plays (the bytes were
+    // not kept, another tab put a different sample on the pad, a trim could not be written): say so rather than let
+    // a person think the project sounds as it does here.
+    const playing = [];
+    for (let pad = 0; pad < PAD_COUNT; pad++) {
+      const sound = kit.get(pad);
+      if (!kit.isDefault(pad)) playing.push({ pad, name: sound.name, bytes: sound.info?.bytes, trim: sound.trim });
+    }
+    const left = padsNotSaved({ playing, samples: kept, missing });
     saveBlob(projectBlob({ song: sampler.getSong(), samples: kept }), projectFileName(new Date()));
     say(left.length ? `PROJECT SAVED, ${left.length} SAMPLE${left.length === 1 ? "" : "S"} NOT KEPT` : "PROJECT SAVED");
     return false;
@@ -297,6 +308,7 @@ const openProject = (file) =>
     // The page being replaced writes nothing more of its own: not a waiting song change, nor a sample still loading.
     saver.cancel();
     samples.freeze();
+    replacingSong = true;
     const kept = await installProject(project, {
       store: blobs,
       readMap: () => loadJson(SAMPLES_KEY),
@@ -306,6 +318,8 @@ const openProject = (file) =>
     });
     if (!kept) {
       samples.freeze(false);
+      replacingSong = false;
+      saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
       say("PROJECT NOT OPENED: STORAGE FULL");
       return false;
     }
