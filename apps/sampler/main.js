@@ -399,9 +399,12 @@ const loadStarter = (starter) =>
   withProjectLock(async () => {
     if (tabSync.isStale) return sayStale("NOT LOADED");
     const current = sampler.getSong();
+    // A pad with a sample kept for it counts as one even where the sample is not playing yet (still being restored, or one
+    // this browser could not decode this visit): it comes back on the next visit, with the settings it was given.
     const keep = {};
     for (let pad = 0; pad < PAD_COUNT; pad++)
-      if (!kit.isDefault(pad) && current.padSettings[pad]) keep[pad] = current.padSettings[pad];
+      if ((!kit.isDefault(pad) || samples.isKept(pad)) && current.padSettings[pad])
+        keep[pad] = current.padSettings[pad];
     const song = starterSong(starter, {
       rows: PAD_COUNT,
       steps: STEPS,
@@ -415,11 +418,13 @@ const loadStarter = (starter) =>
     if (!window.confirm(`Start from ${starter.name}? The beat and pad settings on the page now will be replaced.`))
       return false;
     saver.cancel(); // a change that is waiting would otherwise be written over the starter
-    samples.freeze();
     replacingSong = true;
-    await samples.idle(); // a sample write that was already under way has finished before the song is written
+    // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still being saved
+    // should finish and keep its map entry, or it would be gone after the reload. Wait for the byte writes under way, and a
+    // turn more for the loads that were waiting on them to write their entries.
+    await samples.idle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     if (!saveJson(SONG_KEY, song)) {
-      samples.freeze(false);
       replacingSong = false;
       saver.schedule();
       say("STARTER NOT LOADED: CANNOT SAVE");
