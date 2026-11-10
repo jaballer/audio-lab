@@ -61,6 +61,8 @@ export function createPadGrid(element, { sounds, onTrigger }) {
   const labelOf = (idx) => padLabel({ index: idx, name: names[idx], key: keys[idx], color: colors[idx] });
   const flash = createFlasher("hit", FLASH_MS);
   const light = createFlasher("lit", FLASH_MS);
+  // Powered off, and while shutting down (the audio is already muted then), a hit makes no sound, so it must not light.
+  const isSilent = () => powerPhase === "off" || powerPhase === "shutdown";
   let powerPhase = "off"; // the page's HTML starts the grid off. A pad hit then makes no sound, so it must not light either
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
   element.style.setProperty("--sweep-last", String(sweepStep(0, PAD_COLUMNS - 1, PAD_ROWS)));
@@ -110,11 +112,13 @@ export function createPadGrid(element, { sounds, onTrigger }) {
     },
 
     flash(idx) {
-      if (powerPhase !== "off") flash(padEls[idx]);
+      if (isSilent()) return;
+      flash(padEls[idx]);
     },
 
     light(idx) {
-      if (powerPhase !== "off") light(padEls[idx]);
+      if (isSilent()) return;
+      light(padEls[idx]);
     },
 
     setName(idx, name, custom = false) {
