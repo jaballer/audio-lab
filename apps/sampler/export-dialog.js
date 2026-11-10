@@ -23,13 +23,11 @@
 // background, and a dialog that closed would leave nothing to say how far it had got, or a way to stop it.
 
 import { setAttr, setDisabled, setHidden, setText } from "../../shared/dom-updates.js";
+import { dialogState, isEarlyPress } from "./export-dialog-state.js";
 import { CHANNEL_CHOICES, LOOP_CHOICES, renderingLabel } from "./export-options.js";
 
 const CHANNEL_NAMES = { stereo: "Stereo", mono: "Mono" };
 const PERCENT = 100;
-// A press this soon after a render started or stopped was meant for the button that was there before it (a double
-// click on Export WAV, or on Cancel export), and not for the one in its place now.
-const SETTLE_MS = 500;
 
 export function createExportDialog(root, { onChange, onExport, onCancel, opener = null }) {
   const part = (name) => root.querySelector(`[data-export="${name}"]`);
@@ -97,24 +95,27 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     else root.removeAttribute("open");
   }
 
-  // What can be pressed and what is shown follow from `busy`, `cancelling` and `blocked`.
+  // What can be pressed and what is shown follow from `busy`, `cancelling` and `blocked` (dialogState decides, and is tested);
+  // this writes it, and only what changed.
   function draw() {
-    root.classList.toggle("is-busy", busy);
-    setAttr(root, "aria-busy", String(busy));
-    for (const { button } of [...loopButtons, ...channelButtons]) setDisabled(button, busy, cancelButton);
-    setDisabled(closeButton, busy, cancelButton);
-    setHidden(goButton, busy, cancelButton); // the Cancel export button takes its place, and the focus
-    setDisabled(goButton, blocked !== "", cancelButton);
-    setHidden(bar, !busy);
-    setHidden(progress, !busy);
-    setHidden(hint, busy);
+    const state = dialogState({ busy, cancelling, blocked, hasNote: note.textContent !== "" });
+    root.classList.toggle("is-busy", state.busy);
+    setAttr(root, "aria-busy", String(state.busy));
+    for (const { button } of [...loopButtons, ...channelButtons])
+      setDisabled(button, state.optionsDisabled, cancelButton);
+    setDisabled(closeButton, state.closeDisabled, cancelButton);
+    setHidden(goButton, state.goHidden, cancelButton); // the Cancel export button takes its place, and the focus
+    setDisabled(goButton, state.goDisabled, cancelButton);
+    setHidden(bar, state.barHidden);
+    setHidden(progress, state.progressHidden);
+    setHidden(hint, state.hintHidden);
+    setHidden(note, state.noteHidden);
+    setText(cancelButton, state.cancelLabel);
     // What is wrong (the reason Export WAV is off) and what to know before pressing it (the note) are read out with the
     // dialog's name when it opens, not left to be found by browsing.
-    const described = [blocked && hint.id, note.textContent && !busy && note.id].filter(Boolean).join(" ");
+    const described = state.describedBy.map((name) => (name === "hint" ? hint : note).id).join(" ");
     if (described) setAttr(root, "aria-describedby", described);
     else root.removeAttribute("aria-describedby");
-    setHidden(note, busy || !note.textContent);
-    setText(cancelButton, cancelling ? "Cancelling…" : busy ? "Cancel export" : "Cancel");
   }
 
   function setProgress(fraction) {
@@ -134,12 +135,12 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
 
   closeButton.addEventListener("click", close);
   cancelButton.addEventListener("click", (event) => {
-    if (event.timeStamp - changedAt < SETTLE_MS) return;
+    if (isEarlyPress(event.timeStamp, changedAt)) return;
     if (busy) onCancel();
     else close();
   });
   goButton.addEventListener("click", (event) => {
-    if (event.timeStamp - changedAt < SETTLE_MS) return;
+    if (isEarlyPress(event.timeStamp, changedAt)) return;
     onExport();
   });
   // Escape, while it renders, stops the render and leaves the dialog where it is. The key's own default (a close

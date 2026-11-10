@@ -24,9 +24,11 @@ Numbers link to the pull request.
   for the selected pad ([#101](https://github.com/jaballer/audio-lab/pull/101),
   [#102](https://github.com/jaballer/audio-lab/pull/102)), and the waveform of a loaded sample with a Start and an
   End to trim it ([#104](https://github.com/jaballer/audio-lab/pull/104)).
-- Sampler: Export WAV, beside Tap Tempo, saves the sequence showing as an audio file of exactly its length, so it
-  loops. It is rendered as the page plays it: the sounds and samples, each step's velocity, the pads' settings and the
-  master volume ([#111](https://github.com/jaballer/audio-lab/pull/111)).
+- Sampler: Export, in the machine's header beside Power, saves the sequence showing as an audio file of exactly its
+  length, so it loops. It is rendered as the page plays it: the sounds and samples, each step's velocity, the pads'
+  settings and the master volume ([#111](https://github.com/jaballer/audio-lab/pull/111)). It opens a window to choose
+  1, 2, 4 or 8 loops of the sequence in one file, and stereo or mono, with the file's length and size shown before it is
+  made ([#136](https://github.com/jaballer/audio-lab/pull/136)).
 - Sampler: Stop pressed again, while the sequence is already stopped, cuts off all sound, such as a crash's tail or a
   long sample ([#109](https://github.com/jaballer/audio-lab/pull/109)).
 - Sampler: choke groups. A Choke slider in the pad editor puts a pad in a group from 1 to 8; pads in the same group
@@ -44,8 +46,13 @@ Numbers link to the pull request.
 - Sampler: Shift with a click on a pad, or with the pad's computer key, selects the pad and opens the pad editor
   without playing it, so a pad can be set up in the middle of a take. Opened by key, focus moves to the editor
   ([#127](https://github.com/jaballer/audio-lab/pull/127), [#130](https://github.com/jaballer/audio-lab/pull/130)).
-- Sampler: Export WAV shows its progress on the button and can be cancelled by pressing it again
-  ([#129](https://github.com/jaballer/audio-lab/pull/129)).
+- Sampler: an export shows its progress and can be cancelled, with the Cancel export button or Escape
+  ([#129](https://github.com/jaballer/audio-lab/pull/129), [#136](https://github.com/jaballer/audio-lab/pull/136)).
+- Sampler: the Export window says, before the file is made, which bars have no steps (a file is as long as all its bars) and
+  when it needs a lot of memory (from about 200 MB; a phone may not have it), and it says why Export is off for a
+  sequence with no steps or a browser that cannot render a file
+  ([#136](https://github.com/jaballer/audio-lab/pull/136), [#137](https://github.com/jaballer/audio-lab/pull/137),
+  [#140](https://github.com/jaballer/audio-lab/pull/140)).
 - Sampler: the step editor's heading names the selected pad
   ([#132](https://github.com/jaballer/audio-lab/pull/132)).
 - Every page works offline and can be installed as an app. A newer version of the site waits until you press Reload
@@ -86,9 +93,18 @@ Numbers link to the pull request.
 - Sampler: the tempo knob moves in whole BPM when dragged, scrolled or stepped with the arrow keys. Shift changes the
   size of a move: Shift + drag moves a tenth of a BPM per pixel, and Shift + scroll or arrow steps by 10
   ([#127](https://github.com/jaballer/audio-lab/pull/127)).
+- Sampler: a long or dense export renders far faster (a dense 8-bar song at 40 BPM took 273 s and takes about 7), and a
+  cancelled export no longer keeps growing the page's memory ([#139](https://github.com/jaballer/audio-lab/pull/139)).
 
 ### Fixed
 
+- Sampler: pressing a button no longer makes the page jump: Rec, Export and Edit Pad used to shift the buttons and panels
+  around them by a pixel or two ([#135](https://github.com/jaballer/audio-lab/pull/135)).
+- Sampler: in forced-colours (high contrast) modes the Export window is readable and a lit button can be told from an
+  unlit one ([#137](https://github.com/jaballer/audio-lab/pull/137)).
+- Sampler: the Export button can no longer be left stuck when something goes wrong as an export starts, and a failure to
+  bring back the saved samples says so (`SAMPLES FAILED TO LOAD`) instead of "export failed"
+  ([#137](https://github.com/jaballer/audio-lab/pull/137)).
 - Sampler: the LCD is no longer a live region, so screen readers stop announcing every step
   ([#96](https://github.com/jaballer/audio-lab/pull/96)).
 - Loud steps no longer crackle: a soft clipper after the master volume keeps sounds that add up past full scale from
@@ -110,6 +126,8 @@ Numbers link to the pull request.
   ([#100](https://github.com/jaballer/audio-lab/pull/100)).
 - Tests for behaviour that was not pinned, a fix for a negative velocity key when filling steps, and the docs brought up
   to date ([#107](https://github.com/jaballer/audio-lab/pull/107)).
+- The export's render split into a plan and pieces, and the kit can be snapshotted so a render never hears a pad edited under
+  it ([#138](https://github.com/jaballer/audio-lab/pull/138)).
 
 ## 2026-11-08
 

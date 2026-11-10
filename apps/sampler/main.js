@@ -16,24 +16,9 @@ import { wireMidiButton } from "../../shared/midi-access.js";
 import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportDialog } from "./export-dialog.js";
-import {
-  exportBlockedReason,
-  exportFormat,
-  exportInfo,
-  exportNote as buildExportNote,
-  exportReadout,
-  exportTitle,
-  normalizeExportOptions,
-} from "./export-options.js";
-import {
-  EXPORT_SAMPLE_RATE,
-  canRenderOffline,
-  createExportAction,
-  emptyBars,
-  exportSequence,
-  hasSteps,
-  planRender,
-} from "./export-wav.js";
+import { exportDialogModel } from "./export-dialog-state.js";
+import { normalizeExportOptions } from "./export-options.js";
+import { EXPORT_SAMPLE_RATE, canRenderOffline, createExportAction, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -409,29 +394,17 @@ function sayExport(text) {
   if (!exportDialog.isOpen) say(text);
 }
 
-function exportNote(current) {
-  const plan = planRender({
-    song: current,
-    kit,
-    stepsPerBar: STEPS,
-    sampleRate: EXPORT_SAMPLE_RATE,
-    loops: exportOptions.loops,
-  });
-  return buildExportNote(plan, emptyBars(current, STEPS));
-}
-
 function refreshExportDialog() {
-  const current = sampler.getSong();
-  const nothing = !hasSteps(current, STEPS);
-  exportDialog.refresh({
-    title: exportTitle(current),
-    readout: exportReadout(exportInfo(current, exportOptions, STEPS, EXPORT_SAMPLE_RATE)),
-    format: exportFormat(EXPORT_SAMPLE_RATE),
-    // A sequence with nothing in it is said already; these are for one that can be made: bars with no steps, and a file
-    // that takes a lot of memory (worked out from the render it would be, warm-up and all).
-    note: nothing ? "" : exportNote(current),
-    blocked: exportBlockedReason({ supported: canRenderOffline(), hasSteps: !nothing }),
-  });
+  exportDialog.refresh(
+    exportDialogModel({
+      song: sampler.getSong(),
+      kit,
+      options: exportOptions,
+      stepsPerBar: STEPS,
+      sampleRate: EXPORT_SAMPLE_RATE,
+      supported: canRenderOffline(),
+    }),
+  );
 }
 
 exportDialog = createExportDialog($("export-dialog"), {
