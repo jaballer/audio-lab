@@ -128,6 +128,9 @@ Numbers link to the pull request.
   to date ([#107](https://github.com/jaballer/audio-lab/pull/107)).
 - The export's render split into a plan and pieces, and the kit can be snapshotted so a render never hears a pad edited under
   it ([#138](https://github.com/jaballer/audio-lab/pull/138)).
+- What the Export dialog shows and allows is pure and tested, apart from the DOM it is drawn into, and
+  `docs/export-design.md` records how the export works, what was measured and what stems and a whole-song bounce will need
+  ([#141](https://github.com/jaballer/audio-lab/pull/141)).
 
 ## 2026-11-08
 
