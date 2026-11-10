@@ -10,6 +10,7 @@ function fakeContext(sampleRate = 8000) {
   const sources = []; // every oscillator and noise source, with its start and stop mocks
   const edges = []; // [from, to] for every connect()
   const ramps = []; // the target of every exponential ramp, on any parameter
+  const frequencies = []; // the frequency parameter of every oscillator and filter
 
   const param = () => ({
     value: 0,
@@ -41,9 +42,17 @@ function fakeContext(sampleRate = 8000) {
       getChannelData: () => new Float32Array(length),
     })),
     createBufferSource: () => source({ buffer: null }),
-    createOscillator: () => source({ type: "sine", frequency: param() }),
+    createOscillator: () => {
+      const frequency = param();
+      frequencies.push(frequency);
+      return source({ type: "sine", frequency });
+    },
     createGain: () => node({ gain: param() }),
-    createBiquadFilter: () => node({ type: "lowpass", frequency: param(), Q: param() }),
+    createBiquadFilter: () => {
+      const frequency = param();
+      frequencies.push(frequency);
+      return node({ type: "lowpass", frequency, Q: param() });
+    },
   };
   // Whether a sound made at `from` can get to the output, through however many
   // gains and filters.
@@ -59,7 +68,7 @@ function fakeContext(sampleRate = 8000) {
     }
     return false;
   };
-  return { ctx, out, sources, ramps, reachesOut };
+  return { ctx, out, sources, ramps, frequencies, reachesOut };
 }
 
 const WHEN = 2.5; // seconds on the audio clock
@@ -128,6 +137,30 @@ describe("SOUNDS", () => {
       expect(ramps.length).toBeGreaterThan(0);
       for (const target of ramps) expect(target).toBeGreaterThan(0);
     });
+  });
+
+  // An oscillator that starts part way through a render block has the first part of that block made from what its
+  // frequency holds before the first event, which is the default (440 Hz), not the start of the sweep. What that does to
+  // the waveform depends on where in the block the sound starts, so the same sound sounded different from one pass of a
+  // loop to the next (an exported loop's end did not join its start). A frequency that is swept holds its start value.
+  describe.each(SOUNDS.map((s) => [s.id, s]))("%s's sweeps", (_id, sound) => {
+    it("hold their start value until the sweep begins", () => {
+      const { ctx, out, frequencies } = fakeContext();
+      sound.play(ctx, out, WHEN);
+      const swept = frequencies.filter((f) => f.exponentialRampToValueAtTime.mock.calls.length > 0);
+      for (const f of swept) expect(f.value).toBe(f.setValueAtTime.mock.calls[0][0]);
+    });
+  });
+
+  it("sweeps at least one frequency in the sounds that glide (so the check above is looking at something)", () => {
+    const glides = SOUNDS.filter(({ id }) =>
+      ["kick", "snare", "tomlo", "tomhi", "conga", "zap", "blip", "bass"].includes(id),
+    );
+    for (const sound of glides) {
+      const { ctx, out, frequencies } = fakeContext();
+      sound.play(ctx, out, WHEN);
+      expect(frequencies.some((f) => f.exponentialRampToValueAtTime.mock.calls.length > 0)).toBe(true);
+    }
   });
 
   it("builds its noise once per sample rate, not on every hit", () => {

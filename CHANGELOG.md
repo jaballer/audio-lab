@@ -95,6 +95,9 @@ Numbers link to the pull request.
   ([#127](https://github.com/jaballer/audio-lab/pull/127)).
 - Sampler: a long or dense export renders far faster (a dense 8-bar song at 40 BPM took 273 s and takes about 7), and a
   cancelled export no longer keeps growing the page's memory ([#139](https://github.com/jaballer/audio-lab/pull/139)).
+- Sampler: an export is made at the sample rate the page's audio runs at (44.1 or 48 kHz on most machines), and the
+  Export window says which, so a loaded sample is no longer resampled a second time on its way into the file, which
+  took 1.2 dB off 10 kHz and 4 dB off 19 kHz ([#142](https://github.com/jaballer/audio-lab/pull/142)).
 
 ### Fixed
 
@@ -105,6 +108,9 @@ Numbers link to the pull request.
 - Sampler: the Export button can no longer be left stuck when something goes wrong as an export starts, and a failure to
   bring back the saved samples says so (`SAMPLES FAILED TO LOAD`) instead of "export failed"
   ([#137](https://github.com/jaballer/audio-lab/pull/137)).
+- Sampler: an exported loop no longer clicks where its end meets its start when a kick, snare, tom, conga, zap or blip
+  falls on the last steps (the click was about -30 to -23 dBFS and is now below -50), and those sounds start the same way
+  on every hit on the page too ([#142](https://github.com/jaballer/audio-lab/pull/142)).
 - Sampler: the LCD is no longer a live region, so screen readers stop announcing every step
   ([#96](https://github.com/jaballer/audio-lab/pull/96)).
 - Loud steps no longer crackle: a soft clipper after the master volume keeps sounds that add up past full scale from

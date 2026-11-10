@@ -28,7 +28,20 @@ import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions } from "./
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
 
+// The rate an export is made at when the page has no audio running to take it from.
 export const EXPORT_SAMPLE_RATE = 44100;
+// The rates an export follows the page to: a loaded sample is a buffer at its own rate, and the browser resamples it into
+// a context at another one with a quick, rough resampler (from 48 down to 44.1 kHz, measured 1.2 dB down at 10 kHz and 4.2 dB at 20 kHz, and aliasing),
+// so a file at the rate the page plays at has what the page plays. A higher rate than 96 kHz only makes the file and the
+// memory it takes larger; a lower one than 22.05 kHz is not an audio rate anyone means.
+export const MIN_EXPORT_SAMPLE_RATE = 22050;
+export const MAX_EXPORT_SAMPLE_RATE = 96000;
+
+// The rate to export at, given the one the page's audio context runs at (undefined before it exists, or not a number).
+export function exportSampleRate(contextRate) {
+  const rate = typeof contextRate === "number" ? Math.round(contextRate) : NaN;
+  return rate >= MIN_EXPORT_SAMPLE_RATE && rate <= MAX_EXPORT_SAMPLE_RATE ? rate : EXPORT_SAMPLE_RATE;
+}
 // The first step is not at time 0: a trimmed sample starts at least a few milliseconds into the context's time (see
 // sample-voice.js), so every step is moved on by this much, which keeps every hit where it belongs.
 export const LEAD_SECONDS = 0.01;
@@ -339,7 +352,7 @@ export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.curren
 // What the Export button does: checks there is something to export, renders it, and hands the file to `save`
 // (shared/download.js). Says how it went on the LCD through `onMessage`. `onProgress(0..1)` is how far the render
 // has got, aborting `signal` cancels it (nothing is saved), and `options` ({ loops, channels }, see export-options.js)
-// say what the file is. Whether a file was saved.
+// say what the file is. `sampleRate` is the rate it is made at (`exportSampleRate`). Whether a file was saved.
 export async function exportSequence({
   song,
   kit,
@@ -347,6 +360,7 @@ export async function exportSequence({
   onMessage,
   save,
   options = DEFAULT_EXPORT_OPTIONS,
+  sampleRate = EXPORT_SAMPLE_RATE,
   onProgress,
   signal,
   render = renderSequence,
@@ -363,7 +377,7 @@ export async function exportSequence({
   const { loops, channels } = normalizeExportOptions(options);
   onMessage("EXPORTING...");
   try {
-    const audio = await render({ song, kit, stepsPerBar, loops, channels, onProgress, signal });
+    const audio = await render({ song, kit, stepsPerBar, sampleRate, loops, channels, onProgress, signal });
     const name = exportName(song, { loops, channels });
     const wav = encodeWav(audio.channels, audio.sampleRate);
     // Encoding is one long task (seconds, for a long file), in which a press on Cancel cannot be handled; it waits its

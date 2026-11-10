@@ -3,13 +3,12 @@
 // The pieces they are built from (noise, envelopes, filters) are in dsp.js.
 // Shared because more than one page plays the kit: the sampler and the MPC Sample companion.
 
-import { envelope, filtered, noise } from "./dsp.js";
+import { envelope, filtered, noise, sweep } from "./dsp.js";
 
 function kick(ctx, out, t) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.frequency.setValueAtTime(150, t);
-  osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+  sweep(osc.frequency, 150, 40, t, 0.15);
   envelope(ctx, gain.gain, t, 1, 0.45);
   osc.connect(gain).connect(out);
   osc.start(t);
@@ -28,8 +27,7 @@ function snare(ctx, out, t) {
 
   const osc = ctx.createOscillator();
   osc.type = "triangle";
-  osc.frequency.setValueAtTime(190, t);
-  osc.frequency.exponentialRampToValueAtTime(120, t + 0.1);
+  sweep(osc.frequency, 190, 120, t, 0.1);
   const og = ctx.createGain();
   envelope(ctx, og.gain, t, 0.5, 0.12);
   osc.connect(og).connect(out);
@@ -91,8 +89,7 @@ function makeTom(startHz, endHz, decay) {
   return (ctx, out, t) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.setValueAtTime(startHz, t);
-    osc.frequency.exponentialRampToValueAtTime(endHz, t + decay * 0.7);
+    sweep(osc.frequency, startHz, endHz, t, decay * 0.7);
     envelope(ctx, gain.gain, t, 0.8, decay);
     osc.connect(gain).connect(out);
     osc.start(t);
@@ -118,8 +115,7 @@ function cowbell(ctx, out, t) {
 function conga(ctx, out, t) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.frequency.setValueAtTime(340, t);
-  osc.frequency.exponentialRampToValueAtTime(250, t + 0.08);
+  sweep(osc.frequency, 340, 250, t, 0.08);
   envelope(ctx, gain.gain, t, 0.8, 0.28);
   osc.connect(gain).connect(out);
   osc.start(t);
@@ -145,8 +141,7 @@ function bass(ctx, out, t) {
   osc.frequency.value = 55;
   const lp = ctx.createBiquadFilter();
   lp.type = "lowpass";
-  lp.frequency.setValueAtTime(600, t);
-  lp.frequency.exponentialRampToValueAtTime(120, t + 0.4);
+  sweep(lp.frequency, 600, 120, t, 0.4);
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, 0.6, 0.5);
   osc.connect(lp).connect(g).connect(out);
@@ -183,8 +178,7 @@ function ride(ctx, out, t) {
 function zap(ctx, out, t) {
   const osc = ctx.createOscillator();
   osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(1800, t);
-  osc.frequency.exponentialRampToValueAtTime(80, t + 0.25);
+  sweep(osc.frequency, 1800, 80, t, 0.25);
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, 0.4, 0.3);
   osc
@@ -197,8 +191,7 @@ function zap(ctx, out, t) {
 
 function blip(ctx, out, t) {
   const osc = ctx.createOscillator();
-  osc.frequency.setValueAtTime(1200, t);
-  osc.frequency.exponentialRampToValueAtTime(600, t + 0.06);
+  sweep(osc.frequency, 1200, 600, t, 0.06);
   const g = ctx.createGain();
   envelope(ctx, g.gain, t, 0.5, 0.12);
   osc.connect(g).connect(out);
