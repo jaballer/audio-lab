@@ -66,7 +66,11 @@ export function createMidi(api) {
 
   // Device scanning and permission live in shared/midi-access.js; here we only
   // pick out the output port whose LEDs should mirror the app.
-  const { connect, autoConnect } = createMidiAccess({
+  const {
+    connect,
+    disconnect: stopListening,
+    autoConnect,
+  } = createMidiAccess({
     onMessage: createMidiRouter(PROFILES, handlers),
     onStatus: api.onStatus,
     onLog: api.onLog,
@@ -81,6 +85,17 @@ export function createMidi(api) {
       refresh();
     },
   });
+
+  // Switching MIDI off leaves the port in place (and working), so the controller's lights are turned off here:
+  // an unplugged port is not written to, which is why this is not part of the scan.
+  function disconnect() {
+    try {
+      if (output && outputProfile.reset) output.send(outputProfile.reset);
+    } catch {
+      /* ignore */
+    }
+    stopListening();
+  }
 
   function padHit(idx) {
     if (!output) return;
@@ -108,5 +123,5 @@ export function createMidi(api) {
     }
   });
 
-  return { connect, autoConnect, refresh, padHit };
+  return { connect, disconnect, autoConnect, refresh, padHit };
 }

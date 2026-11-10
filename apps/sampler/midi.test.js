@@ -250,6 +250,20 @@ describe("lighting a controller", () => {
     expect(padLed(out, pad3)[1][2]).toBe(resting);
   });
 
+  it("turns the lights off and stops driving them when MIDI is switched off", async () => {
+    const out = output("Launchpad");
+    const { midi } = await setup({ inputs: [input("Launchpad")], outputs: [out] });
+    out.send.mockClear();
+
+    midi.disconnect();
+    expect(out.send).toHaveBeenCalledTimes(1); // the profile's reset: every LED off
+    out.send.mockClear();
+
+    midi.refresh();
+    midi.padHit(0);
+    expect(out.send).not.toHaveBeenCalled();
+  });
+
   it("stops sending when the Launchpad is unplugged, and starts over with the next one", async () => {
     const first = output("Launchpad");
     const { access, midi } = await setup({ inputs: [input("Launchpad")], outputs: [first] });

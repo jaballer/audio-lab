@@ -87,6 +87,9 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
     for (const input of access.inputs.values()) input.onmidimessage = null;
     access.onstatechange = null;
     known = null;
+    // Tell the app as an unplug of every device would, so held notes are released and its outputs let go. The
+    // access it is handed has no ports left: it is a view of what is still being listened to.
+    onChange?.({ inputs: new Map(), outputs: new Map() }, []);
     onStatus(""); // the switch's lamp says it is off
     onLog?.("MIDI off: no longer listening to inputs");
   }
@@ -110,18 +113,29 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
 // reconnects silently on later visits if permission was already granted.
 export function wireMidiButton(button, midi) {
   let on = false;
+  let pending = false; // a connect is waiting on the permission prompt: another press must not start a second
+  let touched = false; // the person pressed the switch: a slower silent reconnect must not override that
   const show = (value) => {
     on = value;
     button.setAttribute("aria-pressed", String(on));
   };
   show(false);
   button.addEventListener("click", async () => {
+    if (pending) return;
+    touched = true;
     if (on) {
       midi.disconnect();
       show(false);
-    } else {
+      return;
+    }
+    pending = true;
+    try {
       show(await midi.connect());
+    } finally {
+      pending = false;
     }
   });
-  midi.autoConnect().then(show);
+  midi.autoConnect().then((connected) => {
+    if (!touched) show(connected);
+  });
 }

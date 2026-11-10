@@ -171,6 +171,16 @@ describe("createMidiAccess.disconnect", () => {
     expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini");
   });
 
+  it("tells the app, with no ports left, so it releases what it held", async () => {
+    const access = fakeAccess({ inputs: [port("MPK mini")], outputs: [port("MPK mini")] });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+    midi.disconnect();
+    const [seenAccess, seenInputs] = handlers.onChange.mock.lastCall;
+    expect(seenInputs).toEqual([]);
+    expect(seenAccess.outputs.size).toBe(0);
+  });
+
   it("does nothing before a connection", () => {
     const { midi, handlers } = setup();
     midi.disconnect();
@@ -348,6 +358,31 @@ describe("wireMidiButton", () => {
     await button.click();
     expect(midi.connect).toHaveBeenCalledTimes(2);
     expect(button.attrs["aria-pressed"]).toBe("true");
+  });
+
+  it("ignores a press while a connect waits on the permission prompt", async () => {
+    const button = fakeButton();
+    let allow;
+    const midi = fakeMidi({ connect: vi.fn(() => new Promise((resolve) => (allow = resolve))) });
+    wireMidiButton(button, midi);
+    const first = button.click();
+    await button.click();
+    expect(midi.connect).toHaveBeenCalledTimes(1);
+    allow(true);
+    await first;
+    expect(button.attrs["aria-pressed"]).toBe("true");
+  });
+
+  it("does not let a slow silent reconnect undo a press", async () => {
+    const button = fakeButton();
+    let resolveAuto;
+    const midi = fakeMidi({ autoConnect: vi.fn(() => new Promise((resolve) => (resolveAuto = resolve))) });
+    wireMidiButton(button, midi);
+    await button.click(); // on
+    await button.click(); // off
+    resolveAuto(true);
+    await settle();
+    expect(button.attrs["aria-pressed"]).toBe("false");
   });
 
   it("stays off for another try when connecting fails", async () => {
