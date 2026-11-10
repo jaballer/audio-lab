@@ -66,6 +66,14 @@ describe("lightFrame", () => {
       lightFrame({ level: 0, phase: 0, playing: false }).glow,
     );
   });
+  it("does not pulse when still, but the colour and brightness still follow the sound", () => {
+    const beat = { level: 0.4, phase: 0, playing: true, beat: 0 };
+    const still = lightFrame({ ...beat, still: true });
+    expect(still.pulse).toBe(0);
+    expect(still.even).toBe(still.odd);
+    expect(still.glow).toBe(lightFrame({ ...beat, phase: 0.9, still: true }).glow); // the same on the beat and off it
+    expect(still.glow).toBeGreaterThan(lightFrame({ level: 0, phase: 0, playing: true, still: true }).glow);
+  });
   it("keeps the glow within 0 to 1", () => {
     expect(lightFrame({ level: 5, phase: 0, playing: true }).glow).toBeLessThanOrEqual(1);
   });

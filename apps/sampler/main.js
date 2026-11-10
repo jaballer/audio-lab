@@ -132,6 +132,7 @@ function readLights() {
 function setLights(on) {
   lights.setOn(on);
   lastLightFrame = 0;
+  lightLevel = 0; // not the loudness from before it was switched off: the first frame would show it for a second
   setAttr(lightsButton, "aria-pressed", String(on));
 }
 function toggleLights() {

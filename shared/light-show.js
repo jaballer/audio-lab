@@ -114,7 +114,7 @@ export function lightFrame({
   high = 0,
 }) {
   const heat = clamp01(level);
-  const pulse = playing ? beatPulse(phase) : 0;
+  const pulse = playing && !still ? beatPulse(phase) : 0; // a flash on every beat is the motion `still` is asked to hold back
   const t = still ? 0 : timeMs / 1000;
   const evenTurn = beat % 2 === 0;
   const round = (x) => Math.round(x * 100) / 100;
