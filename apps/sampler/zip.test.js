@@ -117,6 +117,36 @@ describe("zipParts", () => {
     expect(parts.some((part) => part.buffer === data.buffer && part.byteLength === data.byteLength)).toBe(true);
   });
 
+  it("takes every byte of a typed array or a DataView, not the number of its elements", () => {
+    const ints = Int16Array.of(1000, -2000, 300, 4000);
+    const view = new DataView(Uint8Array.of(9, 8, 7, 6, 5).buffer, 1, 3);
+    const entries = readZip(
+      join(
+        zipParts(
+          [
+            { name: "ints", data: ints },
+            { name: "view", data: view },
+            { name: "floats", data: Float32Array.of(0.5, -0.5) },
+          ],
+          DATE,
+        ),
+      ),
+    );
+    expect(entries.map((entry) => entry.size)).toEqual([8, 3, 8]);
+    expect([...entries[0].data]).toEqual([...new Uint8Array(ints.buffer)]);
+    expect([...entries[1].data]).toEqual([8, 7, 6]);
+    expect(entries[2].crc).toBe(crc32(new Uint8Array(Float32Array.of(0.5, -0.5).buffer)));
+  });
+
+  it("holds a date outside what a zip can say to its first or last year, and does not wrap it round", () => {
+    const [early] = readZip(join(zipParts([files[0]], new Date(1970, 0, 1, 0, 0, 0))));
+    expect(early.date).toBe(((1980 - 1980) << 9) | (1 << 5) | 1);
+    expect(early.time).toBe(0);
+    const [late] = readZip(join(zipParts([files[0]], new Date(2200, 5, 5, 12, 0, 0))));
+    expect(late.date).toBe(((2107 - 1980) << 9) | (12 << 5) | 31);
+    expect(late.time).toBe((23 << 11) | (59 << 5) | 29);
+  });
+
   it("writes the time and date in DOS form, local, to two seconds", () => {
     const [entry] = readZip(join(zipParts([files[0]], DATE)));
     expect(entry.time).toBe((13 << 11) | (45 << 5) | 15);
@@ -143,6 +173,12 @@ describe("zipParts", () => {
   it("refuses two files of one name (an archive with two is ambiguous), and an empty name", () => {
     expect(() => zipParts([files[0], { ...files[1], name: "one.wav" }], DATE)).toThrow(/one\.wav/);
     expect(() => zipParts([{ name: "", data: bytes("x") }], DATE)).toThrow(/name/);
+  });
+
+  it("refuses a name too long for the two bytes that say how long it is (counted in bytes, not characters)", () => {
+    expect(() => zipParts([{ name: "a".repeat(65536), data: bytes("x") }], DATE)).toThrow(/too long/i);
+    expect(() => zipParts([{ name: "é".repeat(40000), data: bytes("x") }], DATE)).toThrow(/too long/i); // 80,000 bytes
+    expect(() => zipParts([{ name: "a".repeat(65535), data: bytes("x") }], DATE)).not.toThrow();
   });
 
   it("refuses what the format cannot hold, before it reads the bytes: a file of 4 GiB, or 65,536 files", () => {

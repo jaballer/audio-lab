@@ -145,7 +145,13 @@ Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) are bui
   nothing. This is what makes the stems add up: a hit's place in a render block and its fraction of a frame change what an
   oscillator or a sample's start makes of it, and a stem that began a pass or two later put its hits at other frames
   (measured: stems of a song with a long sample release added to the mix to only -39 to -46 dB; on the mix's timeline,
-  -120 dB).
+  -120 dB). A pass is left out only when the pad's tail is 120 dB down by the file: twice its release away (a cut fades
+  over fourteen time constants of a seventh of the release), not the one release that the mix needs for its own steady
+  state. With one, a pad whose release was shorter than the longest in the song was out by -82 to -89 dB, found by a
+  review: the mix still has the tail of the pass before the first one a stem schedules, cut by that pass's first hit.
+- **Where the property is checked.** The mix must be below the clipper's knee (0.7): a clipped mix is not the sum of
+  unclipped stems, so a comparison at a louder volume says nothing about the stems (a test song at volume 25 with loud
+  samples peaked at 0.96 and differed by -13 dB, at volume 10 by -126 dB).
 - **Master volume, no clipper.** The page's master volume is applied, and the clipper is left out (`clip: false`): a clipper
   is for the sum, and it cannot be taken apart. So the stems add up to the page's mix before the clipper, which below the
   clipper's knee is the mix. Measured in Chromium, the sum of the stems equals the single file to float rounding (-115 to
@@ -155,9 +161,11 @@ Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) are bui
 - **Names.** `pad16-seq-01-100bpm-x4-mono-pad03-snare.wav` in a zip named `pad16-seq-01-100bpm-x4-mono-stems.zip`: the
   pad's number is what keeps two pads with one sound apart; the sound's name is made of letters and digits.
 - **Held, not rendered.** Each render is let go of once its file is encoded, so what is held is the encoded files (2 bytes a
-  frame a channel each, all of them until the zip is made, which does not copy them). Progress is one fraction across the
+  frame a channel each, all of them until the zip is made). `zipParts` does not copy them, but the Blob made of the parts is the
+  browser's own copy, so while the parts are held the page has the files twice: the size note for stems counts twice the files. Progress is one fraction across the
   renders, each weighed by `renderCost` (the sounds it makes in each pass it schedules), and a cancel is looked at before
-  the first and between every two (and inside each, as for a single file).
+  the first and between every two (and inside each, as for a single file). The kit and the song are read by every render, so the page passes a snapshot
+  of each, as for a single file: stems made from two states would not add up.
 - **The zip** is stored, not compressed (a WAV does not shrink to anything worth the time): a header, the name and the bytes
   for each file, then the directory. Checked with `unzip -t` and Python's `zipfile` as well as with a reader in the tests. Not
   zip64: a file or an archive of 4 GiB or more, or 65,536 files, is refused.

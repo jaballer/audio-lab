@@ -1507,6 +1507,19 @@ describe("planRender, for one pad's stem", () => {
     expect(long.skipped).toBe(0);
   });
 
+  it("leaves out a pass only when the pad's tail is gone by the file, twice its release away, not one release", () => {
+    // Releases of 5 s (setting 100), 2.56 s (80: the setting is a cube, 5 s x (setting / 100)^3) and 0, in a loop of 2 s: the
+    // mix warms up for 1 + ceil(5 / 2) = 4 passes
+    const kit = createKit([sample(1), sample(1), sound("c")]);
+    kit.setSetting(0, "release", 80);
+    kit.setSetting(1, "release", 100);
+    const song = songOf(sequence({ 0: [15], 1: [3], 2: [0] }));
+    const skipped = (pad) => planRender({ song, kit, stepsPerBar: 16, sampleRate: 1000, pad }).skipped;
+    expect(skipped(1)).toBe(0); // the longest release is the mix's own
+    expect(skipped(0)).toBe(0); // one release would be 1 + ceil(2.56 / 2) = 3 passes and skip one: a tail of -61 dB is left out
+    expect(skipped(2)).toBe(3); // a sound with no release needs the one pass
+  });
+
   it("does not let a pad that only cuts it make it warm up for longer: its tail is the pad's own", () => {
     const longTail = createKit([sound("a"), sample(1, { start: 0, end: 1 })]);
     longTail.setSetting(1, "release", 100);
@@ -1604,6 +1617,23 @@ describe("renderSequence, one pad's stem", () => {
     const apart = run({ pad: 0, choke: [1, 2, 0] });
     await apart.done;
     expect(cutsAt(apart.offline, LEAD_SECONDS + 0.5)).toBe(0); // another group: nothing cuts it there
+  });
+
+  it("is cut at its very start by a pad of its group with a higher number on the same step, and not by a lower one", async () => {
+    // The voices that are heard: those connected to the master (a silent hit's voice goes to the sink)
+    const zeroGains = (offline, time) =>
+      offline.nodes.filter(
+        (node) =>
+          node.connect.mock.calls.some((call) => call[0] === offline.nodes[0]) &&
+          node.gain.setValueAtTime.mock.calls.some((call) => call[0] === 0 && call[1] === time),
+      ).length;
+    const pattern = { 0: [4], 1: [4] };
+    const first = run({ pad: 0, choke: [1, 1, 0], pattern });
+    await first.done;
+    expect(zeroGains(first.offline, LEAD_SECONDS + 0.5)).toBe(1); // pad 1 starts after it, on the step, and silences it
+    const second = run({ pad: 1, choke: [1, 1, 0], pattern });
+    await second.done;
+    expect(zeroGains(second.offline, LEAD_SECONDS + 0.5)).toBe(0); // pad 0 was first: the one handled last is heard
   });
 
   it("is not cut by a pad that is in no group", async () => {
@@ -1804,7 +1834,7 @@ describe("renderStems", () => {
     expect(render).not.toHaveBeenCalled();
   });
 
-  it("does not keep the render's channels: each stem is the encoded file alone", async () => {
+  it("hands back the pad, the name and the encoded file, and nothing else (not the render's channels)", async () => {
     const files = await stems();
     for (const file of files) expect(Object.keys(file).sort()).toEqual(["name", "pad", "wav"]);
   });

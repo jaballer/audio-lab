@@ -6,8 +6,9 @@
 //   const parts = zipParts(files);   // the same archive as a list of pieces, for `new Blob(parts)`
 //   crc32(bytes);                    // the checksum a zip keeps for each file
 //
-// A file's bytes go into the archive as the parts they already are, and are not copied: a stem is megabytes, and
-// there are many. Not zip64: a file or an archive of 4 GiB, or 65,536 files, is refused before anything is read (a
+// A file's bytes go into `zipParts` as the parts they already are, and are not copied there: a stem is megabytes, and
+// there are many. (The Blob made of the parts is the browser's: it keeps a copy of the bytes, so while the parts are still held
+// the page has the files twice.) Not zip64: a file or an archive of 4 GiB, or 65,536 files, is refused before anything is read (a
 // page cannot hold that in memory in any case).
 
 const LOCAL_SIGNATURE = 0x04034b50;
@@ -21,6 +22,7 @@ const CENTRAL_HEADER_BYTES = 46;
 const END_BYTES = 22;
 const MAX_FILES = 0xffff;
 const MAX_BYTES = 0xfffffffe; // 0xffffffff in a header means "see the zip64 record"
+const MAX_NAME_BYTES = 0xffff; // the name's length is two bytes
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -38,11 +40,22 @@ export function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-// The date and time of a file in the form a zip keeps them: two bytes each, local time, to two seconds.
+// The date and time of a file in the form a zip keeps them: two bytes each, local time, to two seconds, for the years 1980
+// to 2107 (a clock that reads the epoch is held to the first of them, and one far ahead to the last, not wrapped round).
+const FIRST_DOS_YEAR = 1980;
+const LAST_DOS_YEAR = 2107;
+function clampDate(date) {
+  if (date.getFullYear() < FIRST_DOS_YEAR) return new Date(FIRST_DOS_YEAR, 0, 1, 0, 0, 0);
+  if (date.getFullYear() > LAST_DOS_YEAR) return new Date(LAST_DOS_YEAR, 11, 31, 23, 59, 58);
+  return date;
+}
 const dosTime = (date) => (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1);
 const dosDate = (date) => ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
 
-const viewOf = (data) => (data instanceof Uint8Array ? data : new Uint8Array(data));
+// A file's bytes as a Uint8Array over the same memory: an ArrayBuffer, or any view of one (a typed array, a DataView),
+// whole as far as its `byteLength` goes (an Int16Array of four values is eight bytes, not four).
+const viewOf = (data) =>
+  ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : new Uint8Array(data);
 
 // What the archive will be, checked before any byte of a file is read: the format's limits, and a name for each file.
 function check(files) {
@@ -54,8 +67,10 @@ function check(files) {
     if (!name) throw new Error("A file in a zip needs a name.");
     if (seen.has(name)) throw new Error(`Two files in a zip are named ${name}.`);
     seen.add(name);
+    const nameBytes = new TextEncoder().encode(name).length;
+    if (nameBytes > MAX_NAME_BYTES) throw new Error(`The name of a file in a zip is too long (${nameBytes} bytes).`);
     if (data.byteLength > MAX_BYTES) throw new Error(`${name} is too large for a zip (4 GiB or more).`);
-    offset += LOCAL_HEADER_BYTES + new TextEncoder().encode(name).length + data.byteLength;
+    offset += LOCAL_HEADER_BYTES + nameBytes + data.byteLength;
     if (offset > MAX_BYTES) throw new Error("The zip is too large (4 GiB or more).");
   }
 }
@@ -63,8 +78,9 @@ function check(files) {
 export function zipParts(files, date = new Date()) {
   check(files);
   const encoder = new TextEncoder();
-  const time = dosTime(date);
-  const day = dosDate(date);
+  const stamp = clampDate(date);
+  const time = dosTime(stamp);
+  const day = dosDate(stamp);
   const parts = [];
   const directory = [];
   let offset = 0;

@@ -48,6 +48,9 @@ export const LEAD_SECONDS = 0.01;
 // How many passes may come before the one that is kept, at most: a 5 s release in a 1 s loop needs six; a longer one is
 // cut short rather than render for ever (the oldest, quietest tails are left out).
 export const MAX_WARM_UP_PASSES = 12;
+// How many releases away a pass can be before a stem leaves it out: a cut voice fades over fourteen time constants of a
+// seventh of the release, so two releases is 120 dB down (see planRender).
+export const STEM_TAIL_RELEASES = 2;
 // The render is scheduled this much audio at a time. Every node that is waiting for its start time is looked at by the
 // audio thread in every block until it has started, so what costs is the nodes waiting times the length they wait: with
 // the whole sequence scheduled before it begins, the work grows with the square of the length (a dense render of 18
@@ -179,16 +182,26 @@ export function planRender({
   const length = sequence.bars * stepsPerBar; // steps in one pass
   const stepLength = stepSeconds(song.bpm);
   const loopSeconds = length * stepLength;
-  const warmUpFor = (forHits) => {
+  // `reach` is how many releases a tail is followed for: one is what a render needs to be a loop's steady state (the voice is
+  // about 60 dB down by then), two is where it is 120 dB down (a cut fades over fourteen time constants of a seventh of
+  // the release).
+  const warmUpFor = (forHits, reach = 1) => {
     const longestRelease = Math.max(0, ...forHits.map(({ row }) => kit.envelope(row)?.release ?? 0));
-    return Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil(longestRelease / loopSeconds));
+    return Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil((reach * longestRelease) / loopSeconds));
   };
   // A stem is on the whole sequence's timeline: its hits sound at the very frames they do in the mix (a hit's position in
   // a render block and its fraction of a frame change what an oscillator or a sample's start makes of it, so a stem
   // that began a pass or two later would not add up to the mix). What it does not do is schedule the early passes that
-  // its own pad cannot be heard from: those are left empty (`skipped`), which costs next to nothing to render.
+  // its own pad cannot be heard from: those are left empty (`skipped`), which costs next to nothing to render. The mix
+  // has the tails of the passes it leaves out (the pad's last hit before them, cut by its first after them), so a stem
+  // leaves out only passes whose tails are 120 dB down by the file, twice the release away, and not the one release that
+  // the mix needs for itself: with one, a pad with a shorter release than the longest in the song was out by -82 dB.
   const warmUp = warmUpFor(hits);
-  const skipped = pad === undefined ? 0 : warmUp - warmUpFor(mine.filter((hit) => !hit.silent));
+  const ownWarmUp = warmUpFor(
+    mine.filter((hit) => !hit.silent),
+    STEM_TAIL_RELEASES,
+  );
+  const skipped = pad === undefined ? 0 : Math.max(0, warmUp - ownWarmUp);
   const first = Math.round((LEAD_SECONDS + warmUp * loopSeconds) * sampleRate);
   const frames = exportFrames(song, stepsPerBar, copies, sampleRate);
   return {
@@ -402,7 +415,9 @@ export const renderCost = (plan) => (plan.passes - plan.skipped) * (1 + plan.hit
 // at the master volume, unclipped (the stems add up to the page's mix up to the clipper), with the options of a single
 // file (loops, channels) and the same length, so they line up with each other and with the mix. `onProgress(0..1)` is one
 // fraction across all of them, each weighed by `renderCost`. A render is let go of once its file is encoded, so only the
-// files are held, and a cancel (`signal`) is looked at before the first and between every two.
+// files are held, and a cancel (`signal`) is looked at before the first and between every two. The kit and the song are
+// read by every render, so a caller whose page can change them while it works passes a snapshot of each (as an export of
+// a single file does): stems made from two states would not add up.
 export async function renderStems({
   song,
   kit,
