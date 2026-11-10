@@ -76,7 +76,7 @@ const site = createSiteHeader($("site-header"), { current: "sampler" });
 enableOffline($("update-notice"));
 const header = createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
-  sub: "Digital Sampler & Sequencer",
+  sub: "Sampler & Sequencer",
   tools: site.midiTools,
   onPower: () => togglePower(audio),
 });
