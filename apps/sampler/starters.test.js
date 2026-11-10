@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS } from "./layout.js";
 import { SONG_VERSION, parseSong, serializeSong } from "./song.js";
 import { SOFT_VELOCITY, STARTERS, sequenceBars, starterSong } from "./starters.js";
-import { clampBpm } from "../../shared/tempo.js";
+import { SWING_DEFAULT, SWING_MAX, SWING_MIN, clampBpm } from "../../shared/tempo.js";
 
 const limits = { rows: PAD_COUNT, steps: STEPS, maxBars: MAX_BARS, sequenceCount: SEQUENCE_COUNT };
 const song = (starter, volume = 80) => starterSong(starter, { ...limits, volume });
@@ -109,6 +109,27 @@ describe("STARTERS", () => {
     expect(kept.padSettings[9]).toMatchObject({ gain: 4, pitch: -2 });
     // And without `keep` a pad is as the starter says, or at its defaults.
     expect(song(hipHop).padSettings[9]).toBeUndefined();
+  });
+
+  it("carry a swing inside the range, and a starter without one is straight", () => {
+    for (const starter of STARTERS) {
+      const swing = song(starter).swing;
+      expect(swing).toBeGreaterThanOrEqual(SWING_MIN);
+      expect(swing).toBeLessThanOrEqual(SWING_MAX);
+      expect(swing).toBe(starter.swing ?? SWING_DEFAULT);
+    }
+    // Each style's own: hip hop lazy, house light, techno and trap on the straight grid.
+    const swingOf = (id) => song(STARTERS.find((s) => s.id === id)).swing;
+    expect(swingOf("hip-hop")).toBe(58);
+    expect(swingOf("house")).toBe(54);
+    expect(swingOf("techno")).toBe(SWING_DEFAULT);
+    expect(swingOf("trap")).toBe(SWING_DEFAULT);
+  });
+
+  it("brings an out-of-range swing inside it, and ignores one that is not a number", () => {
+    const base = { id: "x", name: "X", description: "a test starter", bpm: 100, padSettings: {}, sequences: [] };
+    expect(song({ ...base, swing: 99 }).swing).toBe(SWING_MAX);
+    expect(song({ ...base, swing: "58" }).swing).toBe(SWING_DEFAULT);
   });
 
   it("leaves the master volume as the person has it", () => {
