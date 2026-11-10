@@ -74,8 +74,8 @@
       <div id="piano" class="piano" aria-label="Piano keys"></div>
     </main>
 
-    <aside class="help-panel" aria-labelledby="help-title">
-      <h2 id="help-title" class="help-title">Help</h2>
+    <details class="help-panel">
+      <summary><h2 class="help-title">Help</h2></summary>
       <ul class="help-list">
         <li>
           Computer keys: <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd>
@@ -84,7 +84,7 @@
         <li>The view follows your keyboard's octave</li>
         <li>The knobs need the controller on Program 2 (hold Prog Select and press Pad 6)</li>
       </ul>
-    </aside>
+    </details>
     <!-- First, so its timeout starts even when the page's own script is slow to arrive. -->
     <script type="module" src="/shared/loading-screen.js"></script>
     <script type="module" src="/apps/keys/main.js"></script>

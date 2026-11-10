@@ -1,7 +1,7 @@
 // The row of colours for the selected pad, drawn into an element it is handed. It shows and reports; the sampler
 // decides (setPadSetting). The colours and their names are in pad-colors.js.
 //
-//   const swatches = createColorSwatches(element, { onChange });   // onChange(index): 0 for none, 1 to 8
+//   const swatches = createColorSwatches(element, { onChange });   // onChange(index): 0 for none, 1 to 6
 //   swatches.refresh({ color });                                    // the selected pad's colour
 //
 // A radio group: one swatch is in the tab order (the chosen one), the arrow keys move to the next or previous and

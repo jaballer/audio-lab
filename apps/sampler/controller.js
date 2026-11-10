@@ -24,6 +24,7 @@
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
 //   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke or colour, saved with the song
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
+//   sampler.setStepVelocity(5, 90, { activate: true })   // the same, and turns the step on first if it is off: one undo
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
 //   sampler.start()              // from the first step, even if it is already playing
@@ -205,13 +206,14 @@ export function createSampler({
 
   // Every change a person makes to the pattern goes through here, so that it can be undone: the state from
   // before is kept when the change did something. `merge` is for a change made in a stream (dragging a
-  // velocity), where the first one is kept and the ones right after it are part of the same undo.
-  function edit(change, { merge = false } = {}) {
+  // velocity), where the first one is kept and the ones right after it are part of the same undo. `fresh` starts a new
+  // undo even if the last change was a moment ago (a press on another bar), and what is merged after it joins that one.
+  function edit(change, { merge = false, fresh = false } = {}) {
     const before = pattern.state();
     change();
     if (JSON.stringify(pattern.state()) === JSON.stringify(before)) return;
     const at = now();
-    const continues = merge && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
+    const continues = merge && !fresh && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
     lastMergedAt = merge ? at : -Infinity;
     lastMergedPad = selected;
     if (!continues) history.push(before);
@@ -233,11 +235,20 @@ export function createSampler({
     onChange();
   }
 
-  // The one place a step's velocity (1-127) is set from outside the pattern. Nothing happens for a step that is off.
-  function setStepVelocity(step, value) {
+  // The one place a step's velocity (1-127) is set from outside the pattern. Nothing happens for a step that is off,
+  // unless `activate` is given (a press on its velocity bar): then it is turned on and given the velocity as one change,
+  // so one undo takes both back.
+  function setStepVelocity(step, value, { activate = false } = {}) {
     const index = page * steps + step;
-    if (!pattern.isOn(selected, index)) return;
-    edit(() => pattern.setVelocity(selected, index, value), { merge: true });
+    const wasOn = pattern.isOn(selected, index);
+    if (!wasOn && !activate) return;
+    edit(
+      () => {
+        if (!wasOn) pattern.toggle(selected, index);
+        pattern.setVelocity(selected, index, value);
+      },
+      { merge: true, fresh: !wasOn },
+    );
     onMessage(`VEL ${pattern.velocity(selected, index)}`);
     onChange();
   }

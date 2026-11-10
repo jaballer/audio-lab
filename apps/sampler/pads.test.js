@@ -34,7 +34,7 @@ describe("padLabel", () => {
   });
 
   it("ends with the colour's name when the pad has one, in lower case, and not for none", () => {
-    expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 5 })).toBe("Pad 3, C.Hat, key C, blue");
+    expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 3 })).toBe("Pad 3, C.Hat, key C, blue");
     expect(padLabel({ index: 2, name: "C.Hat", key: "c", color: 0 })).toBe("Pad 3, C.Hat, key C");
     expect(padLabel({ index: 2, name: "C.Hat", key: "c" })).toBe("Pad 3, C.Hat, key C");
   });

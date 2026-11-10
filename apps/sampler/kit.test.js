@@ -237,7 +237,7 @@ describe("a pad's colour", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(0, "setting");
     kit.setSetting(0, "color", 99);
-    expect(kit.settings(0).color).toBe(8);
+    expect(kit.settings(0).color).toBe(6);
   });
 
   it("is listed for a pad that has nothing else set, and left out when it goes back to none", () => {

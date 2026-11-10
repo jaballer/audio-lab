@@ -1247,11 +1247,11 @@ describe("pad colours", () => {
     sampler.selectPad(1);
     songChange.mockClear();
     change.mockClear();
-    sampler.setPadSetting("color", 5);
+    sampler.setPadSetting("color", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
-    expect(sampler.getState().padSettings.color).toBe(5);
+    expect(sampler.getState().padSettings.color).toBe(3);
     expect(sampler.getSong().padSettings).toEqual({
-      1: { gain: 0, pitch: 0, choke: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 0, pitch: 0, choke: 0, color: 3, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
     expect(songChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
@@ -1452,6 +1452,33 @@ describe("transport", () => {
     sampler.setStepVelocity(3, 50); // off: nothing to change
     expect(songChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns a step on as it gives it a velocity when asked to, as one undo", () => {
+    const { sampler } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
+    sampler.selectPad(0);
+    sampler.setStepVelocity(3, 40, { activate: true });
+    expect(sampler.getState().stepsOn[3]).toBe(true);
+    expect(sampler.getState().stepVelocities[3]).toBe(40);
+    sampler.setStepVelocity(3, 90, { activate: true }); // already on: just the velocity
+    expect(sampler.getState().stepVelocities[3]).toBe(90);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[3]).toBe(false); // the turning on and the velocity went together
+    expect(sampler.getState().stepsOn[2]).toBe(true);
+  });
+
+  it("keeps each press that turns a step on as an undo of its own, and merges the drag after it", () => {
+    const { sampler } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    sampler.selectPad(0);
+    sampler.setStepVelocity(3, 40, { activate: true });
+    sampler.setStepVelocity(3, 60); // the drag carries on over the same step: the same undo
+    sampler.setStepVelocity(7, 50, { activate: true }); // a new press, right after: its own undo
+    sampler.undo();
+    expect(sampler.getState().stepsOn[7]).toBe(false);
+    expect(sampler.getState().stepsOn[3]).toBe(true);
+    expect(sampler.getState().stepVelocities[3]).toBe(60);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[3]).toBe(false);
   });
 
   it("sets the velocity of a step on the bar being shown, for the selected pad", () => {

@@ -5,7 +5,7 @@
 //
 //   PAD_COLORS[1]            // { id: "yellow", name: "Yellow", css: "#ffe94a" }: swatch 1 (0 is none)
 //   padColorName(0)          // "None"
-//   padColorCss(2)           // "#b8e04a", or null for none
+//   padColorCss(2)           // "#52d65b", or null for none
 //
 // What is kept for a pad is the number: 0 for no colour, or 1 to the number of colours (the `color` setting in
 // pad-settings.js). Adding to the end of the list is safe for saved songs; changing or reordering it is not.
@@ -13,9 +13,7 @@
 export const PAD_COLORS = [
   { id: "none", name: "None", css: null },
   { id: "yellow", name: "Yellow", css: "#ffe94a" },
-  { id: "lime", name: "Lime", css: "#b8e04a" },
   { id: "green", name: "Green", css: "#52d65b" },
-  { id: "cyan", name: "Cyan", css: "#36d6d0" },
   { id: "blue", name: "Blue", css: "#4aa3ff" },
   { id: "purple", name: "Purple", css: "#b184ff" },
   { id: "pink", name: "Pink", css: "#ff80cc" },

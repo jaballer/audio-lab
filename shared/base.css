@@ -88,7 +88,7 @@ kbd {
 
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: center; /* the tagline on the same centre line as the name and the controls beside it */
   gap: 14px;
   flex-wrap: wrap;
 }
@@ -259,6 +259,15 @@ kbd {
 .btn:hover {
   background: linear-gradient(180deg, #faf8f1, #d8d4c7);
 }
+/* The main action of a group: the dark face of the chosen length key, with light lettering. */
+.btn-primary {
+  border-color: #1b1a18;
+  background: linear-gradient(180deg, #4a483f, #26241f);
+  color: #f3efe3;
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, #5a574c, #302e28);
+}
 /* The press: the face sinks 2px and the foot stays put. The thinner bottom edge would make the box 2px
    shorter, and a box that changes height moves whatever is sized around it (the transport grid, the pad
    panel, a centred dialog), so the margin gives back what the edge takes: the press is paint only.
@@ -290,6 +299,14 @@ a:focus-visible {
 }
 
 /* ---------- Header status and console drawer ---------- */
+/* Connect MIDI, its status and the Console, drawn in the machine header beside Export and POWER. */
+.midi-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
 /* Whatever the status says, it stays on one line; the full text is its tooltip and the console. */
 #midi-status {
   max-width: 36ch; /* wide enough for "permission denied" in the label font */
@@ -389,9 +406,6 @@ a:focus-visible {
   border-bottom: 1px solid #34302b;
   color: #d9d6c8;
 }
-.site-bar .small-label {
-  color: #a9a597;
-}
 .site-name {
   font-size: 1.1rem;
   font-weight: 900;
@@ -431,13 +445,6 @@ a:focus-visible {
   color: #f1eee6;
   box-shadow: 0 2px 0 #ff7a45;
 }
-.site-tools {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
 .site-bar a:focus-visible,
 .site-bar button:focus-visible {
   outline-color: #8ab4ff; /* the shared focus blue is too dark on the desk background */
@@ -446,6 +453,7 @@ a:focus-visible {
 /* ---------- Help panel (below the machine, outside it) ---------- */
 .help-panel {
   width: min(980px, 100%);
+  margin-top: 14px; /* on top of the page's 18px gap: room between the machine and its help */
   padding: 14px 22px 16px;
   border: 1px solid #34302b;
   border-radius: 12px;
@@ -454,8 +462,44 @@ a:focus-visible {
   font-size: 0.8rem;
   line-height: 1.55;
 }
+/* Closed until it is wanted: a native <details>, so the keyboard, the screen reader and the open state need no script. The
+   heading sits inside the summary so the page still has a Help heading in its markup; a screen reader may announce it only
+   as the disclosure button, which is not checked here. */
+.help-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.help-panel summary::-webkit-details-marker {
+  display: none;
+}
+.help-panel summary::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border: solid #a9a597;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(-45deg);
+  transition: transform 0.12s;
+}
+.help-panel[open] summary::before {
+  transform: translateY(-2px) rotate(45deg);
+}
+.help-panel summary:focus-visible {
+  outline: 3px solid #8ab4ff;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .help-panel summary::before {
+    transition: none;
+  }
+}
 .help-title {
-  margin: 0 0 6px;
+  margin: 0;
   font:
     800 0.66rem system-ui,
     sans-serif;
@@ -466,7 +510,7 @@ a:focus-visible {
 .help-list {
   display: grid;
   gap: 3px;
-  margin: 0;
+  margin: 8px 0 0;
   padding-left: 1.1em;
 }
 .help-panel a {

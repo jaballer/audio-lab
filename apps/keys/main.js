@@ -36,6 +36,7 @@ enableOffline($("update-notice"));
 const header = createAppHeader($("header"), {
   brand: { name: "KEYS" },
   sub: "MIDI keyboard test",
+  tools: site.midiTools,
   onPower: () => togglePower(audio),
 });
 
