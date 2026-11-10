@@ -45,6 +45,8 @@ import {
   projectFileName,
 } from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
+import { createTabSync } from "./tab-sync.js";
+import { createUpdateNotice } from "../../shared/update-notice.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { decodeSample } from "./sample-voice.js";
 import { createSettingsSliders } from "./settings-sliders.js";
@@ -186,9 +188,21 @@ backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, s
 let replacingSong = false;
 const saver = createSongSaver({
   read: () => sampler.getSong(),
-  save: (data) => !replacingSong && saveJson(SONG_KEY, data),
+  save: (data) => !replacingSong && !tabSync.isStale && saveJson(SONG_KEY, data),
 });
 window.addEventListener("pagehide", () => saver.flush());
+
+// Another tab of the sampler saved (or opened a project): what this tab holds is behind it, and saving it would write the old
+// beat over the new one. It stops saving and says so; Reload reads what the other tab kept (tab-sync.js).
+const tabNotice = createUpdateNotice($("tab-notice"));
+const tabSync = createTabSync({
+  target: window,
+  keys: [SONG_KEY, SAMPLES_KEY],
+  onStale() {
+    saver.cancel();
+    tabNotice.show(() => location.reload(), "Changed in another tab. This tab will not save until you reload.");
+  },
+});
 
 // ---------- Audio and sequencer ----------
 // The notice comes first: the engine reports its state as soon as it is told to
