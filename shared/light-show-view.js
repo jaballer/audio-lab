@@ -74,7 +74,7 @@ export function createLightShow(
       set(`--light-o${k}y`, `${spot.y}%`);
     });
     sparkles.forEach((dot, i) => {
-      const opacity = String(sparkleOpacity(high, i, inputs.timeMs));
+      const opacity = String(sparkleOpacity(high, i, inputs.timeMs, inputs.still));
       if (dot.style.opacity !== opacity) dot.style.opacity = opacity;
     });
     schedule();

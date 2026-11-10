@@ -141,6 +141,14 @@ describe("sparkleOpacity", () => {
   });
 });
 
+describe("sparkleOpacity when still", () => {
+  it("does not flicker with time, but still shows the highs", () => {
+    expect(sparkleOpacity(1, 2, 0, true)).toBe(sparkleOpacity(1, 2, 777, true));
+    expect(sparkleOpacity(1, 2, 0, true)).toBeGreaterThan(0);
+    expect(sparkleOpacity(0, 2, 0, true)).toBe(0);
+  });
+});
+
 describe("lightFrame bands", () => {
   it("lets the bass swell the glow and passes the highs on", () => {
     const quiet = lightFrame({ level: 0.3, phase: 0.9, playing: true });

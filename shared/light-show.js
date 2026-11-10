@@ -2,7 +2,7 @@
 //
 //   rmsLevel(samples)                        // 0..1 loudness of a block of samples (Float32Array from an AnalyserNode)
 //   bandLevels(bytes, sampleRate)            // { low, high } 0..1: the kick's and the hats' share of a frequency reading
-//   sparkleOpacity(high, index, timeMs)      // how bright one of the edge sparkles is
+//   sparkleOpacity(high, index, timeMs, still)  // how bright one of the edge sparkles is
 //   smoothLevel(previous, next, dtMs)        // rises fast, falls slowly, whatever the frame rate
 //   beatPhase({ step, sinceStepMs, bpm })    // 0..1 through the current beat, from the playhead
 //   beatPulse(phase)                         // 1 on the beat, fading to 0 before the next
@@ -54,8 +54,9 @@ export function bandLevels(bytes, sampleRate) {
 }
 
 // Each sparkle flickers on its own sine, and the highs decide how much of it shows: silent highs, dark sparkles.
-export function sparkleOpacity(high, index, timeMs) {
-  const flicker = 0.5 + 0.5 * Math.sin(timeMs * SPARKLE_RATE * (1 + (index % 5) * 0.37) + index * 2.4);
+// `still` holds them at the middle of their flicker: they follow the highs, but do not twinkle.
+export function sparkleOpacity(high, index, timeMs, still = false) {
+  const flicker = still ? 0.5 : 0.5 + 0.5 * Math.sin(timeMs * SPARKLE_RATE * (1 + (index % 5) * 0.37) + index * 2.4);
   return Math.round(clamp01(high * (0.35 + 0.65 * flicker)) * 100) / 100;
 }
 
