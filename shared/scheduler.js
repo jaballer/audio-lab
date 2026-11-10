@@ -60,6 +60,7 @@ export function createScheduler({
   let scheduledAny = false; // has this run scheduled a step yet? (nextStep === 0 can mean "not yet" or "just wrapped")
   let playheadStep = -1;
   let playheadTime = 0;
+  let playheadDelay = 0; // how much later than its place on the grid the playhead's step sounded, with the swing it was queued with
   const visualQueue = []; // { step, time } for each scheduled step, until the playhead reaches it
   // Live hits that were recorded into the step about to be scheduled: the sound was
   // already heard, so that step's scheduling pass must not play it again.
@@ -80,12 +81,18 @@ export function createScheduler({
   // poll(), which only needs the newest step that has gone by.
   function skipMissedSteps(now) {
     const length = stepSeconds(bpm);
-    const missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
+    let missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
+    if (missed <= 0) return;
+    // Late is when a step SOUNDS, which swing puts after its place on the grid: the last one counted may still be on time
+    // (a step built again by rewindTo, for one). Only that one can be: the one before it sounds before the grid place of
+    // the next, which is already late.
+    const soundsAt = (k) => nextTime + k * length + swingDelay((nextStep + k) % steps, bpm, swing);
+    if (soundsAt(missed - 1) >= now - MAX_LATE_S) missed--;
     if (missed <= 0) return;
     const last = missed - 1;
     forgetHeard(); // its step is skipped; a later pass over it is a new one
     const lastStep = (nextStep + last) % steps;
-    visualQueue.push({ step: lastStep, time: nextTime + last * length + swingDelay(lastStep, bpm, swing) });
+    visualQueue.push({ step: lastStep, time: soundsAt(last), delay: swingDelay(lastStep, bpm, swing) });
     nextTime += missed * length;
     nextStep = (nextStep + missed) % steps;
   }
@@ -131,7 +138,7 @@ export function createScheduler({
       // cannot be worked out from `time` afterwards, as the swing may have changed since.
       onStep(nextStep, time, nextStep === heardStep ? new Set(heardRows) : NOBODY, nextTime);
       if (nextStep === heardStep) forgetHeard();
-      visualQueue.push({ step: nextStep, time });
+      visualQueue.push({ step: nextStep, time, delay: time - nextTime });
       nextTime += stepSeconds(bpm);
       nextStep = (nextStep + 1) % steps;
       scheduledAny = true;
@@ -149,6 +156,7 @@ export function createScheduler({
     scheduledAny = false;
     nextTime = at ?? clock.now() + START_DELAY_S;
     playheadStep = -1;
+    playheadDelay = 0;
     timer = setInterval(schedule, SCHEDULER_TICK_MS);
     return true;
   }
@@ -160,6 +168,7 @@ export function createScheduler({
     forgetHeard();
     scheduledAny = false;
     playheadStep = -1;
+    playheadDelay = 0;
   }
 
   function poll() {
@@ -169,9 +178,10 @@ export function createScheduler({
     const now = clock.now();
     let moved = false;
     while (visualQueue.length && visualQueue[0].time <= now) {
-      const { step, time } = visualQueue.shift();
+      const { step, time, delay } = visualQueue.shift();
       playheadStep = step;
       playheadTime = time;
+      playheadDelay = delay;
       moved = true;
     }
     return moved;
@@ -234,6 +244,10 @@ export function createScheduler({
     },
     get playheadStep() {
       return playheadStep;
+    },
+    // What swing did to the step the playhead is on, as it was when the step was queued: the swing may have moved since.
+    get playheadDelay() {
+      return playheadDelay;
     },
     get playheadTime() {
       return playheadTime;

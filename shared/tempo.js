@@ -30,10 +30,20 @@ export const swingDelay = (step, bpm, swing) => (step % 2 === 1 ? stepSeconds(bp
 // Live recording: which step a pad hit belongs to. The playhead sits on
 // `playheadStep` (which began at `playheadTime`); a hit after the halfway point between that step and the next one
 // (as they sound, with swing: the steps of a pair are not the same length) belongs to the next one. -1 means no step
-// has played yet.
-export function nearestStep({ now, playheadTime, playheadStep, bpm, steps, swing = SWING_DEFAULT }) {
+// has played yet. `playheadDelay` is how much later than the grid the playhead's step was set to sound, when it is known
+// (the scheduler keeps it): the swing may have changed since that step was queued, and `swing` is only what the next step
+// is given.
+export function nearestStep({
+  now,
+  playheadTime,
+  playheadStep,
+  bpm,
+  steps,
+  swing = SWING_DEFAULT,
+  playheadDelay = swingDelay(playheadStep, bpm, swing),
+}) {
   const next = (playheadStep + 1) % steps;
-  const gridTime = playheadTime - swingDelay(playheadStep, bpm, swing);
+  const gridTime = playheadTime - playheadDelay;
   const nextTime = gridTime + stepSeconds(bpm) + swingDelay(next, bpm, swing);
   return now - playheadTime > (nextTime - playheadTime) / 2 ? next : playheadStep;
 }

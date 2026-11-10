@@ -200,7 +200,7 @@ describe("createScheduler", () => {
           vi.advanceTimersByTime(SCHEDULER_TICK_MS);
         }
       };
-      return { scheduler, steps, run };
+      return { clock, scheduler, steps, run };
     }
 
     it("gives each step its place on the grid, which swing does not move", () => {
@@ -223,6 +223,48 @@ describe("createScheduler", () => {
       expect(steps[0].time).toBeCloseTo(0.375 + 0.04); // delayed once, not twice
       expect(steps[1].step).toBe(4);
       expect(steps[1].time).toBeCloseTo(0.5, 2); // and the next pair is on the grid
+    });
+
+    it("plays a step built again whose grid place is late but whose swung sound is not yet", () => {
+      const { clock, scheduler, steps, run } = withGrid(75);
+      scheduler.start(0);
+      run(0.3);
+      const { grid } = steps.find(({ step }) => step === 3); // on the grid at 0.375, sounding at 0.4375
+      steps.length = 0;
+      clock.time = 0.43; // 0.055 s after the grid place, more than a step may be late; 0.0075 s before it sounds
+      scheduler.rewindTo(3, grid);
+      vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+      expect(steps[0].step).toBe(3);
+      expect(steps[0].time).toBeCloseTo(0.4375);
+    });
+
+    it("still skips a step that has gone by once it has sounded as well", () => {
+      const { clock, scheduler, steps, run } = withGrid(75);
+      scheduler.start(0);
+      run(0.3);
+      const { grid } = steps.find(({ step }) => step === 3);
+      steps.length = 0;
+      clock.time = 0.5; // 0.0625 s after it should have sounded
+      scheduler.rewindTo(3, grid);
+      vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+      expect(steps.find(({ step }) => step === 3)).toBeUndefined();
+      expect(steps[0].step).toBe(4);
+    });
+
+    it("says how late the playhead's step was set to sound, with the swing it had when it was queued", () => {
+      const { clock, scheduler, run } = setup({ bpm: 120 });
+      scheduler.setSwing(75);
+      scheduler.start(0);
+      run(0.15);
+      scheduler.setSwing(50); // moved after the steps were queued
+      clock.time = 0.2; // step 1 sounds at 0.1875
+      scheduler.poll();
+      expect(scheduler.playheadStep).toBe(1);
+      expect(scheduler.playheadDelay).toBeCloseTo(0.0625);
+      clock.time = 0.26;
+      scheduler.poll();
+      expect(scheduler.playheadStep).toBe(2);
+      expect(scheduler.playheadDelay).toBe(0);
     });
 
     it("keeps the loop where it was when the swing changed between a step being scheduled and built again", () => {

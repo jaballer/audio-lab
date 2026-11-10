@@ -179,6 +179,7 @@ export function createSampler({
       playheadStep: scheduler.playheadStep,
       bpm: scheduler.bpm,
       swing: scheduler.swing,
+      playheadDelay: scheduler.playheadDelay,
       steps: totalSteps(),
     });
     if (step < 0) return;

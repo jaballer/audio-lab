@@ -118,6 +118,15 @@ describe("nearestStep with swing", () => {
     expect(swung(10.21, 1, 10.165)).toBe(2);
   });
 
+  it("splits against the delay the playhead's step was given, not the swing it has now", () => {
+    // Step 1 was queued at 75 per cent (0.0625 s late, so on the grid at 10.1) and the knob has gone to 50 since.
+    const args = { playheadTime: 10.1625, playheadStep: 1, bpm: 120, steps: 16, swing: 50 };
+    // Step 2 is at 10.225: the middle is 10.19375. With the swing it has now the step would be taken to be on the grid.
+    expect(nearestStep({ ...args, now: 10.19, playheadDelay: 0.0625 })).toBe(1);
+    expect(nearestStep({ ...args, now: 10.2, playheadDelay: 0.0625 })).toBe(2);
+    expect(nearestStep({ ...args, now: 10.2 })).toBe(1); // what the swing now would say, which is wrong for this step
+  });
+
   it("is what it was when the swing is straight, or not given", () => {
     const straight = { now: 10.07, playheadTime: 10, playheadStep: 3, bpm: 120, steps: 16 };
     expect(nearestStep(straight)).toBe(4);
