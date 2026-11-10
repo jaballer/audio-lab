@@ -151,34 +151,53 @@ export function hitsOf(sequence, stepsPerBar) {
   return hits.sort((a, b) => a.step - b.step || a.row - b.row);
 }
 
+// The hits that make one pad's stem: its own, and, as `silent` hits, those of the other pads in its choke group, which are
+// not heard but cut it where they sound, as on the page (a pad in no group is cut only by itself, and group 0 is none).
+function stemHits(hits, pad, kit) {
+  const group = kit.settings(pad).choke;
+  const cuts = (row) => group > 0 && kit.settings(row).choke === group;
+  return hits.flatMap((hit) => (hit.row === pad ? [hit] : cuts(hit.row) ? [{ ...hit, silent: true }] : []));
+}
+
 // What a render is made of, worked out before any audio is made (so it can be tested without a context): the hits, how
 // many passes there are and where the kept window sits in them. The last `copies` passes are the file; the passes
 // before it are warm-up: a voice rings on after it is cut, for the pad's Release, and a Release longer than the loop
 // leaves tails from several passes back in the loop's steady state, so there are enough passes before the file to
-// cover the longest (one, with no release).
+// cover the longest (one, with no release). With a `pad`, the hits of that pad alone are the render (see stemHits): a stem.
 export function planRender({
   song,
   kit,
   stepsPerBar,
   sampleRate = EXPORT_SAMPLE_RATE,
   loops = DEFAULT_EXPORT_OPTIONS.loops,
+  pad,
 }) {
   const copies = Math.max(1, Math.floor(loops) || 1);
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
+  const mine = pad === undefined ? hits : stemHits(hits, pad, kit);
   const length = sequence.bars * stepsPerBar; // steps in one pass
   const stepLength = stepSeconds(song.bpm);
   const loopSeconds = length * stepLength;
-  const longestRelease = Math.max(0, ...hits.map(({ row }) => kit.envelope(row)?.release ?? 0));
-  const warmUp = Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil(longestRelease / loopSeconds));
+  const warmUpFor = (forHits) => {
+    const longestRelease = Math.max(0, ...forHits.map(({ row }) => kit.envelope(row)?.release ?? 0));
+    return Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil(longestRelease / loopSeconds));
+  };
+  // A stem is on the whole sequence's timeline: its hits sound at the very frames they do in the mix (a hit's position in
+  // a render block and its fraction of a frame change what an oscillator or a sample's start makes of it, so a stem
+  // that began a pass or two later would not add up to the mix). What it does not do is schedule the early passes that
+  // its own pad cannot be heard from: those are left empty (`skipped`), which costs next to nothing to render.
+  const warmUp = warmUpFor(hits);
+  const skipped = pad === undefined ? 0 : warmUp - warmUpFor(mine.filter((hit) => !hit.silent));
   const first = Math.round((LEAD_SECONDS + warmUp * loopSeconds) * sampleRate);
   const frames = exportFrames(song, stepsPerBar, copies, sampleRate);
   return {
-    hits,
+    hits: mine,
     copies,
     length,
     stepLength,
     warmUp,
+    skipped,
     passes: warmUp + copies,
     first,
     frames,
@@ -187,11 +206,12 @@ export function planRender({
   };
 }
 
-// The render's output chain: the master gain at the page's volume, into the clipper, into the speakers.
-function connectOutput(ctx, volume) {
+// The render's output chain: the master gain at the page's volume, into the clipper, into the speakers. Without the clipper
+// (a stem's): the master straight to the speakers.
+function connectOutput(ctx, volume, clip = true) {
   const master = ctx.createGain();
   master.gain.value = volume / VOLUME_SCALE;
-  const clipper = createClipper(ctx);
+  const clipper = clip ? createClipper(ctx) : null;
   if (clipper) {
     master.connect(clipper.input);
     clipper.output.connect(ctx.destination);
@@ -204,7 +224,7 @@ function connectOutput(ctx, volume) {
 // The hits that have yet to start, in the order they sound: `take(until)` gives those that sound before `until` seconds
 // (the last of the first pass is followed by the first of the second, and so on through the warm-up and the loops).
 function createHitFeeder(plan) {
-  let pass = 0;
+  let pass = plan.skipped; // a stem's earliest passes are left empty (see planRender)
   let index = 0;
   return function take(until) {
     const taken = [];
@@ -212,7 +232,7 @@ function createHitFeeder(plan) {
       const hit = plan.hits[index];
       const time = LEAD_SECONDS + (pass * plan.length + hit.step) * plan.stepLength;
       if (time >= until) break;
-      taken.push({ row: hit.row, velocity: hit.velocity, time });
+      taken.push({ row: hit.row, velocity: hit.velocity, time, silent: hit.silent });
       if (++index === plan.hits.length) {
         index = 0;
         pass++;
@@ -223,8 +243,13 @@ function createHitFeeder(plan) {
 }
 
 // Starts one hit through the voices, so that it cuts the pad's earlier one and the pads of its choke group, as it does on
-// the page; a sound that gives back a way to stop its source has it stopped when the hit is cut.
-function startHit(ctx, { voices, kit, master }, { row, velocity, time }) {
+// the page; a sound that gives back a way to stop its source has it stopped when the hit is cut. A silent hit (the other
+// pads of a stem's choke group) only cuts: its voice goes to `sink`, which leads nowhere, and its sound is not made.
+function startHit(ctx, { voices, kit, master, sink }, { row, velocity, time, silent }) {
+  if (silent) {
+    voices.start(ctx, row, sink, time);
+    return;
+  }
   const started = voices.start(ctx, row, master, time);
   const played = kit.voice(row).play(ctx, withVelocity(ctx, started.out, velocity / FULL_VELOCITY), time);
   started.stopWith(played?.stop);
@@ -240,6 +265,8 @@ function keptWindow(rendered, plan, channelMode) {
   return { sampleRate: rendered.sampleRate, channels: channelMode === "mono" ? [toMono(channels)] : channels };
 }
 
+// `pad` renders that pad's stem alone (see stemHits); `clip: false` leaves the clipper out (a stem is not clipped: it is
+// one part of a mix, and a clipper is for the sum).
 export async function renderSequence({
   song,
   kit,
@@ -251,10 +278,13 @@ export async function renderSequence({
   windowSeconds = WINDOW_SECONDS,
   onProgress,
   signal,
+  pad,
+  clip = true,
 }) {
-  const plan = planRender({ song, kit, stepsPerBar, sampleRate, loops });
+  const plan = planRender({ song, kit, stepsPerBar, sampleRate, loops, pad });
   const ctx = createContext(plan.total, sampleRate);
-  const master = connectOutput(ctx, song.volume);
+  const master = connectOutput(ctx, song.volume, clip);
+  const sink = pad === undefined ? null : ctx.createGain(); // where the voices of a stem's silent hits go: nowhere
   const voices = createVoices(kit.length, {
     cleanUp: false,
     stopCut: true,
@@ -263,7 +293,7 @@ export async function renderSequence({
   });
   const take = createHitFeeder(plan);
   const schedule = (until) => {
-    for (const hit of take(until)) startHit(ctx, { voices, kit, master }, hit);
+    for (const hit of take(until)) startHit(ctx, { voices, kit, master, sink }, hit);
   };
   // A render that will not be used is let go of: nothing it still has to play is heard, and it runs on to its end quickly.
   // Left suspended it is never freed (Chromium keeps the whole graph and the output buffer): a cancel cost about 90 MB.
@@ -323,13 +353,100 @@ export function encodeWav(channels, sampleRate) {
   return bytes;
 }
 
-// "pad16-seq-01-100bpm.wav", with "-x4" for four loops and "-mono" for mono when they are asked for, so exports of the same
+// "pad16-seq-01-100bpm", with "-x4" for four loops and "-mono" for mono when they are asked for, so exports of the same
 // sequence made differently do not overwrite each other in the downloads folder.
-export function exportName(song, options = DEFAULT_EXPORT_OPTIONS) {
+function exportBaseName(song, options) {
   const { loops, channels } = normalizeExportOptions(options);
   const loopPart = loops > 1 ? `-x${loops}` : "";
   const channelPart = channels === "mono" ? "-mono" : "";
-  return `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm${loopPart}${channelPart}.wav`;
+  return `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm${loopPart}${channelPart}`;
+}
+
+export const exportName = (song, options = DEFAULT_EXPORT_OPTIONS) => `${exportBaseName(song, options)}.wav`;
+
+// The zip of a sequence's stems: "pad16-seq-01-100bpm-stems.zip".
+export const stemsName = (song, options = DEFAULT_EXPORT_OPTIONS) => `${exportBaseName(song, options)}-stems.zip`;
+
+// A sound's name as a piece of a file name: letters and digits, accents taken off, in lower case and not long (a loaded
+// sample is named for its file).
+const MAX_SLUG = 24;
+function slug(name) {
+  return String(name ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, MAX_SLUG)
+    .replace(/-+$/, "");
+}
+
+// One stem's name: the export's own, then the pad's number (from 1, as on the panel) and its sound:
+// "pad16-seq-01-100bpm-pad03-snare.wav". The number is what keeps two pads with one sound apart.
+export function stemName(song, options, kit, pad) {
+  const sound = slug(kit.get(pad)?.name);
+  return `${exportBaseName(song, options)}-pad${pad2(pad + 1)}${sound ? `-${sound}` : ""}.wav`;
+}
+
+// The pads that have a step in the sequence showing, in pad order: the pads that get a stem.
+export function stemPads(song, stepsPerBar) {
+  const rows = new Set(hitsOf(song.sequences[song.current], stepsPerBar).map(({ row }) => row));
+  return [...rows].sort((a, b) => a - b);
+}
+
+// About how much work a render is, for putting the stems' progress into one fraction: the sounds it makes, in every pass. A
+// silent hit only cuts, which costs next to nothing.
+export const renderCost = (plan) => (plan.passes - plan.skipped) * (1 + plan.hits.filter((hit) => !hit.silent).length);
+
+// Every pad's stem, one render after another: [{ pad, name, wav }], with `wav` the encoded file. Each is rendered alone
+// at the master volume, unclipped (the stems add up to the page's mix up to the clipper), with the options of a single
+// file (loops, channels) and the same length, so they line up with each other and with the mix. `onProgress(0..1)` is one
+// fraction across all of them, each weighed by `renderCost`. A render is let go of once its file is encoded, so only the
+// files are held, and a cancel (`signal`) is looked at before the first and between every two.
+export async function renderStems({
+  song,
+  kit,
+  stepsPerBar,
+  sampleRate = EXPORT_SAMPLE_RATE,
+  loops = DEFAULT_EXPORT_OPTIONS.loops,
+  channels = DEFAULT_EXPORT_OPTIONS.channels,
+  onProgress,
+  signal,
+  render = renderSequence,
+}) {
+  const pads = stemPads(song, stepsPerBar);
+  const weights = pads.map((pad) => renderCost(planRender({ song, kit, stepsPerBar, sampleRate, loops, pad })));
+  const all = weights.reduce((sum, weight) => sum + weight, 0);
+  const files = [];
+  let done = 0;
+  for (const [index, pad] of pads.entries()) {
+    if (signal?.aborted) throw cancelled();
+    const before = done;
+    const weight = weights[index];
+    const audio = await render({
+      song,
+      kit,
+      stepsPerBar,
+      sampleRate,
+      loops,
+      channels,
+      pad,
+      clip: false,
+      signal,
+      onProgress: (fraction) => onProgress?.((before + weight * fraction) / all),
+    });
+    files.push({
+      pad,
+      name: stemName(song, { loops, channels }, kit, pad),
+      wav: encodeWav(audio.channels, audio.sampleRate),
+    });
+    done += weight;
+    onProgress?.(index === pads.length - 1 ? 1 : done / all);
+    // Encoding is one long task, in which a press on Cancel cannot be handled: it waits its turn here.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (signal?.aborted) throw cancelled();
+  return files;
 }
 
 // The bars of the sequence showing that have no steps, counting from 1: a file is as long as all its bars, so a bar with

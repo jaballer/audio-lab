@@ -1,8 +1,8 @@
 # Export: how it works, and why
 
 The sampler's Export saves the sequence showing as a 16-bit WAV file, rendered as the page plays it. It was built over
-several pull requests and then audited as a whole (fidelity to live playback, robustness, UX, and what stems and a
-whole-song bounce will need). This records the decisions and what was measured. What is still to do is tracked in the
+several pull requests and then audited as a whole (fidelity to live playback, robustness, UX, and what a whole-song
+bounce will need). This records the decisions and what was measured. What is still to do is tracked in the
 GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 [#117](https://github.com/jaballer/audio-lab/issues/117) whole song,
 [#118](https://github.com/jaballer/audio-lab/issues/118) the speed-ups and guards still open in it: skipping hits that cannot reach the file), not here.
@@ -15,6 +15,7 @@ GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 | `apps/sampler/export-options.js`                      | The choices (loops, stereo or mono), what the file will be (length, size), the notes and reasons the dialog shows |
 | `apps/sampler/export-dialog-state.js`                 | What the dialog shows and allows, the double-click guard, and what the page tells the dialog (all pure)           |
 | `apps/sampler/export-dialog.js`                       | The `<dialog>`: draws what it is told and reports what is pressed                                                 |
+| `apps/sampler/zip.js`                                 | A store-only zip writer (CRC32, no dependency) for the stems                                                      |
 | `apps/sampler/voices.js`, `kit.js`, `sample-voice.js` | One voice per pad and choke groups; the kit snapshot; a sample's source can be stopped                            |
 | `shared/app-header.js`                                | The Export button, next to POWER (the `actions` option)                                                           |
 
@@ -129,22 +130,51 @@ scheduled in one go (at most 6e-7, about 2% of one 16-bit step).
 - **`EXPORTED` is said even if the browser blocks the download**, which `saveBlob` cannot tell.
 - **A pad whose saved sample fails to decode** plays, and exports, its built-in sound without saying so.
 
-## What stems and a whole-song bounce will need
+## Stems
+
+Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) are built in two parts: the engine (`renderStems`,
+`zip.js`), and then the dialog's option, which offers them. What the engine does and why:
+
+- **One render a pad, only that pad's sound.** `planRender({ pad })` keeps the pad's hits, and, as `silent` hits, those of
+  the other pads in its choke group, which are not made (no sound is built for them) but go through `voices.start`, so they
+  cut the pad where they sound, as on the page. A pad in no group (0 is none) is cut only by itself, and its render has no
+  other pad in it. The renders cost about what the one mix does: measured, 16 stems of a dense 8-bar song took 5.2 s against
+  4.7 s for the mix.
+- **On the mix's timeline.** A stem warms up for as many passes as the mix does (a long release on one pad moves every
+  stem), and schedules only the passes its own pad can be heard from (`skipped`): the rest are empty, which costs next to
+  nothing. This is what makes the stems add up: a hit's place in a render block and its fraction of a frame change what an
+  oscillator or a sample's start makes of it, and a stem that began a pass or two later put its hits at other frames
+  (measured: stems of a song with a long sample release added to the mix to only -39 to -46 dB; on the mix's timeline,
+  -120 dB).
+- **Master volume, no clipper.** The page's master volume is applied, and the clipper is left out (`clip: false`): a clipper
+  is for the sum, and it cannot be taken apart. So the stems add up to the page's mix before the clipper, which below the
+  clipper's knee is the mix. Measured in Chromium, the sum of the stems equals the single file to float rounding (-115 to
+  -126 dB): 16 pads with velocities, two choke groups, all 16 pads in one group, loaded samples with trim, pitch, gain and a
+  5 s release, mono, four loops, two bars. Where the mix would clip, the stems add up to more than full scale, which is
+  what a mixer wants; one stem that passes full scale on its own is clipped by the 16-bit file.
+- **Names.** `pad16-seq-01-100bpm-x4-mono-pad03-snare.wav` in a zip named `pad16-seq-01-100bpm-x4-mono-stems.zip`: the
+  pad's number is what keeps two pads with one sound apart; the sound's name is made of letters and digits.
+- **Held, not rendered.** Each render is let go of once its file is encoded, so what is held is the encoded files (2 bytes a
+  frame a channel each, all of them until the zip is made, which does not copy them). Progress is one fraction across the
+  renders, each weighed by `renderCost` (the sounds it makes in each pass it schedules), and a cancel is looked at before
+  the first and between every two (and inside each, as for a single file).
+- **The zip** is stored, not compressed (a WAV does not shrink to anything worth the time): a header, the name and the bytes
+  for each file, then the directory. Checked with `unzip -t` and Python's `zipfile` as well as with a reader in the tests. Not
+  zip64: a file or an archive of 4 GiB or more, or 65,536 files, is refused.
+
+## What a whole-song bounce will need
 
 From the audit; none of it built.
 
-- **What is exported has to be a value.** `emptyBars`, `hasSteps`, `exportFrames`, `exportInfo`, `exportName`, `exportTitle` and
-  `planRender` read `song.sequences[song.current]` (`hitsOf` already takes a sequence). A bounce needs a list of sequences and stems a pad filter.
-- **Stems and choke.** A pad rendered alone is not what the page plays when another pad in its choke group cuts it: either
-  every hit is scheduled and only the wanted pad is audible, or each pad goes to a bus of its own. Stems are also expected
-  unclipped and at unity volume, so the clipper and the master are decisions to make first.
+- **What is exported has to be a value.** `emptyBars`, `hasSteps`, `exportFrames`, `exportInfo`, `exportName`, `exportTitle`,
+  `stemPads` and `planRender` read `song.sequences[song.current]` (`hitsOf` already takes a sequence). A bounce needs a
+  list of sequences.
 - **Memory.** A bounce of eight 8-bar sequences at 40 BPM is 384 s (6.4 minutes): about as large as the biggest export today
   (8 loops of 8 bars, about 275 MB at the peak), so one buffer can still do it. It grows with anything that repeats: the
   audit's synthetic case of eight 384 s sequences (3,072 s) held 1.08 GB of float for the render alone, and 517 MB each of
   WAV and Blob, which would kill a phone's tab. Beyond today's size it needs chunked rendering and output (a file built from
-  encoded chunks and a Blob of them), not one buffer. Stems should encode each pad to 16-bit and drop the float buffer at
-  once; a zip needs a store-only writer with CRC32 and must not hold a second copy.
-- **Progress** is one fraction; many renders need it composed (`[i/n, (i+1)/n]`). One export at a time (`createExportAction`)
-  suits all three. 16 downloads without a gesture meet a browser's "multiple downloads" prompt: a zip avoids it.
+  encoded chunks and a Blob of them), not one buffer.
+- **Progress** is one fraction (stems compose it with `renderCost`); a bounce of several sequences can do the same. One
+  export at a time (`createExportAction`) suits all of them.
 - **The dialog** has two choice groups wired by hand and a hard-coded "WAV"; a second format touches the options, the name,
   the readout, the header title and the button.
