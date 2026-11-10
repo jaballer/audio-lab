@@ -140,6 +140,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/light-show.js`, `light-show-view.js`, `light-show.css` — the sampler's Lights button (beside Edit Pad): a glow on the desk behind the machine that pulses with the tempo and runs from blue to red with how loud the output is, swells with the bass, sparkles at the edges with the highs and bursts in a pad's colour when it plays (the maths has no DOM; the view sets CSS variables each frame)
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
 - `shared/power.js` — what pressing a device's POWER switch does to its audio (on goes off, anything else comes on)
+- `shared/power-sequence.js` — the machine's power phase (off, booting, on, shutdown) that the sampler's LCD and pads boot and shut down by
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps
 - `shared/midi-devices.js` — device profiles: picks the mapping for a controller by its port name, and `createMidiRouter`, which turns a raw message into the app's events and hands them to its handlers
 - `shared/mpc-sample.js` — what is known about the Akai MPC Sample's MIDI: how to recognise its port and which pad and bank a note belongs to

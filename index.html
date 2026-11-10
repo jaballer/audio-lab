@@ -111,7 +111,7 @@
           <section class="console" aria-label="Display and controls">
             <!-- A group, not a live region: the lines change on every step. Only the short message line is announced. -->
             <div class="lcd" role="group" aria-label="Display">
-              <div class="lcd-screen">
+              <div class="lcd-screen" id="lcd-screen" data-power="off">
                 <!-- How far through the whole sequence the playhead is; the bar the step keys show is marked under it. -->
                 <div class="lcd-progress" id="lcd-progress" aria-hidden="true"></div>
                 <div class="lcd-line" id="lcd-1"></div>
@@ -144,7 +144,7 @@
           </section>
 
           <section class="pad-panel" aria-label="Pads">
-            <div id="pads" class="sampler-pads"></div>
+            <div id="pads" class="sampler-pads" data-power="off"></div>
             <!-- The pad editor. It sits beside the machine when there is room, and under the pads when there is not
                (main.js moves it); closed, it is not there. -->
             <aside id="pad-drawer" class="pad-drawer" aria-labelledby="pad-drawer-title" hidden>

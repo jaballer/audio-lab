@@ -3,6 +3,7 @@
 //   const grid = createPadGrid(element, { sounds, onTrigger });   // onTrigger(index, { shift }) for a pointer press; the computer keys are read by the page (padForKeyEvent)
 //   grid.flash(0);    // a pad was pressed: light it and push it down briefly
 //   grid.light(0);    // the sequence played a pad: light it, but it does not move
+//   grid.setPower("booting");   // "off" | "booting" | "on" | "shutdown" (power-sequence.js): the CSS sweeps light across the pads
 //   grid.select(0);   // mark the selected pad (aria-current)
 //   grid.setColor(0, 5);   // the pad's colour: 0 for none, or a swatch (pad-colors.js); shown as its rim, and named in its label
 //   grid.setName(0, "Kick 808", true);   // a pad plays another sound now (true: a loaded sample, not the built-in one)
@@ -11,6 +12,7 @@
 
 import { setAttr } from "../../shared/dom-updates.js";
 import { createFlasher } from "../../shared/flash.js";
+import { sweepStep } from "../../shared/power-sequence.js";
 import { PAD_COLUMNS, PAD_ROWS, padIndex } from "./layout.js";
 import { padColorCss, padColorName } from "./pad-colors.js";
 
@@ -59,7 +61,11 @@ export function createPadGrid(element, { sounds, onTrigger }) {
   const labelOf = (idx) => padLabel({ index: idx, name: names[idx], key: keys[idx], color: colors[idx] });
   const flash = createFlasher("hit", FLASH_MS);
   const light = createFlasher("lit", FLASH_MS);
+  // Powered off, and while shutting down (the audio is already muted then), a hit makes no sound, so it must not light.
+  const isSilent = () => powerPhase === "off" || powerPhase === "shutdown";
+  let powerPhase = "off"; // the page's HTML starts the grid off. A pad hit then makes no sound, so it must not light either
   element.style.setProperty("--pad-columns", String(PAD_COLUMNS));
+  element.style.setProperty("--sweep-last", String(sweepStep(0, PAD_COLUMNS - 1, PAD_ROWS)));
 
   for (let row = 0; row < PAD_ROWS; row++) {
     for (let col = 0; col < PAD_COLUMNS; col++) {
@@ -68,6 +74,7 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "sampler-pad";
+      btn.style.setProperty("--sweep", String(sweepStep(row, col, PAD_ROWS))); // its place in the power-on sweep
       btn.dataset.pad = String(idx); // which pad a dropped file is for (sample-loader.js)
       keys[idx] = key;
       names[idx] = sounds[idx].name;
@@ -99,11 +106,18 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       return { x: ((r.left + r.width / 2) / innerWidth) * 100, y: ((r.top + r.height / 2) / innerHeight) * 100 };
     },
 
+    setPower(phase) {
+      powerPhase = phase;
+      setAttr(element, "data-power", phase);
+    },
+
     flash(idx) {
+      if (isSilent()) return;
       flash(padEls[idx]);
     },
 
     light(idx) {
+      if (isSilent()) return;
       light(padEls[idx]);
     },
 

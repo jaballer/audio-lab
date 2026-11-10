@@ -1058,3 +1058,114 @@
     background: Highlight;
   }
 }
+
+/* ---------- Power: the display and pads boot and shut down ---------- */
+/* power-sequence.js sets data-power ("off", "booting", "on", "shutdown") on the pad grid and on the LCD screen. Off, the
+   glass is dark and the pads unlit; booting, the display comes up under its boot lines while light sweeps across the
+   pads from pad 1; shutdown runs the same backwards. Durations match BOOT_MS and SHUTDOWN_MS in power-sequence.js. */
+/* The glass dims and brightens by a transition, so flipping power mid-boot or mid-shutdown turns around from the
+   brightness it has reached (a keyframe animation would restart from its first keyframe and snap). */
+.lcd-screen {
+  transition:
+    background-color 0.35s,
+    box-shadow 0.35s,
+    color 0.35s,
+    filter 0.5s ease-out;
+}
+.lcd-screen[data-power="off"],
+.lcd-screen[data-power="shutdown"] {
+  filter: brightness(0.7);
+}
+.lcd-screen[data-power="off"] {
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 3px), #4a5440;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6);
+  color: transparent;
+}
+.lcd-screen[data-power="booting"] .lcd-line {
+  animation: lcd-boot-line 0.5s steps(6, end) both;
+}
+.lcd-screen[data-power="booting"] #lcd-2 {
+  animation-delay: 0.25s;
+}
+.lcd-screen[data-power="booting"] #lcd-3 {
+  animation-delay: 0.5s;
+}
+/* The bar along the top fills over the boot. --progress has to be a registered number for it to animate. */
+@property --progress {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+.lcd-screen[data-power="booting"] .lcd-progress {
+  animation: lcd-boot-progress 1.1s ease-out both; /* BOOT_MS */
+}
+.lcd-screen[data-power="shutdown"] .lcd-progress,
+.lcd-screen[data-power="off"] .lcd-progress,
+.lcd-screen[data-power="shutdown"] .ruler,
+.lcd-screen[data-power="off"] .ruler {
+  opacity: 0;
+}
+/* The boot lines type themselves across. */
+@keyframes lcd-boot-line {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes lcd-boot-progress {
+  from {
+    --progress: 0;
+  }
+  to {
+    --progress: 1;
+  }
+}
+
+/* The dimming is a transition, not a keyframe animation, so flipping power mid-sweep reverses each pad from wherever it
+   is (an animation would restart from its first keyframe and snap the grid to the other state). The light that runs
+   across the pads is a pulse over it that starts and ends on the pad's own look, so it can restart without a jump. */
+.sampler-pads[data-power] .sampler-pad {
+  transition:
+    transform 0.05s,
+    box-shadow 0.05s,
+    filter 0.4s ease-out calc(var(--sweep, 0) * 55ms);
+}
+.sampler-pads[data-power="off"] .sampler-pad {
+  filter: brightness(0.5) saturate(0.4);
+}
+.sampler-pads[data-power="off"] .sampler-pad .num,
+.sampler-pads[data-power="off"] .sampler-pad .key,
+.sampler-pads[data-power="off"] .sampler-pad .name {
+  opacity: 0.35;
+}
+.sampler-pads[data-power="booting"] .sampler-pad {
+  animation: pad-pulse 0.6s ease-out calc(var(--sweep, 0) * 55ms) backwards;
+}
+/* Shutdown: the sweep runs from the far corner back to pad 1, then each pad goes dark and stays so. */
+.sampler-pads[data-power="shutdown"] .sampler-pad {
+  filter: brightness(0.5) saturate(0.4);
+  transition-delay: 0s, 0s, calc((var(--sweep-last, 6) - var(--sweep, 0)) * 35ms);
+  animation: pad-pulse 0.35s ease-in calc((var(--sweep-last, 6) - var(--sweep, 0)) * 35ms) backwards;
+}
+@keyframes pad-pulse {
+  30% {
+    background: radial-gradient(circle at 50% 45%, #ff6a57 0%, #c91f12 55%, #6c0d06 100%);
+    box-shadow:
+      inset 0 0 14px rgba(255, 200, 160, 0.5),
+      0 0 22px 4px rgba(255, 59, 47, 0.65);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lcd-screen,
+  .lcd-screen .lcd-line,
+  .sampler-pads .sampler-pad {
+    animation: none !important;
+    transition: none;
+  }
+  .sampler-pads[data-power] .sampler-pad {
+    transition: none;
+  }
+}
