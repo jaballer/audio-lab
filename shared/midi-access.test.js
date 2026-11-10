@@ -383,6 +383,7 @@ describe("wireMidiButton", () => {
     resolveAuto(true);
     await settle();
     expect(button.attrs["aria-pressed"]).toBe("false");
+    expect(midi.disconnect).toHaveBeenCalledTimes(2); // the press, and the reconnect that finished after it
   });
 
   it("stays off for another try when connecting fails", async () => {

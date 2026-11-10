@@ -136,6 +136,9 @@ export function wireMidiButton(button, midi) {
     }
   });
   midi.autoConnect().then((connected) => {
-    if (!touched) show(connected);
+    if (!touched) return show(connected);
+    // The silent reconnect finished after the person pressed the switch, and it restored the listeners: if they left
+    // it off, put that back. (A connect they started is still pending and will say so itself.)
+    if (connected && !on && !pending) midi.disconnect();
   });
 }
