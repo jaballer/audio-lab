@@ -188,19 +188,35 @@ backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, s
 let replacingSong = false;
 const saver = createSongSaver({
   read: () => sampler.getSong(),
-  save: (data) => !replacingSong && !tabSync.isStale && saveJson(SONG_KEY, data),
+  save(data) {
+    if (replacingSong) return false;
+    if (tabSync.isStale) {
+      // The strip may have been put away with Later, and an edit made since would be lost when the tab closes: say so each time.
+      say("NOT SAVED: CHANGED IN ANOTHER TAB");
+      return false;
+    }
+    return saveJson(SONG_KEY, data);
+  },
 });
 window.addEventListener("pagehide", () => saver.flush());
 
 // Another tab of the sampler saved (or opened a project): what this tab holds is behind it, and saving it would write the old
 // beat over the new one. It stops saving and says so; Reload reads what the other tab kept (tab-sync.js).
+// A page restored from the back/forward cache missed the `storage` events of the time it was away, so it cannot know
+// whether another tab saved: it starts again and reads what is kept.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) location.reload();
+});
 const tabNotice = createUpdateNotice($("tab-notice"));
 const tabSync = createTabSync({
   target: window,
   keys: [SONG_KEY, SAMPLES_KEY],
   onStale() {
     saver.cancel();
-    tabNotice.show(() => location.reload(), "Changed in another tab. This tab will not save until you reload.");
+    tabNotice.show(
+      () => location.reload(),
+      "Changed in another tab. This tab will not save the beat until you reload.",
+    );
   },
 });
 
