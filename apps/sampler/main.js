@@ -135,6 +135,10 @@ const kit = createKit(SOUNDS, {
     if (what === "setting") padGrid.setColor(index, kit.settings(index).color);
     sampler.kitChanged(what); // rebuilds the queued steps for a new sound, saves for a setting (see the controller)
     render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
+    // An Export dialog that is open says how much memory its render takes, which depends on the sounds (a loaded sample's
+    // release adds warm-up passes): the saved samples come back pad by pad after the page opens, and a dialog opened before
+    // they have would keep an estimate made from the built-in sounds.
+    if (exportDialog?.isOpen) refreshExportDialog();
   },
 });
 
