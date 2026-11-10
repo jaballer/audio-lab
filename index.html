@@ -90,8 +90,39 @@
             </div>
           </div>
 
+          <div class="quick-group" role="group" aria-label="File">
+            <span class="small-label">File</span>
+            <div class="quick-row quick-row-tight">
+              <button
+                id="project-open"
+                class="btn btn-small"
+                type="button"
+                title="Open a project file, replacing the beat on the page"
+              >
+                Open
+              </button>
+              <button
+                id="project-save"
+                class="btn btn-small"
+                type="button"
+                title="Save the whole beat and its samples as a project file you can open again"
+              >
+                Save
+              </button>
+              <button
+                id="project-export"
+                class="btn btn-small"
+                type="button"
+                aria-haspopup="dialog"
+                title="Save the sequence as a WAV file"
+              >
+                Export
+              </button>
+            </div>
+          </div>
+
           <div class="quick-group quick-end">
-            <div class="quick-row">
+            <div id="quick-switches" class="quick-row">
               <button
                 id="lights"
                 class="btn btn-small btn-led"
@@ -321,12 +352,12 @@
           is off turns it on at that height; a step recorded live keeps the velocity of the hit
         </li>
         <li>
-          Export, in the machine's header, opens a window to save the sequence showing as a 16-bit WAV file: 1, 2, 4 or
-          8 loops of it in one file, in stereo or mono, with its length and size shown before you save it (and a warning
-          when it needs a lot of memory). One loop is exactly the length of its bars, so that it loops, at the tempo,
-          volume and pad settings on the page; what rings on past the end is heard at the start. Stems makes a WAV for
-          each pad that has steps, in one zip: they are not clipped, and they add up to the mix, so the parts can be
-          mixed elsewhere. It shows how far it has got, and Cancel export or Escape stops it
+          Export, in the File group above the display, opens a window to save the sequence showing as a 16-bit WAV file:
+          1, 2, 4 or 8 loops of it in one file, in stereo or mono, with its length and size shown before you save it
+          (and a warning when it needs a lot of memory). One loop is exactly the length of its bars, so that it loops,
+          at the tempo, volume and pad settings on the page; what rings on past the end is heard at the start. Stems
+          makes a WAV for each pad that has steps, in one zip: they are not clipped, and they add up to the mix, so the
+          parts can be mixed elsewhere. It shows how far it has got, and Cancel export or Escape stops it
         </li>
         <li><a href="./keyboard.html">Keyboard test</a> is a page for trying a MIDI keyboard</li>
       </ul>

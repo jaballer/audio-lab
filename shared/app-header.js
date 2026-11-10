@@ -7,7 +7,7 @@
 //     brand: { name: "PAD", accent: "16" },   // `accent` is drawn highlighted, after `name`
 //     sub: "Digital Sampler & Sequencer",
 //     onPower: () => {},                      // optional: draws the POWER switch (a rocker, with its lamp) and calls this when it is pressed
-//     tools: site.midiTools,                  // optional: an element drawn first in the cluster (Connect MIDI, its status, the Console)
+//     tools: site.midiTools,                  // optional: an element drawn first in the cluster (the MIDI switch, its status, the Console)
 //     actions: [{ label: "Export", title: "Save the sequence as a file", popup: "dialog", onPress: () => {} }],
 //                                             // optional: buttons before POWER, in order; `popup` says what a press opens
 //   });

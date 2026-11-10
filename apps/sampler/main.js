@@ -79,16 +79,12 @@ const header = createAppHeader($("header"), {
   sub: "Digital Sampler & Sequencer",
   tools: site.midiTools,
   onPower: () => togglePower(audio),
-  actions: [
-    { label: "Export", title: "Save the sequence as a WAV file", popup: "dialog", onPress: () => openExport() },
-    {
-      label: "Save",
-      title: "Save the whole beat and its samples as a project file you can open again",
-      onPress: () => saveProject(),
-    },
-    { label: "Open", title: "Open a project file, replacing the beat on the page", onPress: () => openProjectPicker() },
-  ],
 });
+
+// Open, Save and Export sit in the quick bar (index.html), not the header: the header was getting crowded.
+$("project-open").addEventListener("click", () => openProjectPicker());
+$("project-save").addEventListener("click", () => saveProject());
+$("project-export").addEventListener("click", () => openExport());
 
 // The Export dialog, built below with the rest of export; the song can change (a MIDI knob) before it exists.
 let exportDialog = null;
@@ -642,7 +638,7 @@ redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
 // ---------- Export ----------
 // The sequence showing, rendered offline and saved as a WAV file (export-wav.js decides when it may run and what it
-// renders). The machine header's Export button opens a dialog for the choices (the mix or a stem for each pad in a zip,
+// renders). The File group's Export button opens a dialog for the choices (the mix or a stem for each pad in a zip,
 // loops, stereo or mono), which are kept
 // between visits; the dialog says how long and how big the file will be, shows how far a long render has got, and
 // cancels it. A message goes to the dialog as well as the LCD: the LCD is behind the dialog, and out of reach of a
@@ -677,7 +673,7 @@ function refreshExportDialog() {
 }
 
 exportDialog = createExportDialog($("export-dialog"), {
-  opener: header.actionButtons[0],
+  opener: $("project-export"),
   onChange(options) {
     exportOptions = normalizeExportOptions(options);
     saveJson(EXPORT_KEY, exportOptions);
@@ -770,6 +766,8 @@ const midi = createMidi({
   onLog: site.log,
 });
 
+// The MIDI switch lives beside Lights and Edit Pad: all three are lamps that say whether they are on.
+$("quick-switches").prepend(site.midiButton);
 wireMidiButton(site.midiButton, midi);
 
 // ---------- The step editor can be hidden ----------

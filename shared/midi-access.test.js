@@ -153,6 +153,31 @@ describe("createMidiAccess.connect", () => {
   });
 });
 
+describe("createMidiAccess.disconnect", () => {
+  it("stops listening and clears the status, and connect() listens again", async () => {
+    const keys = port("MPK mini");
+    const access = fakeAccess({ inputs: [keys] });
+    const { midi, handlers } = setup({ access });
+    await midi.connect();
+    expect(keys.onmidimessage).toBeTypeOf("function");
+
+    midi.disconnect();
+    expect(keys.onmidimessage).toBeNull();
+    expect(access.onstatechange).toBeNull();
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("");
+
+    await midi.connect();
+    expect(keys.onmidimessage).toBeTypeOf("function");
+    expect(handlers.onStatus).toHaveBeenLastCalledWith("MIDI: MPK mini");
+  });
+
+  it("does nothing before a connection", () => {
+    const { midi, handlers } = setup();
+    midi.disconnect();
+    expect(handlers.onStatus).not.toHaveBeenCalled();
+  });
+});
+
 describe("summarizeInputs", () => {
   it("names one or two inputs, and counts more than that", () => {
     expect(summarizeInputs([])).toBe("MIDI: no device");
@@ -282,38 +307,60 @@ describe("createMidiAccess.autoConnect", () => {
 describe("wireMidiButton", () => {
   // A button that remembers its click handler so the test can press it.
   function fakeButton() {
-    const button = { hidden: false, click: null };
+    const button = { attrs: {}, click: null };
     button.addEventListener = (_type, handler) => {
       button.click = handler;
+    };
+    button.setAttribute = (name, value) => {
+      button.attrs[name] = value;
     };
     return button;
   }
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const fakeMidi = (over = {}) => ({
+    connect: vi.fn(async () => true),
+    disconnect: vi.fn(),
+    autoConnect: vi.fn(async () => false),
+    ...over,
+  });
 
-  it("connects on click and hides the button once connected", async () => {
+  it("starts off, and lights when a click connects", async () => {
     const button = fakeButton();
-    const midi = { connect: vi.fn(async () => true), autoConnect: vi.fn(async () => false) };
+    const midi = fakeMidi();
     wireMidiButton(button, midi);
     await settle();
-    expect(button.hidden).toBe(false);
+    expect(button.attrs["aria-pressed"]).toBe("false");
 
     await button.click();
     expect(midi.connect).toHaveBeenCalled();
-    expect(button.hidden).toBe(true);
+    expect(button.attrs["aria-pressed"]).toBe("true");
   });
 
-  it("leaves the button for another try when connecting fails", async () => {
+  it("stays in place and turns MIDI off on a second click", async () => {
     const button = fakeButton();
-    const midi = { connect: vi.fn(async () => false), autoConnect: vi.fn(async () => false) };
+    const midi = fakeMidi();
     wireMidiButton(button, midi);
     await button.click();
-    expect(button.hidden).toBe(false);
+    await button.click();
+    expect(midi.disconnect).toHaveBeenCalled();
+    expect(button.attrs["aria-pressed"]).toBe("false");
+
+    await button.click();
+    expect(midi.connect).toHaveBeenCalledTimes(2);
+    expect(button.attrs["aria-pressed"]).toBe("true");
   });
 
-  it("hides the button when it reconnected on its own", async () => {
+  it("stays off for another try when connecting fails", async () => {
     const button = fakeButton();
-    wireMidiButton(button, { connect: vi.fn(), autoConnect: vi.fn(async () => true) });
+    wireMidiButton(button, fakeMidi({ connect: vi.fn(async () => false) }));
+    await button.click();
+    expect(button.attrs["aria-pressed"]).toBe("false");
+  });
+
+  it("lights when it reconnected on its own", async () => {
+    const button = fakeButton();
+    wireMidiButton(button, fakeMidi({ autoConnect: vi.fn(async () => true) }));
     await settle();
-    expect(button.hidden).toBe(true);
+    expect(button.attrs["aria-pressed"]).toBe("true");
   });
 });

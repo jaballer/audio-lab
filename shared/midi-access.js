@@ -80,6 +80,17 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
     return true;
   }
 
+  // A page cannot revoke the browser's permission, so "off" means it stops listening: no message reaches the app and
+  // plugging a device in or out is not followed, until connect() runs again.
+  function disconnect() {
+    if (!access) return;
+    for (const input of access.inputs.values()) input.onmidimessage = null;
+    access.onstatechange = null;
+    known = null;
+    onStatus(""); // the switch's lamp says it is off
+    onLog?.("MIDI off: no longer listening to inputs");
+  }
+
   // Reconnect silently on later visits if permission was already granted.
   async function autoConnect() {
     try {
@@ -91,16 +102,26 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
     return false;
   }
 
-  return { connect, autoConnect };
+  return { connect, disconnect, autoConnect };
 }
 
-// Hook up a "Connect MIDI" button: connect on click, and reconnect silently
-// when permission was already granted. The button hides once connected.
+// Hook up the MIDI switch: it stays on the device, like a real switch, and shows whether the page is listening
+// (aria-pressed). Pressing it connects, or stops listening; a failed connect leaves it off for another try. It
+// reconnects silently on later visits if permission was already granted.
 export function wireMidiButton(button, midi) {
+  let on = false;
+  const show = (value) => {
+    on = value;
+    button.setAttribute("aria-pressed", String(on));
+  };
+  show(false);
   button.addEventListener("click", async () => {
-    if (await midi.connect()) button.hidden = true;
+    if (on) {
+      midi.disconnect();
+      show(false);
+    } else {
+      show(await midi.connect());
+    }
   });
-  midi.autoConnect().then((connected) => {
-    if (connected) button.hidden = true;
-  });
+  midi.autoConnect().then(show);
 }
