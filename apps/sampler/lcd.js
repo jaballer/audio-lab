@@ -111,6 +111,8 @@ export function createLcd({ lines, message, ruler, progress = null, screen = nul
   }
 
   function clear() {
+    clearTimeout(messageTimer); // a message from before must not show under the boot lines
+    message.textContent = "";
     lines.forEach((line) => setText(line, ""));
     cells.forEach((cell) => cell.classList.remove("on", "now"));
     if (progress) drawProgress(progress, lcdProgress({ playing: false, steps, bars: 1 }));

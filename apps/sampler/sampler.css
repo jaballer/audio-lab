@@ -1063,11 +1063,18 @@
 /* power-sequence.js sets data-power ("off", "booting", "on", "shutdown") on the pad grid and on the LCD screen. Off, the
    glass is dark and the pads unlit; booting, the display comes up under its boot lines while light sweeps across the
    pads from pad 1; shutdown runs the same backwards. Durations match BOOT_MS and SHUTDOWN_MS in power-sequence.js. */
+/* The glass dims and brightens by a transition, so flipping power mid-boot or mid-shutdown turns around from the
+   brightness it has reached (a keyframe animation would restart from its first keyframe and snap). */
 .lcd-screen {
   transition:
     background-color 0.35s,
     box-shadow 0.35s,
-    color 0.35s;
+    color 0.35s,
+    filter 0.5s ease-out;
+}
+.lcd-screen[data-power="off"],
+.lcd-screen[data-power="shutdown"] {
+  filter: brightness(0.7);
 }
 .lcd-screen[data-power="off"] {
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 3px), #4a5440;
@@ -1083,11 +1090,14 @@
 .lcd-screen[data-power="booting"] #lcd-3 {
   animation-delay: 0.5s;
 }
-.lcd-screen[data-power="booting"] {
-  animation: lcd-warm-up 0.9s ease-out both;
+/* The bar along the top fills over the boot. --progress has to be a registered number for it to animate. */
+@property --progress {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
-.lcd-screen[data-power="shutdown"] {
-  animation: lcd-fade-out 0.6s ease-in forwards;
+.lcd-screen[data-power="booting"] .lcd-progress {
+  animation: lcd-boot-progress 1.1s ease-out both; /* BOOT_MS */
 }
 .lcd-screen[data-power="shutdown"] .lcd-progress,
 .lcd-screen[data-power="off"] .lcd-progress,
@@ -1104,30 +1114,12 @@
     clip-path: inset(0 0 0 0);
   }
 }
-/* The glass warms from dark to its normal green, flickering once as it catches. */
-@keyframes lcd-warm-up {
-  0% {
-    filter: brightness(0.5);
+@keyframes lcd-boot-progress {
+  from {
+    --progress: 0;
   }
-  35% {
-    filter: brightness(1.18);
-  }
-  50% {
-    filter: brightness(0.85);
-  }
-  100% {
-    filter: brightness(1);
-  }
-}
-@keyframes lcd-fade-out {
-  0% {
-    filter: brightness(1);
-  }
-  25% {
-    filter: brightness(1.15);
-  }
-  100% {
-    filter: brightness(0.7);
+  to {
+    --progress: 1;
   }
 }
 
