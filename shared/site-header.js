@@ -1,21 +1,19 @@
 // The bar fixed to the top of the window, above the machine and the same on every page: the site's name and a link to each
-// page. It also builds the MIDI tools (the MIDI switch, its status, the Console), which are not drawn in the bar: they are
+// page. It also builds the MIDI tools (its status, then the MIDI switch), which are not drawn in the bar: they are
 // handed to the machine's own header (app-header.js `tools`), beside Export and POWER. It draws into the <header> it is
 // handed and decides nothing.
 //
 //   const site = createSiteHeader(element, {
 //     current: "mpc-sample",   // the id of this page in pages.js; its link is marked
-//     midi: false,             // optional: a page with no MIDI has no MIDI switch, status or Console
+//     midi: false,             // optional: a page with no MIDI has no MIDI switch or status
 //   });
-//   site.midiTools            // the element holding the three MIDI tools: pass to createAppHeader as `tools` (null without MIDI)
+//   site.midiTools            // the element holding the MIDI tools: pass to createAppHeader as `tools` (null without MIDI)
 //   site.midiButton            // pass to wireMidiButton() (null without MIDI)
 //   site.setMidiStatus(text)   // pass as createMidiAccess's onStatus
 //   site.log(text, level)      // pass as createMidiAccess's onLog; level "info" | "warn" | "error"
 //
-// The status is one short line; whatever is long or only useful when something is wrong goes to
-// the console drawer, opened from the Console button.
+// The status is one short line; whatever is long or only useful when something is wrong goes to the log.
 
-import { createConsoleDrawer } from "./console-drawer.js";
 import { createConsoleLog } from "./console-log.js";
 import { PAGES, SITE_NAME } from "./pages.js";
 
@@ -69,25 +67,12 @@ export function createSiteHeader(root, { current, midi = true }) {
   midiStatus.id = "midi-status";
   midiStatus.setAttribute("role", "status");
 
-  const consoleButton = element("button", "btn btn-small", "Console");
-  consoleButton.type = "button";
-  consoleButton.setAttribute("aria-expanded", "false");
-  const drawerEl = element("section");
-  drawerEl.id = "console-drawer";
-  consoleButton.setAttribute("aria-controls", drawerEl.id);
-
-  // Messages sent before the drawer is open are kept, so it shows them when it is.
-  let drawer = null;
-  const log = createConsoleLog({ onChange: () => drawer?.render() });
-  drawer = createConsoleDrawer(drawerEl, {
-    log,
-    onToggle: (open) => consoleButton.setAttribute("aria-expanded", String(open)),
-  });
-  consoleButton.addEventListener("click", () => drawer.toggle());
-  root.ownerDocument.body.append(drawerEl);
+  // The Console button and its drawer (console-drawer.js) are left out until there is a better place for them. The log
+  // still collects what is sent, so the drawer can be wired back in without losing messages.
+  const log = createConsoleLog();
 
   const midiTools = element("div", "midi-tools");
-  midiTools.append(midiButton, midiStatus, consoleButton);
+  midiTools.append(midiStatus, midiButton); // status first: the cluster is right-aligned, so its length changes never move the buttons
   reserveSpace(root);
 
   return {

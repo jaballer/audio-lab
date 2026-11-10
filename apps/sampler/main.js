@@ -8,7 +8,7 @@ import "../../shared/light-show.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAudioNotice } from "../../shared/audio-notice.js";
-import { setAttr, setDisabledMany, setText } from "../../shared/dom-updates.js";
+import { setAttr, setDisabledMany, setHidden, setText } from "../../shared/dom-updates.js";
 import { createLightShow } from "../../shared/light-show-view.js";
 import { bandLevels, beatPhase, rmsLevel, smoothLevel } from "../../shared/light-show.js";
 import { togglePower } from "../../shared/power.js";
@@ -96,7 +96,15 @@ let exportDialog = null;
 const LIGHTS_KEY = "pad-sampler:lights";
 const lightsOnStored = loadJson(LIGHTS_KEY);
 const lights = createLightShow($("light-show"), { read: readLights });
-const lightsButton = $("lights");
+// Lights joins MIDI in the header beside Power: both are lamps that say whether they are on. It reuses the MIDI switch's lamp.
+const lightsButton = document.createElement("button");
+lightsButton.id = "lights";
+lightsButton.className = "btn btn-small btn-midi";
+lightsButton.type = "button";
+lightsButton.setAttribute("aria-pressed", "false");
+lightsButton.title = "Light show behind the machine, in time with the beat";
+lightsButton.textContent = "Lights";
+site.midiTools.append(lightsButton);
 lightsButton.addEventListener("click", () => toggleLights());
 let lightLevel = 0;
 let lastLightFrame = 0;
@@ -377,6 +385,7 @@ const openProject = (file) =>
       say("PROJECT NOT OPENED: STORAGE FULL");
       return false;
     }
+    saveJson(STARTER_KEY, "");
     saver.cancel(); // (again: a change made while it was being written would be flushed as the page unloads)
     window.removeEventListener("beforeunload", keepOpen); // it is all written: the reload is ours
     location.reload();
@@ -395,6 +404,12 @@ projectInput.addEventListener("change", () => {
 const starterSelect = $("starter-select");
 const starterStart = $("starter-start");
 for (const { id, name, bpm } of STARTERS) starterSelect.append(new Option(`${name} \u00b7 ${bpm} BPM`, id));
+// The page starts again after a starter, so the choice is kept to show which one the beat began from. Opening a project
+// replaces the beat with something that did not come from a starter, so it forgets it.
+const STARTER_KEY = "pad-sampler:starter";
+const storedStarter = loadJson(STARTER_KEY);
+if (STARTERS.some(({ id }) => id === storedStarter)) starterSelect.value = storedStarter;
+starterStart.disabled = starterSelect.value === "";
 // Pads playing a sample that the saved map does not hold as it sounds here: one that loaded but could not be kept, or whose
 // trim could not be written. The page starting again would put the saved one back (as Save, below, says of a project).
 function unsavedSamplePads() {
@@ -489,6 +504,7 @@ const loadStarter = (starter) =>
       say("STARTER NOT LOADED: CANNOT SAVE");
       return stay();
     }
+    saveJson(STARTER_KEY, starter.id); // best effort: without it the list just shows "Choose…" after the reload
     saver.cancel(); // (again: a change made during the write would be flushed as the page unloads)
     location.reload();
     return true;
@@ -890,8 +906,6 @@ const midi = createMidi({
   onLog: site.log,
 });
 
-// The MIDI switch lives beside Lights and Edit Pad: all three are lamps that say whether they are on.
-$("quick-switches").prepend(site.midiButton);
 wireMidiButton(site.midiButton, midi);
 
 // ---------- The step editor can be hidden ----------
@@ -902,6 +916,21 @@ createDisclosure({
   regions: [$("step-tools"), $("step-body")],
   open: loadJson(STEPS_KEY, true) !== false,
   onToggle: (open) => saveJson(STEPS_KEY, open),
+});
+
+// The velocity bars are off until the Velocity switch asks for them; the choice is remembered.
+const VELOCITY_KEY = "pad-sampler:velocity";
+const velocityToggle = $("velocity-toggle");
+const velocitySection = $("velocity-section");
+function showVelocity(on) {
+  setAttr(velocityToggle, "aria-pressed", String(on));
+  setHidden(velocitySection, !on, velocityToggle);
+}
+showVelocity(loadJson(VELOCITY_KEY, false) === true);
+velocityToggle.addEventListener("click", () => {
+  const on = velocityToggle.getAttribute("aria-pressed") !== "true";
+  showVelocity(on);
+  saveJson(VELOCITY_KEY, on);
 });
 
 // The pad editor's Tune and Envelope sections can be hidden too, each remembered, and shown by default. The button is
