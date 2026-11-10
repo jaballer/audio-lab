@@ -1,4 +1,4 @@
-// The volume knob: drag it, scroll it, or use the arrow keys, like the tempo knob (tempo-knob.js), and with the same
+// The volume knob (swing has one too, in per cent as well): drag it, scroll it, or use the arrow keys, like the tempo knob (tempo-knob.js), and with the same
 // arithmetic (knob-moves.js), on a scale of whole steps from `min` to `max`. A drag of two pixels is one step; Shift on
 // the wheel or the arrow keys, and Page Up and Page Down, are ten. It reports what the user asked for, kept inside the
 // scale (the sampler does not clamp a volume) and only when it differs from the current one, and the caller decides

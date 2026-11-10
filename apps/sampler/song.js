@@ -10,7 +10,7 @@
 
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
 import { parsePadSettings } from "./pad-settings.js";
-import { clampBpm } from "../../shared/tempo.js";
+import { SWING_DEFAULT, clampBpm, clampSwing } from "../../shared/tempo.js";
 
 // Still named after the project's old name: changing it would orphan every beat
 // already saved in visitors' browsers.
@@ -19,7 +19,7 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 7;
+export const SONG_VERSION = 8;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
 // field itself is set by upgradeSong.
@@ -38,6 +38,8 @@ const MIGRATIONS = {
   // Version 7 adds each pad's envelope (`attack`, `decay`, `sustain`, `release`) to `padSettings`. A version 6 entry has
   // none, which reads as no envelope.
   6: (song) => song,
+  // Version 8 adds `swing` (50 to 75, 50 straight). A version 7 song has none, which reads as straight.
+  7: (song) => song,
 };
 
 const VOLUME_MAX = 100;
@@ -46,10 +48,13 @@ const VOLUME_MAX = 100;
 // { pad row: [steps that are on] }, and `velocities` is pattern.velocitySnapshot(): { pad row: { step: 1-127 } }
 // for the steps that are not at full velocity. `current` is the index of the one that was showing.
 //
+// `swing` is how much of each pair of steps the first takes, in per cent, 50 (straight) to 75 (tempo.js).
+//
 // `padSettings` is { pad: { gain, pitch, choke, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
-export const serializeSong = ({ bpm, volume, current, sequences, padSettings = {} }) => ({
+export const serializeSong = ({ bpm, swing = SWING_DEFAULT, volume, current, sequences, padSettings = {} }) => ({
   version: SONG_VERSION,
   bpm,
+  swing,
   volume,
   current,
   sequences,
@@ -143,6 +148,7 @@ export function parseSong(stored, { rows, steps, maxBars = 1, sequenceCount = 1 
 
   return {
     bpm: clampBpm(raw.bpm),
+    swing: clampSwing(raw.swing),
     volume: Math.round(Math.min(VOLUME_MAX, Math.max(0, raw.volume))),
     current: isIndex(raw.current, sequenceCount) ? raw.current : 0,
     sequences,

@@ -37,6 +37,7 @@ const SEQUENCES = 4;
 // A saved song with one sequence of the given pattern and length, the rest empty.
 const savedSong = ({
   bpm = 100,
+  swing = 50,
   volume = 50,
   bars = 1,
   pattern = {},
@@ -45,6 +46,7 @@ const savedSong = ({
   padSettings = {},
 } = {}) => ({
   bpm,
+  swing,
   volume,
   current,
   padSettings,
@@ -1547,6 +1549,42 @@ describe("tempo", () => {
     tapAt(1500); // half a second apart: 120 BPM
     expect(message).toHaveBeenLastCalledWith("TAP TEMPO");
     expect(sampler.getState().bpm).toBe(120);
+  });
+});
+
+describe("swing", () => {
+  it("starts straight, or where the saved song had it", () => {
+    expect(setup().sampler.getState().swing).toBe(50);
+    expect(setup({ song: savedSong({ swing: 60 }) }).sampler.getState().swing).toBe(60);
+  });
+
+  it("is kept inside its range, says so, and asks for a save", () => {
+    const { sampler, message, change, songChange } = setup();
+    sampler.setSwing(200);
+    expect(sampler.getState().swing).toBe(75);
+    expect(message).toHaveBeenLastCalledWith("SWING 75%");
+    expect(change).toHaveBeenCalledTimes(1);
+    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(sampler.getSong().swing).toBe(75);
+  });
+
+  it("says it is off when it is straight again", () => {
+    const { sampler, message } = setup();
+    sampler.setSwing(60);
+    sampler.setSwing(50);
+    expect(message).toHaveBeenLastCalledWith("SWING OFF");
+  });
+
+  it("plays the second step of each pair later", () => {
+    const { sampler, sounds, advance } = setup({
+      bpm: 120,
+      song: savedSong({ bpm: 120, swing: 66, pattern: { 0: [0, 1] } }),
+    });
+    sampler.start();
+    for (let i = 0; i < 20; i++) advance(0.025); // as the clock moves when nothing stalls
+    const [first, second] = sounds[0].play.mock.calls.map((call) => call[2]);
+    // A step is 0.125 s at 120 BPM; the second of the pair is 0.04 s after its place on the grid.
+    expect(second - first).toBeCloseTo(0.165);
   });
 });
 

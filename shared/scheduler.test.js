@@ -137,6 +137,68 @@ describe("createScheduler", () => {
     expect(played.slice(0, 3).map(([step]) => step)).toEqual([2, 3, 4]);
   });
 
+  describe("swing", () => {
+    // 120 BPM: a step is 0.125 s on the grid.
+    const stepTimes = (played, count) => Object.fromEntries(played.slice(0, count));
+
+    it("plays every step on the grid when it is straight", () => {
+      const { scheduler, played, run } = setup({ bpm: 120 });
+      scheduler.start(0);
+      run(0.5);
+      const times = stepTimes(played, 4);
+      expect(times[1] - times[0]).toBeCloseTo(0.125);
+      expect(times[2] - times[1]).toBeCloseTo(0.125);
+    });
+
+    it("plays the second step of each pair later, and the next pair where it was", () => {
+      const { scheduler, played, run } = setup({ bpm: 120 });
+      scheduler.setSwing(66);
+      scheduler.start(0);
+      run(0.5);
+      const times = stepTimes(played, 5);
+      expect(times[1] - times[0]).toBeCloseTo(0.165); // a bigger first half
+      expect(times[2] - times[1]).toBeCloseTo(0.085); // and a smaller second
+      expect(times[2]).toBeCloseTo(0.25); // the pair as a whole is two steps long, as before
+      expect(times[4]).toBeCloseTo(0.5);
+    });
+
+    it("can be set to begin with, and read back as set", () => {
+      const clock = fakeClock();
+      const scheduler = createScheduler({ clock, steps: 16, bpm: 120, swing: 60, onStep: () => {} });
+      expect(scheduler.swing).toBe(60);
+      expect(scheduler.setSwing(200)).toBe(75);
+      expect(scheduler.swing).toBe(75);
+    });
+
+    it("moves the playhead with the step, not before it", () => {
+      const { clock, scheduler, run } = setup({ bpm: 120 });
+      scheduler.setSwing(66);
+      scheduler.start(0);
+      run(0.1);
+      clock.time = 0.15; // past the grid place of step 1 (0.125), before it sounds (0.165)
+      scheduler.poll();
+      expect(scheduler.playheadStep).toBe(0);
+      clock.time = 0.17;
+      scheduler.poll();
+      expect(scheduler.playheadStep).toBe(1);
+    });
+
+    it("hands a step back at the place it sounded when it is built again", () => {
+      const { scheduler, played, run } = setup({ bpm: 120 });
+      scheduler.setSwing(66);
+      scheduler.start(0);
+      run(0.3); // steps up to 3 are handed out, and the clock is before them
+      const [, time] = played.find(([step]) => step === 3); // an odd step: it sounded after its place on the grid
+      played.length = 0;
+      scheduler.rewindTo(3, time);
+      run(0.4);
+      expect(played[0][0]).toBe(3);
+      expect(played[0][1]).toBeCloseTo(time); // not delayed a second time
+      expect(played[1][0]).toBe(4);
+      expect(played[1][1]).toBeCloseTo(0.5, 2); // and the next pair is on the grid
+    });
+  });
+
   it("wraps the steps already queued for the playhead into the new length", () => {
     const { scheduler, run } = setup({ steps: 16, bpm: 120 });
     scheduler.start();

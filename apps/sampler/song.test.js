@@ -16,6 +16,7 @@ const SHAPE = { rows: 16, steps: 16, maxBars: 8, sequenceCount: 4 };
 const empty = { bars: 1, pattern: {}, velocities: {} };
 const song = {
   bpm: 96.5,
+  swing: 58,
   volume: 60,
   current: 1,
   padSettings: { 1: { gain: -6, pitch: 3, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 } },
@@ -446,6 +447,7 @@ describe("songs saved by version 1", () => {
   it("become a song with that pattern as the first sequence, selected", () => {
     expect(parse(v1)).toEqual({
       bpm: 120,
+      swing: 50,
       volume: 70,
       current: 0,
       sequences: [{ bars: 1, pattern: { 0: [0, 8], 2: [4] }, velocities: {} }, empty, empty, empty],
@@ -499,5 +501,31 @@ describe("backUpUnusable", () => {
     expect(backUpUnusable(null, false, "k:backup", save)).toBe(false);
     expect(backUpUnusable({ version: SONG_VERSION }, true, "k:backup", save)).toBe(false);
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe("swing", () => {
+  it("is kept through saving and loading", () => {
+    expect(parse(serializeSong(song)).swing).toBe(58);
+  });
+
+  it("is straight in a song that does not say, as one saved by version 7 does not", () => {
+    const v7 = {
+      version: 7,
+      bpm: 100,
+      volume: 50,
+      current: 0,
+      padSettings: {},
+      sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
+    };
+    expect(parse(v7).swing).toBe(50);
+    expect(serializeSong({ ...song, swing: undefined }).swing).toBe(50);
+  });
+
+  it("is brought into range, and a value that is not a number is straight", () => {
+    expect(parse({ ...serializeSong(song), swing: 99 }).swing).toBe(75);
+    expect(parse({ ...serializeSong(song), swing: 10 }).swing).toBe(50);
+    expect(parse({ ...serializeSong(song), swing: "58" }).swing).toBe(50);
+    expect(parse({ ...serializeSong(song), swing: 58.4 }).swing).toBe(58);
   });
 });

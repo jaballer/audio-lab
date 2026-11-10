@@ -196,6 +196,17 @@ describe("renderSequence", () => {
     expect(sounds[2].play).not.toHaveBeenCalled();
   });
 
+  it("plays the odd steps later when the song swings, as the page does, and the even ones on the grid", async () => {
+    // 120 BPM, 66 per cent: an odd step is 0.04 s after its place on the grid (0.125 s a step)
+    const { render, sounds } = setup(sequence({ 0: [0, 1, 2, 3] }), { swing: 66 });
+    await render();
+    const first = sounds[0].play.mock.calls.slice(0, 4).map((call) => call[2] - LEAD_SECONDS);
+    expect(first[0]).toBeCloseTo(0);
+    expect(first[1]).toBeCloseTo(0.125 + 0.04);
+    expect(first[2]).toBeCloseTo(0.25);
+    expect(first[3]).toBeCloseTo(0.375 + 0.04);
+  });
+
   it("plays at the song's tempo, not another", async () => {
     const { render, sounds } = setup(sequence({ 0: [4] }), { bpm: 60 });
     await render();
@@ -383,6 +394,12 @@ describe("planRender", () => {
     expect(p.frames).toBe(96000);
     expect(p.first).toBe(Math.round((LEAD_SECONDS + 2) * 48000));
     expect(p.total).toBe(p.first + p.frames);
+  });
+
+  it("has no swing when the song is straight, and the delay of an odd step when it swings", () => {
+    expect(plan(sequence({ 0: [1] })).swingLate).toBe(0);
+    // 120 BPM, 66 per cent: 0.04 s, the same as the page plays it (tempo.js)
+    expect(plan(sequence({ 0: [1] }), { swing: 66 }).swingLate).toBeCloseTo(0.04);
   });
 
   it("is the hits, the passes and where the kept window is, worked out before any audio", () => {

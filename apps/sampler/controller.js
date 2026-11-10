@@ -36,11 +36,12 @@
 //   sampler.kitChanged("sound" | "setting")  // the kit changed: a new sound rebuilds the queued steps, a setting is saved
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
+//   sampler.setSwing(58)         // 50 (straight) to 75: the second step of each pair sounds later (tempo.js)
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
+//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
-//   sampler.getSong()            // { bpm, volume, current, sequences: [{ bars, pattern, velocities }], padSettings }: what song.js saves
+//   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings }: what song.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
@@ -52,7 +53,7 @@ import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
 import { FULL_VELOCITY, createPattern, firstDifference } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
-import { createTapTempo, nearestStep } from "../../shared/tempo.js";
+import { SWING_DEFAULT, createTapTempo, nearestStep } from "../../shared/tempo.js";
 import { STARTER_BEAT } from "./starter-beat.js";
 
 export const DEFAULT_VOLUME = 80; // 0-100; the same as the slider's markup
@@ -118,6 +119,7 @@ export function createSampler({
     clock,
     steps: totalSteps(),
     bpm: song?.bpm,
+    swing: song?.swing,
     onStep(step, time, heard) {
       const { ctx, master } = audio;
       const rows = [];
@@ -421,6 +423,13 @@ export function createSampler({
     onSongChange();
   }
 
+  function setSwing(value) {
+    const swing = scheduler.setSwing(value);
+    onMessage(swing === SWING_DEFAULT ? "SWING OFF" : `SWING ${swing}%`);
+    onChange();
+    onSongChange();
+  }
+
   function tapTempo() {
     const bpm = taps.tap(now());
     if (bpm === null) {
@@ -459,6 +468,7 @@ export function createSampler({
     stop,
     toggleRec,
     setBpm,
+    setSwing,
     nudgeTempo: (delta) => setBpm(scheduler.bpm + delta),
     tapTempo,
     setVolume,
@@ -473,6 +483,7 @@ export function createSampler({
       recording,
       playing: scheduler.playing,
       bpm: scheduler.bpm,
+      swing: scheduler.swing,
       volume,
       sequence: current,
       sequenceCount,
@@ -491,6 +502,7 @@ export function createSampler({
 
     getSong: () => ({
       bpm: scheduler.bpm,
+      swing: scheduler.swing,
       volume,
       current,
       padSettings: kit.settingsSnapshot(),
