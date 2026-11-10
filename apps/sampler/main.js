@@ -44,7 +44,8 @@ import {
   projectBlob,
   projectFileName,
 } from "./project.js";
-import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
+import { SAMPLES_KEY, createSamples, isSamplesMap, parseSamples } from "./samples.js";
+import { STARTERS, starterSong } from "./starters.js";
 import { createTabSync } from "./tab-sync.js";
 import { createUpdateNotice } from "../../shared/update-notice.js";
 import { createSampleLoader } from "./sample-loader.js";
@@ -385,6 +386,119 @@ projectInput.addEventListener("change", () => {
   const [file] = projectInput.files;
   projectInput.value = ""; // so the same file can be chosen again
   if (file) openProject(file);
+});
+
+// A starter (starters.js) is a beat in a style. It goes the way Open does, for the same reason: the song is written where
+// the page keeps its own, and the page starts again and reads it, so nothing live has to be taken apart. The samples are
+// not touched (a starter has none), so the pads that have one keep it, and so do the settings the person gave them
+// (gain, pitch, envelope); the volume stays where the person has it.
+const starterSelect = $("starter-select");
+const starterStart = $("starter-start");
+for (const { id, name, bpm } of STARTERS) starterSelect.append(new Option(`${name} \u00b7 ${bpm} BPM`, id));
+// Pads playing a sample that the saved map does not hold as it sounds here: one that loaded but could not be kept, or whose
+// trim could not be written. The page starting again would put the saved one back (as Save, below, says of a project).
+function unsavedSamplePads() {
+  const saved = Object.entries(parseSamples(loadJson(SAMPLES_KEY), PAD_COUNT)).map(([pad, info]) => ({
+    pad: Number(pad),
+    name: info.name,
+    bytes: { byteLength: info.bytes },
+    trim: info.trim,
+  }));
+  const playing = [];
+  for (let pad = 0; pad < PAD_COUNT; pad++) {
+    const sound = kit.get(pad);
+    if (!kit.isDefault(pad)) playing.push({ pad, name: sound.name, bytes: sound.info?.bytes, trim: sound.trim });
+  }
+  return padsNotSaved({ playing, samples: saved, missing: [] });
+}
+const unsavedWarning = (pads) =>
+  `${pads.length} sample${pads.length === 1 ? "" : "s"} on the pads ${pads.length === 1 ? "is" : "are"} not saved as ${pads.length === 1 ? "it sounds" : "they sound"} now, and will change after the reload.`;
+// Long enough for the events a dialog held back (the other tab's `storage`) to be delivered: a timer, as a resolved promise
+// would carry on before them. Not a guarantee, but those events are already queued when the dialog closes.
+const EVENTS_SETTLE_MS = 50;
+const eventsSettle = () => new Promise((resolve) => setTimeout(resolve, EVENTS_SETTLE_MS));
+// The events a dialog held back can start a load (a file chosen or dropped meanwhile), so once they have been let in, what is
+// under way is waited for again: the last thing before the song is written is a wait that found nothing left.
+const quiet = async () => {
+  await eventsSettle();
+  await samples.idle();
+};
+const loadStarter = (starter) =>
+  withProjectLock(async () => {
+    if (tabSync.isStale) return sayStale("NOT LOADED");
+    const unsavedBefore = unsavedSamplePads();
+    // Nothing is undoable once the page starts again, so ask first.
+    const warning = unsavedBefore.length ? ` ${unsavedWarning(unsavedBefore)}` : "";
+    if (
+      !window.confirm(
+        `Start from ${starter.name}? The beat and pad settings on the page now will be replaced.${warning}`,
+      )
+    )
+      return false;
+    saver.cancel(); // a change that is waiting would otherwise be written over the starter
+    replacingSong = true;
+    const staleNow = () => {
+      if (!tabSync.isStale) return false;
+      replacingSong = false;
+      sayStale("NOT LOADED");
+      return true;
+    };
+    const stay = () => {
+      replacingSong = false;
+      saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
+      return false;
+    };
+    // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still under way should
+    // finish and keep its map entry, or it would be gone after the reload. Wait for the loads and writes under way.
+    await samples.idle();
+    // Another tab may have saved while a confirm was up: the page's events (its `storage`) are held while a dialog is open
+    // and arrive after it, so the check has to wait a moment for them before it can see. The stale guard the saver has
+    // applies here too, or this write would put the starter over its newer beat.
+    // Wait, then look: a load that finished while waiting may have played but not been kept, which is only known now, and
+    // each dialog lets in events that can start another. So go round again until a wait finds nothing new to ask about.
+    let told = unsavedBefore;
+    for (;;) {
+      await quiet();
+      if (staleNow()) return false;
+      const lost = unsavedSamplePads().filter((pad) => !told.includes(pad));
+      if (!lost.length) break;
+      if (!window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
+      told = [...told, ...lost];
+    }
+    // Read now, not before the wait: a load that finished meanwhile put its own sample on its pad and reset the pad's settings.
+    const current = sampler.getSong();
+    // A pad with a sample kept for it counts as one even where the sample is not playing yet (still being restored, or one
+    // this browser could not decode this visit): it comes back on the next visit, with the settings it was given.
+    const keep = {};
+    for (let pad = 0; pad < PAD_COUNT; pad++)
+      if ((!kit.isDefault(pad) || samples.isKept(pad)) && current.padSettings[pad])
+        keep[pad] = current.padSettings[pad];
+    const song = starterSong(starter, {
+      rows: PAD_COUNT,
+      steps: STEPS,
+      maxBars: MAX_BARS,
+      sequenceCount: SEQUENCE_COUNT,
+      volume: current.volume,
+      keep,
+    });
+    if (!song) {
+      say("STARTER NOT LOADED");
+      return stay();
+    }
+    if (!saveJson(SONG_KEY, song)) {
+      say("STARTER NOT LOADED: CANNOT SAVE");
+      return stay();
+    }
+    saver.cancel(); // (again: a change made during the write would be flushed as the page unloads)
+    location.reload();
+    return true;
+  });
+starterSelect.addEventListener("change", () => {
+  starterStart.disabled = starterSelect.value === "";
+});
+starterStart.addEventListener("click", () => {
+  const starter = STARTERS.find(({ id }) => id === starterSelect.value);
+  if (starter) loadStarter(starter);
 });
 
 // ---------- Views ----------
@@ -740,7 +854,8 @@ window.addEventListener("keydown", (e) => {
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
 
   if (e.code === "Space") {
-    if (document.activeElement?.tagName === "BUTTON") return; // let the button click
+    // Let a button click, and a select open, on Space: it is theirs while they have focus.
+    if (["BUTTON", "SELECT"].includes(document.activeElement?.tagName)) return;
     e.preventDefault();
     if (sampler.getState().playing) sampler.stop();
     else sampler.start();
