@@ -12,6 +12,7 @@ import {
   exportName,
   exportSampleRate,
   exportSequence,
+  exportStems,
   hasSteps,
   hitsOf,
   stemName,
@@ -26,9 +27,10 @@ import {
   WINDOW_SECONDS,
   windowPauses,
 } from "./export-wav.js";
-import { exportInfo } from "./export-options.js";
+import { exportInfo, stemsInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
 import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
+import { zipParts } from "./zip.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
 // A loaded sample's shape, as far as the export looks at it.
@@ -1837,5 +1839,228 @@ describe("renderStems", () => {
   it("hands back the pad, the name and the encoded file, and nothing else (not the render's channels)", async () => {
     const files = await stems();
     for (const file of files) expect(Object.keys(file).sort()).toEqual(["name", "pad", "wav"]);
+  });
+});
+
+describe("renderStems, saying which stem it is on", () => {
+  const kit = createKit([sound("Kick"), sound("Snare")]);
+  const song = songOf(sequence({ 0: [0], 1: [4] }));
+  const render = async ({ sampleRate }) => ({ sampleRate, channels: [new Float32Array(2)] });
+
+  it("says the number of each stem, from 1, and how many there are, before it renders it", async () => {
+    const seen = [];
+    const order = [];
+    await renderStems({
+      song,
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 8000,
+      onStem: (stem) => {
+        seen.push(stem);
+        order.push("stem");
+      },
+      render: async (args) => {
+        order.push("render");
+        return render(args);
+      },
+    });
+    expect(seen).toEqual([
+      { number: 1, count: 2 },
+      { number: 2, count: 2 },
+    ]);
+    expect(order).toEqual(["stem", "render", "stem", "render"]);
+  });
+});
+
+describe("exportStems", () => {
+  const kit = createKit([sound("Kick"), sound("Snare")]);
+  const song = songOf(sequence({ 0: [0, 8], 1: [4] }), { bpm: 100 });
+  const render = vi.fn(async ({ sampleRate }) => ({
+    sampleRate,
+    channels: [Float32Array.of(0.5, -0.5), Float32Array.of(0, 0)],
+  }));
+  const run = (extra = {}) => {
+    const onMessage = vi.fn();
+    const save = vi.fn();
+    const done = exportStems({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true, ...extra });
+    return { done, onMessage, save };
+  };
+  // The entry count and the names in a zip, read from its directory
+  const entriesOf = async (blob) => {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const view = new DataView(bytes.buffer);
+    const end = bytes.length - 22;
+    const count = view.getUint16(end + 10, true);
+    const names = [];
+    let at = view.getUint32(end + 16, true);
+    for (let i = 0; i < count; i++) {
+      const nameLength = view.getUint16(at + 28, true);
+      names.push(new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength)));
+      at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+    }
+    return names;
+  };
+
+  it("renders every pad's stem, zips them, saves the zip under its name, and says so", async () => {
+    const { done, onMessage, save } = run();
+    expect(await done).toBe(true);
+    const [blob, name] = save.mock.calls[0];
+    expect(name).toBe("pad16-seq-01-100bpm-stems.zip");
+    expect(blob.type).toBe("application/zip");
+    expect(await entriesOf(blob)).toEqual([
+      "pad16-seq-01-100bpm-pad01-kick.wav",
+      "pad16-seq-01-100bpm-pad02-snare.wav",
+    ]);
+    expect(onMessage.mock.calls.map((call) => call[0])).toEqual([
+      "EXPORTING...",
+      "EXPORTED pad16-seq-01-100bpm-stems.zip",
+    ]);
+  });
+
+  it("makes each file a WAV at the rate asked for, of the channels asked for", async () => {
+    const { done, save } = run({ sampleRate: 48000, options: { loops: 2, channels: "mono", files: "stems" } });
+    await done;
+    expect(save.mock.calls[0][1]).toBe("pad16-seq-01-100bpm-x2-mono-stems.zip");
+    expect(render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sampleRate: 48000, loops: 2, channels: "mono", clip: false }),
+    );
+  });
+
+  it("is the plain stems, one loop in stereo, when it is told nothing", async () => {
+    render.mockClear();
+    const { done } = run();
+    await done;
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 1, channels: "stereo", sampleRate: 44100 }));
+  });
+
+  it("passes on how far along it is, and which stem", async () => {
+    const onProgress = vi.fn();
+    const onStem = vi.fn();
+    const { done } = run({ onProgress, onStem });
+    await done;
+    expect(onProgress).toHaveBeenLastCalledWith(1);
+    expect(onStem.mock.calls.map((call) => call[0])).toEqual([
+      { number: 1, count: 2 },
+      { number: 2, count: 2 },
+    ]);
+  });
+
+  it("says so, and renders nothing, in a browser that cannot render to a file or for a sequence with no steps", async () => {
+    render.mockClear();
+    const none = run({ supported: false });
+    expect(await none.done).toBe(false);
+    expect(none.onMessage).toHaveBeenCalledWith("EXPORT NOT SUPPORTED");
+    const empty = run({ song: songOf(sequence({})) });
+    expect(await empty.done).toBe(false);
+    expect(empty.onMessage).toHaveBeenCalledWith("NOTHING TO EXPORT");
+    expect(render).not.toHaveBeenCalled();
+    expect(none.save).not.toHaveBeenCalled();
+    expect(empty.save).not.toHaveBeenCalled();
+  });
+
+  it("is cancelled by a cancel in a render: nothing is saved, and it says so", async () => {
+    const controller = new AbortController();
+    const cancelling = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException("Export cancelled", "AbortError");
+    });
+    const { done, onMessage, save } = run({ render: cancelling, signal: controller.signal });
+    expect(await done).toBe(false);
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("is cancelled by a cancel that comes after the stems are made and before the zip is saved", async () => {
+    const controller = new AbortController();
+    const late = vi.fn(async ({ sampleRate }) => {
+      setTimeout(() => controller.abort(), 0); // after the encoding of the last stem, during the turn given to the event loop
+      return { sampleRate, channels: [new Float32Array(2)] };
+    });
+    const { done, onMessage, save } = run({
+      render: late,
+      song: songOf(sequence({ 0: [0] })),
+      signal: controller.signal,
+    });
+    expect(await done).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
+  });
+
+  it("is cancelled by a cancel that lands in the turn given after the zip is made, which renderStems has already left", async () => {
+    const controller = new AbortController();
+    // The abort is timed to fall after renderStems' own last check and before this one: a timer started from a timer that was
+    // started when the last stem reported (it runs before renderStems' turn, and its own timer after it).
+    const onProgress = (fraction) => {
+      if (fraction === 1) setTimeout(() => setTimeout(() => controller.abort(), 0), 0);
+    };
+    const { done, onMessage, save } = run({
+      onProgress,
+      signal: controller.signal,
+      song: songOf(sequence({ 0: [0] })),
+    });
+    expect(await done).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
+  });
+
+  it("says it failed, saving nothing, when a render fails or the file cannot be saved", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = run({
+      render: async () => {
+        throw new Error("out of memory");
+      },
+    });
+    expect(await failing.done).toBe(false);
+    expect(failing.onMessage).toHaveBeenLastCalledWith("EXPORT FAILED");
+    expect(failing.save).not.toHaveBeenCalled();
+    // `run` has started it, but nothing has been saved yet: the save is the last thing it does, after turns of the event loop
+    const unsaved = run();
+    unsaved.save.mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(await unsaved.done).toBe(false);
+    expect(unsaved.onMessage).toHaveBeenLastCalledWith("EXPORT FAILED");
+    error.mockRestore();
+  });
+});
+
+describe("stemsInfo against a real zip", () => {
+  // What the dialog says the zip will weigh is checked against the zip the code makes, with real names and real files
+  const kit = createKit([
+    sound("Kick"),
+    sound("Closed Hat!"),
+    sound("A very long name for a sample that was loaded.wav"),
+  ]);
+  it.each([
+    { loops: 1, channels: "stereo" },
+    { loops: 2, channels: "mono" },
+    { loops: 8, channels: "stereo" },
+  ])("is within thirty bytes a file of the zip made with %o", async ({ loops, channels }) => {
+    const song = songOf(sequence({ 0: [0], 1: [4], 2: [8] }, {}, 1), { bpm: 120 });
+    const sampleRate = 1000;
+    const options = { loops, channels, files: "stems" };
+    const files = await renderStems({
+      song,
+      kit,
+      stepsPerBar: 16,
+      sampleRate,
+      loops,
+      channels,
+      render: async () => {
+        // A file of the length the dialog says, in the channels asked for
+        const frames = exportInfo(song, options, 16, sampleRate).frames;
+        return {
+          sampleRate,
+          channels: Array.from({ length: channels === "mono" ? 1 : 2 }, () => new Float32Array(frames)),
+        };
+      },
+    });
+    const real = zipParts(
+      files.map((file) => ({ name: file.name, data: file.wav })),
+      new Date(2026, 0, 1),
+    ).reduce((sum, part) => sum + part.byteLength, 0);
+    const estimate = stemsInfo(song, options, 16, sampleRate, files.length).bytes;
+    expect(files).toHaveLength(3);
+    expect(Math.abs(real - estimate)).toBeLessThanOrEqual(30 * files.length);
   });
 });

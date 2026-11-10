@@ -187,7 +187,7 @@
     </div>
 
     <!-- Export: the machine header's button opens it. A native dialog, so the page behind it is out of reach while it is open;
-       export-dialog.js draws the choices into the two groups and decides nothing. -->
+       export-dialog.js draws the choices into the three groups and decides nothing. -->
     <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-dialog-label export-dialog-title">
       <div class="export-dialog-body">
         <header class="export-head">
@@ -198,6 +198,10 @@
           <button class="btn btn-small" type="button" data-export="close" aria-label="Close">&times;</button>
         </header>
         <div class="export-options">
+          <div class="export-row">
+            <span id="export-files-label" class="small-label">Files</span>
+            <div class="export-choices" role="group" aria-labelledby="export-files-label" data-export="files"></div>
+          </div>
           <div class="export-row">
             <span id="export-loops-label" class="small-label">Loops</span>
             <div class="export-choices" role="group" aria-labelledby="export-loops-label" data-export="loops"></div>
@@ -279,8 +283,9 @@
           Export, in the machine's header, opens a window to save the sequence showing as a 16-bit WAV file: 1, 2, 4 or
           8 loops of it in one file, in stereo or mono, with its length and size shown before you save it (and a warning
           when it needs a lot of memory). One loop is exactly the length of its bars, so that it loops, at the tempo,
-          volume and pad settings on the page; what rings on past the end is heard at the start. It shows how far it has
-          got, and Cancel export or Escape stops it
+          volume and pad settings on the page; what rings on past the end is heard at the start. Stems makes a WAV for
+          each pad that has steps, in one zip: they are not clipped, and they add up to the mix, so the parts can be
+          mixed elsewhere. It shows how far it has got, and Cancel export or Escape stops it
         </li>
         <li><a href="./keyboard.html">Keyboard test</a> is a page for trying a MIDI keyboard</li>
       </ul>

@@ -18,8 +18,15 @@ describe("dialogState", () => {
       hintHidden: false,
       noteHidden: true,
       cancelLabel: "Cancel",
+      goLabel: "Export WAV",
       describedBy: [],
     });
+  });
+
+  it("says Export ZIP on the button when it is the stems that will be made, and Export WAV for the mix", () => {
+    expect(dialogState({ ...idle, files: "stems" }).goLabel).toBe("Export ZIP");
+    expect(dialogState({ ...idle, files: "mix" }).goLabel).toBe("Export WAV");
+    expect(dialogState({ ...idle, files: "anything else" }).goLabel).toBe("Export WAV");
   });
 
   it("shows the note, and describes the dialog by it, when there is one", () => {
@@ -88,7 +95,7 @@ describe("isEarlyPress", () => {
 
 describe("exportDialogModel", () => {
   const sound = () => ({ id: "s", name: "s", play() {} });
-  const kit = createKit([sound(), sound()]);
+  const kit = createKit(Array.from({ length: 16 }, sound)); // the pads of the page
   const song = (bars, pattern, bpm = 120) => ({
     bpm,
     volume: 80,
@@ -104,7 +111,61 @@ describe("exportDialogModel", () => {
       readout: "2.0 s · stereo · 345 KB",
       format: "16-bit 44.1 kHz",
       note: "",
+      hint: "",
       blocked: "",
+    });
+  });
+
+  describe("for stems", () => {
+    const stems = { loops: 1, channels: "stereo", files: "stems" };
+    // Pads 0, 3 and 9 have steps: three stems
+    const three = song(1, { 0: [0, 4], 3: [8], 9: [12] });
+
+    it("counts a stem for each pad that has steps, in the readout, and says what they are in the hint", () => {
+      const m = model(three, stems);
+      expect(m.readout).toMatch(/^3 stems · 2\.0 s each · stereo · \d+(\.\d)? (KB|MB) zip$/);
+      expect(m.hint).toMatch(/one file for each pad/i);
+      expect(m.title).toBe("SEQ 01 · 1 BAR · 120 BPM");
+      expect(m.format).toBe("16-bit 44.1 kHz");
+    });
+
+    it("is as big as the zip will be: a file for each pad", () => {
+      // 240 BPM: a bar of a second, 172 KB a stem, so three stay in kilobytes
+      const size = (pads) => Number(model(song(1, pads, 240), stems).readout.match(/([\d.]+) KB zip/)[1]);
+      const one = size({ 0: [0] });
+      expect(size({ 0: [0], 3: [8], 9: [12] })).toBeGreaterThan(one * 2.9);
+      expect(size({ 0: [0], 3: [8], 9: [12] })).toBeLessThan(one * 3.1);
+    });
+
+    it("follows the loops and the channels", () => {
+      expect(model(three, { ...stems, loops: 4, channels: "mono" }).readout).toMatch(
+        /^3 stems · 8\.0 s each · mono · /,
+      );
+    });
+
+    it("says the memory it takes where the stems together are large, though one mix that long would not be", () => {
+      const long = song(
+        8,
+        { 0: [0], 1: [1], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6], 7: [7], 8: [8], 9: [9], 10: [10], 11: [11] },
+        40,
+      );
+      const mix = model(long, { loops: 4, channels: "stereo" });
+      expect(mix.note).not.toMatch(/memory/);
+      const many = model(long, { loops: 4, channels: "stereo", files: "stems" });
+      expect(many.note).toMatch(/Making this takes about \d+ MB of memory.*Fewer loops or mono make it smaller\./);
+    });
+
+    it("is blocked for a sequence with nothing in it, as the mix is, and says it has no stems and not the mix's size", () => {
+      const m = model(song(2, {}), stems);
+      expect(m.readout).toBe("No stems");
+      expect(m.blocked).toBe("This sequence has no steps yet, so there is nothing to export.");
+      expect(m.note).toBe("");
+    });
+
+    it("leaves the mix's readout and hint as they were when the choice is the mix", () => {
+      const m = model(three, { loops: 1, channels: "stereo", files: "mix" });
+      expect(m.readout).toBe("2.0 s · stereo · 345 KB");
+      expect(m.hint).toBe("");
     });
   });
 

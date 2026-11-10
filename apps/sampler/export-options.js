@@ -1,10 +1,11 @@
 // What an export can be told, and what the Export dialog says about the file before it is made: how many times
-// the loop is repeated in the file, stereo or mono, and from those how long and how big the file will be. No DOM,
-// and nothing at import time.
+// the loop is repeated in the file, stereo or mono, the mix as one file or a stem for each pad in a zip, and from those
+// how long and how big the file will be. No DOM, and nothing at import time.
 //
-//   normalizeExportOptions(loadJson(KEY))                  // { loops: 1, channels: "stereo" }, whatever was saved
+//   normalizeExportOptions(loadJson(KEY))                  // { loops: 1, channels: "stereo", files: "mix" }, whatever was saved
 //   const info = exportInfo(song, options, 16, 44100);     // { frames, seconds, bytes, channels }
 //   exportReadout(info)                                    // "4.8 s · mono · 413 KB"
+//   stemsInfo(song, options, 16, 44100, 5)                 // the same for 5 stems in a zip: { frames, seconds, bytes, channels, stems }
 //   exportFormat(44100)                                    // "16-bit 44.1 kHz"
 //   largeExportNote(exportMemoryBytes(plan))               // "" or "Making this takes about 290 MB of memory, ..."
 
@@ -14,7 +15,9 @@ import { formatSize, pad2 } from "./format.js";
 // 1 is the sequence as it is; the others repeat it back to back in one file. Powers of two, like the bar lengths.
 export const LOOP_CHOICES = [1, 2, 4, 8];
 export const CHANNEL_CHOICES = ["stereo", "mono"];
-export const DEFAULT_EXPORT_OPTIONS = Object.freeze({ loops: 1, channels: "stereo" });
+// The mix is one file, as the export has always been; stems are a file for each pad that has steps, in a zip.
+export const FILE_CHOICES = ["mix", "stems"];
+export const DEFAULT_EXPORT_OPTIONS = Object.freeze({ loops: 1, channels: "stereo", files: "mix" });
 
 // Options from anywhere (saved by an older version, edited by hand, missing): each one that is not a choice we
 // offer falls back to its default, and the other is kept.
@@ -22,6 +25,7 @@ export function normalizeExportOptions(raw) {
   return {
     loops: LOOP_CHOICES.includes(raw?.loops) ? raw.loops : DEFAULT_EXPORT_OPTIONS.loops,
     channels: CHANNEL_CHOICES.includes(raw?.channels) ? raw.channels : DEFAULT_EXPORT_OPTIONS.channels,
+    files: FILE_CHOICES.includes(raw?.files) ? raw.files : DEFAULT_EXPORT_OPTIONS.files,
   };
 }
 
@@ -50,6 +54,18 @@ export function exportInfo(song, options, stepsPerBar, sampleRate) {
   };
 }
 
+// What a zip adds to each file: a header before it and one in the directory (30 and 46 bytes) and its name in both, which is
+// about 45 bytes here ("pad16-seq-01-100bpm-x4-mono-pad03-snare.wav"), and 22 bytes to end it (see zip.js).
+export const ZIP_BYTES_PER_FILE = 170;
+const ZIP_END_BYTES = 22;
+
+// The same as exportInfo for `stems` stems in a zip: each stem is a file as long as the mix, and the zip is the files and
+// its headers (nothing is compressed).
+export function stemsInfo(song, options, stepsPerBar, sampleRate, stems) {
+  const info = exportInfo(song, options, stepsPerBar, sampleRate);
+  return { ...info, bytes: stems * (info.bytes + ZIP_BYTES_PER_FILE) + ZIP_END_BYTES, stems };
+}
+
 const SECONDS_PER_MINUTE = 60;
 
 // "4.8 s" for a short file, "2 min 5 s" for a long one.
@@ -60,9 +76,26 @@ export function formatDuration(seconds) {
   return `${Math.floor(whole / SECONDS_PER_MINUTE)} min ${whole % SECONDS_PER_MINUTE} s`;
 }
 
-// What the dialog says the file will be: "4.8 s · mono · 413 KB".
+// What the dialog says the file will be: "4.8 s · mono · 413 KB", or for stems (`info.stems`) "5 stems · 2.0 s each ·
+// stereo · 1.7 MB zip".
 export function exportReadout(info) {
+  if (info.stems === 0) return "No stems"; // stems are chosen and no pad has a step
+  if (info.stems) {
+    return [
+      `${info.stems} ${info.stems === 1 ? "stem" : "stems"}`,
+      `${formatDuration(info.seconds)} each`,
+      info.channels,
+      `${formatSize(info.bytes)} zip`,
+    ].join(" · ");
+  }
   return [formatDuration(info.seconds), info.channels, formatSize(info.bytes)].join(" · ");
+}
+
+// What the dialog says about the choice of files, in the place of its hint about loops: nothing for the mix (the dialog's
+// own words stay), and for stems what they are.
+export function exportHint(files) {
+  if (files !== "stems") return "";
+  return "One file for each pad that has steps, in one zip. They are not clipped, and they add up to the mix.";
 }
 
 // What every file is, on a line of its own: "16-bit 44.1 kHz" (or 48: the rate is the page's, see exportSampleRate).
@@ -84,7 +117,14 @@ export function exportTitle(song) {
 // planRender gives (`total` is the render's length in frames and `frames` the file's).
 const RENDER_BYTES_PER_FRAME = 8;
 const FILE_BYTES_PER_FRAME = 8;
-export const exportMemoryBytes = ({ total, frames }) => RENDER_BYTES_PER_FRAME * total + FILE_BYTES_PER_FRAME * frames;
+// For `stems` stems it is the render (one at a time, each let go of once its file is encoded) and the files: every stem's
+// file is held until the zip is made, and the zip's Blob is a copy of them (two bytes a sample, a channel each, twice).
+const STEM_FILE_COPIES = 2;
+export function exportMemoryBytes({ total, frames }, { stems = 0, channels = "stereo" } = {}) {
+  if (!stems) return RENDER_BYTES_PER_FRAME * total + FILE_BYTES_PER_FRAME * frames;
+  const file = frames * channelCount(channels) * BYTES_PER_SAMPLE;
+  return RENDER_BYTES_PER_FRAME * total + STEM_FILE_COPIES * stems * file;
+}
 
 // From here the dialog says what it costs. The biggest single export (8 bars at 40 BPM, 8 loops, a 6 minute file) is about
 // 275 MB with the built-in sounds, and up to about 330 when a loaded sample has a long release (one more warm-up pass); one
@@ -96,23 +136,29 @@ const MEMORY_ROUNDING_MB = 10;
 
 // What the dialog says about an export before it is made, as one line: the bars with no steps (`emptyBarNumbers`, from
 // emptyBars) and a memory warning for the render `plan` (from planRender), when there is anything to say.
-export function exportNote(plan, emptyBarNumbers) {
-  return [emptyBarsNote(emptyBarNumbers), largeExportNote(exportMemoryBytes(plan))].filter(Boolean).join(" ");
+export function exportNote(plan, emptyBarNumbers, memory = {}) {
+  return [emptyBarsNote(emptyBarNumbers), largeExportNote(exportMemoryBytes(plan, memory), memory)]
+    .filter(Boolean)
+    .join(" ");
 }
 
-export function largeExportNote(bytes) {
+// `{ stems }` says it is for stems, which can also be made smaller by being mono (and not by being a mix).
+export function largeExportNote(bytes, { stems = 0 } = {}) {
   if (bytes < LARGE_EXPORT_BYTES) return "";
   const megabytes = Math.round(bytes / MEBIBYTE / MEMORY_ROUNDING_MB) * MEMORY_ROUNDING_MB;
-  return `Making this takes about ${megabytes} MB of memory, which a phone may not have to spare. Fewer loops make it smaller.`;
+  const smaller = stems ? "Fewer loops or mono make it smaller." : "Fewer loops make it smaller.";
+  return `Making this takes about ${megabytes} MB of memory, which a phone may not have to spare. ${smaller}`;
 }
 
-// What the dialog says while it renders: how far it has got, in whole per cent, kept within 0 to 100, or only that it is
+// What the dialog says while it renders (and, for stems, which of them it is on: `{ number, count }`): how far it has got, in whole per cent, kept within 0 to 100, or only that it is
 // working before the first report (it may be waiting for the saved samples, or the browser cannot say). Not how long is
 // left: the windows of a render do not cost the same (a dense bar then sparse ones), so a rate so far is a poor guide:
 // measured, it said "a few seconds" for eighteen.
-export function renderingLabel(fraction) {
-  if (fraction === null || fraction === undefined) return "Rendering…";
-  return `Rendering… ${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+export function renderingLabel(fraction, stem = null) {
+  // Stems are many renders, and the percentage is of all of them: which one it is on is said as well (not for just one).
+  const what = stem && stem.count > 1 ? `Rendering stem ${stem.number} of ${stem.count}…` : "Rendering…";
+  if (fraction === null || fraction === undefined) return what;
+  return `${what} ${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
 }
 
 // Runs of consecutive numbers as "2–8" (and a lone one as "3"): [1, 2, 4] is ["1–2", "4"].

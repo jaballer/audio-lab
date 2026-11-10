@@ -53,6 +53,11 @@ Numbers link to the pull request.
   sequence with no steps or a browser that cannot render a file
   ([#136](https://github.com/jaballer/audio-lab/pull/136), [#137](https://github.com/jaballer/audio-lab/pull/137),
   [#140](https://github.com/jaballer/audio-lab/pull/140)).
+- Sampler: Export can make stems: choose Stems in the Export window and it saves a WAV for each pad that has steps,
+  in one zip, so the parts can be mixed elsewhere. Each is the length of the sequence, with the loops and channels
+  chosen, and with the cuts of its choke group; they are at the page's master volume and not clipped, and add up to
+  the mix. The window counts the stems and sizes the zip, shows which one it is rendering, and says how much memory
+  it needs ([#144](https://github.com/jaballer/audio-lab/pull/144)).
 - Sampler: the step editor's heading names the selected pad
   ([#132](https://github.com/jaballer/audio-lab/pull/132)).
 - Every page works offline and can be installed as an app. A newer version of the site waits until you press Reload
