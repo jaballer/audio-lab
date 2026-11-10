@@ -299,7 +299,8 @@ a:focus-visible {
 }
 
 /* ---------- Header status and console drawer ---------- */
-/* Connect MIDI, its status and the Console, drawn in the machine header beside Export and POWER. */
+/* The MIDI status and switch (and, on the sampler, Lights), drawn in the machine header beside POWER. The console drawer
+   below is not mounted at the moment. */
 .midi-tools {
   display: flex;
   align-items: center;

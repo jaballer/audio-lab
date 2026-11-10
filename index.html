@@ -48,8 +48,8 @@
         <header id="header" class="top"></header>
 
         <!-- The controls that act on the whole machine, in one row above the display and the pads: volume, tempo and its
-           tap, the sequence, and Edit Pad, at the end of the row, on the side of the pads. -->
-        <div class="quick-bar" role="group" aria-label="Volume, tempo, sequence and pad">
+           tap, swing, the starter, the file buttons, and Edit Pad, at the end of the row, on the side of the pads. -->
+        <div class="quick-bar" role="group" aria-label="Volume, tempo, swing, starter, file and pad">
           <div class="quick-group">
             <span class="small-label">Volume</span>
             <div
@@ -93,15 +93,6 @@
               aria-valuemax="75"
               aria-valuenow="50"
             ></div>
-          </div>
-
-          <div class="quick-group" role="group" aria-label="Sequence">
-            <span class="small-label">Seq</span>
-            <div class="btn-group">
-              <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">&lt;</button>
-              <span id="seq-number" class="btn-group-readout small-label" aria-live="polite"></span>
-              <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
-            </div>
           </div>
 
           <div class="quick-group" role="group" aria-label="Starter">
@@ -157,16 +148,7 @@
 
           <div class="quick-group quick-end">
             <div id="quick-switches" class="quick-row">
-              <button
-                id="lights"
-                class="btn btn-small btn-led"
-                type="button"
-                aria-pressed="false"
-                title="Light show behind the machine, in time with the beat"
-              >
-                Lights
-              </button>
-              <button id="edit-pad" class="btn btn-small btn-led" type="button">Edit Pad</button>
+              <button id="edit-pad" class="btn btn-small" type="button">Edit Pad</button>
             </div>
           </div>
         </div>
@@ -198,6 +180,16 @@
                   <span id="steps-range-text" class="small-label" aria-hidden="true"></span>
                   <span id="steps-range" class="sampler-visually-hidden" aria-live="polite"></span>
                   <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
+                </div>
+                <div class="seq-pick" role="group" aria-label="Sequence">
+                  <span class="small-label">Seq</span>
+                  <div class="btn-group">
+                    <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">
+                      &lt;
+                    </button>
+                    <span id="seq-number" class="btn-group-readout small-label" aria-live="polite"></span>
+                    <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
+                  </div>
                 </div>
               </div>
 
@@ -272,6 +264,16 @@
               Steps
             </button>
             <div id="step-tools" class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
+              <!-- Shows and hides the velocity bars, which are off until asked for. A lamp says which, as MIDI and Lights do. -->
+              <button
+                id="velocity-toggle"
+                class="btn btn-small btn-midi step-velocity-toggle"
+                type="button"
+                aria-pressed="false"
+                aria-controls="velocity-section"
+              >
+                Velocity
+              </button>
               <button id="undo" class="btn btn-small" type="button" disabled>Undo</button>
               <button id="redo" class="btn btn-small" type="button" disabled>Redo</button>
               <button id="copy" class="btn btn-small" type="button">Copy Steps</button>
@@ -282,8 +284,10 @@
           </div>
           <div id="step-body">
             <div id="steps"></div>
-            <div class="small-label sampler-velocity-label">Velocity &middot; drag to set, soft to hard</div>
-            <div id="velocity" role="group" aria-label="Step velocities for the selected pad"></div>
+            <div id="velocity-section" hidden>
+              <div class="small-label sampler-velocity-label">Velocity &middot; drag to set, soft to hard</div>
+              <div id="velocity" role="group" aria-label="Step velocities for the selected pad"></div>
+            </div>
           </div>
         </section>
       </main>
@@ -381,9 +385,10 @@
         </li>
         <li>
           The heading above the step keys hides or shows the step editor (the keys, the velocity bars and the edit
-          tools), and the page remembers which; Tune and Envelope in the pad editor hide and show the same way. Drag
-          along the velocity bars under the step keys to set how hard each step plays; pressing the bar of a step that
-          is off turns it on at that height; a step recorded live keeps the velocity of the hit
+          tools), and the page remembers which; Tune and Envelope in the pad editor hide and show the same way. Press
+          the Velocity switch to show the velocity bars under the step keys (they start hidden), then drag along them to
+          set how hard each step plays; pressing the bar of a step that is off turns it on at that height; a step
+          recorded live keeps the velocity of the hit
         </li>
         <li>
           Export, in the File group above the display, opens a window to save the sequence showing as a 16-bit WAV file:

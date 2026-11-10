@@ -140,7 +140,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/disclosure.js` — a button that shows and hides some regions (`aria-expanded`, `aria-controls`, focus handed to the button when it hides what has it); the sampler's step editor uses it
 - `shared/blob-store.js` — bytes kept in IndexedDB that never throws (a failed read is `null`, a failed write is `false`), for what localStorage cannot hold: the sampler's samples
 - `shared/audio.js` — the `AudioContext`, master volume (through a soft clipper, so sounds that add up past full scale do not crackle), power on/off and first-interaction unlock, used by every app
-- `shared/light-show.js`, `light-show-view.js`, `light-show.css` — the sampler's Lights button (beside Edit Pad): a glow on the desk behind the machine that pulses with the tempo and runs from blue to red with how loud the output is, swells with the bass, sparkles at the edges with the highs and bursts in a pad's colour when it plays (the maths has no DOM; the view sets CSS variables each frame)
+- `shared/light-show.js`, `light-show-view.js`, `light-show.css` — the sampler's Lights button (in the machine header, beside MIDI and Power): a glow on the desk behind the machine that pulses with the tempo and runs from blue to red with how loud the output is, swells with the bass, sparkles at the edges with the highs and bursts in a pad's colour when it plays (the maths has no DOM; the view sets CSS variables each frame)
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
 - `shared/power.js` — what pressing a device's POWER switch does to its audio (on goes off, anything else comes on)
 - `shared/power-sequence.js` — the machine's power phase (off, booting, on, shutdown) that the sampler's LCD and pads boot and shut down by
@@ -149,11 +149,11 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/mpc-sample.js` — what is known about the Akai MPC Sample's MIDI: how to recognise its port and which pad and bank a note belongs to
 - `shared/loading-screen.js` + `shared/loading.css` — the "Loading" overlay every page starts with, so the page does not jump while its scripts build it; removed once everything has loaded
 - `shared/page-ready.js` — resolves when the page has settled (load event, fonts, two drawn frames) or after a timeout; no DOM
-- `shared/site-header.js` — the bar above the machine, the same on every page: the site name and a link to each page; it also builds the MIDI switch, its short status and the Console button, which `app-header.js` draws in the machine's own header
+- `shared/site-header.js` — the bar above the machine, the same on every page: the site name and a link to each page; it also builds the MIDI switch, and its short status, which `app-header.js` draws in the machine's own header
 - `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test)
 - `shared/app-header.js` — the machine's own header: its name and tagline, its action buttons (Export) and the POWER switch
 - `shared/console-log.js` — the bounded list of messages the device's header leaves out (every MIDI port the browser lists, plug and unplug, errors); no DOM
-- `shared/console-drawer.js` — the drawer along the bottom of the window that shows that list, with Copy and Clear
+- `shared/console-drawer.js` — the drawer along the bottom of the window that shows that list, with Copy and Clear (not mounted at the moment: the Console button is gone until it has a better place)
 - `shared/midi-messages.js` — decodes raw MIDI bytes into `noteOn` / `noteOff` / `cc` / `pitchBend` / pressure / `programChange` objects
 - `shared/flash.js` — light an element for a moment (a pad hit), restarting the time on a repeat hit
 - `shared/holds.js` — who is holding each note (MIDI, computer keyboard, each finger), so a note stops only when the last holder lets go; no DOM; used by the keys page and the Tone.js demo

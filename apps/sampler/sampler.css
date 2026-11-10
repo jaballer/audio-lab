@@ -53,14 +53,9 @@
 .quick-end {
   margin-left: auto;
 }
-/* Tap and Edit Pad are the same height as the sequence keys. Edit Pad's lamp sits beside its name, not over it. */
+/* Tap is the same height as the sequence keys. */
 .quick-tap {
   min-width: 52px;
-}
-.quick-end .btn-led::before {
-  display: inline-block;
-  margin: 0 8px 0 0;
-  vertical-align: middle;
 }
 
 /* A row of buttons that touch, with only the ends rounded: a choice or a pair of arrows is one control. The face
@@ -667,8 +662,12 @@
   gap: 8px 12px;
   margin-bottom: 8px;
 }
-/* The bar arrows sit at the end of the Bars row, and wrap under it when there is no room. */
-.seq-bar .step-nav {
+/* The bar arrows sit with the length keys, on the left. Which sequence is playing sits in the bottom right corner of the
+   display, and wraps under them when there is no room. */
+.seq-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-left: auto;
 }
 /* The length keys are one joined group (.btn-group); the chosen one is pressed in, with a dark face. */
@@ -693,12 +692,20 @@
 .step-tools .btn {
   padding: 5px 8px;
 }
-/* On a phone the six tools make two even rows of three, not a ragged wrap. */
+/* The velocity switch is the one tool that is not an edit: it sits at the start of the row, the rest at the end. */
+.step-velocity-toggle {
+  margin-right: auto;
+}
+/* On a phone the Velocity switch has a row to itself and the six edit tools make two even rows of three, not a ragged wrap. */
 @media (max-width: 480px) {
   .step-tools {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     align-items: stretch; /* a label that wraps does not make its neighbours shorter */
+  }
+  .step-velocity-toggle {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 }
 .seq-bar .btn:disabled,
