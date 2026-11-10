@@ -45,6 +45,7 @@ import {
   projectFileName,
 } from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
+import { STARTERS, starterSong } from "./starters.js";
 import { createTabSync } from "./tab-sync.js";
 import { createUpdateNotice } from "../../shared/update-notice.js";
 import { createSampleLoader } from "./sample-loader.js";
@@ -385,6 +386,55 @@ projectInput.addEventListener("change", () => {
   const [file] = projectInput.files;
   projectInput.value = ""; // so the same file can be chosen again
   if (file) openProject(file);
+});
+
+// A starter (starters.js) is a beat in a style. It goes the way Open does, for the same reason: the song is written where
+// the page keeps its own, and the page starts again and reads it, so nothing live has to be taken apart. The samples are
+// not touched (a starter has none), so the pads that have one keep it, and so do the settings the person gave them
+// (gain, pitch, envelope); the volume stays where the person has it.
+const starterSelect = $("starter-select");
+const starterStart = $("starter-start");
+for (const { id, name, bpm } of STARTERS) starterSelect.append(new Option(`${name} \u00b7 ${bpm} BPM`, id));
+const loadStarter = (starter) =>
+  withProjectLock(async () => {
+    if (tabSync.isStale) return sayStale("NOT LOADED");
+    const current = sampler.getSong();
+    const keep = {};
+    for (let pad = 0; pad < PAD_COUNT; pad++)
+      if (!kit.isDefault(pad) && current.padSettings[pad]) keep[pad] = current.padSettings[pad];
+    const song = starterSong(starter, {
+      rows: PAD_COUNT,
+      steps: STEPS,
+      maxBars: MAX_BARS,
+      sequenceCount: SEQUENCE_COUNT,
+      volume: current.volume,
+      keep,
+    });
+    if (!song) return say("STARTER NOT LOADED");
+    // Nothing is undoable once the page starts again, so ask first.
+    if (!window.confirm(`Start from ${starter.name}? The beat and pad settings on the page now will be replaced.`))
+      return false;
+    saver.cancel(); // a change that is waiting would otherwise be written over the starter
+    samples.freeze();
+    replacingSong = true;
+    await samples.idle(); // a sample write that was already under way has finished before the song is written
+    if (!saveJson(SONG_KEY, song)) {
+      samples.freeze(false);
+      replacingSong = false;
+      saver.schedule();
+      say("STARTER NOT LOADED: CANNOT SAVE");
+      return false;
+    }
+    saver.cancel(); // (again: a change made during the write would be flushed as the page unloads)
+    location.reload();
+    return true;
+  });
+starterSelect.addEventListener("change", () => {
+  starterStart.disabled = starterSelect.value === "";
+});
+starterStart.addEventListener("click", () => {
+  const starter = STARTERS.find(({ id }) => id === starterSelect.value);
+  if (starter) loadStarter(starter);
 });
 
 // ---------- Views ----------
