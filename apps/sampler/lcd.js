@@ -16,6 +16,9 @@ import { pad2 } from "./format.js";
 
 const MESSAGE_MS = 1600;
 
+// What the display says while the machine starts up; it is blank when off. The progress bar fills over the boot (CSS).
+export const BOOT_LINES = ["PAD 16", "DIGITAL SAMPLER", "SELF TEST  OK"];
+
 export function formatLcd({
   playing,
   recording,
@@ -81,7 +84,9 @@ function drawProgress(element, result) {
   element.classList.toggle("multi", multi);
 }
 
-export function createLcd({ lines, message, ruler, progress = null, steps }) {
+// `screen` (optional) is the element that takes the power phase as `data-power` ("off", "booting", "on", "shutdown"),
+// which the CSS draws: a dark glass when off, the text and bar coming up when booting.
+export function createLcd({ lines, message, ruler, progress = null, screen = null, steps }) {
   const cells = [];
   for (let i = 0; i < steps; i++) {
     const cell = document.createElement("span");
@@ -90,18 +95,45 @@ export function createLcd({ lines, message, ruler, progress = null, steps }) {
   }
 
   let messageTimer = null;
+  let phase = screen?.getAttribute("data-power") ?? "on"; // without a `screen` the display just shows what it is given
+  let lastState = null;
+
+  function draw(state) {
+    const text = formatLcd(state);
+    setText(lines[0], text.line1);
+    setText(lines[1], text.line2);
+    setText(lines[2], text.line3);
+    cells.forEach((cell, i) => {
+      cell.classList.toggle("on", text.ruler[i].on);
+      cell.classList.toggle("now", text.ruler[i].now);
+    });
+    if (progress) drawProgress(progress, lcdProgress(state));
+  }
+
+  function clear() {
+    clearTimeout(messageTimer); // a message from before must not show under the boot lines
+    message.textContent = "";
+    lines.forEach((line) => setText(line, ""));
+    cells.forEach((cell) => cell.classList.remove("on", "now"));
+    if (progress) drawProgress(progress, lcdProgress({ playing: false, steps, bars: 1 }));
+  }
 
   return {
+    // The state is kept while the display is not showing it, so it is right the moment it comes on.
     render(state) {
-      const text = formatLcd(state);
-      setText(lines[0], text.line1);
-      setText(lines[1], text.line2);
-      setText(lines[2], text.line3);
-      cells.forEach((cell, i) => {
-        cell.classList.toggle("on", text.ruler[i].on);
-        cell.classList.toggle("now", text.ruler[i].now);
-      });
-      if (progress) drawProgress(progress, lcdProgress(state));
+      lastState = state;
+      if (phase === "on" || phase === "shutdown") draw(state);
+    },
+
+    // Called when the machine's power phase changes (power-sequence.js). Shutdown keeps the text, which the CSS fades.
+    setPower(next) {
+      phase = next;
+      screen?.setAttribute("data-power", next);
+      if (next === "off") clear();
+      else if (next === "booting") {
+        clear();
+        BOOT_LINES.forEach((text, i) => setText(lines[i], text));
+      } else if (next === "on" && lastState) draw(lastState);
     },
 
     // A short message on the fourth line, cleared after a moment.
