@@ -1090,10 +1090,11 @@
 .lcd-screen[data-power="booting"] #lcd-3 {
   animation-delay: 0.5s;
 }
-/* The bar along the top fills over the boot. --progress has to be a registered number for it to animate. */
+/* The bar along the top fills over the boot. --progress has to be a registered number for it to animate. It must inherit:
+   the fill is drawn on the bar's ::before, which only sees the value set on the bar itself if it is inherited. */
 @property --progress {
   syntax: "<number>";
-  inherits: false;
+  inherits: true;
   initial-value: 0;
 }
 .lcd-screen[data-power="booting"] .lcd-progress {
@@ -1161,6 +1162,7 @@
 @media (prefers-reduced-motion: reduce) {
   .lcd-screen,
   .lcd-screen .lcd-line,
+  .lcd-screen .lcd-progress,
   .sampler-pads .sampler-pad {
     animation: none !important;
     transition: none;
