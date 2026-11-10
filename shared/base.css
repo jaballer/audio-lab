@@ -603,6 +603,10 @@ a:focus-visible {
   font-size: 0.82rem;
   font-weight: 600;
 }
+/* The sampler's "changed in another tab" strip is the same strip, a row lower so that it does not cover the update one. */
+.update-notice.tab-notice {
+  top: calc(var(--site-bar-height, 56px) + 56px);
+}
 .update-notice[hidden] {
   display: none;
 }

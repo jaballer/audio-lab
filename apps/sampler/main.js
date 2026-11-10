@@ -45,6 +45,8 @@ import {
   projectFileName,
 } from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
+import { createTabSync } from "./tab-sync.js";
+import { createUpdateNotice } from "../../shared/update-notice.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { decodeSample } from "./sample-voice.js";
 import { createSettingsSliders } from "./settings-sliders.js";
@@ -186,9 +188,44 @@ backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, s
 let replacingSong = false;
 const saver = createSongSaver({
   read: () => sampler.getSong(),
-  save: (data) => !replacingSong && saveJson(SONG_KEY, data),
+  save(data) {
+    if (replacingSong) return false;
+    if (tabSync.isStale) {
+      // The strip may have been put away with Later, and an edit made since would be lost when the tab closes: say so each time.
+      sayStale("NOT SAVED");
+      return false;
+    }
+    return saveJson(SONG_KEY, data);
+  },
 });
 window.addEventListener("pagehide", () => saver.flush());
+
+// Another tab of the sampler saved (or opened a project): what this tab holds is behind it, and saving it would write the old
+// beat over the new one. It stops saving and says so; Reload reads what the other tab kept (tab-sync.js).
+const sayStale = (what) => {
+  say(`${what}: CHANGED IN ANOTHER TAB`);
+  return false;
+};
+// A page restored from the back/forward cache missed the `storage` events of the time it was away, so it cannot know
+// whether another tab saved: it starts again and reads what is kept.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) location.reload();
+});
+const tabNotice = createUpdateNotice($("tab-notice"));
+const tabSync = createTabSync({
+  target: window,
+  keys: [SONG_KEY, SAMPLES_KEY],
+  onStale() {
+    saver.cancel();
+    // A sample loaded here would store its bytes but not the pad settings that go with it (they are in the song), so the next
+    // visit would pair them with the other tab's older ones: samples are left as they are until this tab reloads.
+    samples.freeze();
+    tabNotice.show(
+      () => location.reload(),
+      "Changed in another tab. This tab will not save the beat until you reload.",
+    );
+  },
+});
 
 // ---------- Audio and sequencer ----------
 // The notice comes first: the engine reports its state as soon as it is told to
@@ -294,6 +331,9 @@ const projectInput = $("project-file");
 const openProjectPicker = () => projectInput.click();
 const openProject = (file) =>
   withProjectLock(async () => {
+    // What this tab shows is behind what is kept (see tabSync): opening a project would replace the other tab's newer beat,
+    // which the confirm below would not be describing. Reload first.
+    if (tabSync.isStale) return sayStale("NOT OPENED");
     if (file.size > MAX_PROJECT_BYTES) return say(PROJECT_REASONS.tooBig);
     let bytes;
     try {
@@ -452,9 +492,11 @@ const sampleLoader = createSampleLoader({
   onFile: (index, file) => {
     // The pad it was meant for is the one to show and to hit next, chosen now: loads can finish in any order.
     sampler.selectPad(index);
+    if (tabSync.isStale) return sayStale("NOT LOADED");
     return samples.load(index, file);
   },
   onReset: async (index) => {
+    if (tabSync.isStale) return void sayStale("NOT CHANGED");
     await samples.reset(index);
     render(); // Default Sound goes dim, even when the pad was already playing its built-in sound
   },

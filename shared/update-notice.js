@@ -4,6 +4,7 @@
 //
 //   const notice = createUpdateNotice(element);
 //   notice.show(apply);   // from registerServiceWorker's onUpdate; Reload calls apply, Later hides the strip
+//   notice.show(apply, "Changed in another tab.");   // the same strip for another message (the sampler's other-tab notice)
 //
 // Writes go through dom-updates.js, and the strip hands keyboard focus on before it hides, so Escape and the like keep
 // working where the person was.
@@ -35,9 +36,9 @@ export function createUpdateNotice(element) {
   later.addEventListener("click", () => setHidden(element, true, doc.body));
 
   return {
-    show(applyUpdate) {
+    show(applyUpdate, message = UPDATE_TEXT) {
       apply = applyUpdate;
-      setText(text, UPDATE_TEXT);
+      setText(text, message);
       setDisabled(reload, false);
       setDisabled(later, false);
       setHidden(element, false);
