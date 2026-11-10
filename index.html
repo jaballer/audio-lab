@@ -104,6 +104,26 @@
             </div>
           </div>
 
+          <div class="quick-group" role="group" aria-label="Starter">
+            <label class="small-label" for="starter-select">Starter</label>
+            <!-- The options are filled in by main.js from starters.js. Choosing one does nothing yet (a select changes
+                 as the arrow keys pass over it): Start asks, then replaces the beat. -->
+            <div class="quick-row quick-row-tight">
+              <select id="starter-select" class="btn btn-small quick-select">
+                <option value="">Choose…</option>
+              </select>
+              <button
+                id="starter-start"
+                class="btn btn-small"
+                type="button"
+                disabled
+                title="Replace the beat on the page with the chosen starter"
+              >
+                Start
+              </button>
+            </div>
+          </div>
+
           <div class="quick-group" role="group" aria-label="File">
             <span class="small-label">File</span>
             <div class="quick-row quick-row-tight">

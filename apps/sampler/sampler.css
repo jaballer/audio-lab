@@ -45,6 +45,11 @@
 .quick-row-tight {
   gap: 5px;
 }
+/* The starter picker is a select styled as one of the buttons beside it: same face, same height, a native list when open. */
+.quick-select {
+  min-width: 96px;
+  cursor: pointer;
+}
 .quick-end {
   margin-left: auto;
 }

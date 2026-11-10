@@ -78,6 +78,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `format.js` — small text helpers for the display, messages and the pad editor (a sample's name, size and length); no DOM
   - `knob-moves.js` — how far a drag, wheel turn or key press moves the tempo knob (whole BPM, Shift for tenths or tens), which the volume knob uses too, and the angle a knob's pointer turns to; no DOM
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
+  - `starters.js` — a few complete beats to start from, one per style (hip hop, techno, house, trap): tempo, patterns written as step grids, and the pad settings that go with them (choke group, colours), built into the song `song.js` keeps; the pads' sounds are the same in every starter; no DOM
   - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
   - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing, and so do the other pads in its choke group (a fade on the audio clock), live, in the sequence or in the export; no DOM
