@@ -31,7 +31,7 @@ describe("createMidiAccess.connect", () => {
     const onStatus = vi.fn();
     const midi = createMidiAccess({ onMessage: vi.fn(), onStatus });
     expect(await midi.connect()).toBe(false);
-    expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/use Chrome or Edge/));
+    expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/not supported in this browser/));
   });
 
   it("reports a refused permission prompt", async () => {

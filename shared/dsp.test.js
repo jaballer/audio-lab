@@ -16,7 +16,7 @@ function fakeContext(sampleRate = 8000) {
 describe("envelope", () => {
   it("jumps to the peak at the start and decays exponentially to near silence", () => {
     const param = { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() };
-    envelope(null, param, 2, 0.8, 0.5);
+    envelope(param, 2, 0.8, 0.5);
     expect(param.setValueAtTime).toHaveBeenCalledWith(0.8, 2);
     expect(param.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.0001, 2.5);
   });
