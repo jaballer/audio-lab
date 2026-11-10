@@ -354,6 +354,20 @@ describe("installProject", () => {
     expect(store.data.get(sampleKey(0))).toBe(oldBytes); // rolled back to what the second read found
   });
 
+  it("changes nothing when an old pad the project does not use cannot be emptied", async () => {
+    const store = fakeStore();
+    const before = new Map(store.data);
+    store.delete.mockImplementation(async () => false);
+    const writeMap = vi.fn(() => true);
+    const writeSong = vi.fn(() => true);
+    const ok = await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 });
+    expect(ok).toBe(false);
+    expect(writeMap).not.toHaveBeenCalled();
+    expect(writeSong).not.toHaveBeenCalled();
+    expect([...store.data.keys()].sort()).toEqual([...before.keys()].sort());
+    for (const [key, bytes] of before) expect(store.data.get(key)).toBe(bytes);
+  });
+
   it("puts the map back when the song cannot be written", async () => {
     const store = fakeStore();
     const oldMap = { version: SAMPLES_VERSION, pads: { 0: { name: "Old", bytes: 1 } } };

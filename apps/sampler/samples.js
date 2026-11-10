@@ -212,7 +212,7 @@ export function createSamples({
         // any more, and bytes with no map entry would only take up room.
         delete pads[pad];
         persist(pad);
-        store.delete(keyFor(pad));
+        tracked(store.delete(keyFor(pad)));
         onMessage(`PAD ${pad2(pad + 1)} LOADED, NOT SAVED`);
       }
       return true;

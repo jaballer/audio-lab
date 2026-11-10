@@ -202,7 +202,14 @@ export async function installProject(project, { store, readMap, writeMap, writeS
     }
   };
 
-  for (const [pad, bytes] of old) if (bytes && !used.has(pad)) await store.delete(sampleKey(pad));
+  // A delete that fails would leave bytes the new map does not mention, taking quota for good: stop before anything is
+  // changed further, and put back what was already emptied.
+  for (const [pad, bytes] of old) {
+    if (bytes && !used.has(pad) && !(await store.delete(sampleKey(pad)))) {
+      await rollBack();
+      return false;
+    }
+  }
   const pads = {};
   for (const sample of project.samples) {
     if (!(await store.set(sampleKey(sample.pad), sample.bytes))) {

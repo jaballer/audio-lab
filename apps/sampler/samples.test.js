@@ -1238,6 +1238,22 @@ describe("freeze, for a project that is replacing what is kept", () => {
     expect(writes).toEqual([]);
   });
 
+  it("idle() also waits for the clean-up delete of a load whose map entry could not be written", async () => {
+    let finishDelete;
+    const store = fakeStore();
+    store.delete.mockImplementation(() => new Promise((resolve) => (finishDelete = resolve)));
+    const { samples } = setup({ store, failMap: true });
+    const loading = samples.load(0, file("a.wav"));
+    await vi.waitFor(() => expect(finishDelete).toBeTypeOf("function"));
+    let idle = false;
+    const waiting = samples.idle().then(() => (idle = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(idle).toBe(false); // the delete has not finished
+    finishDelete(true);
+    await waiting;
+    await loading;
+  });
+
   it("does not write a trim while frozen, and works again once thawed", async () => {
     const { samples, writes } = setup();
     await samples.load(0, file("a.wav"));

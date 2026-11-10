@@ -319,11 +319,12 @@ const openProject = (file) =>
     saver.cancel();
     samples.freeze();
     replacingSong = true;
-    await samples.idle(); // a sample write that was already under way has finished before the old state is read
     // The writes below are several, and a page that goes away between them leaves the old map over other bytes. They take
-    // a moment, so the browser is asked to confirm leaving rather than made atomic: a crash is not covered.
+    // a moment, so the browser is asked to confirm leaving rather than made atomic: a crash is not covered. Held from here,
+    // not from the install: waiting for a write that was already under way is part of it.
     const keepOpen = (event) => event.preventDefault();
     window.addEventListener("beforeunload", keepOpen);
+    await samples.idle(); // a sample write that was already under way has finished before the old state is read
     const kept = await installProject(project, {
       store: blobs,
       readMap: () => loadJson(SAMPLES_KEY),
