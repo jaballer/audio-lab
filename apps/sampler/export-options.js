@@ -65,7 +65,7 @@ export function exportReadout(info) {
   return [formatDuration(info.seconds), info.channels, formatSize(info.bytes)].join(" · ");
 }
 
-// What every file is, on a line of its own: "16-bit 44.1 kHz".
+// What every file is, on a line of its own: "16-bit 44.1 kHz" (or 48: the rate is the page's, see exportSampleRate).
 export function exportFormat(sampleRate) {
   return `16-bit ${Number((sampleRate / 1000).toFixed(1))} kHz`;
 }

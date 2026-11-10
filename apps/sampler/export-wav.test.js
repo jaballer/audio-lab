@@ -2,12 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LEAD_SECONDS,
   MAX_WARM_UP_PASSES,
+  MAX_EXPORT_SAMPLE_RATE,
+  MIN_EXPORT_SAMPLE_RATE,
   READY_WAIT_MS,
   canRenderOffline,
   createExportAction,
   emptyBars,
   encodeWav,
   exportName,
+  exportSampleRate,
   exportSequence,
   hasSteps,
   hitsOf,
@@ -628,6 +631,31 @@ describe("exportName", () => {
   });
 });
 
+describe("exportSampleRate", () => {
+  it("is the rate the page's audio runs at, so what is heard is what is saved and nothing is resampled", () => {
+    expect(exportSampleRate(48000)).toBe(48000);
+    expect(exportSampleRate(44100)).toBe(44100);
+    expect(exportSampleRate(96000)).toBe(96000);
+    expect(exportSampleRate(22050)).toBe(22050);
+  });
+
+  it("is 44.1 kHz when the page has no audio yet, or reports nothing usable", () => {
+    for (const rate of [undefined, null, 0, -48000, NaN, Infinity, "48000"]) expect(exportSampleRate(rate)).toBe(44100);
+  });
+
+  it("is 44.1 kHz for a rate that would make a huge file or a poor one, rather than follow it", () => {
+    expect(exportSampleRate(MAX_EXPORT_SAMPLE_RATE + 1)).toBe(44100);
+    expect(exportSampleRate(192000)).toBe(44100);
+    expect(exportSampleRate(MIN_EXPORT_SAMPLE_RATE - 1)).toBe(44100);
+    expect(exportSampleRate(MAX_EXPORT_SAMPLE_RATE)).toBe(MAX_EXPORT_SAMPLE_RATE);
+    expect(exportSampleRate(MIN_EXPORT_SAMPLE_RATE)).toBe(MIN_EXPORT_SAMPLE_RATE);
+  });
+
+  it("is a whole number of frames a second", () => {
+    expect(exportSampleRate(44100.4)).toBe(44100);
+  });
+});
+
 describe("exportSequence", () => {
   const kit = createKit([sound("a")]);
   const render = vi.fn(async () => ({ sampleRate: 8000, channels: [Float32Array.of(0.5), Float32Array.of(0.5)] }));
@@ -655,6 +683,22 @@ describe("exportSequence", () => {
     expect(await done).toBe(true);
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 4, channels: "mono" }));
     expect(save.mock.calls[0][1]).toBe("pad16-seq-01-120bpm-x4-mono.wav");
+  });
+
+  it("renders at the rate it is given, and the file says so in its header", async () => {
+    const echo = vi.fn(async ({ sampleRate }) => ({ sampleRate, channels: [Float32Array.of(0.5)] }));
+    const { done, save } = run(songOf(sequence({ 0: [0] })), { sampleRate: 48000, render: echo });
+    await done;
+    expect(echo).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 48000 }));
+    const header = new DataView(await save.mock.calls[0][0].arrayBuffer());
+    expect(header.getUint32(24, true)).toBe(48000);
+  });
+
+  it("renders at 44.1 kHz when it is given no rate", async () => {
+    render.mockClear();
+    const { done } = run(songOf(sequence({ 0: [0] })));
+    await done;
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 44100 }));
   });
 
   it("is the plain export, one loop in stereo, when it is told nothing", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { envelope, filtered, noise } from "./dsp.js";
+import { envelope, filtered, noise, sweep } from "./dsp.js";
 
 function fakeContext(sampleRate = 8000) {
   return {
@@ -19,6 +19,16 @@ describe("envelope", () => {
     envelope(null, param, 2, 0.8, 0.5);
     expect(param.setValueAtTime).toHaveBeenCalledWith(0.8, 2);
     expect(param.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.0001, 2.5);
+  });
+});
+
+describe("sweep", () => {
+  it("holds the start value before the sweep and ramps exponentially to the end value over the duration", () => {
+    const param = { value: 440, setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() };
+    sweep(param, 150, 40, 2, 0.15);
+    expect(param.value).toBe(150);
+    expect(param.setValueAtTime).toHaveBeenCalledWith(150, 2);
+    expect(param.exponentialRampToValueAtTime).toHaveBeenCalledWith(40, 2.15);
   });
 });
 

@@ -18,7 +18,7 @@ import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportDialog } from "./export-dialog.js";
 import { exportDialogModel } from "./export-dialog-state.js";
 import { normalizeExportOptions } from "./export-options.js";
-import { EXPORT_SAMPLE_RATE, canRenderOffline, createExportAction, exportSequence } from "./export-wav.js";
+import { canRenderOffline, createExportAction, exportSampleRate, exportSequence } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -106,6 +106,8 @@ const audio = createAudioEngine({
     header.setPowered(state === "running");
     // Where kept samples cannot be decoded before the first click (see `samples` below), do it then.
     if (state === "running" && !decodesEarly) samples.restore();
+    // The export is made at the rate the context runs at, which is known once it exists.
+    if (exportDialog?.isOpen) refreshExportDialog();
   },
 });
 audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silent
@@ -394,6 +396,10 @@ function sayExport(text) {
   if (!exportDialog.isOpen) say(text);
 }
 
+// The rate an export is made at: the one the page's audio runs at, so that what is saved is what is heard (a loaded sample is
+// resampled into a context at another rate, and the file's would be a second resampling), or 44.1 kHz before there is audio.
+const exportRate = () => exportSampleRate(audio.ctx?.sampleRate);
+
 function refreshExportDialog() {
   exportDialog.refresh(
     exportDialogModel({
@@ -401,7 +407,7 @@ function refreshExportDialog() {
       kit,
       options: exportOptions,
       stepsPerBar: STEPS,
-      sampleRate: EXPORT_SAMPLE_RATE,
+      sampleRate: exportRate(),
       supported: canRenderOffline(),
     }),
   );
@@ -426,7 +432,7 @@ exportDialog = createExportDialog($("export-dialog"), {
 exportDialog.setOptions(exportOptions);
 
 const pressExport = createExportAction({
-  snapshot: () => ({ song: sampler.getSong(), options: exportOptions }),
+  snapshot: () => ({ song: sampler.getSong(), options: exportOptions, sampleRate: exportRate() }),
   ready: () => restoring,
   run: ({ signal, onProgress, snapshot }) =>
     exportSequence({
@@ -436,6 +442,7 @@ const pressExport = createExportAction({
       kit: kit.snapshot(),
       stepsPerBar: STEPS,
       options: snapshot.options,
+      sampleRate: snapshot.sampleRate,
       onMessage: sayExport,
       save: saveBlob,
       signal,

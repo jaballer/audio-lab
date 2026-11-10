@@ -34,7 +34,8 @@ key handler (pads, Space, undo) leaves the keys alone while it is open, and a pa
 **Loops (1, 2, 4, 8) and Channels (stereo, mono).** The default is the plain export as it always was. The choices are kept
 between visits. A file made with options is named for them (`pad16-seq-01-100bpm-x4-mono.wav`) so two exports of one
 sequence do not overwrite each other. Sample rate and bit depth are not offered (the issue said "if anyone asks"); the file
-is 16-bit at 44.1 kHz and the dialog says so.
+is 16-bit, at the rate the page's audio runs at (44.1 or 48 kHz on most machines; 44.1 kHz where there is none yet, or one
+outside 22.05 to 96 kHz), and the dialog says which.
 
 **Progress and cancel are in the dialog.** While it renders the choices and the close button are off, a bar and a
 percentage show, and Cancel export (or Escape) stops it. It cannot be closed while it renders: a dialog that closed would
@@ -103,13 +104,22 @@ scheduled in one go (at most 6e-7, about 2% of one 16-bit step).
 
 ## Known limits and open questions
 
-- **Samples are resampled.** The page decodes saved samples at 48 kHz, and the export renders at 44.1 kHz, so a loaded sample
-  played into the export is resampled by the browser's fast resampler: about 1.3 dB down at 10 kHz and 5 dB at 20 kHz, with
-  aliasing. Built-in sounds are not affected. Whether the export should render at the page's own rate is undecided.
-- **The loop does not always join cleanly.** A sound with a ramped-frequency oscillator (kick, the snare's tone, toms, conga, zap, blip) on the
-  last steps leaves a tail at the end of the file that does not match the start (Chromium starts an oscillator that begins
-  part way through a block with its default frequency for the first part of it): measured, a step of about -30 dBFS at 90 BPM
-  for a kick on the last step. It affects the file's wrap only, not the loops inside it. Undecided: fix or document.
+- **Samples and the rate.** A loaded sample is a buffer at its own rate, and the browser resamples it, with a quick rough
+  resampler, into a context at another. Into a 44.1 kHz render a 48 kHz buffer measured 1.2 dB down at 10 kHz, 2.7 at 15 kHz
+  and 4.0 at 19 kHz, and into a 48 kHz render none. So the export follows the page's rate (`exportSampleRate`): what is
+  saved is what is heard, and a sample at the page's rate is not resampled at all. Built-in sounds are synthesized at the
+  render's rate and are not affected. Still true: the page decodes the saved samples at 48 kHz (`RESTORE_SAMPLE_RATE`)
+  before its audio exists, so on a 44.1 kHz machine they are resampled, here as on the page; that is the page's, not the
+  export's. The file's size and the render's memory grow with the rate (48 kHz is 9% more than 44.1).
+- **The loop's join.** A swept oscillator (kick, the snare's tone, toms, conga, zap, blip, and the
+  bass's filter) that starts part way through a render block was made, for the first part of the block, from the default
+  frequency before its first event, and what that did depended on where the hit fell in the block: a kick on the last step
+  was one waveform on one pass and another, a phase apart, on the next, so the file's end did not join its start (a step of
+  0.03 to 0.07 at 90 to 133 BPM, about -30 to -23 dBFS). `sweep` (`shared/dsp.js`) holds the start value before the sweep:
+  the step is 0.0007 or less (-63 dBFS) at both rates, and the start of the file matches the same stretch inside a longer
+  render to -59 to -75 dB for a kick, and to -36 dB at worst for seven pads on the last steps at 133 BPM (a phase
+  difference in a tail, not a step: the ramp is still evaluated a block at a time, which a start inside the block cannot
+  avoid). The same change makes the page's own kick start the same way every time. Only measured, not listened to.
 - **Not bit-identical run to run** (one least significant bit in a few samples: the order the engine sums noise sources in);
   the noise sounds' buffer is shared and rebuilt when the audio rate changes, so an export and the page can differ in noise.
 - **Firefox** should keep the old cost and have no percentage or mid-render cancel (above: expected from the missing method,
