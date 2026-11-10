@@ -219,6 +219,10 @@ describe("exportReadout, for stems", () => {
     );
   });
 
+  it("says there are none when stems are chosen and no pad has a step", () => {
+    expect(exportReadout({ seconds: 2, channels: "stereo", bytes: 22, stems: 0 })).toBe("No stems");
+  });
+
   it("is the one line of a file when there are no stems to speak of", () => {
     expect(exportReadout({ seconds: 4.8, channels: "mono", bytes: 423404 })).toBe("4.8 s · mono · 413 KB");
   });

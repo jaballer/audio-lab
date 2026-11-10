@@ -155,8 +155,9 @@ describe("exportDialogModel", () => {
       expect(many.note).toMatch(/Making this takes about \d+ MB of memory.*Fewer loops or mono make it smaller\./);
     });
 
-    it("is blocked for a sequence with nothing in it, as the mix is", () => {
+    it("is blocked for a sequence with nothing in it, as the mix is, and says it has no stems and not the mix's size", () => {
       const m = model(song(2, {}), stems);
+      expect(m.readout).toBe("No stems");
       expect(m.blocked).toBe("This sequence has no steps yet, so there is nothing to export.");
       expect(m.note).toBe("");
     });

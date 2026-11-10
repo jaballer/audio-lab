@@ -79,6 +79,7 @@ export function formatDuration(seconds) {
 // What the dialog says the file will be: "4.8 s · mono · 413 KB", or for stems (`info.stems`) "5 stems · 2.0 s each ·
 // stereo · 1.7 MB zip".
 export function exportReadout(info) {
+  if (info.stems === 0) return "No stems"; // stems are chosen and no pad has a step
   if (info.stems) {
     return [
       `${info.stems} ${info.stems === 1 ? "stem" : "stems"}`,

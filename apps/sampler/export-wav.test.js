@@ -27,9 +27,10 @@ import {
   WINDOW_SECONDS,
   windowPauses,
 } from "./export-wav.js";
-import { exportInfo } from "./export-options.js";
+import { exportInfo, stemsInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
 import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
+import { zipParts } from "./zip.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
 // A loaded sample's shape, as far as the export looks at it.
@@ -2020,5 +2021,46 @@ describe("exportStems", () => {
     expect(await unsaved.done).toBe(false);
     expect(unsaved.onMessage).toHaveBeenLastCalledWith("EXPORT FAILED");
     error.mockRestore();
+  });
+});
+
+describe("stemsInfo against a real zip", () => {
+  // What the dialog says the zip will weigh is checked against the zip the code makes, with real names and real files
+  const kit = createKit([
+    sound("Kick"),
+    sound("Closed Hat!"),
+    sound("A very long name for a sample that was loaded.wav"),
+  ]);
+  it.each([
+    { loops: 1, channels: "stereo" },
+    { loops: 2, channels: "mono" },
+    { loops: 8, channels: "stereo" },
+  ])("is within thirty bytes a file of the zip made with %o", async ({ loops, channels }) => {
+    const song = songOf(sequence({ 0: [0], 1: [4], 2: [8] }, {}, 1), { bpm: 120 });
+    const sampleRate = 1000;
+    const options = { loops, channels, files: "stems" };
+    const files = await renderStems({
+      song,
+      kit,
+      stepsPerBar: 16,
+      sampleRate,
+      loops,
+      channels,
+      render: async () => {
+        // A file of the length the dialog says, in the channels asked for
+        const frames = exportInfo(song, options, 16, sampleRate).frames;
+        return {
+          sampleRate,
+          channels: Array.from({ length: channels === "mono" ? 1 : 2 }, () => new Float32Array(frames)),
+        };
+      },
+    });
+    const real = zipParts(
+      files.map((file) => ({ name: file.name, data: file.wav })),
+      new Date(2026, 0, 1),
+    ).reduce((sum, part) => sum + part.byteLength, 0);
+    const estimate = stemsInfo(song, options, 16, sampleRate, files.length).bytes;
+    expect(files).toHaveLength(3);
+    expect(Math.abs(real - estimate)).toBeLessThanOrEqual(30 * files.length);
   });
 });

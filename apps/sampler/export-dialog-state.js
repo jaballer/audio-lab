@@ -54,7 +54,8 @@ export function dialogState({ busy, cancelling, blocked, hasNote, files = "mix" 
 // said once.
 export function exportDialogModel({ song, kit, options, stepsPerBar, sampleRate, supported }) {
   const nothing = !hasSteps(song, stepsPerBar);
-  const stems = options.files === "stems" ? stemPads(song, stepsPerBar).length : 0;
+  const stemsChosen = options.files === "stems";
+  const stems = stemsChosen ? stemPads(song, stepsPerBar).length : 0;
   const memory = stems ? { stems, channels: options.channels } : {};
   const note = nothing
     ? ""
@@ -63,7 +64,7 @@ export function exportDialogModel({ song, kit, options, stepsPerBar, sampleRate,
         emptyBars(song, stepsPerBar),
         memory,
       );
-  const info = stems
+  const info = stemsChosen
     ? stemsInfo(song, options, stepsPerBar, sampleRate, stems)
     : exportInfo(song, options, stepsPerBar, sampleRate);
   return {
