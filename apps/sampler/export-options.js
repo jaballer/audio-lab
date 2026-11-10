@@ -6,6 +6,7 @@
 //   const info = exportInfo(song, options, 16, 44100);     // { frames, seconds, bytes, channels }
 //   exportReadout(info)                                    // "4.8 s · mono · 413 KB"
 //   exportFormat(44100)                                    // "16-bit 44.1 kHz"
+//   largeExportNote(exportMemoryBytes(plan))               // "" or "Making this takes about 290 MB of memory, ..."
 
 import { stepSeconds } from "../../shared/tempo.js";
 import { formatSize, pad2 } from "./format.js";
@@ -75,8 +76,40 @@ export function exportTitle(song) {
   return `SEQ ${pad2(song.current + 1)} · ${bars} ${bars === 1 ? "BAR" : "BARS"} · ${Math.round(song.bpm)} BPM`;
 }
 
-// What the dialog says while it renders: how far it has got, in whole per cent, kept within 0 to 100, or only that
-// it is working before the first report (it may be waiting for the saved samples, or the browser cannot say).
+// How much memory making the file takes at most, which is what a phone may run out of before it runs out of time. A render
+// is two float channels (4 bytes each) over its whole length, the warm-up before the file included; then the file is made
+// from it while it is still held: stereo holds the file's bytes and its Blob (4 bytes a frame each), mono holds the mix-down
+// (4) and its file twice (2 each), which is the same 8. Measured in Chromium, a 384 s file made after a 48 s warm-up took
+// 297 MB (stereo) and 312 MB (mono) over what the page already used, against the 275 MB this gives: a little low, which the threshold allows for. `plan` is what
+// planRender gives (`total` is the render's length in frames and `frames` the file's).
+const RENDER_BYTES_PER_FRAME = 8;
+const FILE_BYTES_PER_FRAME = 8;
+export const exportMemoryBytes = ({ total, frames }) => RENDER_BYTES_PER_FRAME * total + FILE_BYTES_PER_FRAME * frames;
+
+// From here the dialog says what it costs. The biggest single export (8 bars at 40 BPM, 8 loops, a 6 minute file) is about
+// 275 MB with the built-in sounds, and up to about 330 when a loaded sample has a long release (one more warm-up pass); one
+// that fits, with 4 loops, is about 145. A phone's tab has a few hundred MB to spare on a good day. Not counted: the decoded
+// samples the page already holds, and Firefox, which cannot pause a render and so starts every node up front.
+const MEBIBYTE = 1024 * 1024;
+export const LARGE_EXPORT_BYTES = 200 * MEBIBYTE;
+const MEMORY_ROUNDING_MB = 10;
+
+// What the dialog says about an export before it is made, as one line: the bars with no steps (`emptyBarNumbers`, from
+// emptyBars) and a memory warning for the render `plan` (from planRender), when there is anything to say.
+export function exportNote(plan, emptyBarNumbers) {
+  return [emptyBarsNote(emptyBarNumbers), largeExportNote(exportMemoryBytes(plan))].filter(Boolean).join(" ");
+}
+
+export function largeExportNote(bytes) {
+  if (bytes < LARGE_EXPORT_BYTES) return "";
+  const megabytes = Math.round(bytes / MEBIBYTE / MEMORY_ROUNDING_MB) * MEMORY_ROUNDING_MB;
+  return `Making this takes about ${megabytes} MB of memory, which a phone may not have to spare. Fewer loops make it smaller.`;
+}
+
+// What the dialog says while it renders: how far it has got, in whole per cent, kept within 0 to 100, or only that it is
+// working before the first report (it may be waiting for the saved samples, or the browser cannot say). Not how long is
+// left: the windows of a render do not cost the same (a dense bar then sparse ones), so a rate so far is a poor guide:
+// measured, it said "a few seconds" for eighteen.
 export function renderingLabel(fraction) {
   if (fraction === null || fraction === undefined) return "Rendering…";
   return `Rendering… ${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
