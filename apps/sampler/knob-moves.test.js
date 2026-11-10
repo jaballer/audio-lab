@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { BIG_STEP, SHIFT_WHEEL_GAP_MS, createShiftWheelClock, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
+import {
+  BIG_STEP,
+  DIAL_SWEEP,
+  SHIFT_WHEEL_GAP_MS,
+  createShiftWheelClock,
+  dialAngle,
+  dragTempo,
+  keyTempo,
+  wheelTempo,
+} from "./knob-moves.js";
+
+describe("dialAngle", () => {
+  it("turns the minimum half the sweep to the left and the maximum as far to the right", () => {
+    expect(dialAngle(40, 40, 240)).toBe(-DIAL_SWEEP / 2);
+    expect(dialAngle(240, 40, 240)).toBe(DIAL_SWEEP / 2);
+  });
+
+  it("points straight up in the middle of the range", () => {
+    expect(dialAngle(140, 40, 240)).toBe(0);
+    expect(dialAngle(50, 0, 100)).toBe(0);
+  });
+
+  it("turns in proportion to the value", () => {
+    expect(dialAngle(75, 0, 100)).toBeCloseTo(DIAL_SWEEP / 4);
+    expect(dialAngle(25, 0, 100)).toBeCloseTo(-DIAL_SWEEP / 4);
+  });
+});
 
 describe("dragTempo", () => {
   it("moves half a BPM per pixel and lands on a whole number", () => {

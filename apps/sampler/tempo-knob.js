@@ -9,14 +9,12 @@
 // the current tempo, which relative moves start from.
 
 import { setAttr } from "../../shared/dom-updates.js";
-import { createShiftWheelClock, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
-
-const SWEEP = 270; // degrees from minimum to maximum
+import { createShiftWheelClock, dialAngle, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
 
 export function createTempoKnob(element, { min, max, getBpm, onChange }) {
   let drawn = null; // the transform last written
   function render(bpm) {
-    const angle = ((bpm - min) / (max - min)) * SWEEP - SWEEP / 2;
+    const angle = dialAngle(bpm, min, max);
     // Called on every redraw, which is every step while playing: only what changed is written.
     const transform = `rotate(${angle}deg)`;
     if (drawn !== transform) {

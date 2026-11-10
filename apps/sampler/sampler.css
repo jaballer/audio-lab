@@ -1,10 +1,73 @@
 /* Sampler-only styles (builds on shared/base.css). */
 
+/* The display and its controls on the left, the pads on the right, next to the pad editor (which opens on their side).
+   The two columns are as tall as the pads: see .console. */
 .body {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* ---------- The row of machine controls ---------- */
+/* Volume, tempo and its tap, the sequence, and Edit Pad at the far end (the side of the pads). A label over each, the
+   controls on one baseline. It has the header's rule under it. */
+.quick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 28px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 2px groove #b9b5a7;
+}
+.quick-group {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.quick-end {
+  margin-left: auto;
+}
+/* Tap is a square key as big as the knob next to it. */
+.quick-tap {
+  width: 52px;
+  height: 52px;
+  padding: 0;
+}
+
+/* A row of buttons that touch, with only the ends rounded: a choice or a pair of arrows is one control. The face
+   between two of them is a readout (the sequence number), not a button. */
+.btn-group {
+  display: flex;
+}
+.btn-group > * {
+  border-radius: 0;
+}
+.btn-group > * + * {
+  margin-left: -1px;
+}
+.btn-group > :first-child {
+  border-radius: 5px 0 0 5px;
+}
+.btn-group > :last-child {
+  border-radius: 0 5px 5px 0;
+}
+.btn-group > :only-child {
+  border-radius: 5px;
+}
+.btn-group-readout {
+  display: grid;
+  place-items: center;
+  min-width: 2.8em;
+  border: 1px solid #77736a;
+  border-bottom-width: 4px;
+  background: #e9e5d8;
 }
 
 /* The progress bar along the top of the display: the whole sequence, where the ruler below shows one bar. Its shape comes
@@ -73,30 +136,33 @@
   margin-right: 0;
 }
 
-/* ---------- Controls ---------- */
-.controls {
+/* ---------- The display and its controls ---------- */
+/* As tall as the pad grid beside it, in two equal rows: the display level with the top two rows of pads, the bars and
+   the transport level with the bottom two. The 14px above and below are the pad panel's padding, and the gap is the
+   pads'. With the pad editor open under the pads (a window too narrow to put it beside the machine) the pad panel is
+   taller than its pads, so the column keeps the height its contents want. */
+.console {
   display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas:
-    "knob  buttons"
-    "fader buttons";
-  gap: 16px 20px;
-  margin-top: 18px;
-  align-items: center;
+  grid-template-rows: 1fr 1fr;
+  gap: 10px;
+  padding: 14px 0;
 }
-
-.ctl {
+.body:has(.pad-panel > .pad-drawer:not([hidden])) .console {
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 14px;
+}
+.console .lcd {
+  display: flex;
+}
+.console .lcd-screen {
+  flex: 1;
+}
+.console-lower {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.ctl:first-child {
-  grid-area: knob;
-}
-.ctl-fader {
-  grid-area: fader;
-  width: 100%;
+  justify-content: center;
+  gap: 14px;
 }
 
 .knob {
@@ -122,6 +188,22 @@
   height: 20px;
   border-radius: 2px;
   background: #f3efe3;
+}
+/* The knobs in the row of controls are smaller: 52px, with the pointer in proportion. */
+.knob-small {
+  width: 52px;
+  height: 52px;
+  box-shadow:
+    0 0 0 2px #b3afa1,
+    0 0 0 3px #8d8979,
+    0 4px 6px rgba(0, 0, 0, 0.5),
+    inset 0 2px 2px rgba(255, 255, 255, 0.18);
+}
+.knob-small::after {
+  top: 5px;
+  left: calc(50% - 1.5px);
+  width: 3px;
+  height: 14px;
 }
 
 .fader {
@@ -165,9 +247,8 @@
 }
 
 .buttons {
-  grid-area: buttons;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px 10px;
 }
 
@@ -535,7 +616,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 14px;
 }
 .step-head,
 .step-nav,
@@ -550,13 +630,15 @@
   gap: 8px 12px;
   margin-bottom: 8px;
 }
-.seq-lengths {
-  display: flex;
-  gap: 6px;
-}
-/* A length key is a narrow LED button: the lamp sits above the number. */
+/* The length keys are one joined group (.btn-group); the chosen one is pressed in, with a dark face. */
 .seq-lengths .btn {
-  min-width: 2.6em;
+  min-width: 2.8em;
+}
+.seq-lengths .btn[aria-pressed="true"],
+.seq-lengths .btn[aria-pressed="true"]:hover {
+  border-color: #1b1a18;
+  background: linear-gradient(180deg, #3a3832, #26241f);
+  color: #f3efe3;
 }
 /* Edit tools for the steps below: undo and redo, copy and paste, clear. They have a row of their own under the
    label and the bar buttons, so the header reads the same at every width. */
@@ -656,17 +738,10 @@
   .body {
     grid-template-columns: 1fr;
   }
-}
-
-@media (max-width: 480px) {
-  .controls {
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      "knob  fader"
-      "buttons buttons";
-  }
-  .buttons {
-    grid-template-columns: repeat(2, 1fr);
+  .console {
+    grid-template-rows: auto auto;
+    gap: 14px;
+    padding: 0;
   }
 }
 
@@ -742,6 +817,13 @@
     background: Highlight;
     filter: none; /* the pressed rule above it has a green glow, with the same weight as the rule that removes it */
     box-shadow: none;
+  }
+  /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */
+  .seq-lengths .btn[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: ButtonText;
   }
 }
 

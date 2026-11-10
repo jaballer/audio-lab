@@ -160,6 +160,52 @@ kbd {
     0 0 0 2px #7a1f19;
 }
 
+/* The rocker beside the label: a dark housing with the switch in it, I on the top half and O on the bottom. The half
+   that says where the switch is (I while power is on, O while it is off) is the light one; the other is dark. The
+   button's aria-pressed drives it; the picture is hidden from a screen reader. */
+.power-rocker {
+  display: flex;
+  flex-direction: column;
+  width: 32px;
+  height: 46px;
+  padding: 3px;
+  border: 2px solid #1b1a18;
+  border-radius: 7px;
+  background: #0d0d0e;
+  box-shadow:
+    inset 0 2px 5px #000,
+    0 1px 0 #f3f0e6;
+}
+.power-rocker > span {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font: 800 0.7rem var(--mono);
+  /* Both halves are the dark face unless a state below raises one of them. */
+  background: linear-gradient(180deg, #4a4a4c, #2a2a2b);
+  color: #d9d5c6;
+}
+.power-rocker-on {
+  border-radius: 3px 3px 0 0;
+  border-bottom: 1px solid #000;
+}
+.power-rocker-off {
+  border-radius: 0 0 3px 3px;
+}
+.power-switch[aria-pressed="true"] .power-rocker-on,
+.power-switch[aria-pressed="false"] .power-rocker-off {
+  background: linear-gradient(180deg, #f2efe6, #cfcbbe);
+  color: var(--ink);
+}
+@media (forced-colors: active) {
+  .power-switch[aria-pressed="true"] .power-rocker-on,
+  .power-switch[aria-pressed="false"] .power-rocker-off {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
 /* ---------- LCD ---------- */
 .lcd {
   padding: 12px;
