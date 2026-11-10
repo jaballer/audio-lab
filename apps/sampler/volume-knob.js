@@ -1,7 +1,8 @@
 // The volume knob: drag it, scroll it, or use the arrow keys, like the tempo knob (tempo-knob.js), and with the same
 // arithmetic (knob-moves.js), on a scale of whole steps from `min` to `max`. A drag of two pixels is one step; Shift on
 // the wheel or the arrow keys, and Page Up and Page Down, are ten. It reports what the user asked for, kept inside the
-// scale (the sampler does not clamp a volume), and the caller decides the volume and tells the knob to show it.
+// scale (the sampler does not clamp a volume) and only when it differs from the current one, and the caller decides
+// the volume and tells the knob to show it.
 //
 //   const knob = createVolumeKnob(element, { min, max, getValue, onChange });
 //   knob.render(value);   // point the knob at a volume
@@ -12,7 +13,11 @@ import { setAttr } from "../../shared/dom-updates.js";
 import { createShiftWheelClock, dialAngle, dragTempo, keyTempo, wheelTempo } from "./knob-moves.js";
 
 export function createVolumeKnob(element, { min, max, getValue, onChange }) {
-  const report = (value) => onChange(Math.min(max, Math.max(min, value)));
+  // Only a change is reported: a drag sends a move for every pixel, and a repeat would log VOLUME again and save again.
+  const report = (value) => {
+    const wanted = Math.min(max, Math.max(min, value));
+    if (wanted !== getValue()) onChange(wanted);
+  };
 
   let drawn = null; // the transform last written
   function render(value) {

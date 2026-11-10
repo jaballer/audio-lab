@@ -11,7 +11,7 @@ import {
 } from "./knob-moves.js";
 
 describe("dialAngle", () => {
-  it("turns the minimum a quarter and a half to the left, and the maximum as far to the right", () => {
+  it("turns the minimum half the sweep to the left and the maximum as far to the right", () => {
     expect(dialAngle(40, 40, 240)).toBe(-DIAL_SWEEP / 2);
     expect(dialAngle(240, 40, 240)).toBe(DIAL_SWEEP / 2);
   });
