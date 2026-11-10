@@ -206,13 +206,14 @@ export function createSampler({
 
   // Every change a person makes to the pattern goes through here, so that it can be undone: the state from
   // before is kept when the change did something. `merge` is for a change made in a stream (dragging a
-  // velocity), where the first one is kept and the ones right after it are part of the same undo.
-  function edit(change, { merge = false } = {}) {
+  // velocity), where the first one is kept and the ones right after it are part of the same undo. `fresh` starts a new
+  // undo even if the last change was a moment ago (a press on another bar), and what is merged after it joins that one.
+  function edit(change, { merge = false, fresh = false } = {}) {
     const before = pattern.state();
     change();
     if (JSON.stringify(pattern.state()) === JSON.stringify(before)) return;
     const at = now();
-    const continues = merge && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
+    const continues = merge && !fresh && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
     lastMergedAt = merge ? at : -Infinity;
     lastMergedPad = selected;
     if (!continues) history.push(before);
@@ -246,7 +247,7 @@ export function createSampler({
         if (!wasOn) pattern.toggle(selected, index);
         pattern.setVelocity(selected, index, value);
       },
-      { merge: true },
+      { merge: true, fresh: !wasOn },
     );
     onMessage(`VEL ${pattern.velocity(selected, index)}`);
     onChange();

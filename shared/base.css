@@ -463,7 +463,8 @@ a:focus-visible {
   line-height: 1.55;
 }
 /* Closed until it is wanted: a native <details>, so the keyboard, the screen reader and the open state need no script. The
-   heading sits inside the summary, so the page keeps its Help heading for a screen reader's headings list. */
+   heading sits inside the summary so the page still has a Help heading in its markup; a screen reader may announce it only
+   as the disclosure button, which is not checked here. */
 .help-panel summary {
   display: flex;
   align-items: center;

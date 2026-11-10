@@ -1467,6 +1467,20 @@ describe("transport", () => {
     expect(sampler.getState().stepsOn[2]).toBe(true);
   });
 
+  it("keeps each press that turns a step on as an undo of its own, and merges the drag after it", () => {
+    const { sampler } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    sampler.selectPad(0);
+    sampler.setStepVelocity(3, 40, { activate: true });
+    sampler.setStepVelocity(3, 60); // the drag carries on over the same step: the same undo
+    sampler.setStepVelocity(7, 50, { activate: true }); // a new press, right after: its own undo
+    sampler.undo();
+    expect(sampler.getState().stepsOn[7]).toBe(false);
+    expect(sampler.getState().stepsOn[3]).toBe(true);
+    expect(sampler.getState().stepVelocities[3]).toBe(60);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[3]).toBe(false);
+  });
+
   it("sets the velocity of a step on the bar being shown, for the selected pad", () => {
     const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [5, 21] } }) });
     sampler.selectPad(1);
