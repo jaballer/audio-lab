@@ -141,6 +141,23 @@ export function projectFileName(date) {
   return `pad16-beat-${day[0]}-${day[1]}-${day[2]}${PROJECT_EXTENSION}`;
 }
 
+// The first sample in a parsed project that this browser cannot decode, as { pad, reason }, or null. A file can pass every
+// check on bytes and the zip's CRC and still hold audio this browser does not read (a codec the one that saved it had),
+// and a pad that cannot be decoded plays its built-in sound after the page starts again, so Open asks before anything is
+// replaced. `decode(bytes)` gives { ok, reason } as `decodeSample` does.
+export async function undecodableSample(project, decode) {
+  for (const { pad, bytes } of project.samples) {
+    let result;
+    try {
+      result = await decode(bytes);
+    } catch {
+      result = { ok: false, reason: "NOT AUDIO" };
+    }
+    if (!result.ok) return { pad, reason: result.reason };
+  }
+  return null;
+}
+
 // The pads that would not come back as they sound in this tab: one that plays a sample the file does not hold, or holds
 // differently (another tab put a different one in storage, a trim could not be kept), and the pads whose bytes were
 // `missing` from storage. `playing` is [{ pad, name, bytes (a size), trim }] for the pads on a sample, `samples` is what

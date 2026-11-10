@@ -11,6 +11,7 @@ import {
   padsNotSaved,
   parseProject,
   projectFileName,
+  undecodableSample,
   projectBlob,
 } from "./project.js";
 import { SAMPLES_VERSION, sampleKey } from "./samples.js";
@@ -446,5 +447,32 @@ describe("padsNotSaved", () => {
   it("includes a pad the map has but whose bytes are gone, even when the pad plays its built-in sound", () => {
     expect(padsNotSaved({ playing: [], samples: [], missing: [4] })).toEqual([4]);
     expect(padsNotSaved({ playing: [playing(4, "A", 1)], samples: [], missing: [4] })).toEqual([4]);
+  });
+});
+
+describe("undecodableSample", () => {
+  const project = {
+    samples: [
+      { pad: 1, bytes: new ArrayBuffer(3) },
+      { pad: 4, bytes: new ArrayBuffer(5) },
+    ],
+  };
+
+  it("is null when every sample decodes", async () => {
+    const decode = vi.fn(async () => ({ ok: true }));
+    expect(await undecodableSample(project, decode)).toBeNull();
+    expect(decode).toHaveBeenCalledTimes(2);
+  });
+
+  it("names the first pad whose audio this browser cannot decode, with the reason, and stops there", async () => {
+    const decode = vi.fn(async (bytes) => (bytes.byteLength === 5 ? { ok: false, reason: "NOT AUDIO" } : { ok: true }));
+    expect(await undecodableSample(project, decode)).toEqual({ pad: 4, reason: "NOT AUDIO" });
+  });
+
+  it("treats a decoder that throws as not audio, not as a crash", async () => {
+    const decode = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    expect(await undecodableSample(project, decode)).toEqual({ pad: 1, reason: "NOT AUDIO" });
   });
 });

@@ -38,6 +38,7 @@ import {
   REASONS as PROJECT_REASONS,
   collectSamples,
   padsNotSaved,
+  undecodableSample,
   installProject,
   parseProject,
   projectBlob,
@@ -45,6 +46,7 @@ import {
 } from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
+import { decodeSample } from "./sample-voice.js";
 import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
 import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
@@ -306,12 +308,21 @@ const openProject = (file) =>
       sequenceCount: SEQUENCE_COUNT,
     });
     if (!project.ok) return say(project.reason);
+    // Every sample has to decode here, in this browser, before anything is replaced: one it cannot read would leave its
+    // pad on the built-in sound after the page starts again, and the beat that was here would be gone.
+    const ctx = decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure();
+    const unreadable = ctx && (await undecodableSample(project, (sampleBytes) => decodeSample(ctx, sampleBytes)));
+    if (unreadable) return say(`PAD ${pad2(unreadable.pad + 1)} ${unreadable.reason}`);
     // Nothing is undoable once the page starts again, so ask first.
     if (!window.confirm("Open this project? The beat and samples on the page now will be replaced.")) return false;
     // The page being replaced writes nothing more of its own: not a waiting song change, nor a sample still loading.
     saver.cancel();
     samples.freeze();
     replacingSong = true;
+    // The writes below are several, and a page that goes away between them leaves the old map over other bytes. They take
+    // a moment, so the browser is asked to confirm leaving rather than made atomic: a crash is not covered.
+    const keepOpen = (event) => event.preventDefault();
+    window.addEventListener("beforeunload", keepOpen);
     const kept = await installProject(project, {
       store: blobs,
       readMap: () => loadJson(SAMPLES_KEY),
@@ -320,6 +331,7 @@ const openProject = (file) =>
       padCount: PAD_COUNT,
     });
     if (!kept) {
+      window.removeEventListener("beforeunload", keepOpen);
       samples.freeze(false);
       replacingSong = false;
       saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
@@ -327,6 +339,7 @@ const openProject = (file) =>
       return false;
     }
     saver.cancel(); // (again: a change made while it was being written would be flushed as the page unloads)
+    window.removeEventListener("beforeunload", keepOpen); // it is all written: the reload is ours
     location.reload();
     return true;
   });

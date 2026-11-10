@@ -1202,6 +1202,18 @@ describe("freeze, for a project that is replacing what is kept", () => {
     expect(writes).toEqual([]);
   });
 
+  it("writes a trim moved while frozen once it is thawed, as when opening a project failed", async () => {
+    const long = { ok: true, buffer: { duration: 2, numberOfChannels: 1, sampleRate: 44100, length: 88200 } };
+    const { samples, writes } = setup({ decode: vi.fn(async () => long) });
+    await samples.load(0, file("a.wav"));
+    samples.freeze();
+    samples.setTrim(0, { start: 0.1, end: 0.9 }, "end");
+    const frozenWrites = writes.length;
+    samples.freeze(false);
+    expect(writes.length).toBe(frozenWrites + 1);
+    expect(writes.at(-1).pads[0].trim).toEqual({ start: 0.1, end: 0.9 });
+  });
+
   it("does not write a trim while frozen, and works again once thawed", async () => {
     const { samples, writes } = setup();
     await samples.load(0, file("a.wav"));

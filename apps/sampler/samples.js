@@ -93,6 +93,7 @@ export function createSamples({
   const requested = new Array(kit.length).fill(0);
   const installed = new Array(kit.length).fill(0);
   let restored = false;
+  const trimsWhileFrozen = new Set(); // pads whose trim was moved while frozen: written when it thaws, if it does
   let frozen = false; // a project is replacing what is kept: this page writes nothing more of its own (see freeze)
   let persistAsked = false; // the browser is asked once per visit to keep the samples
 
@@ -270,7 +271,8 @@ export function createSamples({
     const next = sound.setTrim(trim, moved);
     if (pads[pad] && owners.get(pad) === sound) {
       pads[pad] = entryFor(pads[pad].name, pads[pad].bytes, next);
-      persist(pad, { sameSampleOnly: true });
+      if (frozen) trimsWhileFrozen.add(pad);
+      else persist(pad, { sameSampleOnly: true });
     }
     return next;
   }
@@ -283,6 +285,10 @@ export function createSamples({
   // (A byte write already under way when this is called is not taken back.)
   function freeze(on = true) {
     frozen = on;
+    if (on) return;
+    // Opening failed and this page goes on: the trims moved meanwhile are still what it plays.
+    for (const pad of trimsWhileFrozen) persist(pad, { sameSampleOnly: true });
+    trimsWhileFrozen.clear();
   }
 
   return { load, reset, restore, isKept, setTrim, freeze };
