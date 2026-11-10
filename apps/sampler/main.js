@@ -400,6 +400,10 @@ const unsavedSamplePads = () =>
   Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter((pad) => !kit.isDefault(pad) && !samples.isKept(pad));
 const unsavedWarning = (pads) =>
   `${pads.length} sample${pads.length === 1 ? "" : "s"} on the pads could not be saved and will be lost.`;
+// Long enough for the events a dialog held back (the other tab's `storage`) to be delivered: a timer, as a resolved promise
+// would carry on before them. Not a guarantee, but those events are already queued when the dialog closes.
+const EVENTS_SETTLE_MS = 50;
+const eventsSettle = () => new Promise((resolve) => setTimeout(resolve, EVENTS_SETTLE_MS));
 const loadStarter = (starter) =>
   withProjectLock(async () => {
     if (tabSync.isStale) return sayStale("NOT LOADED");
@@ -414,6 +418,12 @@ const loadStarter = (starter) =>
       return false;
     saver.cancel(); // a change that is waiting would otherwise be written over the starter
     replacingSong = true;
+    const staleNow = () => {
+      if (!tabSync.isStale) return false;
+      replacingSong = false;
+      sayStale("NOT LOADED");
+      return true;
+    };
     const stay = () => {
       replacingSong = false;
       saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
@@ -422,15 +432,18 @@ const loadStarter = (starter) =>
     // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still under way should
     // finish and keep its map entry, or it would be gone after the reload. Wait for the loads and writes under way.
     await samples.idle();
-    // Another tab may have saved while those were finished (its event arrives between turns): the stale guard the saver has
+    // Another tab may have saved while a confirm was up: the page's events (its `storage`) are held while a dialog is open
+    // and arrive after it, so the check has to wait a moment for them before it can see. The stale guard the saver has
     // applies here too, or this write would put the starter over its newer beat.
-    if (tabSync.isStale) {
-      replacingSong = false;
-      return sayStale("NOT LOADED");
-    }
+    await eventsSettle();
+    if (staleNow()) return false;
     // A load that finished while waiting may have played but not been kept: that is only known now.
     const lost = unsavedSamplePads().filter((pad) => !unsavedBefore.includes(pad));
-    if (lost.length && !window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
+    if (lost.length) {
+      if (!window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
+      await eventsSettle(); // (and again after this dialog)
+      if (staleNow()) return false;
+    }
     // Read now, not before the wait: a load that finished meanwhile put its own sample on its pad and reset the pad's settings.
     const current = sampler.getSong();
     // A pad with a sample kept for it counts as one even where the sample is not playing yet (still being restored, or one
