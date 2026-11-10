@@ -108,7 +108,7 @@ export function createSampler({
   const lastPage = () => bars - 1;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
-  const scheduledHits = []; // { time, step, rows, bus, chokes } for each step handed to the scheduler, until its light is shown
+  const scheduledHits = []; // { time, gridTime, step, rows, bus, chokes } for each step handed to the scheduler, until its light is shown
   // A pad plays one voice at a time: a hit cuts off what the pad was still playing (voices.js).
   const voices = createVoices(kit.length, {
     groupOf: (pad) => kit.settings(pad).choke,
@@ -120,7 +120,7 @@ export function createSampler({
     steps: totalSteps(),
     bpm: song?.bpm,
     swing: song?.swing,
-    onStep(step, time, heard) {
+    onStep(step, time, heard, gridTime) {
       const { ctx, master } = audio;
       const rows = [];
       const chokes = []; // the voices these hits cut off, so cancelling the step can give them back
@@ -140,7 +140,7 @@ export function createSampler({
       }
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
-      scheduledHits.push({ time, step, rows, bus, chokes });
+      scheduledHits.push({ time, gridTime, step, rows, bus, chokes });
       if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
     },
   });
@@ -178,6 +178,7 @@ export function createSampler({
       playheadTime: scheduler.playheadTime,
       playheadStep: scheduler.playheadStep,
       bpm: scheduler.bpm,
+      swing: scheduler.swing,
       steps: totalSteps(),
     });
     if (step < 0) return;
@@ -356,9 +357,9 @@ export function createSampler({
     const now = clock.now();
     const first = scheduledHits.findIndex((hit) => hit.time > now);
     if (first === -1) return;
-    const { step, time } = scheduledHits[first];
+    const { step, gridTime } = scheduledHits[first];
     for (const hit of scheduledHits.splice(first)) cancelHit(hit);
-    scheduler.rewindTo(step, time);
+    scheduler.rewindTo(step, gridTime); // where the step is on the grid, not when it sounded: swing may have moved since
   }
 
   // The kit changed: `what` is "sound" (a sample was loaded, restored or removed) or "setting" (a pad's gain, pitch,

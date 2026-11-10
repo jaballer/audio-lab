@@ -84,7 +84,8 @@ export function createScheduler({
     if (missed <= 0) return;
     const last = missed - 1;
     forgetHeard(); // its step is skipped; a later pass over it is a new one
-    visualQueue.push({ step: (nextStep + last) % steps, time: nextTime + last * length });
+    const lastStep = (nextStep + last) % steps;
+    visualQueue.push({ step: lastStep, time: nextTime + last * length + swingDelay(lastStep, bpm, swing) });
     nextTime += missed * length;
     nextStep = (nextStep + missed) % steps;
   }
@@ -126,7 +127,9 @@ export function createScheduler({
       // `nextTime` is the step's place on the grid, which swing does not move: only when the step sounds (and when the
       // playhead reaches it) is later, so tempo changes and stalls are still worked out on the even grid.
       const time = nextTime + swingDelay(nextStep, bpm, swing);
-      onStep(nextStep, time, nextStep === heardStep ? new Set(heardRows) : NOBODY);
+      // `nextTime` goes along as a fourth argument: a page that builds its steps again (rewindTo) hands it back, and it
+      // cannot be worked out from `time` afterwards, as the swing may have changed since.
+      onStep(nextStep, time, nextStep === heardStep ? new Set(heardRows) : NOBODY, nextTime);
       if (nextStep === heardStep) forgetHeard();
       visualQueue.push({ step: nextStep, time });
       nextTime += stepSeconds(bpm);
@@ -194,10 +197,10 @@ export function createScheduler({
   // Take back the steps scheduled from `step` (at `time`) on, and schedule them again from there: the
   // page replaced what they were built from (a different sequence), after the scheduler had already
   // handed the next step or two to the audio clock. The caller silences the old ones itself.
+  // `time` is the step's place on the grid (the fourth argument `onStep` was given), not when it sounded.
   function rewindTo(step, time) {
     nextStep = step % steps;
-    // `time` is when the step sounded, which swing put later than its place on the grid.
-    nextTime = time - swingDelay(step, bpm, swing);
+    nextTime = time;
     for (let i = visualQueue.length - 1; i >= 0; i--) if (visualQueue[i].time >= time) visualQueue.splice(i, 1);
     forgetHeard();
   }

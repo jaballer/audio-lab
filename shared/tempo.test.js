@@ -103,6 +103,32 @@ describe("createTapTempo", () => {
   });
 });
 
+describe("nearestStep with swing", () => {
+  // 120 BPM, 66 per cent: step 0 sounds at 10, step 1 at 10.165 (0.04 after its place on the grid), step 2 at 10.25.
+  const swung = (now, playheadStep, playheadTime) =>
+    nearestStep({ now, playheadTime, playheadStep, bpm: 120, steps: 16, swing: 66 });
+
+  it("splits an even step from the next at the middle of the time between them as they sound", () => {
+    expect(swung(10.08, 0, 10)).toBe(0); // nearer the step that sounded at 10 than the one at 10.165
+    expect(swung(10.09, 0, 10)).toBe(1);
+  });
+
+  it("splits an odd step from the next at the middle of the shorter time between them", () => {
+    expect(swung(10.2, 1, 10.165)).toBe(1); // 10.2 is nearer 10.165 than 10.25
+    expect(swung(10.21, 1, 10.165)).toBe(2);
+  });
+
+  it("is what it was when the swing is straight, or not given", () => {
+    const straight = { now: 10.07, playheadTime: 10, playheadStep: 3, bpm: 120, steps: 16 };
+    expect(nearestStep(straight)).toBe(4);
+    expect(nearestStep({ ...straight, swing: 50 })).toBe(4);
+  });
+
+  it("wraps from the last step to the first", () => {
+    expect(nearestStep({ now: 10.12, playheadTime: 10, playheadStep: 15, bpm: 120, steps: 16, swing: 66 })).toBe(0);
+  });
+});
+
 describe("clampSwing", () => {
   it("keeps swing to whole numbers inside the range", () => {
     expect(clampSwing(40)).toBe(SWING_MIN);
@@ -135,10 +161,14 @@ describe("swingDelay", () => {
     expect(swingDelay(1, 120, SWING_MAX)).toBeCloseTo(0.0625);
   });
 
-  it("scales with the tempo, and keeps a pair the length of two steps", () => {
+  it("scales with the tempo", () => {
     expect(swingDelay(1, 60, 60)).toBeCloseTo(2 * swingDelay(1, 120, 60));
-    // The second step ends where the next pair begins, so the pair as a whole is as long as it was.
-    expect(2 * stepSeconds(120) - (stepSeconds(120) + swingDelay(1, 120, 70))).toBeGreaterThan(0);
+  });
+
+  it("never moves the second step of a pair as far as the next pair, at any swing", () => {
+    for (let swing = SWING_MIN; swing <= SWING_MAX; swing++) {
+      expect(swingDelay(1, 120, swing)).toBeLessThan(stepSeconds(120));
+    }
   });
 
   it("is kept inside the range, so a wild value cannot push a step past the next", () => {

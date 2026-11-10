@@ -183,19 +183,65 @@ describe("createScheduler", () => {
       expect(scheduler.playheadStep).toBe(1);
     });
 
-    it("hands a step back at the place it sounded when it is built again", () => {
-      const { scheduler, played, run } = setup({ bpm: 120 });
-      scheduler.setSwing(66);
+    // A scheduler that also records the grid time each step was given, as the sampler's controller does.
+    function withGrid(swing) {
+      const clock = fakeClock();
+      const steps = []; // { step, time, grid }
+      const scheduler = createScheduler({
+        clock,
+        steps: 16,
+        bpm: 120,
+        swing,
+        onStep: (step, time, _heard, grid) => steps.push({ step, time, grid }),
+      });
+      const run = (seconds) => {
+        for (let t = 0; t < seconds; t += SCHEDULER_TICK_MS / 1000) {
+          clock.time += SCHEDULER_TICK_MS / 1000;
+          vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+        }
+      };
+      return { scheduler, steps, run };
+    }
+
+    it("gives each step its place on the grid, which swing does not move", () => {
+      const { scheduler, steps, run } = withGrid(66);
+      scheduler.start(0);
+      run(0.5);
+      expect(steps.slice(0, 5).map(({ grid }) => grid)).toEqual([0, 0.125, 0.25, 0.375, 0.5]);
+      expect(steps[1].time).toBeCloseTo(0.165); // sounded later than its place
+    });
+
+    it("builds a step again at its place on the grid", () => {
+      const { scheduler, steps, run } = withGrid(66);
       scheduler.start(0);
       run(0.3); // steps up to 3 are handed out, and the clock is before them
-      const [, time] = played.find(([step]) => step === 3); // an odd step: it sounded after its place on the grid
-      played.length = 0;
-      scheduler.rewindTo(3, time);
+      const { grid } = steps.find(({ step }) => step === 3);
+      steps.length = 0;
+      scheduler.rewindTo(3, grid);
       run(0.4);
-      expect(played[0][0]).toBe(3);
-      expect(played[0][1]).toBeCloseTo(time); // not delayed a second time
-      expect(played[1][0]).toBe(4);
-      expect(played[1][1]).toBeCloseTo(0.5, 2); // and the next pair is on the grid
+      expect(steps[0].step).toBe(3);
+      expect(steps[0].time).toBeCloseTo(0.375 + 0.04); // delayed once, not twice
+      expect(steps[1].step).toBe(4);
+      expect(steps[1].time).toBeCloseTo(0.5, 2); // and the next pair is on the grid
+    });
+
+    it("keeps the loop where it was when the swing changed between a step being scheduled and built again", () => {
+      for (const [before, after] of [
+        [75, 50],
+        [50, 75],
+      ]) {
+        const { scheduler, steps, run } = withGrid(before);
+        scheduler.start(0);
+        run(0.3);
+        const { grid } = steps.find(({ step }) => step === 3);
+        scheduler.setSwing(after);
+        steps.length = 0;
+        scheduler.rewindTo(3, grid);
+        run(0.4);
+        const four = steps.find(({ step }) => step === 4);
+        expect(four.grid).toBeCloseTo(0.5); // the grid is where it was, whatever the swing did
+        expect(four.time).toBeCloseTo(0.5); // an even step sounds on the grid
+      }
     });
   });
 

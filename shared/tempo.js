@@ -28,11 +28,14 @@ export const clampSwing = (value) =>
 export const swingDelay = (step, bpm, swing) => (step % 2 === 1 ? stepSeconds(bpm) * (clampSwing(swing) / 50 - 1) : 0);
 
 // Live recording: which step a pad hit belongs to. The playhead sits on
-// `playheadStep` (which began at `playheadTime`); a hit in the second half of
-// that step belongs to the next one. -1 means no step has played yet.
-export function nearestStep({ now, playheadTime, playheadStep, bpm, steps }) {
-  const sincePlayhead = now - playheadTime;
-  return sincePlayhead > stepSeconds(bpm) / 2 ? (playheadStep + 1) % steps : playheadStep;
+// `playheadStep` (which began at `playheadTime`); a hit after the halfway point between that step and the next one
+// (as they sound, with swing: the steps of a pair are not the same length) belongs to the next one. -1 means no step
+// has played yet.
+export function nearestStep({ now, playheadTime, playheadStep, bpm, steps, swing = SWING_DEFAULT }) {
+  const next = (playheadStep + 1) % steps;
+  const gridTime = playheadTime - swingDelay(playheadStep, bpm, swing);
+  const nextTime = gridTime + stepSeconds(bpm) + swingDelay(next, bpm, swing);
+  return now - playheadTime > (nextTime - playheadTime) / 2 ? next : playheadStep;
 }
 
 // Tap tempo: average the last few intervals, and start over after a pause.
