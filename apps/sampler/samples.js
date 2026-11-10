@@ -13,6 +13,7 @@
 //   await samples.reset(3);        // the built-in sound again
 //   samples.setTrim(3, { start, end }, "end");   // the part of pad 3's sample that plays; kept with the sample
 //   await samples.restore();       // at the start of a visit: put back what was kept
+//   samples.freeze();              // a project is being opened: write nothing more (freeze(false) undoes it)
 //
 // The file's original bytes are what is kept, not the decoded audio: they are smaller. They are decoded again
 // at the start of each visit, with an offline context, because the real audio context only exists after the
@@ -92,6 +93,7 @@ export function createSamples({
   const requested = new Array(kit.length).fill(0);
   const installed = new Array(kit.length).fill(0);
   let restored = false;
+  let frozen = false; // a project is replacing what is kept: this page writes nothing more of its own (see freeze)
   let persistAsked = false; // the browser is asked once per visit to keep the samples
 
   // What counts toward the total cap, kept in two parts so it can always be put right: `held` is what each pad
@@ -114,6 +116,7 @@ export function createSamples({
   // onto the entry of that same sample. If another tab has since put a different sample on the pad (or taken it off),
   // the entry is theirs and the files' bytes are theirs, so this tab's trim must not be written over it.
   function persist(pad, { sameSampleOnly = false } = {}) {
+    if (frozen) return false;
     const stored = readMap();
     // A map that cannot be read (never saved, blocked, damaged) says nothing about the other pads, so this tab's own
     // are written; reading it as empty would drop them.
@@ -140,6 +143,7 @@ export function createSamples({
   }
 
   async function load(pad, file) {
+    if (frozen) return false;
     const request = ++requested[pad];
     if (file.size > MAX_SAMPLE_BYTES) return fail(pad, REASONS.bytes);
     // Asked here, at the start, because this runs in the click or drop the visitor made and nothing has been
@@ -169,6 +173,7 @@ export function createSamples({
     reservations[pad].set(request, bytes.byteLength);
     try {
       const result = await decode(audio.ensure(), bytes);
+      if (frozen) return false; // a project was opened while it decoded: it must not land on the project's pad
       if (request < installed[pad]) return false; // a newer one has installed, or a reset has come since: it stands
       if (!result.ok) return fail(pad, result.reason); // the pad is as it was, and an earlier load may still stand
 
@@ -205,6 +210,7 @@ export function createSamples({
   }
 
   async function reset(pad) {
+    if (frozen) return;
     installed[pad] = ++requested[pad]; // a reset counts as an install: it overtakes every load made before it
     touched.add(pad);
     delete pads[pad];
@@ -272,5 +278,12 @@ export function createSamples({
   // Is there a sample kept for this pad, whether or not it is playing (a restore that failed leaves the entry)?
   const isKept = (pad) => pad in pads;
 
-  return { load, reset, restore, isKept, setTrim };
+  // For the moment a project is opened: it writes the bytes and the map itself and the page starts again, and a load
+  // that finishes after that, or a trim, must not write the old page's pad over it. `freeze(false)` if opening fails.
+  // (A byte write already under way when this is called is not taken back.)
+  function freeze(on = true) {
+    frozen = on;
+  }
+
+  return { load, reset, restore, isKept, setTrim, freeze };
 }

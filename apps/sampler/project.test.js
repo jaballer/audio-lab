@@ -239,6 +239,7 @@ describe("installProject", () => {
     ]);
     return {
       data,
+      get: vi.fn(async (key) => data.get(key) ?? null),
       set: vi.fn(async (key, bytes) => {
         if (key === failSet) return false;
         data.set(key, bytes);
@@ -254,7 +255,7 @@ describe("installProject", () => {
     const writeMap = vi.fn(() => true);
     const writeSong = vi.fn(() => true);
     const parsed = project();
-    expect(await installProject(parsed, { store, writeMap, writeSong, padCount: 16 })).toBe(true);
+    expect(await installProject(parsed, { store, readMap: () => null, writeMap, writeSong, padCount: 16 })).toBe(true);
     expect([...store.data.keys()].sort()).toEqual([sampleKey(0), sampleKey(5)].sort());
     expect(store.data.get(sampleKey(0)).byteLength).toBe(40);
     expect(writeMap).toHaveBeenCalledWith({
@@ -268,20 +269,61 @@ describe("installProject", () => {
     const writeMap = vi.fn(() => true);
     const writeSong = vi.fn(() => true);
     const store = fakeStore({ failSet: sampleKey(5) });
-    expect(await installProject(project(), { store, writeMap, writeSong, padCount: 16 })).toBe(false);
+    expect(await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 })).toBe(
+      false,
+    );
     expect(writeMap).not.toHaveBeenCalled();
     expect(writeSong).not.toHaveBeenCalled();
+  });
+
+  it("puts every pad back as it was when the bytes cannot all be kept, and does not delete first", async () => {
+    const store = fakeStore({ failSet: sampleKey(5) });
+    const before = new Map(store.data);
+    const writeMap = vi.fn(() => true);
+    const writeSong = vi.fn(() => true);
+    await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 });
+    expect([...store.data.keys()].sort()).toEqual([...before.keys()].sort());
+    for (const [key, bytes] of before) expect(store.data.get(key)).toBe(bytes);
+  });
+
+  it("puts the map back when the song cannot be written", async () => {
+    const store = fakeStore();
+    const oldMap = { version: SAMPLES_VERSION, pads: { 0: { name: "Old", bytes: 1 } } };
+    const written = [];
+    const ok = await installProject(project(), {
+      store,
+      readMap: () => oldMap,
+      writeMap: (map) => written.push(map) && true,
+      writeSong: () => false,
+      padCount: 16,
+    });
+    expect(ok).toBe(false);
+    expect(written.at(-1)).toBe(oldMap);
+    expect(store.data.get(sampleKey(0)).byteLength).toBe(1); // the old bytes are back
+    expect(store.data.has(sampleKey(3))).toBe(true); // and a pad the project would have emptied was not
   });
 
   it("says so when the map or the song cannot be written", async () => {
     const ok = () => true;
     const fail = () => false;
-    expect(await installProject(project(), { store: fakeStore(), writeMap: fail, writeSong: ok, padCount: 16 })).toBe(
-      false,
-    );
-    expect(await installProject(project(), { store: fakeStore(), writeMap: ok, writeSong: fail, padCount: 16 })).toBe(
-      false,
-    );
+    expect(
+      await installProject(project(), {
+        store: fakeStore(),
+        readMap: () => null,
+        writeMap: fail,
+        writeSong: ok,
+        padCount: 16,
+      }),
+    ).toBe(false);
+    expect(
+      await installProject(project(), {
+        store: fakeStore(),
+        readMap: () => null,
+        writeMap: ok,
+        writeSong: fail,
+        padCount: 16,
+      }),
+    ).toBe(false);
   });
 });
 

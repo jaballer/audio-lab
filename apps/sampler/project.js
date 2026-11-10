@@ -142,21 +142,39 @@ export function projectFileName(date) {
 }
 
 // Puts a parsed project where the page keeps its own: each pad's bytes in `store`, the map of which pad has which with
-// `writeMap`, and the song with `writeSong` (the page then starts again, and reads them as it does on any visit). The song is
-// last, so a store that fails leaves the beat as it was; the pads already written are then the project's, and the
-// call gives back false. Pads the project has no sample for have what was on them taken off.
-export async function installProject(project, { store, writeMap, writeSong, padCount }) {
+// `writeMap` (`readMap` gives what is there now), and the song with `writeSong` (the page then starts again, and reads
+// them as it does on any visit). The bytes go first and nothing is deleted until the end, and what a write replaced is
+// read before it is, so that a store that fails part way (the quota is the likely one) or a map or song that cannot be
+// written puts back what was there and gives false: the page is as it was, not half a project. Pads the project has no
+// sample for are emptied last, once it is certain; a delete that fails only leaves bytes the map does not mention.
+export async function installProject(project, { store, readMap, writeMap, writeSong, padCount }) {
+  const oldMap = readMap();
+  const previous = new Map(); // pad -> the bytes it had (null for none), for the pads this call wrote
   const pads = {};
-  for (let pad = 0; pad < padCount; pad++) {
-    const sample = project.samples.find((one) => one.pad === pad);
-    if (!sample) {
-      await store.delete(sampleKey(pad));
-      continue;
+
+  const rollBack = async () => {
+    for (const [pad, bytes] of previous)
+      await (bytes ? store.set(sampleKey(pad), bytes) : store.delete(sampleKey(pad)));
+  };
+
+  for (const sample of project.samples) {
+    previous.set(sample.pad, await store.get(sampleKey(sample.pad)));
+    if (!(await store.set(sampleKey(sample.pad), sample.bytes))) {
+      await rollBack();
+      return false;
     }
-    if (!(await store.set(sampleKey(pad), sample.bytes))) return false;
-    pads[pad] = { name: sample.name, bytes: sample.bytes.byteLength };
-    if (sample.trim && !isFullTrim(sample.trim)) pads[pad].trim = sample.trim;
+    pads[sample.pad] = { name: sample.name, bytes: sample.bytes.byteLength };
+    if (sample.trim && !isFullTrim(sample.trim)) pads[sample.pad].trim = sample.trim;
   }
-  if (!writeMap({ version: SAMPLES_VERSION, pads })) return false;
-  return Boolean(writeSong(project.song));
+  if (!writeMap({ version: SAMPLES_VERSION, pads })) {
+    await rollBack();
+    return false;
+  }
+  if (!writeSong(project.song)) {
+    writeMap(oldMap);
+    await rollBack();
+    return false;
+  }
+  for (let pad = 0; pad < padCount; pad++) if (!(pad in pads)) await store.delete(sampleKey(pad));
+  return true;
 }

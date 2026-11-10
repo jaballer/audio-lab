@@ -299,4 +299,25 @@ describe("readZip", () => {
     view.setUint32(central + 42, 5, true);
     expect(() => readArchive(whole)).toThrow(/damaged/);
   });
+
+  it("refuses entries that share the same bytes, which would give far more data than the file holds", () => {
+    const whole = archive([{ name: "a", data: new Uint8Array(1000) }]);
+    // Add a second central entry for another name, pointing at the same local header, by rebuilding the directory.
+    const view = new DataView(whole.buffer, whole.byteOffset);
+    const endAt = whole.length - 22;
+    const directoryAt = view.getUint32(endAt + 16, true);
+    const entry = whole.slice(directoryAt, endAt); // the one central record, with its name "a"
+    const twin = entry.slice();
+    twin[46] = "b".charCodeAt(0);
+    const out = new Uint8Array(directoryAt + entry.length * 2 + 22);
+    out.set(whole.subarray(0, directoryAt));
+    out.set(entry, directoryAt);
+    out.set(twin, directoryAt + entry.length);
+    out.set(whole.subarray(endAt), directoryAt + entry.length * 2);
+    const end = new DataView(out.buffer, directoryAt + entry.length * 2);
+    end.setUint16(8, 2, true);
+    end.setUint16(10, 2, true);
+    end.setUint32(12, entry.length * 2, true);
+    expect(() => readArchive(out)).toThrow(/overlap|more data/);
+  });
 });

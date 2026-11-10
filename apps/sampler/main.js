@@ -247,48 +247,72 @@ const sampler = createSampler({
 // kept as a file (project.js): Save downloads it, Open replaces what is on the page with one. Open writes the project
 // where the page keeps its own and starts the page again, which reads it as it does on any visit, so nothing that
 // is live (a playing sequence, the sounds on the pads, the undo history) has to be taken apart and put back.
-async function saveProject() {
-  const { samples: kept } = await collectSamples({ map: loadJson(SAMPLES_KEY), store: blobs, padCount: PAD_COUNT });
-  // A pad that plays a sample which is not in the page's storage (it was loaded with storage blocked or full, or
-  // the browser cleared the bytes) cannot go in the file: say so rather than let a person think it did.
-  const included = new Set(kept.map(({ pad }) => pad));
-  const left = Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter(
-    (pad) => !kit.isDefault(pad) && !included.has(pad),
-  );
-  saveBlob(projectBlob({ song: sampler.getSong(), samples: kept }), projectFileName(new Date()));
-  say(left.length ? `PROJECT SAVED, ${left.length} SAMPLE${left.length === 1 ? "" : "S"} NOT KEPT` : "PROJECT SAVED");
+// One Save or Open at a time: two clicks would read the samples twice, and two Opens would write over each other.
+let projectBusy = false;
+async function withProjectLock(work) {
+  if (projectBusy) return;
+  projectBusy = true;
+  let reloading = false;
+  try {
+    reloading = await work();
+  } finally {
+    if (!reloading) projectBusy = false; // a page that is starting again stays busy until it has
+  }
 }
+
+const saveProject = () =>
+  withProjectLock(async () => {
+    const { samples: kept } = await collectSamples({ map: loadJson(SAMPLES_KEY), store: blobs, padCount: PAD_COUNT });
+    // A pad that plays a sample which is not in the page's storage (it was loaded with storage blocked or full, or
+    // the browser cleared the bytes) cannot go in the file: say so rather than let a person think it did.
+    const included = new Set(kept.map(({ pad }) => pad));
+    const left = Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter(
+      (pad) => !kit.isDefault(pad) && !included.has(pad),
+    );
+    saveBlob(projectBlob({ song: sampler.getSong(), samples: kept }), projectFileName(new Date()));
+    say(left.length ? `PROJECT SAVED, ${left.length} SAMPLE${left.length === 1 ? "" : "S"} NOT KEPT` : "PROJECT SAVED");
+    return false;
+  });
 
 const projectInput = $("project-file");
 const openProjectPicker = () => projectInput.click();
-async function openProject(file) {
-  if (file.size > MAX_PROJECT_BYTES) return say(PROJECT_REASONS.tooBig);
-  let bytes;
-  try {
-    bytes = await file.arrayBuffer();
-  } catch {
-    return say(PROJECT_REASONS.damaged);
-  }
-  const project = parseProject(bytes, {
-    rows: PAD_COUNT,
-    steps: STEPS,
-    maxBars: MAX_BARS,
-    sequenceCount: SEQUENCE_COUNT,
+const openProject = (file) =>
+  withProjectLock(async () => {
+    if (file.size > MAX_PROJECT_BYTES) return say(PROJECT_REASONS.tooBig);
+    let bytes;
+    try {
+      bytes = await file.arrayBuffer();
+    } catch {
+      return say(PROJECT_REASONS.damaged);
+    }
+    const project = parseProject(bytes, {
+      rows: PAD_COUNT,
+      steps: STEPS,
+      maxBars: MAX_BARS,
+      sequenceCount: SEQUENCE_COUNT,
+    });
+    if (!project.ok) return say(project.reason);
+    // Nothing is undoable once the page starts again, so ask first.
+    if (!window.confirm("Open this project? The beat and samples on the page now will be replaced.")) return false;
+    // The page being replaced writes nothing more of its own: not a waiting song change, nor a sample still loading.
+    saver.cancel();
+    samples.freeze();
+    const kept = await installProject(project, {
+      store: blobs,
+      readMap: () => loadJson(SAMPLES_KEY),
+      writeMap: (map) => saveJson(SAMPLES_KEY, map),
+      writeSong: (song) => saveJson(SONG_KEY, song),
+      padCount: PAD_COUNT,
+    });
+    if (!kept) {
+      samples.freeze(false);
+      say("PROJECT NOT OPENED: STORAGE FULL");
+      return false;
+    }
+    saver.cancel(); // (again: a change made while it was being written would be flushed as the page unloads)
+    location.reload();
+    return true;
   });
-  if (!project.ok) return say(project.reason);
-  // Nothing is undoable once the page starts again, so ask first.
-  if (!window.confirm("Open this project? The beat and samples on the page now will be replaced.")) return;
-  saver.cancel(); // a change still waiting would be saved over the project
-  const kept = await installProject(project, {
-    store: blobs,
-    writeMap: (map) => saveJson(SAMPLES_KEY, map),
-    writeSong: (song) => saveJson(SONG_KEY, song),
-    padCount: PAD_COUNT,
-  });
-  if (!kept) return say("PROJECT NOT OPENED: STORAGE FULL");
-  saver.cancel(); // (again: a change made while it was being written would be flushed as the page unloads)
-  location.reload();
-}
 projectInput.addEventListener("change", () => {
   const [file] = projectInput.files;
   projectInput.value = ""; // so the same file can be chosen again

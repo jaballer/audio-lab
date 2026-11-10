@@ -169,6 +169,7 @@ export function readZip(input) {
   const decoder = new TextDecoder();
   const files = [];
   const seen = new Set();
+  let total = 0; // the sizes of all the files so far
   let at = directoryAt;
   for (let i = 0; i < count; i++) {
     if (at + CENTRAL_HEADER_BYTES > end || view.getUint32(at, true) !== CENTRAL_SIGNATURE)
@@ -190,6 +191,10 @@ export function readZip(input) {
     if (seen.has(name)) throw new Error(`Two files in the zip are named ${name}.`);
     seen.add(name);
 
+    // Entries that point at the same bytes would each give a copy of them: a few megabytes could make gigabytes. Files
+    // that do not overlap cannot add up to more than the archive, so that is the limit, before anything is cut out.
+    total += size;
+    if (total > bytes.byteLength) throw new Error("The zip's files overlap: they hold more data than the file does.");
     // The data follows the local header, which has its own name and extra field lengths. It has to end before the directory.
     if (localAt + LOCAL_HEADER_BYTES > directoryAt || view.getUint32(localAt, true) !== LOCAL_SIGNATURE)
       throw new Error(`${name} is damaged.`);
