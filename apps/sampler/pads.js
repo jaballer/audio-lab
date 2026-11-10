@@ -93,6 +93,12 @@ export function createPadGrid(element, { sounds, onTrigger }) {
   }
 
   return {
+    // The middle of a pad in the window, as a share of its width and height (the light show bursts from there).
+    center(idx) {
+      const r = padEls[idx].getBoundingClientRect();
+      return { x: ((r.left + r.width / 2) / innerWidth) * 100, y: ((r.top + r.height / 2) / innerHeight) * 100 };
+    },
+
     flash(idx) {
       flash(padEls[idx]);
     },

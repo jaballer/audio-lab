@@ -4,10 +4,13 @@
 
 import "../../shared/base.css";
 import "../../shared/step-keys.css";
+import "../../shared/light-show.css";
 import "./sampler.css";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAudioNotice } from "../../shared/audio-notice.js";
 import { setAttr, setDisabledMany, setText } from "../../shared/dom-updates.js";
+import { createLightShow } from "../../shared/light-show-view.js";
+import { bandLevels, beatPhase, rmsLevel, smoothLevel } from "../../shared/light-show.js";
 import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { enableOffline } from "../../shared/offline.js";
@@ -19,6 +22,7 @@ import { createExportDialog } from "./export-dialog.js";
 import { exportDialogModel } from "./export-dialog-state.js";
 import { normalizeExportOptions } from "./export-options.js";
 import { canRenderOffline, createExportAction, exportSampleRate, exportSequence, exportStems } from "./export-wav.js";
+import { padColorCss } from "./pad-colors.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -67,6 +71,74 @@ const header = createAppHeader($("header"), {
 
 // The Export dialog, built below with the rest of export; the song can change (a MIDI knob) before it exists.
 let exportDialog = null;
+
+// ---------- Light show ----------
+// A glow on the desk behind the machine: it pulses with the tempo and runs from blue to red with how loud the
+// output is. Kept between visits; off by default for a person who asked their system for less motion.
+const LIGHTS_KEY = "pad-sampler:lights";
+const lightsOnStored = loadJson(LIGHTS_KEY);
+const lights = createLightShow($("light-show"), { read: readLights });
+const lightsButton = $("lights");
+lightsButton.addEventListener("click", () => toggleLights());
+let lightLevel = 0;
+let lastLightFrame = 0;
+let stepSeen = { step: -1, at: 0 };
+const LEVEL_WINDOW = 512; // the last samples read for loudness: about 10 ms, quick enough to follow each hit
+let timeBuffer = null; // allocated once the analyser exists, at its size
+let freqBuffer = null;
+const FLASH_FALLBACK = "#fff0d8"; // a pad with no colour of its own bursts warm white
+
+function flashLight(index) {
+  if (!lights.isOn) return;
+  const color = padColorCss(kit.settings(index).color) ?? FLASH_FALLBACK;
+  lights.flash({ ...padGrid.center(index), color });
+}
+
+function readLights() {
+  const now = performance.now();
+  const analyser = audio.running ? audio.analyser : null;
+  let heard = 0;
+  let bands = { low: 0, high: 0 };
+  if (analyser) {
+    timeBuffer ??= new Float32Array(analyser.fftSize);
+    freqBuffer ??= new Uint8Array(analyser.frequencyBinCount);
+    analyser.getFloatTimeDomainData(timeBuffer);
+    analyser.getByteFrequencyData(freqBuffer);
+    heard = rmsLevel(timeBuffer.subarray(timeBuffer.length - LEVEL_WINDOW));
+    bands = bandLevels(freqBuffer, audio.ctx.sampleRate);
+  }
+  lightLevel = smoothLevel(lightLevel, heard, lastLightFrame ? now - lastLightFrame : 0);
+  lastLightFrame = now;
+  const state = sampler.getState();
+  // The step in the whole sequence: `playheadStep` is only the one on the bar shown (-1 in any other), which would
+  // stop the beat from showing while a longer sequence plays through the bars not on screen.
+  const step = state.playing ? state.playheadPosition : -1;
+  if (step !== stepSeen.step) stepSeen = { step, at: now }; // stopped, the step is -1: a restart is a new step
+  const playing = state.playing && audio.running && step >= 0;
+  const phase = playing ? beatPhase({ step, sinceStepMs: now - stepSeen.at, bpm: state.bpm }) : 0;
+  const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  return {
+    level: lightLevel,
+    phase,
+    playing,
+    beat: Math.floor(step / 4),
+    bpm: state.bpm,
+    timeMs: now,
+    still,
+    ...bands,
+  };
+}
+
+function setLights(on) {
+  lights.setOn(on);
+  lastLightFrame = 0;
+  lightLevel = 0; // not the loudness from before it was switched off: the first frame would show it for a second
+  setAttr(lightsButton, "aria-pressed", String(on));
+}
+function toggleLights() {
+  setLights(!lights.isOn);
+  saveJson(LIGHTS_KEY, lights.isOn);
+}
 
 const playBtn = $("play");
 const recBtn = $("rec");
@@ -141,10 +213,12 @@ const sampler = createSampler({
   onMessage: say,
   onPadHit(index) {
     padGrid.flash(index);
+    flashLight(index);
     midi.padHit(index);
   },
   onPadPlayed(index) {
     padGrid.light(index);
+    flashLight(index);
     midi.padHit(index);
   },
   onSongChange() {
@@ -564,3 +638,8 @@ if (loadJson(DRAWER_KEY, false) === true) padDrawer.open(); // as it was left
 // built-in sounds where a saved sample is about to be.
 const restoring = decodesEarly ? samples.restore() : Promise.resolve();
 sampler.selectPad(0);
+setLights(
+  typeof lightsOnStored === "boolean"
+    ? lightsOnStored
+    : !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+);

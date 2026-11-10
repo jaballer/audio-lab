@@ -137,6 +137,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/disclosure.js` — a button that shows and hides some regions (`aria-expanded`, `aria-controls`, focus handed to the button when it hides what has it); the sampler's step editor uses it
 - `shared/blob-store.js` — bytes kept in IndexedDB that never throws (a failed read is `null`, a failed write is `false`), for what localStorage cannot hold: the sampler's samples
 - `shared/audio.js` — the `AudioContext`, master volume (through a soft clipper, so sounds that add up past full scale do not crackle), power on/off and first-interaction unlock, used by every app
+- `shared/light-show.js`, `light-show-view.js`, `light-show.css` — the sampler's Lights button (beside Edit Pad): a glow on the desk behind the machine that pulses with the tempo and runs from blue to red with how loud the output is, swells with the bass, sparkles at the edges with the highs and bursts in a pad's colour when it plays (the maths has no DOM; the view sets CSS variables each frame)
 - `shared/audio-notice.js` — the "sound is off" notice the pages that play sound (sampler, keys, tone) show until the first click or key press (on touch screens only once a MIDI hit makes no sound)
 - `shared/power.js` — what pressing a device's POWER switch does to its audio (on goes off, anything else comes on)
 - `shared/midi-access.js` — Web MIDI permission, device scanning and status, used by both apps

@@ -33,6 +33,7 @@
     >
   </head>
   <body>
+    <div id="light-show" class="light-show" aria-hidden="true" hidden></div>
     <div id="loading" class="loading-screen" role="status">
       <span class="loading-name">Audio <b>Lab</b></span>
       <span class="loading-bar" aria-hidden="true"></span>
@@ -89,7 +90,18 @@
           </div>
 
           <div class="quick-group quick-end">
-            <button id="edit-pad" class="btn btn-small btn-led" type="button">Edit Pad</button>
+            <div class="quick-row">
+              <button
+                id="lights"
+                class="btn btn-small btn-led"
+                type="button"
+                aria-pressed="false"
+                title="Light show behind the machine, in time with the beat"
+              >
+                Lights
+              </button>
+              <button id="edit-pad" class="btn btn-small btn-led" type="button">Edit Pad</button>
+            </div>
           </div>
         </div>
 
