@@ -307,6 +307,36 @@ a:focus-visible {
   justify-content: flex-end;
   gap: 10px;
 }
+/* The MIDI switch stays in place and its lamp says whether the page is listening, as a switch on a real device would. */
+.btn-midi::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin: 0 8px 0 0;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: #4a4a45;
+  box-shadow: inset 0 1px 2px #000;
+}
+.btn-midi[aria-pressed="true"]::before {
+  background: var(--led-green);
+  box-shadow: 0 0 8px 2px rgba(88, 224, 74, 0.7);
+}
+@media (forced-colors: active) {
+  /* A lamp is a colour and a glow, both dropped here: say lit by the fill instead (a hollow ring off, filled when on). */
+  .btn-midi::before {
+    forced-color-adjust: none;
+    box-sizing: border-box;
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    box-shadow: none;
+  }
+  .btn-midi[aria-pressed="true"]::before {
+    border-color: Highlight;
+    background: Highlight;
+  }
+}
 /* Whatever the status says, it stays on one line; the full text is its tooltip and the console. */
 #midi-status {
   max-width: 36ch; /* wide enough for "permission denied" in the label font */

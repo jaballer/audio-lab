@@ -284,8 +284,13 @@ wireMidiButton(
         board.releaseAll();
         transport.reset();
       }
-      output = [...access.outputs.values()].find((p) => p.state !== "disconnected" && isMpcSample(p.name)) ?? null;
-      if (!output) stopPlayback();
+      const next = [...access.outputs.values()].find((p) => p.state !== "disconnected" && isMpcSample(p.name)) ?? null;
+      // Stop while the old port is still the output, so the pad-offs reach it when MIDI was only switched off (its port
+      // is still there). An unplugged port is already gone from the browser's list and cannot take them.
+      const stopFirst = !next && output?.state !== "disconnected";
+      if (stopFirst) stopPlayback();
+      output = next;
+      if (!output && !stopFirst) stopPlayback();
       schedule();
     },
   }),

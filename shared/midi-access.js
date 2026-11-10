@@ -80,6 +80,20 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
     return true;
   }
 
+  // A page cannot revoke the browser's permission, so "off" means it stops listening: no message reaches the app and
+  // plugging a device in or out is not followed, until connect() runs again.
+  function disconnect() {
+    if (!access) return;
+    for (const input of access.inputs.values()) input.onmidimessage = null;
+    access.onstatechange = null;
+    known = null;
+    // Tell the app as an unplug of every device would, so held notes are released and its outputs let go. The
+    // access it is handed has no ports left: it is a view of what is still being listened to.
+    onChange?.({ inputs: new Map(), outputs: new Map() }, []);
+    onStatus(""); // the switch's lamp says it is off
+    onLog?.("MIDI off: no longer listening to inputs");
+  }
+
   // Reconnect silently on later visits if permission was already granted.
   async function autoConnect() {
     try {
@@ -91,16 +105,40 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
     return false;
   }
 
-  return { connect, autoConnect };
+  return { connect, disconnect, autoConnect };
 }
 
-// Hook up a "Connect MIDI" button: connect on click, and reconnect silently
-// when permission was already granted. The button hides once connected.
+// Hook up the MIDI switch: it stays on the device, like a real switch, and shows whether the page is listening
+// (aria-pressed). Pressing it connects, or stops listening; a failed connect leaves it off for another try. It
+// reconnects silently on later visits if permission was already granted.
 export function wireMidiButton(button, midi) {
+  let on = false;
+  let pending = false; // a connect is waiting on the permission prompt: another press must not start a second
+  let touched = false; // the person pressed the switch: a slower silent reconnect must not override that
+  const show = (value) => {
+    on = value;
+    button.setAttribute("aria-pressed", String(on));
+  };
+  show(false);
   button.addEventListener("click", async () => {
-    if (await midi.connect()) button.hidden = true;
+    if (pending) return;
+    touched = true;
+    if (on) {
+      midi.disconnect();
+      show(false);
+      return;
+    }
+    pending = true;
+    try {
+      show(await midi.connect());
+    } finally {
+      pending = false;
+    }
   });
   midi.autoConnect().then((connected) => {
-    if (connected) button.hidden = true;
+    if (!touched) return show(connected);
+    // The silent reconnect finished after the person pressed the switch, and it restored the listeners: if they left
+    // it off, put that back. (A connect they started is still pending and will say so itself.)
+    if (connected && !on && !pending) midi.disconnect();
   });
 }

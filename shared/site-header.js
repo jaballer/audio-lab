@@ -1,11 +1,11 @@
 // The bar fixed to the top of the window, above the machine and the same on every page: the site's name and a link to each
-// page. It also builds the MIDI tools (Connect MIDI, its status, the Console), which are not drawn in the bar: they are
+// page. It also builds the MIDI tools (the MIDI switch, its status, the Console), which are not drawn in the bar: they are
 // handed to the machine's own header (app-header.js `tools`), beside Export and POWER. It draws into the <header> it is
 // handed and decides nothing.
 //
 //   const site = createSiteHeader(element, {
 //     current: "mpc-sample",   // the id of this page in pages.js; its link is marked
-//     midi: false,             // optional: a page with no MIDI has no Connect MIDI, status or Console
+//     midi: false,             // optional: a page with no MIDI has no MIDI switch, status or Console
 //   });
 //   site.midiTools            // the element holding the three MIDI tools: pass to createAppHeader as `tools` (null without MIDI)
 //   site.midiButton            // pass to wireMidiButton() (null without MIDI)
@@ -60,10 +60,12 @@ export function createSiteHeader(root, { current, midi = true }) {
     return { midiTools: null, midiButton: null, setMidiStatus() {}, log() {} };
   }
 
-  const midiButton = element("button", "btn btn-small", "Connect MIDI");
+  const midiButton = element("button", "btn btn-small btn-midi", "MIDI");
   midiButton.id = "midi-btn";
   midiButton.type = "button";
-  const midiStatus = element("span", "small-label", "MIDI: off");
+  midiButton.setAttribute("aria-pressed", "false");
+  midiButton.title = "Listen for MIDI controllers: on when lit";
+  const midiStatus = element("span", "small-label", "");
   midiStatus.id = "midi-status";
   midiStatus.setAttribute("role", "status");
 

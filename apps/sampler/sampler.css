@@ -10,7 +10,7 @@
 }
 
 /* ---------- The row of machine controls ---------- */
-/* Volume, tempo and its tap, the sequence, and Edit Pad at the far end (the side of the pads). A label over each, the
+/* Volume, tempo and its tap, the sequence, Open, Save and Export, and Edit Pad at the far end (the side of the pads). A label over each, the
    controls on one baseline. It has the header's rule under it. */
 .quick-bar {
   display: flex;
@@ -40,6 +40,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+/* Open, Save and Export sit closer together than the other controls, so they read as one group. */
+.quick-row-tight {
+  gap: 5px;
 }
 .quick-end {
   margin-left: auto;
