@@ -33,8 +33,20 @@ import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } f
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
 import { createPadGrid, padForKeyEvent, padPressAction } from "./pads.js";
+import {
+  MAX_PROJECT_BYTES,
+  REASONS as PROJECT_REASONS,
+  collectSamples,
+  padsNotSaved,
+  undecodableSample,
+  installProject,
+  parseProject,
+  projectBlob,
+  projectFileName,
+} from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap } from "./samples.js";
 import { createSampleLoader } from "./sample-loader.js";
+import { decodeSample } from "./sample-voice.js";
 import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
 import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
@@ -67,6 +79,12 @@ const header = createAppHeader($("header"), {
   onPower: () => togglePower(audio),
   actions: [
     { label: "Export", title: "Save the sequence as a WAV file", popup: "dialog", onPress: () => openExport() },
+    {
+      label: "Save",
+      title: "Save the whole beat and its samples as a project file you can open again",
+      onPress: () => saveProject(),
+    },
+    { label: "Open", title: "Open a project file, replacing the beat on the page", onPress: () => openProjectPicker() },
   ],
 });
 
@@ -163,9 +181,12 @@ backUpUnusable(storedSong, song, SONG_BACKUP_KEY, saveJson);
 const storedSamples = loadJson(SAMPLES_KEY);
 backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, saveJson);
 
+// True while a project is being written over what is kept: the page being replaced saves no song of its own then, so that
+// an edit made meanwhile cannot land after the project's song (see openProject).
+let replacingSong = false;
 const saver = createSongSaver({
   read: () => sampler.getSong(),
-  save: (data) => saveJson(SONG_KEY, data),
+  save: (data) => !replacingSong && saveJson(SONG_KEY, data),
 });
 window.addEventListener("pagehide", () => saver.flush());
 
@@ -230,6 +251,106 @@ const sampler = createSampler({
   },
 });
 
+// ---------- Project file ----------
+// The browser's own storage can be cleared (by the person, or under disk pressure), so the whole beat can also be
+// kept as a file (project.js): Save downloads it, Open replaces what is on the page with one. Open writes the project
+// where the page keeps its own and starts the page again, which reads it as it does on any visit, so nothing that
+// is live (a playing sequence, the sounds on the pads, the undo history) has to be taken apart and put back.
+// One Save or Open at a time: two clicks would read the samples twice, and two Opens would write over each other.
+let projectBusy = false;
+async function withProjectLock(work) {
+  if (projectBusy) return;
+  projectBusy = true;
+  let reloading = false;
+  try {
+    reloading = await work();
+  } finally {
+    if (!reloading) projectBusy = false; // a page that is starting again stays busy until it has
+  }
+}
+
+const saveProject = () =>
+  withProjectLock(async () => {
+    const { samples: kept, missing } = await collectSamples({
+      map: loadJson(SAMPLES_KEY),
+      store: blobs,
+      padCount: PAD_COUNT,
+    });
+    // What the file holds is what the page's storage holds, which is not always what this tab plays (the bytes were
+    // not kept, another tab put a different sample on the pad, a trim could not be written): say so rather than let
+    // a person think the project sounds as it does here.
+    const playing = [];
+    for (let pad = 0; pad < PAD_COUNT; pad++) {
+      const sound = kit.get(pad);
+      if (!kit.isDefault(pad)) playing.push({ pad, name: sound.name, bytes: sound.info?.bytes, trim: sound.trim });
+    }
+    const left = padsNotSaved({ playing, samples: kept, missing });
+    saveBlob(projectBlob({ song: sampler.getSong(), samples: kept }), projectFileName(new Date()));
+    say(left.length ? `PROJECT SAVED, ${left.length} SAMPLE${left.length === 1 ? "" : "S"} NOT KEPT` : "PROJECT SAVED");
+    return false;
+  });
+
+const projectInput = $("project-file");
+const openProjectPicker = () => projectInput.click();
+const openProject = (file) =>
+  withProjectLock(async () => {
+    if (file.size > MAX_PROJECT_BYTES) return say(PROJECT_REASONS.tooBig);
+    let bytes;
+    try {
+      bytes = await file.arrayBuffer();
+    } catch {
+      return say(PROJECT_REASONS.damaged);
+    }
+    const project = parseProject(bytes, {
+      rows: PAD_COUNT,
+      steps: STEPS,
+      maxBars: MAX_BARS,
+      sequenceCount: SEQUENCE_COUNT,
+    });
+    if (!project.ok) return say(project.reason);
+    // Every sample has to decode here, in this browser, before anything is replaced: one it cannot read would leave its
+    // pad on the built-in sound after the page starts again, and the beat that was here would be gone.
+    const ctx = decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure();
+    const unreadable = ctx && (await undecodableSample(project, (sampleBytes) => decodeSample(ctx, sampleBytes)));
+    if (unreadable) return say(`PAD ${pad2(unreadable.pad + 1)} ${unreadable.reason}`);
+    // Nothing is undoable once the page starts again, so ask first.
+    if (!window.confirm("Open this project? The beat and samples on the page now will be replaced.")) return false;
+    // The page being replaced writes nothing more of its own: not a waiting song change, nor a sample still loading.
+    saver.cancel();
+    samples.freeze();
+    replacingSong = true;
+    // The writes below are several, and a page that goes away between them leaves the old map over other bytes. They take
+    // a moment, so the browser is asked to confirm leaving rather than made atomic: a crash is not covered. Held from here,
+    // not from the install: waiting for a write that was already under way is part of it.
+    const keepOpen = (event) => event.preventDefault();
+    window.addEventListener("beforeunload", keepOpen);
+    await samples.idle(); // a sample write that was already under way has finished before the old state is read
+    const kept = await installProject(project, {
+      store: blobs,
+      readMap: () => loadJson(SAMPLES_KEY),
+      writeMap: (map) => saveJson(SAMPLES_KEY, map),
+      writeSong: (song) => saveJson(SONG_KEY, song),
+      padCount: PAD_COUNT,
+    });
+    if (!kept) {
+      window.removeEventListener("beforeunload", keepOpen);
+      samples.freeze(false);
+      replacingSong = false;
+      saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
+      say("PROJECT NOT OPENED: STORAGE FULL");
+      return false;
+    }
+    saver.cancel(); // (again: a change made while it was being written would be flushed as the page unloads)
+    window.removeEventListener("beforeunload", keepOpen); // it is all written: the reload is ours
+    location.reload();
+    return true;
+  });
+projectInput.addEventListener("change", () => {
+  const [file] = projectInput.files;
+  projectInput.value = ""; // so the same file can be chosen again
+  if (file) openProject(file);
+});
+
 // ---------- Views ----------
 // A short message goes on the LCD, and, for the eye, in the pad editor too: the LCD is out of sight when the editor
 // is under the pads. (Both are declared below; this is only called once the page is running.)
@@ -278,11 +399,12 @@ powerSequence = createPowerSequence({
 powerSequence.set(audio.running);
 
 // Samples on the pads: kept in this browser (IndexedDB for the files, localStorage for which pad has which).
+const blobs = createBlobStore();
 const samples = createSamples({
   kit,
   audio,
   restoreContext: () => (decodesEarly ? new OfflineAudioContext(1, 1, RESTORE_SAMPLE_RATE) : audio.ensure()),
-  store: createBlobStore(),
+  store: blobs,
   budget: createStorageBudget(),
   readMap: () => loadJson(SAMPLES_KEY),
   writeMap: (map) => saveJson(SAMPLES_KEY, map),

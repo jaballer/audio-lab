@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crc32, zipBlob, zipParts } from "./zip.js";
+import { crc32, readZip as readArchive, zipBlob, zipParts } from "./zip.js";
 
 const bytes = (text) => new TextEncoder().encode(text);
 const DATE = new Date(2026, 10, 9, 13, 45, 30); // 9 Nov 2026, 13:45:30 local time
@@ -201,5 +201,123 @@ describe("zipBlob", () => {
     expect(blob.type).toBe("application/zip");
     const [entry] = readZip(new Uint8Array(await blob.arrayBuffer()));
     expect(new TextDecoder().decode(entry.data)).toBe("hello");
+  });
+});
+
+describe("readZip", () => {
+  const archive = (files) => join(zipParts(files, DATE));
+  const text = (data) => new TextDecoder().decode(data);
+
+  it("gives back the files that zipParts wrote, in order, with their bytes", () => {
+    const files = readArchive(
+      archive([
+        { name: "a.txt", data: bytes("hello") },
+        { name: "b/c.bin", data: new Uint8Array([0, 255, 7]) },
+      ]),
+    );
+    expect(files.map((file) => file.name)).toEqual(["a.txt", "b/c.bin"]);
+    expect(text(files[0].data)).toBe("hello");
+    expect([...files[1].data]).toEqual([0, 255, 7]);
+  });
+
+  it("reads an empty archive, an empty file and a name that is not ASCII", () => {
+    expect(readArchive(archive([]))).toEqual([]);
+    const files = readArchive(archive([{ name: "é-音.txt", data: new Uint8Array(0) }]));
+    expect(files[0].name).toBe("é-音.txt");
+    expect(files[0].data.length).toBe(0);
+  });
+
+  it("gives each file its own bytes, not a view of the archive", () => {
+    const whole = archive([{ name: "a", data: bytes("abc") }]);
+    const [file] = readArchive(whole);
+    expect(file.data.buffer.byteLength).toBe(3);
+    whole.fill(0);
+    expect(text(file.data)).toBe("abc");
+  });
+
+  it("leaves out folders", () => {
+    const files = readArchive(
+      archive([
+        { name: "dir/", data: new Uint8Array(0) },
+        { name: "dir/a", data: bytes("x") },
+      ]),
+    );
+    expect(files.map((file) => file.name)).toEqual(["dir/a"]);
+  });
+
+  it("finds the end record before a comment, even one that holds the signature", () => {
+    const whole = archive([{ name: "a", data: bytes("abc") }]);
+    const comment = new Uint8Array([0x50, 0x4b, 0x05, 0x06, 1, 2, 3, 4]);
+    const withComment = new Uint8Array(whole.length + comment.length);
+    withComment.set(whole);
+    withComment.set(comment, whole.length);
+    new DataView(withComment.buffer).setUint16(whole.length - 2, comment.length, true);
+    expect(readArchive(withComment).map((file) => file.name)).toEqual(["a"]);
+  });
+
+  it("takes an ArrayBuffer as well as a Uint8Array", () => {
+    const whole = archive([{ name: "a", data: bytes("abc") }]);
+    expect(readArchive(whole.buffer)[0].name).toBe("a");
+  });
+
+  it("refuses what is not a zip, or is cut short", () => {
+    expect(() => readArchive(bytes("this is not a zip file at all, just text"))).toThrow(/not a zip/);
+    expect(() => readArchive(new Uint8Array(0))).toThrow(/not a zip/);
+    const whole = archive([{ name: "a", data: bytes("abcdef") }]);
+    expect(() => readArchive(whole.subarray(0, whole.length - 10))).toThrow(/not a zip/);
+  });
+
+  it("refuses a file whose checksum is wrong", () => {
+    const whole = archive([{ name: "a", data: bytes("abcdef") }]);
+    whole[30 + 1] ^= 0xff; // a byte of the data: after the 30 byte header and the one byte name
+    expect(() => readArchive(whole)).toThrow(/checksum/);
+  });
+
+  it("refuses a compressed or encrypted file instead of reading its bytes as they are", () => {
+    const compressed = archive([{ name: "a", data: bytes("abc") }]);
+    const view = new DataView(compressed.buffer);
+    const central = view.getUint32(compressed.length - 22 + 16, true);
+    view.setUint16(central + 10, 8, true); // deflate
+    expect(() => readArchive(compressed)).toThrow(/compressed/);
+
+    const encrypted = archive([{ name: "a", data: bytes("abc") }]);
+    const at = new DataView(encrypted.buffer).getUint32(encrypted.length - 22 + 16, true);
+    new DataView(encrypted.buffer).setUint16(at + 8, 1, true);
+    expect(() => readArchive(encrypted)).toThrow(/encrypted/);
+  });
+
+  it("refuses a directory that points outside the file", () => {
+    const whole = archive([{ name: "a", data: bytes("abc") }]);
+    new DataView(whole.buffer).setUint32(whole.length - 22 + 16, whole.length + 100, true);
+    expect(() => readArchive(whole)).toThrow(/damaged/);
+  });
+
+  it("refuses a local header offset that does not point at one", () => {
+    const whole = archive([{ name: "a", data: bytes("abc") }]);
+    const view = new DataView(whole.buffer);
+    const central = view.getUint32(whole.length - 22 + 16, true);
+    view.setUint32(central + 42, 5, true);
+    expect(() => readArchive(whole)).toThrow(/damaged/);
+  });
+
+  it("refuses entries that share the same bytes, which would give far more data than the file holds", () => {
+    const whole = archive([{ name: "a", data: new Uint8Array(1000) }]);
+    // Add a second central entry for another name, pointing at the same local header, by rebuilding the directory.
+    const view = new DataView(whole.buffer, whole.byteOffset);
+    const endAt = whole.length - 22;
+    const directoryAt = view.getUint32(endAt + 16, true);
+    const entry = whole.slice(directoryAt, endAt); // the one central record, with its name "a"
+    const twin = entry.slice();
+    twin[46] = "b".charCodeAt(0);
+    const out = new Uint8Array(directoryAt + entry.length * 2 + 22);
+    out.set(whole.subarray(0, directoryAt));
+    out.set(entry, directoryAt);
+    out.set(twin, directoryAt + entry.length);
+    out.set(whole.subarray(endAt), directoryAt + entry.length * 2);
+    const end = new DataView(out.buffer, directoryAt + entry.length * 2);
+    end.setUint16(8, 2, true);
+    end.setUint16(10, 2, true);
+    end.setUint32(12, entry.length * 2, true);
+    expect(() => readArchive(out)).toThrow(/overlap|more data/);
   });
 });

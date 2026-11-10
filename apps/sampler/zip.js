@@ -5,6 +5,7 @@
 //   const blob = zipBlob([{ name: "a.wav", data: arrayBufferOrUint8Array }, ...]);   // a Blob of type application/zip
 //   const parts = zipParts(files);   // the same archive as a list of pieces, for `new Blob(parts)`
 //   crc32(bytes);                    // the checksum a zip keeps for each file
+//   const files = readZip(bytes);    // [{ name, data }] from an archive made like this one; throws an Error saying what is wrong
 //
 // A file's bytes go into `zipParts` as the parts they already are, and are not copied there: a stem is megabytes, and
 // there are many. (The Blob made of the parts is the browser's: it keeps a copy of the bytes, so while the parts are still held
@@ -23,6 +24,9 @@ const END_BYTES = 22;
 const MAX_FILES = 0xffff;
 const MAX_BYTES = 0xfffffffe; // 0xffffffff in a header means "see the zip64 record"
 const MAX_NAME_BYTES = 0xffff; // the name's length is two bytes
+const MAX_COMMENT_BYTES = 0xffff; // the end record may be followed by a comment this long, so the record can sit this far from the end
+const ENCRYPTED = 0x0001; // general purpose flag, bit 0
+const ZIP64_MARK = 0xffff; // in a count or size field, "see the zip64 record"
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -134,3 +138,73 @@ export function zipParts(files, date = new Date()) {
 }
 
 export const zipBlob = (files, date) => new Blob(zipParts(files, date), { type: "application/zip" });
+
+// The offset of the end record, which is the last thing in the file but for a comment of up to 65,535 bytes: the one
+// whose comment length ends exactly at the file's end (so a comment that happens to contain the signature is not taken).
+function findEnd(bytes, view) {
+  const last = bytes.byteLength - END_BYTES;
+  for (let at = last; at >= 0 && last - at <= MAX_COMMENT_BYTES; at--) {
+    if (view.getUint32(at, true) !== END_SIGNATURE) continue;
+    if (at + END_BYTES + view.getUint16(at + 20, true) === bytes.byteLength) return at;
+  }
+  return -1;
+}
+
+// The files of an archive written like `zipParts` does (and by any tool that stores files without compressing them), each
+// as { name, data } with `data` a Uint8Array of its own (not a view into `input`). Directory entries are left out.
+// Anything this cannot read for certain throws an Error: a file that is not a zip, is cut short, is encrypted or compressed
+// (the reader has no inflate: it is for what this site writes), is zip64, or has a file whose checksum is wrong.
+export function readZip(input) {
+  const bytes = viewOf(input);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const end = findEnd(bytes, view);
+  if (end < 0) throw new Error("This is not a zip file (or it is cut short).");
+  const count = view.getUint16(end + 10, true);
+  const directorySize = view.getUint32(end + 12, true);
+  const directoryAt = view.getUint32(end + 16, true);
+  if (count === ZIP64_MARK || directorySize === 0xffffffff || directoryAt === 0xffffffff)
+    throw new Error("Zip64 archives are not supported.");
+  if (directoryAt + directorySize > end) throw new Error("The zip's directory is damaged.");
+
+  const decoder = new TextDecoder();
+  const files = [];
+  const seen = new Set();
+  let total = 0; // the sizes of all the files so far
+  let at = directoryAt;
+  for (let i = 0; i < count; i++) {
+    if (at + CENTRAL_HEADER_BYTES > end || view.getUint32(at, true) !== CENTRAL_SIGNATURE)
+      throw new Error("The zip's directory is damaged.");
+    const flags = view.getUint16(at + 8, true);
+    const method = view.getUint16(at + 10, true);
+    const crc = view.getUint32(at + 16, true);
+    const compressed = view.getUint32(at + 20, true);
+    const size = view.getUint32(at + 24, true);
+    const nameLength = view.getUint16(at + 28, true);
+    const localAt = view.getUint32(at + 42, true);
+    const nameStart = at + CENTRAL_HEADER_BYTES;
+    if (nameStart + nameLength > end) throw new Error("The zip's directory is damaged.");
+    const name = decoder.decode(bytes.subarray(nameStart, nameStart + nameLength));
+    at = nameStart + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+
+    if (flags & ENCRYPTED) throw new Error(`${name} is encrypted: it cannot be read.`);
+    if (method !== STORED || compressed !== size) throw new Error(`${name} is compressed: it cannot be read.`);
+    if (seen.has(name)) throw new Error(`Two files in the zip are named ${name}.`);
+    seen.add(name);
+
+    // Entries that point at the same bytes would each give a copy of them: a few megabytes could make gigabytes. Files
+    // that do not overlap cannot add up to more than the archive, so that is the limit, before anything is cut out.
+    total += size;
+    if (total > bytes.byteLength) throw new Error("The zip's files overlap: they hold more data than the file does.");
+    // The data follows the local header, which has its own name and extra field lengths. It has to end before the directory.
+    if (localAt + LOCAL_HEADER_BYTES > directoryAt || view.getUint32(localAt, true) !== LOCAL_SIGNATURE)
+      throw new Error(`${name} is damaged.`);
+    const start =
+      localAt + LOCAL_HEADER_BYTES + view.getUint16(localAt + 26, true) + view.getUint16(localAt + 28, true);
+    if (start + size > directoryAt) throw new Error(`${name} is cut short.`);
+    const data = bytes.slice(start, start + size);
+    if (crc32(data) !== crc) throw new Error(`${name} is damaged (its checksum is wrong).`);
+    if (name.endsWith("/")) continue; // a folder
+    files.push({ name, data });
+  }
+  return files;
+}

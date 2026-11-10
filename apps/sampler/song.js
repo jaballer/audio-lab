@@ -6,6 +6,7 @@
 //   const saver = createSongSaver({ read, save });
 //   saver.schedule();   // something changed: save once things settle
 //   saver.flush();      // about to leave the page: save now if a change is waiting
+//   saver.cancel();     // something else is about to replace the saved song: drop a change that is waiting
 
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
 import { parsePadSettings } from "./pad-settings.js";
@@ -172,6 +173,11 @@ export function createSongSaver({ read, save, delayMs = 300 }) {
       if (timer === null) return;
       clearTimeout(timer);
       write();
+    },
+    // For a project being opened: it has written the song, and the page it replaces must not save over it on its way out.
+    cancel() {
+      clearTimeout(timer);
+      timer = null;
     },
   };
 }

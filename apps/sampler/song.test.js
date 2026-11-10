@@ -234,6 +234,18 @@ describe("createSongSaver", () => {
     saver.flush();
     expect(saved).toEqual([]);
   });
+
+  it("cancel drops a waiting change, for the timer and for a flush after it", () => {
+    const { saver, saved } = setup();
+    saver.schedule();
+    saver.cancel();
+    saver.flush();
+    vi.advanceTimersByTime(1000);
+    expect(saved).toEqual([]);
+    saver.schedule(); // and it still works afterwards
+    vi.advanceTimersByTime(300);
+    expect(saved).toEqual([1]);
+  });
 });
 
 describe("upgradeSong", () => {

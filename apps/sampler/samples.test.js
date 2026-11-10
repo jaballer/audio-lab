@@ -1177,3 +1177,91 @@ describe("the settings a sample has, when the sound changes", () => {
     expect(seen[0]).toMatchObject(flat);
   });
 });
+
+describe("freeze, for a project that is replacing what is kept", () => {
+  it("refuses a load, and a reset, while frozen, and writes nothing", async () => {
+    const { samples, store, writes } = setup();
+    samples.freeze();
+    expect(await samples.load(0, file("a.wav"))).toBe(false);
+    await samples.reset(0);
+    expect(store.set).not.toHaveBeenCalled();
+    expect(store.delete).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it("leaves a load that was decoding when it froze out of the store and the map", async () => {
+    let finish;
+    const decode = vi.fn(() => new Promise((resolve) => (finish = resolve)));
+    const { samples, store, writes } = setup({ decode });
+    const loading = samples.load(0, file("a.wav"));
+    await vi.waitFor(() => expect(decode).toHaveBeenCalled());
+    samples.freeze();
+    finish(decoded());
+    expect(await loading).toBe(false);
+    expect(store.set).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it("writes a trim moved while frozen once it is thawed, as when opening a project failed", async () => {
+    const long = { ok: true, buffer: { duration: 2, numberOfChannels: 1, sampleRate: 44100, length: 88200 } };
+    const { samples, writes } = setup({ decode: vi.fn(async () => long) });
+    await samples.load(0, file("a.wav"));
+    samples.freeze();
+    samples.setTrim(0, { start: 0.1, end: 0.9 }, "end");
+    const frozenWrites = writes.length;
+    samples.freeze(false);
+    expect(writes.length).toBe(frozenWrites + 1);
+    expect(writes.at(-1).pads[0].trim).toEqual({ start: 0.1, end: 0.9 });
+  });
+
+  it("idle() waits for a byte write that was already under way when it froze, and that load then leaves the store alone", async () => {
+    let finishWrite;
+    const store = fakeStore();
+    const write = store.set.getMockImplementation();
+    store.set.mockImplementation(async (key, bytes) => {
+      await new Promise((resolve) => (finishWrite = resolve));
+      return write(key, bytes);
+    });
+    const { samples, writes } = setup({ store });
+    const loading = samples.load(0, file("a.wav"));
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf("function"));
+    samples.freeze();
+    let idle = false;
+    const waiting = samples.idle().then(() => (idle = true));
+    await Promise.resolve();
+    expect(idle).toBe(false); // the write has not finished
+    finishWrite();
+    await waiting;
+    await loading;
+    // Once it has finished, nothing more of the old page reaches the store or the map: no cleanup delete, no map write.
+    expect(store.delete).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it("idle() also waits for the clean-up delete of a load whose map entry could not be written", async () => {
+    let finishDelete;
+    const store = fakeStore();
+    store.delete.mockImplementation(() => new Promise((resolve) => (finishDelete = resolve)));
+    const { samples } = setup({ store, failMap: true });
+    const loading = samples.load(0, file("a.wav"));
+    await vi.waitFor(() => expect(finishDelete).toBeTypeOf("function"));
+    let idle = false;
+    const waiting = samples.idle().then(() => (idle = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(idle).toBe(false); // the delete has not finished
+    finishDelete(true);
+    await waiting;
+    await loading;
+  });
+
+  it("does not write a trim while frozen, and works again once thawed", async () => {
+    const { samples, writes } = setup();
+    await samples.load(0, file("a.wav"));
+    const before = writes.length;
+    samples.freeze();
+    samples.setTrim(0, { start: 0.1, end: 0.9 }, "end");
+    expect(writes.length).toBe(before);
+    samples.freeze(false);
+    expect(await samples.load(1, file("b.wav"))).toBe(true);
+  });
+});
