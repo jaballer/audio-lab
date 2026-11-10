@@ -9,7 +9,7 @@ function kick(ctx, out, t) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   sweep(osc.frequency, 150, 40, t, 0.15);
-  envelope(ctx, gain.gain, t, 1, 0.45);
+  envelope(gain.gain, t, 1, 0.45);
   osc.connect(gain).connect(out);
   osc.start(t);
   osc.stop(t + 0.5);
@@ -18,7 +18,7 @@ function kick(ctx, out, t) {
 function snare(ctx, out, t) {
   const n = noise(ctx);
   const ng = ctx.createGain();
-  envelope(ctx, ng.gain, t, 0.7, 0.2);
+  envelope(ng.gain, t, 0.7, 0.2);
   n.connect(filtered(ctx, "highpass", 1200))
     .connect(ng)
     .connect(out);
@@ -29,7 +29,7 @@ function snare(ctx, out, t) {
   osc.type = "triangle";
   sweep(osc.frequency, 190, 120, t, 0.1);
   const og = ctx.createGain();
-  envelope(ctx, og.gain, t, 0.5, 0.12);
+  envelope(og.gain, t, 0.5, 0.12);
   osc.connect(og).connect(out);
   osc.start(t);
   osc.stop(t + 0.15);
@@ -38,7 +38,7 @@ function snare(ctx, out, t) {
 function hat(ctx, out, t, decay = 0.05, level = 0.35) {
   const n = noise(ctx);
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, level, decay);
+  envelope(g.gain, t, level, decay);
   n.connect(filtered(ctx, "highpass", 7000))
     .connect(g)
     .connect(out);
@@ -55,7 +55,7 @@ function clap(ctx, out, t) {
   [0, 0.012, 0.024].forEach((offset, i) => {
     const n = noise(ctx);
     const g = ctx.createGain();
-    envelope(ctx, g.gain, t + offset, 0.6, i === 2 ? 0.18 : 0.015);
+    envelope(g.gain, t + offset, 0.6, i === 2 ? 0.18 : 0.015);
     n.connect(g).connect(bp);
     n.start(t + offset);
     n.stop(t + offset + 0.2);
@@ -67,7 +67,7 @@ function rim(ctx, out, t) {
   osc.type = "square";
   osc.frequency.value = 1700;
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.3, 0.03);
+  envelope(g.gain, t, 0.3, 0.03);
   osc
     .connect(filtered(ctx, "bandpass", 1700, 2))
     .connect(g)
@@ -77,7 +77,7 @@ function rim(ctx, out, t) {
 
   const n = noise(ctx);
   const ng = ctx.createGain();
-  envelope(ctx, ng.gain, t, 0.25, 0.02);
+  envelope(ng.gain, t, 0.25, 0.02);
   n.connect(filtered(ctx, "highpass", 3500))
     .connect(ng)
     .connect(out);
@@ -90,7 +90,7 @@ function makeTom(startHz, endHz, decay) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     sweep(osc.frequency, startHz, endHz, t, decay * 0.7);
-    envelope(ctx, gain.gain, t, 0.8, decay);
+    envelope(gain.gain, t, 0.8, decay);
     osc.connect(gain).connect(out);
     osc.start(t);
     osc.stop(t + decay + 0.05);
@@ -99,7 +99,7 @@ function makeTom(startHz, endHz, decay) {
 
 function cowbell(ctx, out, t) {
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.45, 0.35);
+  envelope(g.gain, t, 0.45, 0.35);
   const bp = filtered(ctx, "bandpass", 700, 1.2);
   bp.connect(g).connect(out);
   [540, 800].forEach((f) => {
@@ -116,7 +116,7 @@ function conga(ctx, out, t) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   sweep(osc.frequency, 340, 250, t, 0.08);
-  envelope(ctx, gain.gain, t, 0.8, 0.28);
+  envelope(gain.gain, t, 0.8, 0.28);
   osc.connect(gain).connect(out);
   osc.start(t);
   osc.stop(t + 0.3);
@@ -143,7 +143,7 @@ function bass(ctx, out, t) {
   lp.type = "lowpass";
   sweep(lp.frequency, 600, 120, t, 0.4);
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.6, 0.5);
+  envelope(g.gain, t, 0.6, 0.5);
   osc.connect(lp).connect(g).connect(out);
   osc.start(t);
   osc.stop(t + 0.55);
@@ -152,7 +152,7 @@ function bass(ctx, out, t) {
 function crash(ctx, out, t) {
   const n = noise(ctx);
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.5, 1.2);
+  envelope(g.gain, t, 0.5, 1.2);
   n.connect(filtered(ctx, "highpass", 4500))
     .connect(g)
     .connect(out);
@@ -163,7 +163,7 @@ function crash(ctx, out, t) {
 function ride(ctx, out, t) {
   const hp = filtered(ctx, "highpass", 6000);
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.18, 0.9);
+  envelope(g.gain, t, 0.18, 0.9);
   hp.connect(g).connect(out);
   [205, 304, 369, 522, 540, 800].forEach((f) => {
     const osc = ctx.createOscillator();
@@ -180,7 +180,7 @@ function zap(ctx, out, t) {
   osc.type = "sawtooth";
   sweep(osc.frequency, 1800, 80, t, 0.25);
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.4, 0.3);
+  envelope(g.gain, t, 0.4, 0.3);
   osc
     .connect(filtered(ctx, "lowpass", 3000))
     .connect(g)
@@ -193,7 +193,7 @@ function blip(ctx, out, t) {
   const osc = ctx.createOscillator();
   sweep(osc.frequency, 1200, 600, t, 0.06);
   const g = ctx.createGain();
-  envelope(ctx, g.gain, t, 0.5, 0.12);
+  envelope(g.gain, t, 0.5, 0.12);
   osc.connect(g).connect(out);
   osc.start(t);
   osc.stop(t + 0.14);

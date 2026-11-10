@@ -64,7 +64,7 @@ export function createMidiAccess({ onMessage, onStatus, onChange, onLog, sysex =
 
   async function connect() {
     if (!navigator.requestMIDIAccess) {
-      onStatus("MIDI: use Chrome or Edge");
+      onStatus("MIDI: not supported in this browser");
       onLog?.("This browser has no Web MIDI (navigator.requestMIDIAccess is missing)", "error");
       return false;
     }

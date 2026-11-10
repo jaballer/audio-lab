@@ -18,7 +18,7 @@ export function noise(ctx) {
   return src;
 }
 
-export function envelope(ctx, param, t, peak, duration) {
+export function envelope(param, t, peak, duration) {
   param.setValueAtTime(peak, t);
   param.exponentialRampToValueAtTime(0.0001, t + duration);
 }
