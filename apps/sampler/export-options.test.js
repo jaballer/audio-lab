@@ -9,9 +9,13 @@ import {
   exportBlockedReason,
   exportFormat,
   exportInfo,
+  exportMemoryBytes,
+  exportNote,
   exportReadout,
   exportTitle,
   formatDuration,
+  LARGE_EXPORT_BYTES,
+  largeExportNote,
   normalizeExportOptions,
   renderingLabel,
 } from "./export-options.js";
@@ -223,5 +227,75 @@ describe("exportBlockedReason", () => {
 
   it("puts the browser first when both are true: an empty sequence is not the problem to fix", () => {
     expect(exportBlockedReason({ supported: false, hasSteps: false })).toMatch(/browser/);
+  });
+});
+
+const MiB = 1024 * 1024;
+
+describe("exportMemoryBytes", () => {
+  it("is the whole render at eight bytes a frame (two float channels, the warm-up included) and the file at eight more", () => {
+    expect(exportMemoryBytes({ total: 2000, frames: 1000 })).toBe(8 * 2000 + 8 * 1000);
+  });
+
+  it("is a little under what the biggest export took in Chromium (297 MiB for a 384 s file after a 48 s warm-up)", () => {
+    const sampleRate = 44100;
+    const bytes = exportMemoryBytes({ total: 432 * sampleRate, frames: 384 * sampleRate });
+    expect(bytes / MiB).toBeGreaterThan(270);
+    expect(bytes / MiB).toBeLessThan(310);
+  });
+});
+
+describe("largeExportNote", () => {
+  it("is nothing for an export that fits easily", () => {
+    expect(largeExportNote(LARGE_EXPORT_BYTES - 1)).toBe("");
+    expect(largeExportNote(20 * MiB)).toBe("");
+  });
+
+  it("says how much memory it takes, to the nearest ten megabytes, and what makes it smaller, from the threshold up", () => {
+    expect(largeExportNote(LARGE_EXPORT_BYTES)).toBe(
+      "Making this takes about 200 MB of memory, which a phone may not have to spare. Fewer loops make it smaller.",
+    );
+    expect(largeExportNote(288 * MiB)).toBe(
+      "Making this takes about 290 MB of memory, which a phone may not have to spare. Fewer loops make it smaller.",
+    );
+  });
+
+  it("warns for the biggest single export and not for a long one that fits", () => {
+    const rate = 44100;
+    // 8 bars at 40 BPM: a loop of 48 s, one warm-up pass of it
+    const biggest = exportMemoryBytes({ total: (48 + 8 * 48) * rate, frames: 8 * 48 * rate });
+    const fits = exportMemoryBytes({ total: (48 + 4 * 48) * rate, frames: 4 * 48 * rate });
+    expect(largeExportNote(biggest)).toMatch(/^Making this takes about 2[78]0 MB/);
+    expect(largeExportNote(fits)).toBe("");
+  });
+});
+
+describe("exportNote", () => {
+  const rate = 44100;
+  const small = { total: 2 * 10 * rate, frames: 10 * rate };
+  const large = { total: 432 * rate, frames: 384 * rate };
+
+  it("is nothing when there is nothing to say", () => {
+    expect(exportNote(small, [])).toBe("");
+  });
+
+  it("is the bars with no steps, alone, for a small export", () => {
+    expect(exportNote(small, [2, 3])).toBe(emptyBarsNote([2, 3]));
+  });
+
+  it("is the memory warning, alone, for a large export with every bar filled", () => {
+    expect(exportNote(large, [])).toBe(largeExportNote(exportMemoryBytes(large)));
+  });
+
+  it("is both, the bars first, in one line", () => {
+    expect(exportNote(large, [2])).toBe(`${emptyBarsNote([2])} ${largeExportNote(exportMemoryBytes(large))}`);
+  });
+
+  it("counts the render and the file each on its own: the line is 26,214,400 frames at 8 bytes", () => {
+    const frames = LARGE_EXPORT_BYTES / 8;
+    expect(exportNote({ total: frames, frames: 0 }, [])).not.toBe("");
+    expect(exportNote({ total: 0, frames }, [])).not.toBe("");
+    expect(exportNote({ total: frames - 1, frames: 0 }, [])).toBe("");
+    expect(exportNote({ total: 0, frames: frames - 1 }, [])).toBe("");
   });
 });

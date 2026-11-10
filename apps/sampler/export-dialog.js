@@ -10,8 +10,9 @@
 //   });
 //   dialog.open(); dialog.close(); dialog.isOpen;
 //   dialog.setOptions({ loops: 2, channels: "mono" });        // which choices are lit
-//   dialog.refresh({ title, readout, format, note, blocked }); // for the sequence showing; `note`: a warning about it;
-//                                                             `blocked`: why Export WAV is off (a sentence), or "" when it is on
+//   dialog.refresh({ title, readout, format, note, blocked }); // for the sequence showing: `note` is what to know before it
+//                                                             is made (bars with no steps, how much memory it takes);
+//                                                             `blocked` is why Export WAV is off (a sentence), or "" when on
 //   dialog.setBusy(true); dialog.setProgress(0.4);            // while it renders (null: not known yet)
 //   dialog.setCancelling();                                   // a cancel was asked for, and the render is still stopping
 //   dialog.showMessage("EXPORT CANCELLED");                   // the LCD's short messages, again: the LCD is behind the dialog
@@ -107,8 +108,10 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     setHidden(bar, !busy);
     setHidden(progress, !busy);
     setHidden(hint, busy);
-    // The reason Export WAV is off is read out with the dialog's name when it opens, not left to be found by browsing.
-    if (blocked) setAttr(root, "aria-describedby", hint.id);
+    // What is wrong (the reason Export WAV is off) and what to know before pressing it (the note) are read out with the
+    // dialog's name when it opens, not left to be found by browsing.
+    const described = [blocked && hint.id, note.textContent && !busy && note.id].filter(Boolean).join(" ");
+    if (described) setAttr(root, "aria-describedby", described);
     else root.removeAttribute("aria-describedby");
     setHidden(note, busy || !note.textContent);
     setText(cancelButton, cancelling ? "Cancelling…" : busy ? "Cancel export" : "Cancel");

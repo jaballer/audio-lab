@@ -216,7 +216,7 @@
           <span class="small-label">File</span>
           <p class="export-readout" data-export="readout"></p>
           <p class="export-hint" data-export="format"></p>
-          <p class="export-note" data-export="note" hidden></p>
+          <p id="export-dialog-note" class="export-note" data-export="note" hidden></p>
           <p id="export-dialog-hint" class="export-hint" data-export="hint">
             Loops repeat the sequence back to back; what rings on past the end is heard at the start of the next pass.
           </p>
@@ -277,9 +277,10 @@
         </li>
         <li>
           Export, in the machine's header, opens a window to save the sequence showing as a 16-bit WAV file: 1, 2, 4 or
-          8 loops of it in one file, in stereo or mono, with its length and size shown before you save it. One loop is
-          exactly the length of its bars, so that it loops, at the tempo, volume and pad settings on the page; what
-          rings on past the end is heard at the start. It shows how far it has got, and Cancel export or Escape stops it
+          8 loops of it in one file, in stereo or mono, with its length and size shown before you save it (and a warning
+          when it needs a lot of memory). One loop is exactly the length of its bars, so that it loops, at the tempo,
+          volume and pad settings on the page; what rings on past the end is heard at the start. It shows how far it has
+          got, and Cancel export or Escape stops it
         </li>
         <li><a href="./keyboard.html">Keyboard test</a> is a page for trying a MIDI keyboard</li>
       </ul>

@@ -17,10 +17,10 @@ import { loadJson, saveJson } from "../../shared/storage.js";
 import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportDialog } from "./export-dialog.js";
 import {
-  emptyBarsNote,
   exportBlockedReason,
   exportFormat,
   exportInfo,
+  exportNote as buildExportNote,
   exportReadout,
   exportTitle,
   normalizeExportOptions,
@@ -32,6 +32,7 @@ import {
   emptyBars,
   exportSequence,
   hasSteps,
+  planRender,
 } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
@@ -404,6 +405,17 @@ function sayExport(text) {
   if (!exportDialog.isOpen) say(text);
 }
 
+function exportNote(current) {
+  const plan = planRender({
+    song: current,
+    kit,
+    stepsPerBar: STEPS,
+    sampleRate: EXPORT_SAMPLE_RATE,
+    loops: exportOptions.loops,
+  });
+  return buildExportNote(plan, emptyBars(current, STEPS));
+}
+
 function refreshExportDialog() {
   const current = sampler.getSong();
   const nothing = !hasSteps(current, STEPS);
@@ -411,8 +423,9 @@ function refreshExportDialog() {
     title: exportTitle(current),
     readout: exportReadout(exportInfo(current, exportOptions, STEPS, EXPORT_SAMPLE_RATE)),
     format: exportFormat(EXPORT_SAMPLE_RATE),
-    // A sequence with nothing in it is said already; this is for one with steps in some bars and not others.
-    note: nothing ? "" : emptyBarsNote(emptyBars(current, STEPS)),
+    // A sequence with nothing in it is said already; these are for one that can be made: bars with no steps, and a file
+    // that takes a lot of memory (worked out from the render it would be, warm-up and all).
+    note: nothing ? "" : exportNote(current),
     blocked: exportBlockedReason({ supported: canRenderOffline(), hasSteps: !nothing }),
   });
 }
