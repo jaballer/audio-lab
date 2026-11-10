@@ -62,7 +62,7 @@ import { createStepKeys } from "../../shared/step-keys.js";
 import { createTempoKnob } from "./tempo-knob.js";
 import { createVelocityBars } from "./velocity-bars.js";
 import { createVolumeKnob } from "./volume-knob.js";
-import { BPM_MAX, BPM_MIN } from "../../shared/tempo.js";
+import { BPM_MAX, BPM_MIN, SWING_MAX, SWING_MIN } from "../../shared/tempo.js";
 
 const $ = (id) => document.getElementById(id);
 const SAMPLES_BACKUP_KEY = `${SAMPLES_KEY}:backup`;
@@ -659,6 +659,14 @@ const volumeKnob = createVolumeKnob($("vol"), {
   onChange: (volume) => sampler.setVolume(volume),
 });
 
+// Swing is turned like the volume (whole steps on a scale), so it uses the same knob.
+const swingKnob = createVolumeKnob($("swing"), {
+  min: SWING_MIN,
+  max: SWING_MAX,
+  getValue: () => sampler.getState().swing,
+  onChange: (swing) => sampler.setSwing(swing),
+});
+
 // Every view is drawn from the sampler's state, so it cannot disagree with it.
 function render() {
   const state = sampler.getState();
@@ -709,6 +717,7 @@ function render() {
     [stepsNext, state.page === state.bars - 1, [stepsPrev, barButtons[0].button]],
   ]);
   volumeKnob.render(state.volume);
+  swingKnob.render(state.swing);
   setAttr(playBtn, "aria-pressed", String(state.playing));
   setAttr(recBtn, "aria-pressed", String(state.recording));
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.

@@ -6,6 +6,7 @@
 //   scheduler.stop();
 //   scheduler.setSteps(32); // change the loop length, while playing too
 //   scheduler.setBpm(120);  // returns the tempo actually set (clamped to bpmRange, 40-240 by default)
+//   scheduler.setSwing(58); // 50 (straight) to 75: the odd steps sound later (tempo.js); `swing` in the options starts it there
 //   scheduler.poll();       // call every animation frame; true when the playhead moved
 //
 //   scheduler.playing, scheduler.bpm, scheduler.playheadStep, scheduler.playheadTime
@@ -31,7 +32,7 @@
 // step is next and to the steps skipped after a stall, and any page that records live pad hits
 // needs it.
 
-import { clampBpm, stepSeconds } from "./tempo.js";
+import { SWING_DEFAULT, clampBpm, clampSwing, stepSeconds, swingDelay } from "./tempo.js";
 
 // How often the scheduler wakes (not how far ahead it schedules: SCHEDULE_AHEAD_S).
 export const SCHEDULER_TICK_MS = 25;
@@ -41,9 +42,17 @@ const START_DELAY_S = 0.05; // a short run-up so the first step is not already l
 // fastest tempo a step is longer than this, so at most one step is ever this late.
 const MAX_LATE_S = 0.03;
 
-export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initialBpm = 100, bpmRange }) {
+export function createScheduler({
+  clock,
+  steps: initialSteps,
+  onStep,
+  bpm: initialBpm = 100,
+  bpmRange,
+  swing: initialSwing = SWING_DEFAULT,
+}) {
   let steps = initialSteps;
   let bpm = initialBpm;
+  let swing = clampSwing(initialSwing);
   let playing = false;
   let timer = null;
   let nextStep = 0;
@@ -51,6 +60,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
   let scheduledAny = false; // has this run scheduled a step yet? (nextStep === 0 can mean "not yet" or "just wrapped")
   let playheadStep = -1;
   let playheadTime = 0;
+  let playheadDelay = 0; // how much later than its place on the grid the playhead's step sounded, with the swing it was queued with
   const visualQueue = []; // { step, time } for each scheduled step, until the playhead reaches it
   // Live hits that were recorded into the step about to be scheduled: the sound was
   // already heard, so that step's scheduling pass must not play it again.
@@ -71,11 +81,18 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
   // poll(), which only needs the newest step that has gone by.
   function skipMissedSteps(now) {
     const length = stepSeconds(bpm);
-    const missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
+    let missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
+    if (missed <= 0) return;
+    // Late is when a step SOUNDS, which swing puts after its place on the grid: the last one counted may still be on time
+    // (a step built again by rewindTo, for one). Only that one can be: the one before it sounds before the grid place of
+    // the next, which is already late.
+    const soundsAt = (k) => nextTime + k * length + swingDelay((nextStep + k) % steps, bpm, swing);
+    if (soundsAt(missed - 1) >= now - MAX_LATE_S) missed--;
     if (missed <= 0) return;
     const last = missed - 1;
     forgetHeard(); // its step is skipped; a later pass over it is a new one
-    visualQueue.push({ step: (nextStep + last) % steps, time: nextTime + last * length });
+    const lastStep = (nextStep + last) % steps;
+    visualQueue.push({ step: lastStep, time: soundsAt(last), delay: swingDelay(lastStep, bpm, swing) });
     nextTime += missed * length;
     nextStep = (nextStep + missed) % steps;
   }
@@ -114,9 +131,14 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     dropSupersededSteps(now);
     skipMissedSteps(now);
     while (nextTime < now + SCHEDULE_AHEAD_S) {
-      onStep(nextStep, nextTime, nextStep === heardStep ? new Set(heardRows) : NOBODY);
+      // `nextTime` is the step's place on the grid, which swing does not move: only when the step sounds (and when the
+      // playhead reaches it) is later, so tempo changes and stalls are still worked out on the even grid.
+      const time = nextTime + swingDelay(nextStep, bpm, swing);
+      // `nextTime` goes along as a fourth argument: a page that builds its steps again (rewindTo) hands it back, and it
+      // cannot be worked out from `time` afterwards, as the swing may have changed since.
+      onStep(nextStep, time, nextStep === heardStep ? new Set(heardRows) : NOBODY, nextTime);
       if (nextStep === heardStep) forgetHeard();
-      visualQueue.push({ step: nextStep, time: nextTime });
+      visualQueue.push({ step: nextStep, time, delay: time - nextTime });
       nextTime += stepSeconds(bpm);
       nextStep = (nextStep + 1) % steps;
       scheduledAny = true;
@@ -134,6 +156,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     scheduledAny = false;
     nextTime = at ?? clock.now() + START_DELAY_S;
     playheadStep = -1;
+    playheadDelay = 0;
     timer = setInterval(schedule, SCHEDULER_TICK_MS);
     return true;
   }
@@ -145,6 +168,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     forgetHeard();
     scheduledAny = false;
     playheadStep = -1;
+    playheadDelay = 0;
   }
 
   function poll() {
@@ -154,9 +178,10 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     const now = clock.now();
     let moved = false;
     while (visualQueue.length && visualQueue[0].time <= now) {
-      const { step, time } = visualQueue.shift();
+      const { step, time, delay } = visualQueue.shift();
       playheadStep = step;
       playheadTime = time;
+      playheadDelay = delay;
       moved = true;
     }
     return moved;
@@ -182,6 +207,7 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
   // Take back the steps scheduled from `step` (at `time`) on, and schedule them again from there: the
   // page replaced what they were built from (a different sequence), after the scheduler had already
   // handed the next step or two to the audio clock. The caller silences the old ones itself.
+  // `time` is the step's place on the grid (the fourth argument `onStep` was given), not when it sounded.
   function rewindTo(step, time) {
     nextStep = step % steps;
     nextTime = time;
@@ -194,11 +220,17 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     return bpm;
   }
 
+  function setSwing(value) {
+    swing = clampSwing(value);
+    return swing;
+  }
+
   return {
     start,
     stop,
     poll,
     setBpm,
+    setSwing,
     setSteps,
     rewindTo,
     get playing() {
@@ -207,8 +239,15 @@ export function createScheduler({ clock, steps: initialSteps, onStep, bpm: initi
     get bpm() {
       return bpm;
     },
+    get swing() {
+      return swing;
+    },
     get playheadStep() {
       return playheadStep;
+    },
+    // What swing did to the step the playhead is on, as it was when the step was queued: the swing may have moved since.
+    get playheadDelay() {
+      return playheadDelay;
     },
     get playheadTime() {
       return playheadTime;

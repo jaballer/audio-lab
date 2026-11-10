@@ -23,7 +23,7 @@ import { createClipper } from "../../shared/audio.js";
 import { VOLUME_SCALE } from "./controller.js";
 import { FULL_VELOCITY } from "../../shared/pattern.js";
 import { withVelocity } from "../../shared/sounds.js";
-import { stepSeconds } from "../../shared/tempo.js";
+import { stepSeconds, swingDelay } from "../../shared/tempo.js";
 import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions } from "./export-options.js";
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
@@ -210,6 +210,8 @@ export function planRender({
     copies,
     length,
     stepLength,
+    // How much later than the grid a render's odd steps sound: the same swing as on the page (tempo.js).
+    swingLate: swingDelay(1, song.bpm, song.swing),
     warmUp,
     skipped,
     passes: warmUp + copies,
@@ -244,7 +246,8 @@ function createHitFeeder(plan) {
     const taken = [];
     while (pass < plan.passes && index < plan.hits.length) {
       const hit = plan.hits[index];
-      const time = LEAD_SECONDS + (pass * plan.length + hit.step) * plan.stepLength;
+      const time =
+        LEAD_SECONDS + (pass * plan.length + hit.step) * plan.stepLength + (hit.step % 2 === 1 ? plan.swingLate : 0);
       if (time >= until) break;
       taken.push({ row: hit.row, velocity: hit.velocity, time, silent: hit.silent });
       if (++index === plan.hits.length) {
