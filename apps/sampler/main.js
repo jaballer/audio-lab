@@ -431,7 +431,7 @@ const loadStarter = (starter) =>
     const warning = unsavedBefore.length ? ` ${unsavedWarning(unsavedBefore)}` : "";
     if (
       !window.confirm(
-        `Start from ${starter.name}? The beat and pad settings on the page now will be replaced.${warning}`,
+        `Start from ${starter.name}? The beat, swing and pad settings on the page now will be replaced.${warning}`,
       )
     )
       return false;

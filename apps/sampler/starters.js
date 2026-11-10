@@ -5,9 +5,12 @@
 // Plain data and pure functions: no DOM, nothing at import time. `starter-beat.js` is separate: the one beat a first
 // visit starts with.
 //
-//   STARTERS                            // [{ id, name, description, bpm, sequences: [{ pads }], padSettings }]
+//   STARTERS                            // [{ id, name, description, bpm, swing?, sequences: [{ pads }], padSettings }]
 //   starterSong(STARTERS[0], { rows: 16, steps: 16, maxBars: 8, sequenceCount: 8, volume: 80, keep: { 0: { gain: -6 } } })
 //                                       // the song as song.js saves it, or null if it does not fit those limits
+//
+// `swing` (tempo.js: 50 straight to 75) is how much of each pair of steps the first takes; a starter that does not say is
+// straight, and loading one sets the swing as it sets the tempo.
 //
 // A pattern is written as a grid of characters, 16 to a bar (spaces are ignored, so a beat can be written in groups):
 // `X` is a hit at full velocity, `o` a soft one (a ghost note, an off-beat hat), `.` a rest. Every row of a sequence has
@@ -43,8 +46,9 @@ export const STARTERS = [
   {
     id: "hip-hop",
     name: "Hip hop",
-    description: "90 BPM, a kick that skips and a snare on 2 and 4, with ghost notes in the hats",
+    description: "90 BPM with a lazy swing, a kick that skips and a snare on 2 and 4, and ghost notes in the hats",
     bpm: 90,
+    swing: 58,
     sequences: [
       {
         // Two bars: the second adds a kick to push into the repeat.
@@ -113,8 +117,10 @@ export const STARTERS = [
   {
     id: "house",
     name: "House",
-    description: "124 BPM, four on the floor with a clap on 2 and 4, open hats between the kicks and a bass line",
+    description:
+      "124 BPM with a light swing, four on the floor, a clap on 2 and 4, open hats between the kicks and a bass line",
     bpm: 124,
+    swing: 54,
     sequences: [
       {
         pads: {
@@ -201,7 +207,7 @@ export function starterSong(starter, { rows, steps, maxBars, sequenceCount, volu
   if (sequences.some(({ bars }) => bars < 1 || bars > maxBars)) return null;
   const padSettings = { ...starter.padSettings };
   for (const [pad, settings] of Object.entries(keep)) padSettings[pad] = { ...settings, ...starter.padSettings[pad] };
-  const raw = serializeSong({ bpm: starter.bpm, volume, current: 0, sequences, padSettings });
+  const raw = serializeSong({ bpm: starter.bpm, swing: starter.swing, volume, current: 0, sequences, padSettings });
   const song = parseSong(raw, { rows, steps, maxBars, sequenceCount });
   return song && serializeSong(song);
 }
