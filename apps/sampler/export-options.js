@@ -80,7 +80,7 @@ export function exportTitle(song) {
 // is two float channels (4 bytes each) over its whole length, the warm-up before the file included; then the file is made
 // from it while it is still held: stereo holds the file's bytes and its Blob (4 bytes a frame each), mono holds the mix-down
 // (4) and its file twice (2 each), which is the same 8. Measured in Chromium, a 384 s file made after a 48 s warm-up took
-// 297 MB (stereo) and 312 MB (mono) over what the page already used, against the 275 MB this gives: a little low, which the threshold allows for. `plan` is what
+// 297 MB (stereo) and 312 MB (mono) over what the page already used, against the 275 MB this gives (at 44.1 kHz; it grows with the rate): a little low, which the threshold allows for. `plan` is what
 // planRender gives (`total` is the render's length in frames and `frames` the file's).
 const RENDER_BYTES_PER_FRAME = 8;
 const FILE_BYTES_PER_FRAME = 8;

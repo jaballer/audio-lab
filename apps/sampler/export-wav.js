@@ -31,7 +31,7 @@ import { createVoices } from "./voices.js";
 // The rate an export is made at when the page has no audio running to take it from.
 export const EXPORT_SAMPLE_RATE = 44100;
 // The rates an export follows the page to: a loaded sample is a buffer at its own rate, and the browser resamples it into
-// a context at another one with a quick, rough resampler (about 5 dB down at 20 kHz from 48 down to 44.1 kHz, and aliasing),
+// a context at another one with a quick, rough resampler (from 48 down to 44.1 kHz, measured 1.2 dB down at 10 kHz and 4.2 dB at 20 kHz, and aliasing),
 // so a file at the rate the page plays at has what the page plays. A higher rate than 96 kHz only makes the file and the
 // memory it takes larger; a lower one than 22.05 kHz is not an audio rate anyone means.
 export const MIN_EXPORT_SAMPLE_RATE = 22050;

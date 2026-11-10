@@ -370,6 +370,14 @@ describe("planRender", () => {
   const plan = (seq, extra = {}, options = {}, sounds = [sound("a"), sound("b"), sound("c")]) =>
     planRender({ song: songOf(seq, extra), kit: createKit(sounds), stepsPerBar: 16, sampleRate: 1000, ...options });
 
+  it("is in frames of the rate it is given: the lead, the warm-up and the file all scale with it", () => {
+    const p = plan(sequence({ 0: [0] }), {}, { sampleRate: 48000 }); // a bar at 120 BPM is 2 s
+    expect(p.sampleRate).toBe(48000);
+    expect(p.frames).toBe(96000);
+    expect(p.first).toBe(Math.round((LEAD_SECONDS + 2) * 48000));
+    expect(p.total).toBe(p.first + p.frames);
+  });
+
   it("is the hits, the passes and where the kept window is, worked out before any audio", () => {
     const p = plan(sequence({ 0: [0, 4], 1: [8] }));
     expect(p.hits).toHaveLength(3);
@@ -815,6 +823,17 @@ describe("wasCancelled", () => {
     expect(wasCancelled(new DOMException("x", "AbortError"))).toBe(true);
     expect(wasCancelled(new Error("x"))).toBe(false);
     expect(wasCancelled(undefined)).toBe(false);
+  });
+});
+
+describe("windowPauses, at the rates an export can be made at", () => {
+  it.each([22050, 44100, 48000, 96000])("%i Hz: whole blocks, a window apart, none twice", (rate) => {
+    const total = rate * 5;
+    const frames = windowPauses(total, rate, 1);
+    expect(frames).toHaveLength(4);
+    expect(frames.every((frame) => frame % 128 === 0 && frame > 0 && frame < total)).toBe(true);
+    frames.forEach((frame, i) => expect(Math.abs(frame - (i + 1) * rate)).toBeLessThanOrEqual(64));
+    expect(new Set(frames).size).toBe(frames.length);
   });
 });
 

@@ -110,18 +110,20 @@ scheduled in one go (at most 6e-7, about 2% of one 16-bit step).
   saved is what is heard, and a sample at the page's rate is not resampled at all. Built-in sounds are synthesized at the
   render's rate and are not affected. Still true: the page decodes the saved samples at 48 kHz (`RESTORE_SAMPLE_RATE`)
   before its audio exists, so on a 44.1 kHz machine they are resampled, here as on the page; that is the page's, not the
-  export's. The file's size and the render's memory grow with the rate (48 kHz is 9% more than 44.1).
+  export's. The file's size and the render's memory grow with the rate (48 kHz is 9% more than 44.1, and 96 kHz 2.2 times: the largest export, 275 MB at 44.1 kHz, would be about 600 MB, which the size note warns of but does not stop).
 - **The loop's join.** A swept oscillator (kick, the snare's tone, toms, conga, zap, blip, and the
   bass's filter) that starts part way through a render block was made, for the first part of the block, from the default
   frequency before its first event, and what that did depended on where the hit fell in the block: a kick on the last step
   was one waveform on one pass and another, a phase apart, on the next, so the file's end did not join its start (a step of
-  0.03 to 0.07 at 90 to 133 BPM, about -30 to -23 dBFS). `sweep` (`shared/dsp.js`) holds the start value before the sweep:
-  the step is 0.0007 or less (-63 dBFS) at both rates, and the start of the file matches the same stretch inside a longer
-  render to -59 to -75 dB for a kick, and to -36 dB at worst for seven pads on the last steps at 133 BPM (a phase
-  difference in a tail, not a step: the ramp is still evaluated a block at a time, which a start inside the block cannot
-  avoid). The same change makes the page's own kick start the same way every time. Only measured, not listened to.
+  0.03 to 0.07 at 90 to 133 BPM, about -30 to -23 dBFS). `sweep` (`shared/dsp.js`) holds the start value before the sweep.
+  Over 41 tempos from 60 to 180 BPM, at 44.1 and 48 kHz, a kick (and a kick with a snare) on the last steps leaves a step
+  of 0.003 at worst (-51 dBFS), and the first second of the file differs from the same stretch inside a longer render by
+  -52 dB of the file's peak at worst. It is not zero: the engine still evaluates a ramp a block at a time, which a start
+  inside the block cannot avoid, so a lone swept sound's phase after its first block still depends on where it fell
+  (a review measured up to -34 dB of that one sound's own level, at the worst alignment; seven pads on the last steps at
+  133 BPM, -36 dB of the file's peak). That is a small difference in a tail, not a step. The same change makes the page's own kick start the same way every time. Only measured, not listened to.
 - **Not bit-identical run to run** (one least significant bit in a few samples: the order the engine sums noise sources in);
-  the noise sounds' buffer is shared and rebuilt when the audio rate changes, so an export and the page can differ in noise.
+  the noise sounds' buffer is shared, made for one rate at a time, and rebuilt when the rate changes: an export at the page's rate shares the page's, and only an export at the 44.1 kHz fallback (no audio yet, or a rate outside 22.05 to 96 kHz) alternates with it.
 - **Firefox** should keep the old cost and have no percentage or mid-render cancel (above: expected from the missing method,
   not observed). Safari is untested.
 - **`EXPORTED` is said even if the browser blocks the download**, which `saveBlob` cannot tell.
