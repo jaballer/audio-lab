@@ -29,7 +29,7 @@ A small set of browser audio tools built with Vite, the Web Audio API and Web MI
 
 ## MIDI
 
-Click **Connect MIDI** (in the bar at the top of every page) and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost`, `127.0.0.1` or HTTPS.
+Click **Connect MIDI** (in the machine's header, beside the power switch, on every page that uses MIDI) and allow the permission prompt. This uses the Web MIDI API, which works in Chrome, Edge, and Firefox (not Safari), on `localhost`, `127.0.0.1` or HTTPS.
 
 **Novation Launchpad, Launchpad S, and Launchpad Mini mk1/mk2** — pads are lit to mirror the app when the MIDI port name identifies a supported model:
 
@@ -144,7 +144,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/mpc-sample.js` — what is known about the Akai MPC Sample's MIDI: how to recognise its port and which pad and bank a note belongs to
 - `shared/loading-screen.js` + `shared/loading.css` — the "Loading" overlay every page starts with, so the page does not jump while its scripts build it; removed once everything has loaded
 - `shared/page-ready.js` — resolves when the page has settled (load event, fonts, two drawn frames) or after a timeout; no DOM
-- `shared/site-header.js` — the bar above the machine, the same on every page: the site name, a link to each page, and Connect MIDI, its short status and the Console button
+- `shared/site-header.js` — the bar above the machine, the same on every page: the site name and a link to each page; it also builds Connect MIDI, its short status and the Console button, which `app-header.js` draws in the machine's own header
 - `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test)
 - `shared/app-header.js` — the machine's own header: its name and tagline, its action buttons (Export) and the POWER switch
 - `shared/console-log.js` — the bounded list of messages the device's header leaves out (every MIDI port the browser lists, plug and unplug, errors); no DOM

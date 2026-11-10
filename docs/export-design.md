@@ -23,7 +23,7 @@ GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 
 **A button in the machine's header, not in the transport.** Export acts on the whole machine and is not a performance
 control, so it sits with POWER, and the transport is Play, Stop, Rec and Tap Tempo. (The first version was an Export WAV
-button in the transport, which also made that grid lopsided.) Connect MIDI and the Console stay in the site header, which
+button in the transport, which also made that grid lopsided.) Connect MIDI and the Console were in the site header (now in the machine header), which
 every page shares; moving them, or adding a Menu, is a separate decision that touches every page.
 
 **A native `<dialog>`, not a side panel.** Exporting is one-shot: it should take no room while it is closed. A side panel

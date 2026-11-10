@@ -4,11 +4,14 @@
 //   const bars = createVelocityBars(element, { steps: 16, group: 4, onChange });
 //   bars.refresh({ on, velocities, soundName });           // on: booleans; velocities: 1-127 for every step
 //   bars.refresh({ on, velocities, soundName, first: 16 }); // the bars are steps 17-32 of the sequence
-//   // onChange(index, value) is called with the bar's place in the row and the new velocity, 1-127
+//   // onChange(index, value, { activate }) is called with the bar's place in the row and the new velocity, 1-127;
+//   // `activate` is true for a press on the bar of a step that is off, which asks for the step to be turned on
 //
 // Press and drag along the row to paint: the bar under the pointer takes the height of the pointer.
-// Each bar is also a slider for the keyboard (arrows, Page Up/Down, Home, End). A bar for a step that is
-// off is shown dim and does nothing: a velocity belongs to a step that sounds, so it is also out of the tab order.
+// Each bar is also a slider for the keyboard (arrows, Page Up/Down, Home, End). A bar for a step that is off is shown
+// dim: a velocity belongs to a step that sounds, so it is out of the tab order, and a drag passing over it leaves it
+// alone. Pressing on it, though, asks for the step to be turned on at the height pressed, and the drag carries on from
+// there, so a step can be made and shaped in one move.
 
 import { setAttr } from "../../shared/dom-updates.js";
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
@@ -103,12 +106,14 @@ export function createVelocityBars(element, { steps, group: groupSize = 4, onCha
     );
   }
 
-  function paint(e) {
+  // `activate` is only for the press itself: dragging across off steps does not turn them on.
+  function paint(e, activate = false) {
     const i = barAt(e.clientX, e.clientY);
-    if (i < 0 || !bars[i].on) return;
+    if (i < 0 || (!bars[i].on && !activate)) return;
     const rect = bars[i].bar.getBoundingClientRect();
     const value = velocityFromPosition(e.clientY - rect.top, rect.height);
-    if (value !== bars[i].value) onChange(i, value);
+    if (!bars[i].on) onChange(i, value, { activate: true });
+    else if (value !== bars[i].value) onChange(i, value);
   }
 
   let dragging = false;
@@ -120,7 +125,7 @@ export function createVelocityBars(element, { steps, group: groupSize = 4, onCha
     element.setPointerCapture(e.pointerId);
     bars[i].bar.focus({ preventScroll: true });
     e.preventDefault(); // no text selection or scrolling while painting
-    paint(e);
+    paint(e, true);
   });
   element.addEventListener("pointermove", (e) => {
     if (dragging) paint(e);

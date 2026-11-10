@@ -79,13 +79,13 @@
       </div>
     </main>
 
-    <aside class="help-panel" aria-labelledby="help-title">
-      <h2 id="help-title" class="help-title">Help</h2>
+    <details class="help-panel">
+      <summary><h2 class="help-title">Help</h2></summary>
       <ul class="help-list">
         <li>Hit each pad once, in order, to see which note it sends</li>
         <li>The newest message is on top, and the hex is the raw bytes</li>
       </ul>
-    </aside>
+    </details>
     <!-- First, so its timeout starts even when the page's own script is slow to arrive. -->
     <script type="module" src="/shared/loading-screen.js"></script>
     <script type="module" src="/apps/monitor/main.js"></script>

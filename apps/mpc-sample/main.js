@@ -34,6 +34,7 @@ enableOffline($("update-notice"));
 createAppHeader($("header"), {
   brand: { name: "MPC ", accent: "SAMPLE" },
   sub: "Companion",
+  tools: site.midiTools,
 });
 
 const SEQUENCE_STORE_KEY = "mpc-sample.sequence";

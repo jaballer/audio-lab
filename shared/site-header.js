@@ -1,11 +1,13 @@
-// The bar fixed to the top of the window, above the machine and the same on every page: the site's name, a link to each page,
-// and the things that belong to the page rather than to the device (Connect MIDI, its status,
-// the Console). It draws into the <header> it is handed and decides nothing.
+// The bar fixed to the top of the window, above the machine and the same on every page: the site's name and a link to each
+// page. It also builds the MIDI tools (Connect MIDI, its status, the Console), which are not drawn in the bar: they are
+// handed to the machine's own header (app-header.js `tools`), beside Export and POWER. It draws into the <header> it is
+// handed and decides nothing.
 //
 //   const site = createSiteHeader(element, {
 //     current: "mpc-sample",   // the id of this page in pages.js; its link is marked
 //     midi: false,             // optional: a page with no MIDI has no Connect MIDI, status or Console
 //   });
+//   site.midiTools            // the element holding the three MIDI tools: pass to createAppHeader as `tools` (null without MIDI)
 //   site.midiButton            // pass to wireMidiButton() (null without MIDI)
 //   site.setMidiStatus(text)   // pass as createMidiAccess's onStatus
 //   site.log(text, level)      // pass as createMidiAccess's onLog; level "info" | "warn" | "error"
@@ -55,7 +57,7 @@ export function createSiteHeader(root, { current, midi = true }) {
 
   if (!midi) {
     reserveSpace(root);
-    return { midiButton: null, setMidiStatus() {}, log() {} };
+    return { midiTools: null, midiButton: null, setMidiStatus() {}, log() {} };
   }
 
   const midiButton = element("button", "btn btn-small", "Connect MIDI");
@@ -82,12 +84,12 @@ export function createSiteHeader(root, { current, midi = true }) {
   consoleButton.addEventListener("click", () => drawer.toggle());
   root.ownerDocument.body.append(drawerEl);
 
-  const tools = element("div", "site-tools");
-  tools.append(midiButton, midiStatus, consoleButton);
-  root.append(tools);
-  reserveSpace(root); // last, so the first measurement includes everything in the bar
+  const midiTools = element("div", "midi-tools");
+  midiTools.append(midiButton, midiStatus, consoleButton);
+  reserveSpace(root);
 
   return {
+    midiTools,
     midiButton,
     setMidiStatus(text) {
       midiStatus.textContent = text;

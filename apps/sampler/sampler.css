@@ -21,10 +21,20 @@
   margin-bottom: 14px;
   border-bottom: 2px groove #b9b5a7;
 }
+/* The label, then a control row as tall as a knob: whatever the control is, it is centred in that row, so the knobs,
+   the keys and Edit Pad share one centre line. */
 .quick-group {
   display: grid;
+  grid-template-rows: auto var(--quick-control);
+  align-items: center;
   justify-items: center;
   gap: 6px;
+}
+.quick-bar {
+  --quick-control: 56px; /* the knob */
+}
+.quick-group > :not(.small-label) {
+  grid-row: 2; /* Edit Pad has no label, and stays in the control row */
 }
 .quick-row {
   display: flex;
@@ -34,11 +44,14 @@
 .quick-end {
   margin-left: auto;
 }
-/* Tap is a square key as big as the knob next to it. */
+/* Tap and Edit Pad are the same height as the sequence keys. Edit Pad's lamp sits beside its name, not over it. */
 .quick-tap {
-  width: 52px;
-  height: 52px;
-  padding: 0;
+  min-width: 52px;
+}
+.quick-end .btn-led::before {
+  display: inline-block;
+  margin: 0 8px 0 0;
+  vertical-align: middle;
 }
 
 /* A row of buttons that touch, with only the ends rounded: a choice or a pair of arrows is one control. The face
@@ -137,15 +150,13 @@
 }
 
 /* ---------- The display and its controls ---------- */
-/* As tall as the pad grid beside it, in two equal rows: the display level with the top two rows of pads, the bars and
-   the transport level with the bottom two. The 14px above and below are the pad panel's padding, and the gap is the
-   pads'. With the pad editor open under the pads (a window too narrow to put it beside the machine) the pad panel is
+/* As tall as the pad panel beside it, in two equal rows: the display's top level with the panel's top edge and the
+   transport's bottom with its bottom edge. With the pad editor open under the pads (a window too narrow to put it beside the machine) the pad panel is
    taller than its pads, so the column keeps the height its contents want. */
 .console {
   display: grid;
   grid-template-rows: 1fr 1fr;
   gap: 10px;
-  padding: 14px 0;
 }
 .body:has(.pad-panel > .pad-drawer:not([hidden])) .console {
   grid-template-rows: auto auto;
@@ -161,8 +172,11 @@
 .console-lower {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 14px;
+}
+/* The bars keys stay up under the display; the transport centres in the space left below them. */
+.console-lower .buttons {
+  margin-block: auto;
 }
 
 .knob {
@@ -298,12 +312,19 @@
   border-radius: 1px;
   box-shadow: inset 0 1px 2px #000;
 }
+/* Record is the one red key: white on the lightest part of the face, #d63a2e (hover), is 4.7:1, and the lamp, red everywhere else, is white here because a red
+   lamp would vanish into a red face. */
 .btn-rec {
-  color: #9c1c12;
+  border-color: #6e120c;
+  background: linear-gradient(180deg, #cf3226, #ab2218);
+  color: #fff;
+}
+.btn-rec:hover {
+  background: linear-gradient(180deg, #d63a2e, #b52a1f);
 }
 .btn-rec[aria-pressed="true"]::before {
-  background: var(--led-red);
-  box-shadow: 0 0 8px 2px rgba(255, 59, 47, 0.8);
+  background: #fff;
+  box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.85);
 }
 .btn-rec.armed::before {
   animation: rec-blink 0.8s steps(1) infinite;
@@ -415,6 +436,12 @@
 }
 .pad-drawer .pad-tools {
   margin-top: 0;
+  flex-wrap: nowrap; /* the two buttons share a line; they shrink to fit the narrow editor */
+}
+.pad-drawer .pad-tools .btn {
+  flex: 1 1 auto;
+  padding-inline: 6px;
+  white-space: nowrap;
 }
 .pad-drawer .sampler-settings {
   margin-top: 0;
@@ -610,7 +637,8 @@
     inset 0 2px 6px rgba(0, 0, 0, 0.25),
     0 1px 0 #f3f0e6;
 }
-/* Under the LCD: the settings of the sequence the LCD is showing. */
+/* Under the LCD: the settings of the sequence the LCD is showing, and the arrows for which bar the step keys show,
+   next to the length keys that decide how many bars there are. */
 .seq-bar {
   display: flex;
   align-items: center;
@@ -630,6 +658,10 @@
   gap: 8px 12px;
   margin-bottom: 8px;
 }
+/* The bar arrows sit at the end of the Bars row, and wrap under it when there is no room. */
+.seq-bar .step-nav {
+  margin-left: auto;
+}
 /* The length keys are one joined group (.btn-group); the chosen one is pressed in, with a dark face. */
 .seq-lengths .btn {
   min-width: 2.8em;
@@ -646,6 +678,7 @@
   order: 3;
   flex: 1 0 100%;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 .step-tools .btn {

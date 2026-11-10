@@ -104,8 +104,8 @@
       </section>
     </main>
 
-    <aside class="help-panel" aria-labelledby="help-title">
-      <h2 id="help-title" class="help-title">Help</h2>
+    <details class="help-panel">
+      <summary><h2 class="help-title">Help</h2></summary>
       <ul class="help-list">
         <li>
           Hit the pads on the device: they light up here. The page makes no sound, the device plays its own samples
@@ -128,7 +128,7 @@
           Bars, Beats and Note to match the sequence there. The page sends no clock of its own
         </li>
       </ul>
-    </aside>
+    </details>
     <!-- First, so its timeout starts even when the page's own script is slow to arrive. -->
     <script type="module" src="/shared/loading-screen.js"></script>
     <script type="module" src="/apps/mpc-sample/main.js"></script>

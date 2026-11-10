@@ -1,12 +1,13 @@
 // The machine's own header: its name (and a tagline), the lights and readouts on the device itself, and
 // the buttons that act on the machine as a whole (Export). What belongs to the page, not the device
-// (links, Connect MIDI, the Console), is in the site header above it (site-header.js). It draws into
+// (the links), is in the site header above it (site-header.js). It draws into
 // the <header> it is handed and decides nothing.
 //
 //   const header = createAppHeader(element, {
 //     brand: { name: "PAD", accent: "16" },   // `accent` is drawn highlighted, after `name`
 //     sub: "Digital Sampler & Sequencer",
 //     onPower: () => {},                      // optional: draws the POWER switch (a rocker, with its lamp) and calls this when it is pressed
+//     tools: site.midiTools,                  // optional: an element drawn first in the cluster (Connect MIDI, its status, the Console)
 //     actions: [{ label: "Export", title: "Save the sequence as a file", popup: "dialog", onPress: () => {} }],
 //                                             // optional: buttons before POWER, in order; `popup` says what a press opens
 //   });
@@ -20,11 +21,12 @@ function element(tag, className, text) {
   return el;
 }
 
-export function createAppHeader(root, { brand, sub, onPower = null, actions = [] }) {
+export function createAppHeader(root, { brand, sub, onPower = null, tools = null, actions = [] }) {
   const name = element("span", "brand-name", brand.name);
   if (brand.accent) name.append(element("b", "", brand.accent));
 
   const power = element("div", "power");
+  if (tools) power.append(tools);
 
   const actionButtons = actions.map(({ label, title, popup, onPress }) => {
     const button = element("button", "btn btn-small", label);

@@ -1454,6 +1454,19 @@ describe("transport", () => {
     expect(change).toHaveBeenCalledTimes(1);
   });
 
+  it("turns a step on as it gives it a velocity when asked to, as one undo", () => {
+    const { sampler } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
+    sampler.selectPad(0);
+    sampler.setStepVelocity(3, 40, { activate: true });
+    expect(sampler.getState().stepsOn[3]).toBe(true);
+    expect(sampler.getState().stepVelocities[3]).toBe(40);
+    sampler.setStepVelocity(3, 90, { activate: true }); // already on: just the velocity
+    expect(sampler.getState().stepVelocities[3]).toBe(90);
+    sampler.undo();
+    expect(sampler.getState().stepsOn[3]).toBe(false); // the turning on and the velocity went together
+    expect(sampler.getState().stepsOn[2]).toBe(true);
+  });
+
   it("sets the velocity of a step on the bar being shown, for the selected pad", () => {
     const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [5, 21] } }) });
     sampler.selectPad(1);

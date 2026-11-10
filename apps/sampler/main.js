@@ -58,6 +58,7 @@ enableOffline($("update-notice"));
 const header = createAppHeader($("header"), {
   brand: { name: "PAD", accent: "16" },
   sub: "Digital Sampler & Sequencer",
+  tools: site.midiTools,
   onPower: () => togglePower(audio),
   actions: [
     { label: "Export", title: "Save the sequence as a WAV file", popup: "dialog", onPress: () => openExport() },
@@ -256,7 +257,7 @@ const stepKeys = createStepKeys($("steps"), {
 const velocityBars = createVelocityBars($("velocity"), {
   steps: STEPS,
   group: STEP_GROUP,
-  onChange: (step, value) => sampler.setStepVelocity(step, value),
+  onChange: (step, value, options) => sampler.setStepVelocity(step, value, options),
 });
 const seqPrev = $("seq-prev");
 const seqNext = $("seq-next");
@@ -266,6 +267,7 @@ seqNext.addEventListener("click", () => sampler.setSequence(sampler.getState().s
 const stepsPrev = $("steps-prev");
 const stepsNext = $("steps-next");
 const stepsRange = $("steps-range");
+const stepsRangeText = $("steps-range-text");
 stepsPrev.addEventListener("click", () => sampler.setPage(sampler.getState().page - 1));
 stepsNext.addEventListener("click", () => sampler.setPage(sampler.getState().page + 1));
 
@@ -339,6 +341,7 @@ function render() {
   ]);
   for (const { bars, button } of barButtons) setAttr(button, "aria-pressed", String(bars === state.bars));
   setText(stepsRange, `Bar ${state.page + 1} of ${state.bars}`);
+  setText(stepsRangeText, `Bar ${state.page + 1}/${state.bars}`);
   setDisabledMany([
     [stepsPrev, state.page === 0, [stepsNext, barButtons[0].button]],
     [stepsNext, state.page === state.bars - 1, [stepsPrev, barButtons[0].button]],
@@ -518,11 +521,11 @@ const midi = createMidi({
 wireMidiButton(site.midiButton, midi);
 
 // ---------- The step editor can be hidden ----------
-// Its heading stays: the keys, the velocity bars, the bar arrows and the edit tools go. Remembered, and shown by default.
+// Its heading stays: the keys, the velocity bars and the edit tools go. The bar arrows live with the Bars keys, so they stay. Remembered, and shown by default.
 const STEPS_KEY = "pad-sampler:steps";
 createDisclosure({
   toggle: $("steps-toggle"),
-  regions: [$("step-tools"), $("step-nav"), $("step-body")],
+  regions: [$("step-tools"), $("step-body")],
   open: loadJson(STEPS_KEY, true) !== false,
   onToggle: (open) => saveJson(STEPS_KEY, open),
 });

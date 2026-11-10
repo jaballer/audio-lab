@@ -21,6 +21,7 @@ enableOffline($("update-notice"));
 createAppHeader($("header"), {
   brand: { name: "MIDI ", accent: "MONITOR" },
   sub: "What your controller really sends",
+  tools: site.midiTools,
 });
 
 const log = createLog();
