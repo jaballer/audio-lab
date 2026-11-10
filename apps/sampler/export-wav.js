@@ -27,6 +27,7 @@ import { stepSeconds } from "../../shared/tempo.js";
 import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions } from "./export-options.js";
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
+import { zipBlob } from "./zip.js";
 
 // The rate an export is made at when the page has no audio running to take it from.
 export const EXPORT_SAMPLE_RATE = 44100;
@@ -414,7 +415,7 @@ export const renderCost = (plan) => (plan.passes - plan.skipped) * (1 + plan.hit
 // Every pad's stem, one render after another: [{ pad, name, wav }], with `wav` the encoded file. Each is rendered alone
 // at the master volume, unclipped (the stems add up to the page's mix up to the clipper), with the options of a single
 // file (loops, channels) and the same length, so they line up with each other and with the mix. `onProgress(0..1)` is one
-// fraction across all of them, each weighed by `renderCost`. A render is let go of once its file is encoded, so only the
+// fraction across all of them, each weighed by `renderCost`, and `onStem({ number, count })` says which it is starting. A render is let go of once its file is encoded, so only the
 // files are held, and a cancel (`signal`) is looked at before the first and between every two. The kit and the song are
 // read by every render, so a caller whose page can change them while it works passes a snapshot of each (as an export of
 // a single file does): stems made from two states would not add up.
@@ -426,6 +427,7 @@ export async function renderStems({
   loops = DEFAULT_EXPORT_OPTIONS.loops,
   channels = DEFAULT_EXPORT_OPTIONS.channels,
   onProgress,
+  onStem,
   signal,
   render = renderSequence,
 }) {
@@ -436,6 +438,7 @@ export async function renderStems({
   let done = 0;
   for (const [index, pad] of pads.entries()) {
     if (signal?.aborted) throw cancelled();
+    onStem?.({ number: index + 1, count: pads.length });
     const before = done;
     const weight = weights[index];
     const audio = await render({
@@ -520,13 +523,72 @@ export async function exportSequence({
     onMessage(`EXPORTED ${name}`);
     return true;
   } catch (error) {
-    if (wasCancelled(error)) {
-      onMessage("EXPORT CANCELLED");
-      return false;
-    }
-    console.error("Export failed:", error);
-    onMessage("EXPORT FAILED");
+    return reportFailure(error, onMessage);
+  }
+}
+
+// What an export that did not finish says, and that it saved nothing: a cancel is not a failure.
+function reportFailure(error, onMessage) {
+  if (wasCancelled(error)) {
+    onMessage("EXPORT CANCELLED");
     return false;
+  }
+  console.error("Export failed:", error);
+  onMessage("EXPORT FAILED");
+  return false;
+}
+
+// What the Export button does for stems, as exportSequence does for the mix: checks there is something to export, renders a
+// stem for each pad that has steps (renderStems), puts them in a zip and hands it to `save`, saying how it went through
+// `onMessage`. `onProgress(0..1)` is how far it has got over all the stems and `onStem({ number, count })` which one it is on;
+// aborting `signal` cancels it (nothing is saved). Whether a file was saved.
+export async function exportStems({
+  song,
+  kit,
+  stepsPerBar,
+  onMessage,
+  save,
+  options = DEFAULT_EXPORT_OPTIONS,
+  sampleRate = EXPORT_SAMPLE_RATE,
+  onProgress,
+  onStem,
+  signal,
+  render = renderSequence,
+  supported = canRenderOffline(),
+}) {
+  if (!supported) {
+    onMessage("EXPORT NOT SUPPORTED");
+    return false;
+  }
+  if (!hasSteps(song, stepsPerBar)) {
+    onMessage("NOTHING TO EXPORT");
+    return false;
+  }
+  const { loops, channels } = normalizeExportOptions(options);
+  onMessage("EXPORTING...");
+  try {
+    const stems = await renderStems({
+      song,
+      kit,
+      stepsPerBar,
+      sampleRate,
+      loops,
+      channels,
+      onProgress,
+      onStem,
+      signal,
+      render,
+    });
+    const name = stemsName(song, { loops, channels });
+    const zip = zipBlob(stems.map((stem) => ({ name: stem.name, data: stem.wav })));
+    // As for a single file: the zip is one long task too, and a press on Cancel waits its turn at the end of it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (signal?.aborted) throw cancelled();
+    save(zip, name);
+    onMessage(`EXPORTED ${name}`);
+    return true;
+  } catch (error) {
+    return reportFailure(error, onMessage);
   }
 }
 

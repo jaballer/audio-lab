@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   CHANNEL_CHOICES,
   DEFAULT_EXPORT_OPTIONS,
+  FILE_CHOICES,
   LOOP_CHOICES,
+  ZIP_BYTES_PER_FILE,
   channelCount,
   emptyBarsNote,
   exportFrames,
   exportBlockedReason,
   exportFormat,
   exportInfo,
+  exportHint,
   exportMemoryBytes,
   exportNote,
   exportReadout,
@@ -18,6 +21,7 @@ import {
   largeExportNote,
   normalizeExportOptions,
   renderingLabel,
+  stemsInfo,
 } from "./export-options.js";
 
 // 120 BPM: a sixteenth is 0.125 s, a bar of 16 steps is 2 s
@@ -25,26 +29,53 @@ const songOf = (bars, extra = {}) => ({ bpm: 120, current: 0, sequences: [{ bars
 
 describe("the choices", () => {
   it("are the sequence as it is by default: one loop, in stereo, as the export has always been", () => {
-    expect(DEFAULT_EXPORT_OPTIONS).toEqual({ loops: 1, channels: "stereo" });
+    expect(DEFAULT_EXPORT_OPTIONS).toEqual({ loops: 1, channels: "stereo", files: "mix" });
     expect(LOOP_CHOICES).toContain(DEFAULT_EXPORT_OPTIONS.loops);
     expect(CHANNEL_CHOICES).toContain(DEFAULT_EXPORT_OPTIONS.channels);
+    expect(FILE_CHOICES).toContain(DEFAULT_EXPORT_OPTIONS.files);
   });
 
-  it("offer 1, 2, 4 and 8 loops, and stereo or mono", () => {
+  it("offer 1, 2, 4 and 8 loops, stereo or mono, and the mix or its stems", () => {
     expect(LOOP_CHOICES).toEqual([1, 2, 4, 8]);
     expect(CHANNEL_CHOICES).toEqual(["stereo", "mono"]);
+    expect(FILE_CHOICES).toEqual(["mix", "stems"]);
   });
 });
 
 describe("normalizeExportOptions", () => {
   it("keeps options that are choices", () => {
-    expect(normalizeExportOptions({ loops: 4, channels: "mono" })).toEqual({ loops: 4, channels: "mono" });
+    expect(normalizeExportOptions({ loops: 4, channels: "mono", files: "stems" })).toEqual({
+      loops: 4,
+      channels: "mono",
+      files: "stems",
+    });
+  });
+
+  it("takes options saved before there were stems as the mix, which is what they made", () => {
+    expect(normalizeExportOptions({ loops: 4, channels: "mono" })).toEqual({
+      loops: 4,
+      channels: "mono",
+      files: "mix",
+    });
   });
 
   it("falls back to the default for anything saved that is not a choice, each option on its own", () => {
-    expect(normalizeExportOptions({ loops: 3, channels: "mono" })).toEqual({ loops: 1, channels: "mono" });
-    expect(normalizeExportOptions({ loops: 8, channels: "quad" })).toEqual({ loops: 8, channels: "stereo" });
-    expect(normalizeExportOptions({ loops: "4", channels: 2 })).toEqual(DEFAULT_EXPORT_OPTIONS);
+    expect(normalizeExportOptions({ loops: 3, channels: "mono", files: "stems" })).toEqual({
+      loops: 1,
+      channels: "mono",
+      files: "stems",
+    });
+    expect(normalizeExportOptions({ loops: 8, channels: "quad", files: "stems" })).toEqual({
+      loops: 8,
+      channels: "stereo",
+      files: "stems",
+    });
+    expect(normalizeExportOptions({ loops: 8, channels: "mono", files: "zip" })).toEqual({
+      loops: 8,
+      channels: "mono",
+      files: "mix",
+    });
+    expect(normalizeExportOptions({ loops: "4", channels: 2, files: 1 })).toEqual(DEFAULT_EXPORT_OPTIONS);
   });
 
   it("gives the defaults for nothing, or for something that is not an object", () => {
@@ -114,6 +145,35 @@ describe("exportInfo", () => {
   });
 });
 
+describe("stemsInfo", () => {
+  const options = { loops: 1, channels: "stereo", files: "stems" };
+
+  it("says how many stems, how long each is, and how big the zip is: every file a whole export of its own, and the zip's headers", () => {
+    const info = stemsInfo(songOf(1), options, 16, 1000, 5);
+    const wav = 44 + 2000 * 2 * 2;
+    expect(info).toEqual({
+      frames: 2000,
+      seconds: 2,
+      bytes: 5 * (wav + ZIP_BYTES_PER_FILE) + 22,
+      channels: "stereo",
+      stems: 5,
+    });
+  });
+
+  it("is as long as the mix, and follows the loops and the channels as it does", () => {
+    const mix = exportInfo(songOf(2), { loops: 4, channels: "mono" }, 16, 1000);
+    const stems = stemsInfo(songOf(2), { loops: 4, channels: "mono", files: "stems" }, 16, 1000, 3);
+    expect(stems.frames).toBe(mix.frames);
+    expect(stems.seconds).toBe(mix.seconds);
+    expect(stems.channels).toBe("mono");
+    expect(stems.bytes).toBe(3 * (mix.bytes + ZIP_BYTES_PER_FILE) + 22);
+  });
+
+  it("is about the headers' size when there are no stems", () => {
+    expect(stemsInfo(songOf(1), options, 16, 1000, 0).bytes).toBe(22);
+  });
+});
+
 describe("formatDuration", () => {
   it("is seconds to a tenth under a minute", () => {
     expect(formatDuration(4.8)).toBe("4.8 s");
@@ -143,6 +203,38 @@ describe("exportReadout", () => {
     expect(exportReadout({ seconds: 154, channels: "stereo", bytes: 27_000_000 })).toBe(
       "2 min 34 s · stereo · 25.7 MB",
     );
+  });
+});
+
+describe("exportReadout, for stems", () => {
+  it("says how many stems, how long each is, the channels and the size of the zip", () => {
+    expect(exportReadout({ seconds: 2, channels: "stereo", bytes: 1_800_000, stems: 5 })).toBe(
+      "5 stems · 2.0 s each · stereo · 1.7 MB zip",
+    );
+  });
+
+  it("says one stem, not one stems", () => {
+    expect(exportReadout({ seconds: 4.8, channels: "mono", bytes: 423404, stems: 1 })).toBe(
+      "1 stem · 4.8 s each · mono · 413 KB zip",
+    );
+  });
+
+  it("is the one line of a file when there are no stems to speak of", () => {
+    expect(exportReadout({ seconds: 4.8, channels: "mono", bytes: 423404 })).toBe("4.8 s · mono · 413 KB");
+  });
+});
+
+describe("exportHint", () => {
+  it("is nothing for the mix: the dialog's own words about loops are its hint", () => {
+    expect(exportHint("mix")).toBe("");
+  });
+
+  it("says what stems are: a file each, in a zip, not clipped, adding up to the mix", () => {
+    const hint = exportHint("stems");
+    expect(hint).toMatch(/one file for each pad/i);
+    expect(hint).toMatch(/zip/i);
+    expect(hint).toMatch(/not clipped/i);
+    expect(hint).toMatch(/add up to the mix/i);
   });
 });
 
@@ -178,6 +270,16 @@ describe("renderingLabel", () => {
   it("only says it is working before the first report", () => {
     expect(renderingLabel(null)).toBe("Rendering…");
     expect(renderingLabel(undefined)).toBe("Rendering…");
+  });
+
+  it("says which stem it is on, of how many, with how far along the whole is", () => {
+    expect(renderingLabel(0.4, { number: 3, count: 5 })).toBe("Rendering stem 3 of 5… 40%");
+    expect(renderingLabel(null, { number: 1, count: 5 })).toBe("Rendering stem 1 of 5…");
+    expect(renderingLabel(1, { number: 5, count: 5 })).toBe("Rendering stem 5 of 5… 100%");
+  });
+
+  it("does not say stem of a stem when there is only one", () => {
+    expect(renderingLabel(0.5, { number: 1, count: 1 })).toBe("Rendering… 50%");
   });
 });
 
@@ -245,6 +347,30 @@ describe("exportMemoryBytes", () => {
   });
 });
 
+describe("exportMemoryBytes, for stems", () => {
+  // A render is eight bytes a frame whatever the channels are; each stem's file is held until the zip is made, and the
+  // zip's Blob is a copy of them: two bytes a sample, a channel each, twice
+  it("is the render, and every stem's file twice (held, and copied into the zip)", () => {
+    expect(exportMemoryBytes({ total: 2000, frames: 1000 }, { stems: 5, channels: "stereo" })).toBe(
+      8 * 2000 + 2 * 5 * (1000 * 2 * 2),
+    );
+  });
+
+  it("is smaller in mono: the files are half the size, the render is not", () => {
+    const stereo = exportMemoryBytes({ total: 2000, frames: 1000 }, { stems: 5, channels: "stereo" });
+    const mono = exportMemoryBytes({ total: 2000, frames: 1000 }, { stems: 5, channels: "mono" });
+    expect(stereo - mono).toBe(2 * 5 * (1000 * 2));
+  });
+
+  it("grows with the number of stems, and is the same as the mix's when there are none asked for", () => {
+    const plan = { total: 4000, frames: 2000 };
+    expect(exportMemoryBytes(plan, { stems: 8, channels: "stereo" })).toBeGreaterThan(
+      exportMemoryBytes(plan, { stems: 4, channels: "stereo" }),
+    );
+    expect(exportMemoryBytes(plan, { stems: 0 })).toBe(exportMemoryBytes(plan));
+  });
+});
+
 describe("largeExportNote", () => {
   it("is nothing for an export that fits easily", () => {
     expect(largeExportNote(LARGE_EXPORT_BYTES - 1)).toBe("");
@@ -267,6 +393,40 @@ describe("largeExportNote", () => {
     const fits = exportMemoryBytes({ total: (48 + 4 * 48) * rate, frames: 4 * 48 * rate });
     expect(largeExportNote(biggest)).toMatch(/^Making this takes about 2[78]0 MB/);
     expect(largeExportNote(fits)).toBe("");
+  });
+});
+
+describe("largeExportNote, for stems", () => {
+  it("says what makes it smaller: fewer loops, or mono (a mix has no stems to leave out)", () => {
+    expect(largeExportNote(288 * MiB, { stems: 5 })).toBe(
+      "Making this takes about 290 MB of memory, which a phone may not have to spare. Fewer loops or mono make it smaller.",
+    );
+  });
+
+  it("is nothing under the threshold, as for a mix", () => {
+    expect(largeExportNote(LARGE_EXPORT_BYTES - 1, { stems: 5 })).toBe("");
+  });
+});
+
+describe("exportNote, for stems", () => {
+  const rate = 44100;
+  const plan = { total: 70 * rate, frames: 60 * rate }; // a minute: 10 MB a stem, and the file held twice over
+
+  it("is nothing for a small set of stems with every bar filled", () => {
+    expect(exportNote(plan, [], { stems: 4, channels: "stereo" })).toBe("");
+  });
+
+  it("warns where the stems together are large though one mix of the same length is not", () => {
+    expect(exportNote(plan, [])).toBe("");
+    expect(exportNote(plan, [], { stems: 16, channels: "stereo" })).toMatch(
+      /^Making this takes about \d+ MB of memory/,
+    );
+  });
+
+  it("puts the bars with no steps first, as for a mix", () => {
+    const note = exportNote(plan, [2], { stems: 16, channels: "stereo" });
+    expect(note.startsWith(emptyBarsNote([2]))).toBe(true);
+    expect(note).toContain("Fewer loops or mono make it smaller.");
   });
 });
 

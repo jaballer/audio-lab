@@ -18,7 +18,7 @@ import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createExportDialog } from "./export-dialog.js";
 import { exportDialogModel } from "./export-dialog-state.js";
 import { normalizeExportOptions } from "./export-options.js";
-import { canRenderOffline, createExportAction, exportSampleRate, exportSequence } from "./export-wav.js";
+import { canRenderOffline, createExportAction, exportSampleRate, exportSequence, exportStems } from "./export-wav.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
@@ -380,7 +380,8 @@ redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
 // ---------- Export ----------
 // The sequence showing, rendered offline and saved as a WAV file (export-wav.js decides when it may run and what it
-// renders). The machine header's Export button opens a dialog for the choices (loops, stereo or mono), which are kept
+// renders). The machine header's Export button opens a dialog for the choices (the mix or a stem for each pad in a zip,
+// loops, stereo or mono), which are kept
 // between visits; the dialog says how long and how big the file will be, shows how far a long render has got, and
 // cancels it. A message goes to the dialog as well as the LCD: the LCD is behind the dialog, and out of reach of a
 // screen reader while it is open.
@@ -434,11 +435,13 @@ exportDialog.setOptions(exportOptions);
 const pressExport = createExportAction({
   snapshot: () => ({ song: sampler.getSong(), options: exportOptions, sampleRate: exportRate() }),
   ready: () => restoring,
-  run: ({ signal, onProgress, snapshot }) =>
-    exportSequence({
+  run: ({ signal, onProgress, snapshot }) => {
+    const make = snapshot.options.files === "stems" ? exportStems : exportSequence;
+    return make({
       song: snapshot.song,
       // Taken here, once the saved samples are back (`ready` has been waited for): a kit snapshot at the press could hold
-      // the built-in sound of a pad whose sample is still being restored.
+      // the built-in sound of a pad whose sample is still being restored. Stems are many renders of this one kit and song,
+      // which is why both are snapshots: stems made from two states would not add up.
       kit: kit.snapshot(),
       stepsPerBar: STEPS,
       options: snapshot.options,
@@ -447,7 +450,9 @@ const pressExport = createExportAction({
       save: saveBlob,
       signal,
       onProgress,
-    }),
+      onStem: (stem) => exportDialog.setStem(stem), // (only the stems say it)
+    });
+  },
   onMessage: sayExport,
   onProgress: (fraction) => exportDialog.setProgress(fraction),
   onCancel: () => exportDialog.setCancelling(), // a browser that cannot pause the render finishes it first

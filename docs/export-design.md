@@ -9,15 +9,15 @@ GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 
 ## Where it is
 
-| File                                                  | What it does                                                                                                      |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `apps/sampler/export-wav.js`                          | The render (`planRender`, windows, `renderSequence`), the WAV encoder, `exportSequence`, `createExportAction`     |
-| `apps/sampler/export-options.js`                      | The choices (loops, stereo or mono), what the file will be (length, size), the notes and reasons the dialog shows |
-| `apps/sampler/export-dialog-state.js`                 | What the dialog shows and allows, the double-click guard, and what the page tells the dialog (all pure)           |
-| `apps/sampler/export-dialog.js`                       | The `<dialog>`: draws what it is told and reports what is pressed                                                 |
-| `apps/sampler/zip.js`                                 | A store-only zip writer (CRC32, no dependency) for the stems                                                      |
-| `apps/sampler/voices.js`, `kit.js`, `sample-voice.js` | One voice per pad and choke groups; the kit snapshot; a sample's source can be stopped                            |
-| `shared/app-header.js`                                | The Export button, next to POWER (the `actions` option)                                                           |
+| File                                                  | What it does                                                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/sampler/export-wav.js`                          | The render (`planRender`, windows, `renderSequence`), the WAV encoder, `exportSequence`, `createExportAction`                   |
+| `apps/sampler/export-options.js`                      | The choices (loops, stereo or mono, mix or stems), what the file will be (length, size), the notes and reasons the dialog shows |
+| `apps/sampler/export-dialog-state.js`                 | What the dialog shows and allows, the double-click guard, and what the page tells the dialog (all pure)                         |
+| `apps/sampler/export-dialog.js`                       | The `<dialog>`: draws what it is told and reports what is pressed                                                               |
+| `apps/sampler/zip.js`                                 | A store-only zip writer (CRC32, no dependency) for the stems                                                                    |
+| `apps/sampler/voices.js`, `kit.js`, `sample-voice.js` | One voice per pad and choke groups; the kit snapshot; a sample's source can be stopped                                          |
+| `shared/app-header.js`                                | The Export button, next to POWER (the `actions` option)                                                                         |
 
 ## Decisions
 
@@ -37,6 +37,12 @@ between visits. A file made with options is named for them (`pad16-seq-01-100bpm
 sequence do not overwrite each other. Sample rate and bit depth are not offered (the issue said "if anyone asks"); the file
 is 16-bit, at the rate the page's audio runs at (44.1 or 48 kHz on most machines; 44.1 kHz where there is none yet, or one
 outside 22.05 to 96 kHz), and the dialog says which.
+
+**Files: Mix or Stems.** The third choice, first in the dialog, is what is made: the mix as one WAV (the default, as it
+always was), or a WAV for each pad that has steps in one zip, so the parts can be mixed elsewhere (see Stems below).
+The button says which (Export WAV, Export ZIP), the readout counts the stems and sizes the zip ("5 stems · 2.0 s each ·
+stereo · 1.7 MB zip"), and the hint says what stems are. Loops and Channels apply to every stem. The choice is kept
+between visits with the others (options saved before it have none, which is the mix).
 
 **Progress and cancel are in the dialog.** While it renders the choices and the close button are off, a bar and a
 percentage show, and Cancel export (or Escape) stops it. It cannot be closed while it renders: a dialog that closed would
@@ -132,8 +138,8 @@ scheduled in one go (at most 6e-7, about 2% of one 16-bit step).
 
 ## Stems
 
-Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) are built in two parts: the engine (`renderStems`,
-`zip.js`), and then the dialog's option, which offers them. What the engine does and why:
+Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) were built in two parts: the engine (`renderStems`,
+`zip.js`), then the dialog's Files choice, which offers them (`exportStems`). What the engine does and why:
 
 - **One render a pad, only that pad's sound.** `planRender({ pad })` keeps the pad's hits, and, as `silent` hits, those of
   the other pads in its choke group, which are not made (no sound is built for them) but go through `voices.start`, so they
@@ -166,6 +172,12 @@ Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) are bui
   renders, each weighed by `renderCost` (the sounds it makes in each pass it schedules), and a cancel is looked at before
   the first and between every two (and inside each, as for a single file). The kit and the song are read by every render, so the page passes a snapshot
   of each, as for a single file: stems made from two states would not add up.
+- **The size note counts the files twice** (`exportMemoryBytes`, with `stems`): the render, and each stem's file held and
+  copied into the zip's Blob. Measured in Chromium, 16 stems of a dense 8-bar song at 100 BPM, 4 loops (77 s each, a 225 MB
+  zip): the browser's memory peaked about 335 MiB over its baseline, against the note's 490 MB. So the note is about 30% high
+  there, probably because the browser keeps the Blob's bytes outside the page's own memory; Firefox and Safari may not, and
+  the note is a warning for phones, so it is left on the safe side (the mix's was a little low, 8%). The 16 stems took 24 s;
+  the zip's size in the dialog (225 MB) was the file's (235,932,750 bytes) to the digit shown.
 - **The zip** is stored, not compressed (a WAV does not shrink to anything worth the time): a header, the name and the bytes
   for each file, then the directory. Checked with `unzip -t` and Python's `zipfile` as well as with a reader in the tests. Not
   zip64: a file or an archive of 4 GiB or more, or 65,536 files, is refused.
@@ -184,5 +196,5 @@ From the audit; none of it built.
   encoded chunks and a Blob of them), not one buffer.
 - **Progress** is one fraction (stems compose it with `renderCost`); a bounce of several sequences can do the same. One
   export at a time (`createExportAction`) suits all of them.
-- **The dialog** has two choice groups wired by hand and a hard-coded "WAV"; a second format touches the options, the name,
-  the readout, the header title and the button.
+- **The dialog** has three choice groups wired by hand and a button that says WAV or ZIP; a second format touches the
+  options, the name, the readout, the header title and the button.
