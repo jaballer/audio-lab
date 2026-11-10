@@ -41,6 +41,9 @@ describe("beatPhase and beatPulse", () => {
     expect(beatPhase({ step: 4, sinceStepMs: 0, bpm: 120 })).toBe(0);
     expect(beatPhase({ step: 6, sinceStepMs: 62.5, bpm: 120 })).toBeCloseTo(0.625);
   });
+  it("has no beat before the first step (the scheduler's step is -1 then): phase 0, not a negative one", () => {
+    expect(beatPhase({ step: -1, sinceStepMs: 40, bpm: 120 })).toBe(0);
+  });
   it("never reaches 1 when a step is late", () => {
     expect(beatPhase({ step: 3, sinceStepMs: 5000, bpm: 120 })).toBeLessThan(1);
   });

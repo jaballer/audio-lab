@@ -76,6 +76,7 @@ export function smoothLevel(previous, next, dtMs) {
 // `step` is the playhead's step in the sequence and `sinceStepMs` how long ago it moved there; a step lasts
 // 60000 / bpm / STEPS_PER_BEAT milliseconds, so how far through it we are carries the beat on between steps.
 export function beatPhase({ step, sinceStepMs, bpm }) {
+  if (step < 0) return 0; // the scheduler is at -1 before its first step; a negative phase would read as a hit
   const stepMs = 60000 / bpm / STEPS_PER_BEAT;
   const within = clamp01(sinceStepMs / stepMs);
   return (((step % STEPS_PER_BEAT) + within) / STEPS_PER_BEAT) % 1;

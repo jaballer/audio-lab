@@ -110,15 +110,18 @@ function readLights() {
   lightLevel = smoothLevel(lightLevel, heard, lastLightFrame ? now - lastLightFrame : 0);
   lastLightFrame = now;
   const state = sampler.getState();
-  if (state.playheadStep !== stepSeen.step) stepSeen = { step: state.playheadStep, at: now };
-  const playing = state.playing && audio.running;
-  const phase = playing ? beatPhase({ step: state.playheadStep, sinceStepMs: now - stepSeen.at, bpm: state.bpm }) : 0;
+  // The step in the whole sequence: `playheadStep` is only the one on the bar shown (-1 in any other), which would
+  // stop the beat from showing while a longer sequence plays through the bars not on screen.
+  const step = state.playing ? state.playheadPosition : -1;
+  if (step !== stepSeen.step) stepSeen = { step, at: now }; // stopped, the step is -1: a restart is a new step
+  const playing = state.playing && audio.running && step >= 0;
+  const phase = playing ? beatPhase({ step, sinceStepMs: now - stepSeen.at, bpm: state.bpm }) : 0;
   const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
   return {
     level: lightLevel,
     phase,
     playing,
-    beat: Math.floor(state.playheadStep / 4),
+    beat: Math.floor(step / 4),
     bpm: state.bpm,
     timeMs: now,
     still,
