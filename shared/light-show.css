@@ -1,0 +1,109 @@
+/* The backdrop light show: on the desk, behind the machine. Fixed and below everything (z-index -1) so the chassis
+   is drawn over it and it can never cover a control. light-show-view.js sets the three variables each frame:
+   --light-hue (blue when quiet, red when loud), --light-glow (0-1 brightness) and --light-pulse (1 on the beat). */
+.light-show {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --light-hue: 225;
+  --light-glow: 0.18;
+  --light-pulse: 0;
+  --light-x: 50%;
+  --light-y: 55%;
+  --light-size: 52%;
+  --light-even: 0;
+  --light-odd: 0;
+  --light-o0x: 110%;
+  --light-o0y: 50%;
+  --light-o1x: 50%;
+  --light-o1y: 112%;
+  --light-o2x: -10%;
+  --light-o2y: 50%;
+  --light-o3x: 50%;
+  --light-o3y: -12%;
+  /* The main glow, and four lights that circle the window (light-show.js sets where): each is a wide soft ellipse, so
+     as they pass the corners they light them. Opposite lights (0 and 2, 1 and 3) take the beats in turn, and each has
+     its own hue a little round the colour wheel from the others. */
+  background:
+    radial-gradient(
+      ellipse var(--light-size) 60% at var(--light-x) var(--light-y),
+      hsl(var(--light-hue) 90% 55% / calc(var(--light-glow) * 0.75)),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 55% at var(--light-o0x) var(--light-o0y),
+      hsl(calc(var(--light-hue) + 50) 90% 55% / calc(var(--light-glow) * 0.45 + var(--light-even) * 0.5)),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 55% at var(--light-o1x) var(--light-o1y),
+      hsl(calc(var(--light-hue) + 100) 90% 55% / calc(var(--light-glow) * 0.45 + var(--light-odd) * 0.5)),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 55% at var(--light-o2x) var(--light-o2y),
+      hsl(calc(var(--light-hue) - 50) 90% 55% / calc(var(--light-glow) * 0.45 + var(--light-even) * 0.5)),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 55% at var(--light-o3x) var(--light-o3y),
+      hsl(calc(var(--light-hue) - 100) 90% 55% / calc(var(--light-glow) * 0.45 + var(--light-odd) * 0.5)),
+      transparent 70%
+    );
+}
+.light-show[hidden] {
+  display: none;
+}
+
+/* A burst where a pad is, in the pad's colour: it grows and fades, from behind the machine (the layer is below it). */
+.light-flash {
+  position: absolute;
+  width: 34vmin;
+  height: 34vmin;
+  margin: -17vmin 0 0 -17vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--flash-color) 0%, transparent 65%);
+  opacity: 0;
+  animation: light-flash 700ms ease-out;
+}
+@keyframes light-flash {
+  0% {
+    opacity: 0.75;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+/* The highs, as small points of light round the edges: their brightness is set from the script each frame. */
+.light-sparkle {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: hsl(calc(var(--light-hue) + 160) 100% 85%);
+  box-shadow: 0 0 10px 3px hsl(calc(var(--light-hue) + 160) 100% 70% / 0.8);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A pulse is motion: a person who asked for less of it gets a steady colour, which still follows the sound. */
+  .light-show {
+    --light-pulse: 0;
+  }
+  .light-flash {
+    animation-name: light-flash-still;
+  }
+  @keyframes light-flash-still {
+    from {
+      opacity: 0.5;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+}

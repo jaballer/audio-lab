@@ -13,6 +13,7 @@
 //   audio.powered                  // false while off: a page should not start sounds then (they are
 //                                  // inaudible, but a held note would be heard again at power on)
 //   audio.running                  // true only while sound can be heard: powered, and the context running
+//   audio.analyser                 // an AnalyserNode listening after the clipper (what is heard), or null; for meters and lights
 //   audio.killSound()              // cut off everything sounding now, tails and all; sounds made after it are heard
 //
 // Power off mutes the master gain and leaves the context running. Suspending it would freeze
@@ -34,6 +35,8 @@
 // What the header marks its POWER button with (app-header.js).
 export const POWER_SWITCH = "[data-power-switch]";
 
+const ANALYSER_SIZE = 2048; // samples per reading: bins about 23 Hz wide, fine enough to tell a kick from a hat
+const ANALYSER_SMOOTHING = 0.4; // of the spectrum, between readings: the default 0.8 smears a hit over a second
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
 // Killing sound is a faster fade (still no click), and the cut-off master is disconnected once it is inaudible.
 const KILL_TIME_CONSTANT = 0.004;
@@ -71,6 +74,7 @@ export function createClipper(ctx) {
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
   let master = null;
+  let analyser = null;
   let sink = null; // what every master connects to: the clipper's input, or the speakers
   let level = volume;
 
@@ -95,7 +99,17 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
       // which would replace ours and leave the status stuck on "suspended".
       ctx.addEventListener("statechange", notify);
       const clipper = createClipper(ctx);
-      if (clipper) clipper.output.connect(ctx.destination);
+      if (clipper) {
+        clipper.output.connect(ctx.destination);
+        // A tap on what is heard, not wired onward: it only reads. Without a clipper there is no fixed node to tap
+        // (the master is replaced by killSound), so a page gets no analyser rather than one that goes deaf.
+        if (typeof ctx.createAnalyser === "function") {
+          analyser = ctx.createAnalyser();
+          analyser.fftSize = ANALYSER_SIZE;
+          analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
+          clipper.output.connect(analyser);
+        }
+      }
       sink = clipper ? clipper.input : ctx.destination;
       master = createMaster();
     }
@@ -164,6 +178,9 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
     },
     get master() {
       return master;
+    },
+    get analyser() {
+      return analyser;
     },
     powerOff,
     powerOn,
