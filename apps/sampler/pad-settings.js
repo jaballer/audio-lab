@@ -6,14 +6,14 @@
 //   attack, decay, release: (for a loaded sample) 0 to 100 on a slider, a time up to 2, 2 and 5 seconds (envelopeSeconds)
 //   sustain: (for a loaded sample) the level the decay falls to, 0 to 100 per cent (100 leaves the sample as it is)
 //   choke: a choke group, 0 (none) or 1 to 8: pads in the same group cut each other off (voices.js)
-//   color: a colour for the pad, 0 (none) or 1 to 8 (pad-colors.js); only for looks, and chosen with swatches, not a slider
+//   color: a colour for the pad, 0 (none) or 1 to 6 (pad-colors.js); only for looks, and chosen with swatches, not a slider
 //
 //   clampSetting("gain", 9.4)            // 6
 //   gainToLinear(-6)                     // 0.501...: what to multiply the signal by
 //   pitchToRate(12)                      // 2: the playbackRate that sounds an octave up
 //   formatSetting("pitch", 2)            // "+2 st"
 //   formatSetting("choke", 0)            // "OFF"; 3 is "GROUP 3"
-//   formatSetting("color", 5)            // "BLUE"
+//   formatSetting("color", 3)            // "BLUE"
 //   formatSetting("attack", 50)          // "250 MS": a time, not the slider position; "sustain" is "50 %"
 //   envelopeSeconds("release", 100)      // 5
 //   padEnvelope(settings)                // { attack, decay, sustain, release } in seconds and 0-1, or null when flat

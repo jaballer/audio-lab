@@ -1247,11 +1247,11 @@ describe("pad colours", () => {
     sampler.selectPad(1);
     songChange.mockClear();
     change.mockClear();
-    sampler.setPadSetting("color", 5);
+    sampler.setPadSetting("color", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
-    expect(sampler.getState().padSettings.color).toBe(5);
+    expect(sampler.getState().padSettings.color).toBe(3);
     expect(sampler.getSong().padSettings).toEqual({
-      1: { gain: 0, pitch: 0, choke: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 0, pitch: 0, choke: 0, color: 3, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
     expect(songChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
