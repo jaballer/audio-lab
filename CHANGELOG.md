@@ -137,6 +137,8 @@ Numbers link to the pull request.
 - What the Export dialog shows and allows is pure and tested, apart from the DOM it is drawn into, and
   `docs/export-design.md` records how the export works, what was measured and what stems and a whole-song bounce will need
   ([#141](https://github.com/jaballer/audio-lab/pull/141)).
+- The engine for per-pad stems (a pad rendered on its own, with its choke group's cuts, so the stems add up to the mix) and
+  a zip writer for them; the page does not offer stems yet ([#143](https://github.com/jaballer/audio-lab/pull/143)).
 
 ## 2026-11-08
 
