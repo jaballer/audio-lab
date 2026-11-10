@@ -395,9 +395,43 @@ projectInput.addEventListener("change", () => {
 const starterSelect = $("starter-select");
 const starterStart = $("starter-start");
 for (const { id, name, bpm } of STARTERS) starterSelect.append(new Option(`${name} \u00b7 ${bpm} BPM`, id));
+// Pads playing a sample that is not kept (it loaded, but could not be saved): the page starting again would lose it.
+const unsavedSamplePads = () =>
+  Array.from({ length: PAD_COUNT }, (_, pad) => pad).filter((pad) => !kit.isDefault(pad) && !samples.isKept(pad));
+const unsavedWarning = (pads) =>
+  `${pads.length} sample${pads.length === 1 ? "" : "s"} on the pads could not be saved and will be lost.`;
 const loadStarter = (starter) =>
   withProjectLock(async () => {
     if (tabSync.isStale) return sayStale("NOT LOADED");
+    const unsavedBefore = unsavedSamplePads();
+    // Nothing is undoable once the page starts again, so ask first.
+    const warning = unsavedBefore.length ? ` ${unsavedWarning(unsavedBefore)}` : "";
+    if (
+      !window.confirm(
+        `Start from ${starter.name}? The beat and pad settings on the page now will be replaced.${warning}`,
+      )
+    )
+      return false;
+    saver.cancel(); // a change that is waiting would otherwise be written over the starter
+    replacingSong = true;
+    const stay = () => {
+      replacingSong = false;
+      saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
+      return false;
+    };
+    // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still under way should
+    // finish and keep its map entry, or it would be gone after the reload. Wait for the loads and writes under way.
+    await samples.idle();
+    // Another tab may have saved while those were finished (its event arrives between turns): the stale guard the saver has
+    // applies here too, or this write would put the starter over its newer beat.
+    if (tabSync.isStale) {
+      replacingSong = false;
+      return sayStale("NOT LOADED");
+    }
+    // A load that finished while waiting may have played but not been kept: that is only known now.
+    const lost = unsavedSamplePads().filter((pad) => !unsavedBefore.includes(pad));
+    if (lost.length && !window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
+    // Read now, not before the wait: a load that finished meanwhile put its own sample on its pad and reset the pad's settings.
     const current = sampler.getSong();
     // A pad with a sample kept for it counts as one even where the sample is not playing yet (still being restored, or one
     // this browser could not decode this visit): it comes back on the next visit, with the settings it was given.
@@ -413,26 +447,13 @@ const loadStarter = (starter) =>
       volume: current.volume,
       keep,
     });
-    if (!song) return say("STARTER NOT LOADED");
-    // Nothing is undoable once the page starts again, so ask first.
-    if (!window.confirm(`Start from ${starter.name}? The beat and pad settings on the page now will be replaced.`))
-      return false;
-    saver.cancel(); // a change that is waiting would otherwise be written over the starter
-    replacingSong = true;
-    // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still under way should
-    // finish and keep its map entry, or it would be gone after the reload. Wait for the loads and writes under way.
-    await samples.idle();
-    // Another tab may have saved while those were finished (its event arrives between turns): the stale guard the saver has
-    // applies here too, or this write would put the starter over its newer beat.
-    if (tabSync.isStale) {
-      replacingSong = false;
-      return sayStale("NOT LOADED");
+    if (!song) {
+      say("STARTER NOT LOADED");
+      return stay();
     }
     if (!saveJson(SONG_KEY, song)) {
-      replacingSong = false;
-      saver.schedule();
       say("STARTER NOT LOADED: CANNOT SAVE");
-      return false;
+      return stay();
     }
     saver.cancel(); // (again: a change made during the write would be flushed as the page unloads)
     location.reload();
