@@ -454,14 +454,16 @@ const loadStarter = (starter) =>
     // Another tab may have saved while a confirm was up: the page's events (its `storage`) are held while a dialog is open
     // and arrive after it, so the check has to wait a moment for them before it can see. The stale guard the saver has
     // applies here too, or this write would put the starter over its newer beat.
-    await quiet();
-    if (staleNow()) return false;
-    // A load that finished while waiting may have played but not been kept: that is only known now.
-    const lost = unsavedSamplePads().filter((pad) => !unsavedBefore.includes(pad));
-    if (lost.length) {
-      if (!window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
-      await quiet(); // (and again after this dialog)
+    // Wait, then look: a load that finished while waiting may have played but not been kept, which is only known now, and
+    // each dialog lets in events that can start another. So go round again until a wait finds nothing new to ask about.
+    let told = unsavedBefore;
+    for (;;) {
+      await quiet();
       if (staleNow()) return false;
+      const lost = unsavedSamplePads().filter((pad) => !told.includes(pad));
+      if (!lost.length) break;
+      if (!window.confirm(`${unsavedWarning(lost)} Start from ${starter.name} anyway?`)) return stay();
+      told = [...told, ...lost];
     }
     // Read now, not before the wait: a load that finished meanwhile put its own sample on its pad and reset the pad's settings.
     const current = sampler.getSong();
