@@ -19,8 +19,9 @@ What `song.js` keeps, and `controller.js` plays:
   turning Next off is how a touch screen, which has no Shift, switches at once (`pressIsNow` in `sequence-row.js`). All plays the sequences one after the other until Stop; it is off on every load, and a chain that plays does not
   save the beat as it goes.
 - **What plays and what shows** are kept apart in the controller. `current` is the sequence the step keys, the step editor and the
-  sequence keys are about (with its `pattern`, `history`, `bars` and `page`); `playing` is the one the scheduler builds steps from
-  and the display says sounds (`playingSlot`, `playingSteps`). They are the same sequence for now: every pick, switch and takeover
+  sequence keys are about (with its `pattern`, `history`, `bars` and `page`); `playing` is the slot of the one the scheduler builds steps
+  from and the display says sounds (`playingIndex()` gives its number: the slot itself is kept because a number moves when a sequence is
+  removed). They are the same sequence for now: every pick, switch and takeover
   goes through `adoptSequence`, which sets both, so a person sees and edits what plays. The split is there so that Song mode can play
   one sequence while another is edited. A read about sound (the steps built, the length of a pass, the sequence the song or a queue
   goes on from, a live hit recorded, `heard`) uses `playing`; a read about the editor uses `current`.

@@ -141,13 +141,15 @@ export function createSampler({
   let bars = slots[current].bars;
   const lastPage = () => bars - 1;
   // What plays and what shows are two things. `current` is the sequence the step keys, the step editor and the sequence keys are
-  // about, with its `pattern`, `history`, `bars` and `page`; `playing` is the sequence the scheduler builds steps from, and what the
+  // about, with its `pattern`, `history`, `bars` and `page`; `playing` is the slot of the sequence the scheduler builds steps from, and what the
   // display says sounds. They are the same sequence for now: every pick, switch and takeover sets both (adoptSequence), so a person
   // sees and edits what plays. Reads that are about sound (the steps built, the length of the pass, the sequence the song or a queue
   // goes on from, a live hit recorded) use `playing`; reads that are about the editor use `current`.
-  let playing = current;
-  const playingSlot = () => slots[playing];
-  const playingSteps = () => playingSlot().bars * steps;
+  // `playing` is the slot itself and not its number, which is not stable: removing a sequence moves the ones after it down, and the slot
+  // of the one that goes is still what was playing until the next one is adopted. Where a number is wanted it is `playingIndex()`.
+  let playing = slots[current];
+  const playingIndex = () => slots.indexOf(playing);
+  const playingSteps = () => playing.bars * steps;
 
   // A sequence can take over where the pass ends: one queued (queueSequence), or the next of Play All. The scheduler hands the first
   // step of the next pass to the audio clock before the last steps of this one have sounded (by the lookahead and a step: about a
@@ -221,7 +223,7 @@ export function createSampler({
     swing: song?.swing,
     onStep(step, time, heard, gridTime) {
       const { ctx, master } = audio;
-      const { pattern: playingPattern } = playingSlot();
+      const { pattern: playingPattern } = playing;
       const rows = [];
       const chokes = []; // the voices these hits cut off, so cancelling the step can give them back
       // The step's hits go through a gain of their own, so that if playback is restarted or
@@ -256,20 +258,21 @@ export function createSampler({
       }
       // A queued sequence goes first (a person asked for it), and the chain goes on from it.
       const asked = queued >= 0;
-      let next = asked ? queued : playing;
+      const was = playingIndex(); // the sequence whose pass has ended
+      let next = asked ? queued : was;
       if (!asked && playAll) {
         const from = isSamePassEnd(wrapped.time, time) ? wrapped.from : songAt;
         // Where that pass was, worked out now, so that what is remembered of it can follow an edit (a position not known is the first
         // entry that names the sequence in the list as it is, and an edit changes the list).
-        const here = wherePassWas(arrangement, slots.length, from, playing);
-        const pass = nextPass(arrangement, slots.length, here, playing);
-        wrapped = { time, from: here, repeat: pass.sequence === playing };
+        const here = wherePassWas(arrangement, slots.length, from, was);
+        const pass = nextPass(arrangement, slots.length, here, was);
+        wrapped = { time, from: here, repeat: pass.sequence === was };
         songAt = { entry: pass.entry, rep: pass.rep };
         next = pass.sequence;
       }
       // Nothing to take over (one sequence, no chain, or an entry that goes round again): the pass end stays one that a sequence
       // queued just ahead of it can take over at, and no pick of the chain's is left to take back (chainAtOpenPassEnd).
-      if (next === playing) {
+      if (next === was) {
         chained = null;
         lastWrap = time;
       } else takeOver(next, time, { automatic: !asked });
@@ -317,7 +320,7 @@ export function createSampler({
       steps: before ? outgoing.steps : playingSteps(),
     });
     if (step < 0) return;
-    const into = before && step !== 0 ? outgoing : { pattern: playingSlot().pattern, history: playingSlot().history };
+    const into = before && step !== 0 ? outgoing : { pattern: playing.pattern, history: playing.history };
     // a hit played again over a step replaces its velocity
     editOn(into, () => into.pattern.set(index, step, true, Math.round(velocity * FULL_VELOCITY)));
     if (into !== outgoing) scheduler.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
@@ -413,7 +416,7 @@ export function createSampler({
     if (next === bars) return;
     const shorter = next < bars;
     // What plays is only changed when it is what is showing: the length of the pass is the playing sequence's.
-    const alters = current === playing;
+    const alters = slots[current] === playing;
     if (!shorter && alters) withdrawPassEnd(); // the loop carries on past the pass end the scheduler had reached: it is not one
     bars = next;
     slots[current].bars = bars;
@@ -434,7 +437,7 @@ export function createSampler({
   function adoptSequence(next) {
     queued = -1;
     current = next;
-    playing = next;
+    playing = slots[next];
     pattern = slots[current].pattern;
     history = slots[current].history;
     lastMergedAt = -Infinity;
@@ -446,7 +449,7 @@ export function createSampler({
   // waiting for the end of the pass: a person who picks one now, or adds or removes one (which moves the numbers), is not
   // leaving a plan behind.
   function showSequence(next) {
-    if (slots[next].bars > bars) lastWrap = -Infinity; // as for setBars: a longer one carries on past the pass end
+    if (slots[next].bars > playing.bars) lastWrap = -Infinity; // as for setBars: a longer one carries on past the pass end
     adoptSequence(next);
     forgetSongPosition(); // a person picked it (or made or removed one): the song goes on from where this sequence first is
     // The position carries over into the length of the sequence picked, which can end the loop where the scheduler is: that is no
@@ -491,15 +494,16 @@ export function createSampler({
     // (An open pass end has nothing queued: a sequence queued in that moment takes over at once.)
     if (!scheduler.playing || !passEndOpen()) return;
     if (playAll) {
-      const here = wherePassWas(arrangement, slots.length, songAt, playing);
-      const pass = nextPass(arrangement, slots.length, here, playing);
-      wrapped = { time: lastWrap, from: here, repeat: pass.sequence === playing };
+      const was = playingIndex();
+      const here = wherePassWas(arrangement, slots.length, songAt, was);
+      const pass = nextPass(arrangement, slots.length, here, was);
+      wrapped = { time: lastWrap, from: here, repeat: pass.sequence === was };
       songAt = { entry: pass.entry, rep: pass.rep };
       // An entry that goes round again has no sequence to take over: the first step built is already the right one.
-      if (pass.sequence !== playing) takeOverLate(pass.sequence, { automatic: true });
+      if (pass.sequence !== was) takeOverLate(pass.sequence, { automatic: true });
       return;
     }
-    if (chained !== playingSlot().pattern) return;
+    if (chained !== playing.pattern) return;
     const back = slots.findIndex((slot) => slot.pattern === outgoing.pattern);
     if (back !== -1) takeOverLate(back, { automatic: true });
   }
@@ -515,7 +519,7 @@ export function createSampler({
   function followEdit({ arrangement: next, entryAfter }) {
     // A pass that is playing and has not been told yet (the first after Play, or after a pick) is on the first entry that names its
     // sequence, in the list as it is now: said before the list changes, so that the edit moves it and does not choose it again.
-    if (!songAt && playAll && scheduler.playing) songAt = positionOf(arrangement, slots.length, playing);
+    if (!songAt && playAll && scheduler.playing) songAt = positionOf(arrangement, slots.length, playingIndex());
     arrangement = next;
     const follow = (at) => {
       if (!at) return at;
@@ -533,14 +537,14 @@ export function createSampler({
   // that was asked for (a queued sequence) is not the song's to change, and one that has sounded is heard from the next.
   function reconsiderPassEnd() {
     if (!playAll || !scheduler.playing || !passEndOpen() || wrapped.time !== lastWrap) return;
-    const ended = wrapped.repeat ? playing : slots.findIndex((slot) => slot.pattern === outgoing?.pattern);
+    const ended = wrapped.repeat ? playingIndex() : slots.findIndex((slot) => slot.pattern === outgoing?.pattern);
     if (ended < 0) return;
     const pass = nextPass(arrangement, slots.length, wrapped.from, ended);
     songAt = { entry: pass.entry, rep: pass.rep };
     // Still the entry going round again with nothing taken over, only if it was and is: when this takes over, even back to the sequence that
     // ended, the pass has been restarted, so the pass end is a real one and no longer one that can be withdrawn.
     wrapped = { ...wrapped, repeat: wrapped.repeat && pass.sequence === ended };
-    if (pass.sequence !== playing) takeOverLate(pass.sequence, { automatic: true });
+    if (pass.sequence !== playingIndex()) takeOverLate(pass.sequence, { automatic: true });
   }
 
   function addEntry(at = entryCount()) {
@@ -620,12 +624,12 @@ export function createSampler({
     passStart = time;
     lastWrap = automatic ? time : -Infinity;
     if (!keepOutgoing) {
-      const { pattern: gone, history: goneHistory, bars: goneBars } = playingSlot();
+      const { pattern: gone, history: goneHistory, bars: goneBars } = playing;
       outgoing = {
         pattern: gone,
         history: goneHistory,
         steps: playingSteps(),
-        sequence: playing,
+        sequence: playingIndex(),
         bars: goneBars,
         page,
       };
@@ -633,9 +637,9 @@ export function createSampler({
     adoptSequence(next);
     // Asked for, not the chain's pick (which has worked out where it is): the song goes on from the first entry that names it.
     if (!automatic) songAt = positionOf(arrangement, slots.length, next);
-    chained = automatic ? playingSlot().pattern : null;
+    chained = automatic ? playing.pattern : null;
     scheduler.startPass(playingSteps());
-    if (!automatic) onMessage(`SEQ ${pad2(current + 1)}`);
+    if (!automatic) onMessage(`SEQ ${pad2(next + 1)}`); // the one that began to play
     onChange();
     if (!automatic) onSongChange();
   }
@@ -663,7 +667,7 @@ export function createSampler({
       setSequence(next);
       return;
     }
-    if (next === queued || next === playing) {
+    if (next === queued || next === playingIndex()) {
       cancelQueue();
       return;
     }
@@ -925,7 +929,6 @@ export function createSampler({
     getState: () => {
       const stepsOn = pattern.row(selected).slice(page * steps, (page + 1) * steps);
       const playheadStep = playheadOnPage(scheduler.playheadStep);
-      const play = playingSlot();
       return {
         selected,
         recording,
@@ -950,7 +953,7 @@ export function createSampler({
           playAll && scheduler.playing
             ? songAt
               ? { ...songAt }
-              : positionOf(arrangement, slots.length, playing)
+              : positionOf(arrangement, slots.length, playingIndex())
             : null,
         // What sounds, for the display: until the new pass sounds, a sequence that has taken over is not yet the one heard, and the
         // playhead is on the last steps of the one that gave way, in its numbering and its length, in the bar that was showing.
@@ -965,10 +968,10 @@ export function createSampler({
               playheadStep: playheadOnPage(scheduler.playheadStep, outgoing.page),
             }
           : {
-              sequence: playing,
-              bars: play.bars,
+              sequence: playingIndex(),
+              bars: playing.bars,
               page,
-              stepsOn: play.pattern.row(selected).slice(page * steps, (page + 1) * steps),
+              stepsOn: playing.pattern.row(selected).slice(page * steps, (page + 1) * steps),
               playheadStep,
             },
         bars,
