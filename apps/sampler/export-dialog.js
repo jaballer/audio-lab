@@ -1,15 +1,15 @@
-// The Export dialog: what the file will be (the mix or a stem for each pad, loops, stereo or mono, and how long and how
-// big that makes it), a button to make it, and how far along the render is. This file is only the dialog: it shows what it is told and
+// The Export dialog: what the file will be (the sequence showing or all of them, the mix or a stem for each pad, loops, stereo
+// or mono, and how long and how big that makes it), a button to make it, and how far along the render is. This file is only the dialog: it shows what it is told and
 // reports what is pressed; the page decides what an export is (export-wav.js) and when it may run.
 //
 //   const dialog = createExportDialog(element, {   // a <dialog> whose markup has the parts named by data-export (index.html)
-//     onChange: (options) => {},   // a choice was pressed: { loops, channels, files }
+//     onChange: (options) => {},   // a choice was pressed: { loops, channels, files, scope }
 //     onExport: () => {},          // Export WAV (or Export ZIP, for stems) was pressed
 //     onCancel: () => {},          // Cancel export was pressed, or Escape, while it renders
 //     opener: button,              // optional: the button that opens it, which gets the focus back when it closes
 //   });
 //   dialog.open(); dialog.close(); dialog.isOpen;
-//   dialog.setOptions({ loops: 2, channels: "mono", files: "mix" }); // which choices are lit, and what the button says
+//   dialog.setOptions({ loops: 2, channels: "mono", files: "mix", scope: "sequence" }); // which choices are lit, and what the button says
 //   dialog.refresh({ title, readout, format, note, hint, blocked }); // for the sequence showing: `note` is what to know before it
 //                                                             is made (bars with no steps, how much memory it takes);
 //                                                             `hint` is about the choice of files ("": the dialog's own);
@@ -26,9 +26,11 @@
 
 import { setAttr, setDisabled, setHidden, setText } from "../../shared/dom-updates.js";
 import { dialogState, isEarlyPress } from "./export-dialog-state.js";
-import { CHANNEL_CHOICES, FILE_CHOICES, LOOP_CHOICES, renderingLabel } from "./export-options.js";
+import { CHANNEL_CHOICES, FILE_CHOICES, LOOP_CHOICES, SCOPE_CHOICES, renderingLabel } from "./export-options.js";
 
 const CHANNEL_NAMES = { stereo: "Stereo", mono: "Mono" };
+const SCOPE_NAMES = { sequence: "Showing", all: "All" };
+const SCOPE_DESCRIPTIONS = { sequence: "The sequence showing", all: "All the sequences, in order" };
 const FILE_NAMES = { mix: "Mix", stems: "Stems" };
 const FILE_DESCRIPTIONS = { mix: "One file: the mix", stems: "Stems: a file for each pad, in a zip" };
 const PERCENT = 100;
@@ -54,7 +56,13 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
   let blocked = "";
   let changedAt = -Infinity; // when a render last started or stopped, in the clock of event.timeStamp
   let latest = ""; // the last message said while it renders, shown when it stops: "EXPORTING..." is the progress bar's job
-  let current = { loops: LOOP_CHOICES[0], channels: CHANNEL_CHOICES[0], files: FILE_CHOICES[0] };
+  let current = {
+    loops: LOOP_CHOICES[0],
+    channels: CHANNEL_CHOICES[0],
+    files: FILE_CHOICES[0],
+    scope: SCOPE_CHOICES[0],
+  };
+  const loopsRow = part("loops-row"); // all the sequences have no loops to repeat: the row goes
   let stem = null; // which stem a render is on, for the label: { number, count }
   let fraction = null; // how far along it is, kept so that a change of stem can say it again
 
@@ -72,6 +80,13 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
       return { value, button };
     });
   }
+  const scopeButtons = choices(
+    part("scope"),
+    "scope",
+    SCOPE_CHOICES,
+    (name) => SCOPE_NAMES[name],
+    (name) => SCOPE_DESCRIPTIONS[name],
+  );
   const fileButtons = choices(
     part("files"),
     "files",
@@ -111,11 +126,19 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
   // What can be pressed and what is shown follow from `busy`, `cancelling` and `blocked` (dialogState decides, and is tested);
   // this writes it, and only what changed.
   function draw() {
-    const state = dialogState({ busy, cancelling, blocked, hasNote: note.textContent !== "", files: current.files });
+    const state = dialogState({
+      busy,
+      cancelling,
+      blocked,
+      hasNote: note.textContent !== "",
+      files: current.files,
+      scope: current.scope,
+    });
     root.classList.toggle("is-busy", state.busy);
     setAttr(root, "aria-busy", String(state.busy));
-    for (const { button } of [...fileButtons, ...loopButtons, ...channelButtons])
+    for (const { button } of [...scopeButtons, ...fileButtons, ...loopButtons, ...channelButtons])
       setDisabled(button, state.optionsDisabled, cancelButton);
+    setHidden(loopsRow, state.loopsHidden, cancelButton);
     setDisabled(closeButton, state.closeDisabled, cancelButton);
     setHidden(goButton, state.goHidden, cancelButton); // the Cancel export button takes its place, and the focus
     setDisabled(goButton, state.goDisabled, cancelButton);
@@ -197,6 +220,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     },
     setOptions(next) {
       current = { ...next };
+      for (const { value, button } of scopeButtons) setAttr(button, "aria-pressed", String(value === next.scope));
       for (const { value, button } of fileButtons) setAttr(button, "aria-pressed", String(value === next.files));
       for (const { value, button } of loopButtons) setAttr(button, "aria-pressed", String(value === next.loops));
       for (const { value, button } of channelButtons) setAttr(button, "aria-pressed", String(value === next.channels));

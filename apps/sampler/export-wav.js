@@ -7,7 +7,9 @@
 //   exportName(song)                                                        // "pad16-seq-01-100bpm.wav"
 //
 // `song` is what the sampler saves (controller.getSong()): the sequence exported is the one showing (`current`), and
-// the file is exactly the length of its bars, so it loops. To make it loop cleanly the sequence is played more than
+// the file is exactly the length of its bars, so it loops. With `scope: "all"` it is every sequence in order (songPasses), once
+// each, with a tail after the last for what rings on (SONG_TAIL_SECONDS in export-options.js): nothing comes round, so there is
+// no warm-up and no loop seam, and loops are not offered. To make it loop cleanly the sequence is played more than
 // once and the last pass is kept: what rings on from the end of the earlier passes (a crash, a long sample, a long
 // Release) is in the start of it, as it is when the page loops, and a pad's last hit is cut by its first hit of the
 // next pass. Two passes (one to warm up) are enough unless a pad's Release is longer than the loop: then each tail
@@ -24,7 +26,7 @@ import { VOLUME_SCALE } from "./controller.js";
 import { FULL_VELOCITY } from "../../shared/pattern.js";
 import { withVelocity } from "../../shared/sounds.js";
 import { stepSeconds, swingDelay } from "../../shared/tempo.js";
-import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions } from "./export-options.js";
+import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions, songSteps } from "./export-options.js";
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
 import { zipBlob } from "./zip.js";
@@ -175,7 +177,9 @@ export function planRender({
   sampleRate = EXPORT_SAMPLE_RATE,
   loops = DEFAULT_EXPORT_OPTIONS.loops,
   pad,
+  scope = DEFAULT_EXPORT_OPTIONS.scope,
 }) {
+  if (scope === "all") return planSong({ song, kit, stepsPerBar, sampleRate, pad });
   const copies = Math.max(1, Math.floor(loops) || 1);
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
@@ -205,6 +209,7 @@ export function planRender({
   const skipped = pad === undefined ? 0 : Math.max(0, warmUp - ownWarmUp);
   const first = Math.round((LEAD_SECONDS + warmUp * loopSeconds) * sampleRate);
   const frames = exportFrames(song, stepsPerBar, copies, sampleRate);
+  const passes = warmUp + copies;
   return {
     hits: mine,
     copies,
@@ -214,7 +219,46 @@ export function planRender({
     swingLate: swingDelay(1, song.bpm, song.swing),
     warmUp,
     skipped,
-    passes: warmUp + copies,
+    passes,
+    // Each pass of the render, with the steps it begins at: here the one sequence over and over.
+    passList: Array.from({ length: passes }, (_, i) => ({ hits: mine, startStep: i * length, length })),
+    cost: (passes - skipped) * (1 + mine.filter((hit) => !hit.silent).length),
+    first,
+    frames,
+    total: first + frames,
+    sampleRate,
+  };
+}
+
+// The order every sequence is played in, one pass each: what the render of all of them is made of, as the Play All key plays them.
+// (An order that a person edits, with repeats, is the next step of song mode: this is the one place that will change.)
+export const songPasses = (song) => song.sequences.map(({ bars }, index) => ({ index, bars }));
+
+// The plan for all the sequences: a pass for each, one after the other and never repeated, so no warm-up (nothing comes round
+// to ring into the start) and the file begins where the first step does; the tail after the last is in `frames`.
+function planSong({ song, kit, stepsPerBar, sampleRate, pad }) {
+  let startStep = 0;
+  const passList = songPasses(song).map(({ index }) => {
+    const sequence = song.sequences[index];
+    const hits = hitsOf(sequence, stepsPerBar);
+    const length = sequence.bars * stepsPerBar;
+    const pass = { hits: pad === undefined ? hits : stemHits(hits, pad, kit), startStep, length };
+    startStep += length;
+    return pass;
+  });
+  const frames = exportFrames(song, stepsPerBar, 1, sampleRate, "all");
+  const first = Math.round(LEAD_SECONDS * sampleRate);
+  return {
+    hits: passList.flatMap((pass) => pass.hits),
+    copies: 1,
+    length: songSteps(song, stepsPerBar),
+    stepLength: stepSeconds(song.bpm),
+    swingLate: swingDelay(1, song.bpm, song.swing),
+    warmUp: 0,
+    skipped: 0,
+    passes: passList.length,
+    passList,
+    cost: passList.reduce((sum, { hits }) => sum + 1 + hits.filter((hit) => !hit.silent).length, 0),
     first,
     frames,
     total: first + frames,
@@ -244,16 +288,18 @@ function createHitFeeder(plan) {
   let index = 0;
   return function take(until) {
     const taken = [];
-    while (pass < plan.passes && index < plan.hits.length) {
-      const hit = plan.hits[index];
-      const time =
-        LEAD_SECONDS + (pass * plan.length + hit.step) * plan.stepLength + (hit.step % 2 === 1 ? plan.swingLate : 0);
+    while (pass < plan.passList.length) {
+      const { hits, startStep } = plan.passList[pass];
+      if (index >= hits.length) {
+        pass++; // a pass with no steps left (or none: an empty sequence) is over
+        index = 0;
+        continue;
+      }
+      const hit = hits[index];
+      const time = LEAD_SECONDS + (startStep + hit.step) * plan.stepLength + (hit.step % 2 === 1 ? plan.swingLate : 0);
       if (time >= until) break;
       taken.push({ row: hit.row, velocity: hit.velocity, time, silent: hit.silent });
-      if (++index === plan.hits.length) {
-        index = 0;
-        pass++;
-      }
+      index++;
     }
     return taken;
   };
@@ -292,13 +338,14 @@ export async function renderSequence({
   createContext = (length, rate) => new OfflineAudioContext(2, length, rate),
   loops = DEFAULT_EXPORT_OPTIONS.loops,
   channels = DEFAULT_EXPORT_OPTIONS.channels,
+  scope = DEFAULT_EXPORT_OPTIONS.scope,
   windowSeconds = WINDOW_SECONDS,
   onProgress,
   signal,
   pad,
   clip = true,
 }) {
-  const plan = planRender({ song, kit, stepsPerBar, sampleRate, loops, pad });
+  const plan = planRender({ song, kit, stepsPerBar, sampleRate, loops, pad, scope });
   const ctx = createContext(plan.total, sampleRate);
   const master = connectOutput(ctx, song.volume, clip);
   const sink = pad === undefined ? null : ctx.createGain(); // where the voices of a stem's silent hits go: nowhere
@@ -373,9 +420,11 @@ export function encodeWav(channels, sampleRate) {
 // "pad16-seq-01-100bpm", with "-x4" for four loops and "-mono" for mono when they are asked for, so exports of the same
 // sequence made differently do not overwrite each other in the downloads folder.
 function exportBaseName(song, options) {
-  const { loops, channels } = normalizeExportOptions(options);
-  const loopPart = loops > 1 ? `-x${loops}` : "";
+  const { loops, channels, scope } = normalizeExportOptions(options);
   const channelPart = channels === "mono" ? "-mono" : "";
+  // All the sequences are played once each: there are no loops to name, and "all" where the sequence's number was.
+  if (scope === "all") return `pad16-all-${Math.round(song.bpm)}bpm${channelPart}`;
+  const loopPart = loops > 1 ? `-x${loops}` : "";
   return `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm${loopPart}${channelPart}`;
 }
 
@@ -406,14 +455,16 @@ export function stemName(song, options, kit, pad) {
 }
 
 // The pads that have a step in the sequence showing, in pad order: the pads that get a stem.
-export function stemPads(song, stepsPerBar) {
-  const rows = new Set(hitsOf(song.sequences[song.current], stepsPerBar).map(({ row }) => row));
+export function stemPads(song, stepsPerBar, scope = DEFAULT_EXPORT_OPTIONS.scope) {
+  const sequences = scope === "all" ? song.sequences : [song.sequences[song.current]];
+  const rows = new Set(sequences.flatMap((sequence) => hitsOf(sequence, stepsPerBar).map(({ row }) => row)));
   return [...rows].sort((a, b) => a - b);
 }
 
 // About how much work a render is, for putting the stems' progress into one fraction: the sounds it makes, in every pass. A
 // silent hit only cuts, which costs next to nothing.
-export const renderCost = (plan) => (plan.passes - plan.skipped) * (1 + plan.hits.filter((hit) => !hit.silent).length);
+export const renderCost = (plan) =>
+  plan.cost ?? (plan.passes - plan.skipped) * (1 + plan.hits.filter((hit) => !hit.silent).length);
 
 // Every pad's stem, one render after another: [{ pad, name, wav }], with `wav` the encoded file. Each is rendered alone
 // at the master volume, unclipped (the stems add up to the page's mix up to the clipper), with the options of a single
@@ -429,13 +480,14 @@ export async function renderStems({
   sampleRate = EXPORT_SAMPLE_RATE,
   loops = DEFAULT_EXPORT_OPTIONS.loops,
   channels = DEFAULT_EXPORT_OPTIONS.channels,
+  scope = DEFAULT_EXPORT_OPTIONS.scope,
   onProgress,
   onStem,
   signal,
   render = renderSequence,
 }) {
-  const pads = stemPads(song, stepsPerBar);
-  const weights = pads.map((pad) => renderCost(planRender({ song, kit, stepsPerBar, sampleRate, loops, pad })));
+  const pads = stemPads(song, stepsPerBar, scope);
+  const weights = pads.map((pad) => renderCost(planRender({ song, kit, stepsPerBar, sampleRate, loops, pad, scope })));
   const all = weights.reduce((sum, weight) => sum + weight, 0);
   const files = [];
   let done = 0;
@@ -451,6 +503,7 @@ export async function renderStems({
       sampleRate,
       loops,
       channels,
+      scope,
       pad,
       clip: false,
       signal,
@@ -458,7 +511,7 @@ export async function renderStems({
     });
     files.push({
       pad,
-      name: stemName(song, { loops, channels }, kit, pad),
+      name: stemName(song, { loops, channels, scope }, kit, pad),
       wav: encodeWav(audio.channels, audio.sampleRate),
     });
     done += weight;
@@ -480,12 +533,23 @@ export function emptyBars(song, stepsPerBar) {
     .map((bar) => bar + 1);
 }
 
+// The sequences with no steps (in the bars they have), counting from 1: a file of all of them has each as a pass of silence
+// (apart from what is still ringing from the one before), as Play All plays it.
+export function emptySequences(song, stepsPerBar) {
+  return song.sequences
+    .map((sequence, index) => (hitsOf(sequence, stepsPerBar).length === 0 ? index + 1 : 0))
+    .filter(Boolean);
+}
+
 // Can this browser render audio to a file at all? Firefox, Chrome and current Safari can; the dialog asks before it offers
 // an export, and exportSequence asks again before it starts one.
 export const canRenderOffline = () => typeof OfflineAudioContext === "function";
 
-// Is there anything in the sequence showing to export (in the bars it has)?
-export const hasSteps = (song, stepsPerBar) => hitsOf(song.sequences[song.current], stepsPerBar).length > 0;
+// Is there anything in the sequence showing to export (in the bars it has), or for `scope` "all" in any sequence?
+export const hasSteps = (song, stepsPerBar, scope = DEFAULT_EXPORT_OPTIONS.scope) =>
+  (scope === "all" ? song.sequences : [song.sequences[song.current]]).some(
+    (sequence) => hitsOf(sequence, stepsPerBar).length > 0,
+  );
 
 // What the Export button does: checks there is something to export, renders it, and hands the file to `save`
 // (shared/download.js). Says how it went on the LCD through `onMessage`. `onProgress(0..1)` is how far the render
@@ -508,15 +572,15 @@ export async function exportSequence({
     onMessage("EXPORT NOT SUPPORTED");
     return false;
   }
-  if (!hasSteps(song, stepsPerBar)) {
+  const { loops, channels, scope } = normalizeExportOptions(options);
+  if (!hasSteps(song, stepsPerBar, scope)) {
     onMessage("NOTHING TO EXPORT");
     return false;
   }
-  const { loops, channels } = normalizeExportOptions(options);
   onMessage("EXPORTING...");
   try {
-    const audio = await render({ song, kit, stepsPerBar, sampleRate, loops, channels, onProgress, signal });
-    const name = exportName(song, { loops, channels });
+    const audio = await render({ song, kit, stepsPerBar, sampleRate, loops, channels, scope, onProgress, signal });
+    const name = exportName(song, { loops, channels, scope });
     const wav = encodeWav(audio.channels, audio.sampleRate);
     // Encoding is one long task (seconds, for a long file), in which a press on Cancel cannot be handled; it waits its
     // turn at the end of it. So give the event loop one before the file is saved, and honour what it brings.
@@ -563,11 +627,11 @@ export async function exportStems({
     onMessage("EXPORT NOT SUPPORTED");
     return false;
   }
-  if (!hasSteps(song, stepsPerBar)) {
+  const { loops, channels, scope } = normalizeExportOptions(options);
+  if (!hasSteps(song, stepsPerBar, scope)) {
     onMessage("NOTHING TO EXPORT");
     return false;
   }
-  const { loops, channels } = normalizeExportOptions(options);
   onMessage("EXPORTING...");
   try {
     const stems = await renderStems({
@@ -577,12 +641,13 @@ export async function exportStems({
       sampleRate,
       loops,
       channels,
+      scope,
       onProgress,
       onStem,
       signal,
       render,
     });
-    const name = stemsName(song, { loops, channels });
+    const name = stemsName(song, { loops, channels, scope });
     const zip = zipBlob(stems.map((stem) => ({ name: stem.name, data: stem.wav })));
     // As for a single file: the zip is one long task too, and a press on Cancel waits its turn at the end of it.
     await new Promise((resolve) => setTimeout(resolve, 0));

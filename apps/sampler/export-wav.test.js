@@ -8,6 +8,7 @@ import {
   canRenderOffline,
   createExportAction,
   emptyBars,
+  emptySequences,
   encodeWav,
   exportName,
   exportSampleRate,
@@ -22,6 +23,7 @@ import {
   renderCost,
   renderSequence,
   renderStems,
+  songPasses,
   toMono,
   wasCancelled,
   WINDOW_SECONDS,
@@ -30,7 +32,7 @@ import {
 import { exportInfo, stemsInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
 import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
-import { zipParts } from "./zip.js";
+import { readZip, zipParts } from "./zip.js";
 
 const sound = (id) => ({ id, name: id, play: vi.fn() });
 // A loaded sample's shape, as far as the export looks at it.
@@ -2079,5 +2081,302 @@ describe("stemsInfo against a real zip", () => {
     const estimate = stemsInfo(song, options, 16, sampleRate, files.length).bytes;
     expect(files).toHaveLength(3);
     expect(Math.abs(real - estimate)).toBeLessThanOrEqual(30 * files.length);
+  });
+});
+
+// Every sequence in order, once each, with a tail: three sequences of 1, 2 and 1 bars at 120 BPM are 2 s, 4 s and 2 s, and the
+// pass of each begins where the one before ends. Pad i has the steps of sequence i, to tell them apart.
+describe("exporting all the sequences", () => {
+  const allSong = (sequences, extra = {}) => ({
+    bpm: 120,
+    volume: 80,
+    current: 0,
+    sequences,
+    padSettings: {},
+    ...extra,
+  });
+  const three = () => allSong([sequence({ 0: [0, 15] }), sequence({ 1: [8] }, {}, 2), sequence({ 2: [0] })]);
+  const kitOf = (sounds = [sound("a"), sound("b"), sound("c")]) => createKit(sounds);
+  const TAIL = 4;
+
+  it("is each sequence once, in order, with the bars it has", () => {
+    expect(songPasses(three())).toEqual([
+      { index: 0, bars: 1 },
+      { index: 1, bars: 2 },
+      { index: 2, bars: 1 },
+    ]);
+  });
+
+  describe("planRender", () => {
+    const plan = (song, extra = {}) =>
+      planRender({ song, kit: kitOf(), stepsPerBar: 16, sampleRate: 1000, scope: "all", ...extra });
+
+    it("is a pass for each sequence, one after the other, whatever is in them, with no warm-up", () => {
+      const p = plan(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 1: [3] }, {}, 2)]));
+      expect(p.passList.map(({ startStep, length, hits }) => [startStep, length, hits.length])).toEqual([
+        [0, 16, 1],
+        [16, 16, 0], // an empty sequence is a pass of silence, as Play All plays it
+        [32, 32, 1],
+      ]);
+      expect(p).toMatchObject({ passes: 3, warmUp: 0, skipped: 0, copies: 1, length: 64 });
+      expect(p.hits).toHaveLength(2);
+    });
+
+    it("begins at the lead, so the first step is the first frame of the file, and ends with the tail", () => {
+      const p = plan(three());
+      expect(p.first).toBe(Math.round(LEAD_SECONDS * 1000));
+      expect(p.frames).toBe((8 + TAIL) * 1000);
+      expect(p.total).toBe(p.first + p.frames);
+    });
+
+    it("is not changed by loops, which there is nothing to repeat for", () => {
+      expect(plan(three(), { loops: 8 }).frames).toBe(plan(three(), { loops: 1 }).frames);
+    });
+
+    it("has the sequence showing's passes as it always did when the scope is the sequence, as a list too", () => {
+      const p = planRender({
+        song: songOf(sequence({ 0: [0] })),
+        kit: kitOf(),
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        loops: 2,
+      });
+      expect(p.passList.map(({ startStep, length }) => [startStep, length])).toEqual([
+        [0, 16],
+        [16, 16],
+        [32, 16],
+      ]); // one warm-up and two loops
+      expect(p.passes).toBe(p.passList.length);
+    });
+
+    it("weighs the work by the sounds in every pass, empty ones as nothing but the pass", () => {
+      const p = plan(allSong([sequence({ 0: [0, 1] }), sequence({}), sequence({ 1: [3] })]));
+      expect(renderCost(p)).toBe(1 + 2 + (1 + 0) + (1 + 1)); // a pass and its sounds, for each
+    });
+
+    it("makes a stem of one pad of every pass, with the silent hits of its choke group, on the whole timeline", () => {
+      const kit = kitOf();
+      kit.setSetting(1, "choke", 1);
+      kit.setSetting(2, "choke", 1);
+      const p = plan(allSong([sequence({ 1: [0] }), sequence({ 2: [4] }), sequence({ 1: [8], 0: [0] })]), {
+        kit,
+        pad: 1,
+      });
+      expect(p.passList.map(({ hits }) => hits.map(({ row, silent }) => [row, Boolean(silent)]))).toEqual([
+        [[1, false]],
+        [[2, true]], // pad 3 is in the group: it cuts pad 2 where it sounds, and is not heard
+        [[1, false]],
+      ]);
+      expect(p.frames).toBe((6 + TAIL) * 1000); // as long as the mix: three bars and the tail
+    });
+  });
+
+  describe("renderSequence", () => {
+    const render = (song, extra = {}, sounds = [sound("a"), sound("b"), sound("c")]) => {
+      const offline = fakeOffline();
+      const kit = createKit(sounds);
+      const done = renderSequence({
+        song,
+        kit,
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        createContext: offline.createContext,
+        scope: "all",
+        ...extra,
+      });
+      return { done, offline, sounds, kit };
+    };
+    const times = (sound) => sound.play.mock.calls.map((call) => call[2]);
+
+    it("plays every sequence's steps at their times, the second where the first ends", async () => {
+      const { done, sounds } = render(three());
+      await done;
+      expect(times(sounds[0])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 15 * 0.125]);
+      expect(times(sounds[1])).toEqual([LEAD_SECONDS + 2 + 8 * 0.125]); // the second sequence begins at 2 s
+      expect(times(sounds[2])).toEqual([LEAD_SECONDS + 6]); // and the third at 6 s
+    });
+
+    it("plays each sequence once: there is no warm-up and no second pass", async () => {
+      const { done, sounds } = render(three());
+      await done;
+      expect(sounds.reduce((sum, { play }) => sum + play.mock.calls.length, 0)).toBe(4);
+    });
+
+    it("is as long as every sequence and the tail, from the first step: the file is the render after the lead", async () => {
+      const { done, offline } = render(three());
+      const audio = await done;
+      const first = Math.round(LEAD_SECONDS * 1000);
+      expect(offline.made.frames).toBe(first + 12000);
+      expect(audio.channels[0]).toHaveLength(12000);
+      expect(audio.channels[0][0]).toBe(first);
+    });
+
+    it("keeps an empty sequence as silence between the others", async () => {
+      const { done, sounds } = render(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 0: [0] })]));
+      await done;
+      expect(times(sounds[0])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 4]); // a sequence of silence is 2 s between them
+    });
+
+    it("plays the odd steps late with the swing, in every sequence", async () => {
+      const { done, sounds } = render(allSong([sequence({ 0: [0] }), sequence({ 0: [1] })], { swing: 66 }));
+      await done;
+      expect(times(sounds[0])[1]).toBeCloseTo(LEAD_SECONDS + 2 + 0.125 + 0.04);
+    });
+
+    it("lets a pad's hit be cut by its next, across the end of a sequence, as the page's chain does", async () => {
+      const { done, sounds } = render(allSong([sequence({ 0: [15] }), sequence({ 0: [0] })]));
+      await done;
+      const last = sounds[0].play.mock.calls[0][1];
+      expect(last.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 2, expect.any(Number));
+    });
+
+    it("does not cut the last hit of the whole: it rings on into the tail, and nothing from the start cuts it", async () => {
+      const { done, sounds } = render(allSong([sequence({ 0: [0] }), sequence({ 0: [15] })]));
+      await done;
+      const last = sounds[0].play.mock.calls[1][1];
+      expect(last.gain.setTargetAtTime).not.toHaveBeenCalled();
+    });
+
+    it("does not play steps in bars a sequence no longer has", async () => {
+      const { done, sounds } = render(allSong([sequence({ 0: [0, 20] }, {}, 1), sequence({ 0: [0] })]));
+      await done;
+      expect(times(sounds[0])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 2]);
+    });
+
+    it("is as long and as big as the dialog said it would be", async () => {
+      const song = three();
+      const { done } = render(song, { channels: "mono" });
+      const audio = await done;
+      const info = exportInfo(song, { channels: "mono", scope: "all" }, 16, 1000);
+      expect(audio.channels).toHaveLength(1);
+      expect(audio.channels[0]).toHaveLength(info.frames);
+    });
+
+    it("renders only one pad's hits for a stem, from every sequence", async () => {
+      const { done, sounds } = render(three(), { pad: 0 });
+      await done;
+      expect(sounds[0].play).toHaveBeenCalledTimes(2);
+      expect(sounds[1].play).not.toHaveBeenCalled();
+      expect(sounds[2].play).not.toHaveBeenCalled();
+    });
+
+    it("reports how far it has got, in windows, over the whole of it, ending at 1", async () => {
+      const offline = fakeOffline({ pausable: true });
+      const progress = [];
+      await renderSequence({
+        song: three(),
+        kit: kitOf(),
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        createContext: offline.createContext,
+        scope: "all",
+        onProgress: (fraction) => progress.push(fraction),
+      });
+      expect(progress.at(-1)).toBe(1);
+      expect(progress.length).toBeGreaterThan(3); // a window a second over twelve seconds
+    });
+  });
+
+  describe("what it asks about the song", () => {
+    it("has steps when any sequence has, whichever is showing, and not when none does", () => {
+      const song = allSong([sequence({}), sequence({ 0: [3] })], { current: 0 });
+      expect(hasSteps(song, 16, "all")).toBe(true);
+      expect(hasSteps(song, 16, "sequence")).toBe(false);
+      expect(hasSteps(allSong([sequence({}), sequence({})]), 16, "all")).toBe(false);
+      expect(hasSteps(song, 16)).toBe(false);
+    });
+
+    it("does not count steps in bars a sequence no longer has", () => {
+      expect(hasSteps(allSong([sequence({ 0: [20] }), sequence({})]), 16, "all")).toBe(false);
+    });
+
+    it("lists the sequences with no steps, counting from 1", () => {
+      expect(
+        emptySequences(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 0: [20] }), sequence({ 1: [0] })]), 16),
+      ).toEqual([2, 3]);
+      expect(emptySequences(three(), 16)).toEqual([]);
+    });
+
+    it("gives a stem to each pad that has a step in any sequence, in pad order", () => {
+      const song = allSong([sequence({ 2: [0] }), sequence({ 0: [1] }), sequence({ 2: [5], 1: [0] })], { current: 0 });
+      expect(stemPads(song, 16, "all")).toEqual([0, 1, 2]);
+      expect(stemPads(song, 16, "sequence")).toEqual([2]);
+      expect(stemPads(song, 16)).toEqual([2]);
+    });
+  });
+
+  describe("names", () => {
+    const song = { current: 3, bpm: 100, sequences: [] };
+
+    it("says all, in place of a sequence, and not how many loops, which it does not have", () => {
+      expect(exportName(song, { scope: "all" })).toBe("pad16-all-100bpm.wav");
+      expect(exportName(song, { scope: "all", loops: 4 })).toBe("pad16-all-100bpm.wav");
+      expect(exportName(song, { scope: "all", channels: "mono" })).toBe("pad16-all-100bpm-mono.wav");
+      expect(exportName(song, { scope: "sequence", loops: 4 })).toBe("pad16-seq-04-100bpm-x4.wav");
+    });
+
+    it("names the zip and the stems the same way", () => {
+      expect(stemsName(song, { scope: "all" })).toBe("pad16-all-100bpm-stems.zip");
+      expect(stemName(song, { scope: "all" }, createKit([sound("Snare")]), 0)).toBe("pad16-all-100bpm-pad01-snare.wav");
+    });
+  });
+
+  describe("exportSequence and exportStems", () => {
+    const kit = createKit([sound("a"), sound("b"), sound("c")]);
+    const render = vi.fn(async () => ({ sampleRate: 8000, channels: [Float32Array.of(0.5), Float32Array.of(0.5)] }));
+    const run = (make, song, options) => {
+      const onMessage = vi.fn();
+      const save = vi.fn();
+      const done = make({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true, options });
+      return { done, onMessage, save };
+    };
+
+    it("exports the whole song as one file when it is asked to, even when the sequence showing is empty", async () => {
+      render.mockClear();
+      const song = allSong([sequence({}), sequence({ 0: [0] })], { current: 0 });
+      const { done, save, onMessage } = run(exportSequence, song, { scope: "all" });
+      expect(await done).toBe(true);
+      expect(render).toHaveBeenCalledWith(expect.objectContaining({ scope: "all" }));
+      expect(save.mock.calls[0][1]).toBe("pad16-all-120bpm.wav");
+      expect(onMessage).toHaveBeenLastCalledWith("EXPORTED pad16-all-120bpm.wav");
+    });
+
+    it("has nothing to export when no sequence has steps, with its own message the same as before", async () => {
+      const { done, onMessage } = run(exportSequence, allSong([sequence({}), sequence({})]), { scope: "all" });
+      expect(await done).toBe(false);
+      expect(onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
+    });
+
+    it("still exports the sequence showing, and says there is nothing when it is empty, when the scope is the sequence", async () => {
+      const song = allSong([sequence({}), sequence({ 0: [0] })], { current: 0 });
+      const { done, onMessage } = run(exportSequence, song, { scope: "sequence" });
+      expect(await done).toBe(false);
+      expect(onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
+    });
+
+    it("makes a stem for each pad of any sequence, all of them as long as the whole, in a zip with the song's name", async () => {
+      render.mockClear();
+      const song = allSong([sequence({ 2: [0] }), sequence({ 0: [1] })], { current: 0 });
+      const { done, save } = run(exportStems, song, { scope: "all", files: "stems" });
+      expect(await done).toBe(true);
+      expect(render.mock.calls.map(([args]) => [args.pad, args.scope])).toEqual([
+        [0, "all"],
+        [2, "all"],
+      ]);
+      expect(save.mock.calls[0][1]).toBe("pad16-all-120bpm-stems.zip");
+      const names = readZip(await save.mock.calls[0][0].arrayBuffer()).map((file) => file.name);
+      expect(names).toEqual(["pad16-all-120bpm-pad01-a.wav", "pad16-all-120bpm-pad03-c.wav"]);
+    });
+
+    it("weighs the stems by their work over every sequence", async () => {
+      // Pad 1 has a step in the second sequence and pad 3 has three in the first: a stem is a pass for each sequence and the
+      // sounds in them, so pad 1's is (1 + 0) + (1 + 1) = 3 and pad 3's is (1 + 3) + (1 + 0) = 5
+      const song = allSong([sequence({ 2: [0, 1, 2] }), sequence({ 0: [1] })]);
+      const onProgress = vi.fn();
+      await renderStems({ song, kit, stepsPerBar: 16, sampleRate: 1000, scope: "all", onProgress, render });
+      const reported = onProgress.mock.calls.map(([fraction]) => fraction);
+      expect(reported[0]).toBeCloseTo(3 / 8); // the first stem done
+      expect(reported.at(-1)).toBe(1);
+    });
   });
 });

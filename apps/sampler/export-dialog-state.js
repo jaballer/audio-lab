@@ -18,7 +18,7 @@ import {
   exportTitle,
   stemsInfo,
 } from "./export-options.js";
-import { emptyBars, hasSteps, planRender, stemPads } from "./export-wav.js";
+import { emptyBars, emptySequences, hasSteps, planRender, stemPads } from "./export-wav.js";
 
 // A press this soon after a render started or stopped was meant for the button that was there before it (a double click on
 // Export WAV, or on Cancel export), and not for the one in its place now.
@@ -29,8 +29,9 @@ export const isEarlyPress = (eventTime, changedAt) => eventTime - changedAt < SE
 // `busy`: a render is going on. `cancelling`: a cancel has been asked for and the render is still stopping. `blocked`: why
 // Export WAV is off ("" when it is on). `hasNote`: there is a note to show. `describedBy` names the parts of the dialog
 // that are read out with its name when it opens ("hint", "note"): what is wrong, and what to know before pressing. `files`
-// is what will be made, "mix" or "stems", which the button says.
-export function dialogState({ busy, cancelling, blocked, hasNote, files = "mix" }) {
+// is what will be made, "mix" or "stems", which the button says, and `scope` is "all" when it is every sequence, which has no
+// loops (so they are not offered).
+export function dialogState({ busy, cancelling, blocked, hasNote, files = "mix", scope = "sequence" }) {
   return {
     busy,
     optionsDisabled: busy,
@@ -43,36 +44,39 @@ export function dialogState({ busy, cancelling, blocked, hasNote, files = "mix" 
     noteHidden: busy || !hasNote,
     cancelLabel: cancelling ? "Cancelling…" : busy ? "Cancel export" : "Cancel",
     goLabel: files === "stems" ? "Export ZIP" : "Export WAV",
+    loopsHidden: scope === "all",
     describedBy: [blocked !== "" && "hint", hasNote && !busy && "note"].filter(Boolean),
   };
 }
 
-// What the page gives the dialog for the sequence showing: its heading, what the file will be and in what format, a hint
-// for the choice of files ("" for the mix: the dialog's own), a note
-// (bars with no steps, how much memory it takes) and `blocked`, the reason Export WAV is off. `supported` is whether the
-// browser can render audio to a file. A sequence with nothing in it is blocked with its own reason and has no note: that is
-// said once.
+// What the page gives the dialog for the sequence showing, or for all of them (`options.scope`): its heading, what the file will
+// be and in what format, a hint for the choice of files and scope ("" for the mix of the sequence showing: the dialog's own), a
+// note (bars, or for all of them sequences, with no steps, and how much memory it takes) and `blocked`, the reason Export WAV is
+// off. `supported` is whether the browser can render audio to a file. A sequence with nothing in it is blocked with its own
+// reason and has no note: that is said once.
 export function exportDialogModel({ song, kit, options, stepsPerBar, sampleRate, supported }) {
-  const nothing = !hasSteps(song, stepsPerBar);
+  const scope = options.scope === "all" ? "all" : "sequence";
+  const nothing = !hasSteps(song, stepsPerBar, scope);
   const stemsChosen = options.files === "stems";
-  const stems = stemsChosen ? stemPads(song, stepsPerBar).length : 0;
+  const stems = stemsChosen ? stemPads(song, stepsPerBar, scope).length : 0;
   const memory = stems ? { stems, channels: options.channels } : {};
   const note = nothing
     ? ""
     : exportNote(
-        planRender({ song, kit, stepsPerBar, sampleRate, loops: options.loops }),
-        emptyBars(song, stepsPerBar),
+        planRender({ song, kit, stepsPerBar, sampleRate, loops: options.loops, scope }),
+        scope === "all" ? [] : emptyBars(song, stepsPerBar),
         memory,
+        scope === "all" ? emptySequences(song, stepsPerBar) : [],
       );
   const info = stemsChosen
     ? stemsInfo(song, options, stepsPerBar, sampleRate, stems)
     : exportInfo(song, options, stepsPerBar, sampleRate);
   return {
-    title: exportTitle(song),
+    title: exportTitle(song, scope),
     readout: exportReadout(info),
     format: exportFormat(sampleRate),
     note,
-    hint: exportHint(options.files),
-    blocked: exportBlockedReason({ supported, hasSteps: !nothing }),
+    hint: exportHint(options.files, scope),
+    blocked: exportBlockedReason({ supported, hasSteps: !nothing, scope }),
   };
 }
