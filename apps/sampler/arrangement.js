@@ -80,7 +80,7 @@ export function positionOf(arrangement, count, sequence) {
 }
 
 // The pass that follows the one that has just ended: the next time round its entry if it repeats, else the next entry, and the
-// first entry after the last (a song goes round until the end of song comes, with its Loop switch).
+// first entry after the last (a song goes round and round for now: stopping at its end, with a Loop switch, is a later step).
 //
 // `played` is where the controller says that pass was, and `sequence` is the sequence that played: what it says is believed only
 // while it still fits (the entry is there, names that sequence, and has that time round), since a sequence picked by a person, or

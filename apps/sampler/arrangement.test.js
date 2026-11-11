@@ -228,8 +228,11 @@ describe("nextPass", () => {
     expect(walk(null, 4, 9)).toEqual([1, 2, 3, 0, 1, 2, 3, 0, 1]);
   });
 
-  it("stays on a single entry's sequence while the entry goes round", () => {
-    expect(walk([entry(1, 2)], 2, 5)).toEqual([1, 1, 1, 1, 1]);
+  it("counts the times round a single entry and begins it again when they are over", () => {
+    const only = [entry(1, 3)];
+    expect(nextPass(only, 2, { entry: 0, rep: 0 }, 1)).toEqual({ entry: 0, rep: 1, sequence: 1 });
+    expect(nextPass(only, 2, { entry: 0, rep: 1 }, 1)).toEqual({ entry: 0, rep: 2, sequence: 1 });
+    expect(nextPass(only, 2, { entry: 0, rep: 2 }, 1)).toEqual({ entry: 0, rep: 0, sequence: 1 });
   });
 
   it("takes the place of the sequence that played from the first entry that names it, when it does not know where it was", () => {

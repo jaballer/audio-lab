@@ -3386,10 +3386,12 @@ describe("Play All with an arrangement", () => {
     run(s, 0.5);
     s.message.mockClear();
     s.songChange.mockClear();
+    s.change.mockClear();
     run(s, 3.6); // 4.1 s: the second pass has begun, and the third at 4.05 s
     expect(s.sampler.getState().sequence).toBe(0);
     expect(s.message).not.toHaveBeenCalled();
     expect(s.songChange).not.toHaveBeenCalled();
+    expect(s.change).not.toHaveBeenCalled(); // nothing took over, so nothing on the page is out of date
   });
 
   describe("a queued sequence", () => {
@@ -3425,6 +3427,17 @@ describe("Play All with an arrangement", () => {
       expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
       expect(timesOf(s, 1)).toEqual(closeTo(6.05, 8.05));
     });
+  });
+
+  it("goes on from the first entry that names a queued sequence, wherever it is in the list", () => {
+    const s = setup({ song: songWith(3, [entry(2), entry(1), entry(2)]) });
+    s.sampler.setSequence(1);
+    playAll(s);
+    run(s, 0.3);
+    s.sampler.queueSequence(2); // the third sequence is named first by the first entry, not by the third
+    run(s, 9.9); // 10.2 s
+    expect(timesOf(s, 1)).toEqual(closeTo(0.05, 4.05, 10.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(2.05, 6.05, 8.05));
   });
 
   it("goes on from the first entry that names a sequence a person has picked, with its repeats", () => {
@@ -3464,7 +3477,8 @@ describe("Play All with an arrangement", () => {
     it("does nothing when turned on at an end where the entry repeats: it is not taken back and built again", () => {
       const s = setup({ song: songWith(2, [entry(0, 2), entry(1)]) });
       s.sampler.start();
-      tick(s, 38); // 1.9 s: the pass has ended in the scheduler, and the first step of the next is built from this sequence
+      tick(s, 39); // 1.95 s: the pass has ended in the scheduler, and the first step of the next (at 2.05 s) is built from this sequence
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05));
       const built = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
       s.sampler.togglePlayAll();
       expect(built.disconnect).not.toHaveBeenCalled();
@@ -3484,6 +3498,45 @@ describe("Play All with an arrangement", () => {
       run(s, 3.2); // 7.1 s
       expect(timesOf(s, 0)).toEqual(closeTo(0.05));
       expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05)); // and it goes on in the second, as it does with no chain
+    });
+  });
+
+  describe("when the steps already handed over are built again just before a pass end where an entry goes round again", () => {
+    // The pass that follows has no sequence of its own to mark it, so the scheduler, which goes back over the pass end to build them
+    // again, tells it a second time: the song must go on once for a pass end, not once for each time it is told.
+    it("goes on once for that pass end when the sounds change", () => {
+      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      playAll(s);
+      tick(s, 37); // 1.85 s: the pass end at 2.05 s has been reached, and the first step after it is built
+      s.sampler.kitChanged("sound");
+      run(s, 6.4); // 8.25 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05, 8.05)); // three passes of the entry, and again from the first
+      expect(timesOf(s, 1)).toEqual(closeTo(6.05));
+    });
+
+    it("goes on once for that pass end when the sequence is made shorter", () => {
+      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)], { bars: [2, 1] }) });
+      playAll(s);
+      tick(s, 77); // 3.85 s: the end of the first pass (4.05 s) has been reached
+      s.sampler.setBars(1);
+      run(s, 12);
+      // each time round the entry is one pass of the sequence, in the length it has: the entry is three passes long, then the second
+      const first = timesOf(s, 1)[0];
+      expect(timesOf(s, 0).filter((time) => time < first)).toHaveLength(3);
+    });
+
+    it("goes on once for each pass end when the sounds change at each of them", () => {
+      const s = setup({ song: songWith(2, [entry(0, 3), entry(1, 2)]) });
+      playAll(s);
+      for (let pass = 0; pass < 6; pass++) {
+        tick(s, pass === 0 ? 37 : 40);
+        s.sampler.kitChanged("sound");
+      }
+      run(s, 7); // 18.85 s: the tenth pass began at 18.05 s
+      const order = [...timesOf(s, 0).map((time) => [time, 0]), ...timesOf(s, 1).map((time) => [time, 1])]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, pad]) => pad);
+      expect(order.slice(0, 10)).toEqual([0, 0, 0, 1, 1, 0, 0, 0, 1, 1]);
     });
   });
 
@@ -3523,13 +3576,5 @@ describe("Play All with an arrangement", () => {
       expect(timesOf(s, 0)).toEqual(closeTo(0.05));
       expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 8.05));
     });
-  });
-
-  it("repeats a single entry's sequence round and round, with one sequence", () => {
-    const s = setup({ song: songWith(1, [entry(0, 4)]) });
-    playAll(s);
-    run(s, 6.2);
-    expect(s.sampler.getState().sequence).toBe(0);
-    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05, 6.05));
   });
 });
