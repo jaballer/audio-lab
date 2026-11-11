@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CLIP } from "../../shared/audio.js";
 import {
   CLIP_DB,
   FLOOR_DB,
@@ -57,7 +58,7 @@ describe("litSegments", () => {
     expect(litSegments(-47.99)).toBe(1);
   });
 
-  it("lights a segment only above its edge, the same at every edge, exactly on it included", () => {
+  it("lights a segment only above its edge: a loudness exactly on an edge does not light it, at every edge", () => {
     expect(litSegments(-48)).toBe(0);
     expect(litSegments(-44)).toBe(1);
     expect(litSegments(-40)).toBe(2);
@@ -196,6 +197,71 @@ describe("createMeterChannel", () => {
     let frame;
     for (let later = 32; later <= 250; later += 16) frame = channel.update(block(0), t + later);
     expect(frame.level).toBe(0); // empty within a quarter of a second
+  });
+
+  it("lights the clip lamp for a peak, not for the loudness: one full-scale sample in silence lights it", () => {
+    const channel = createMeterChannel();
+    channel.update(block(0), 0);
+    const spike = new Float32Array(64);
+    spike[10] = 1; // the loudness of this block is far under the lamp's threshold
+    expect(channel.update(spike, 16)).toMatchObject({ clip: true });
+    expect(channel.update(spike, 800).level).toBeLessThan(METER_SEGMENTS);
+  });
+
+  it("lights the clip lamp for a sine whose peak is 0.1 dB under full scale, though its loudness is 3 dB under", () => {
+    const channel = createMeterChannel();
+    channel.update(block(0), 0);
+    const sine = Float32Array.from({ length: 1000 }, (_, i) => 0.99 * Math.sin((2 * Math.PI * i) / 100));
+    expect(channel.update(sine, 16).clip).toBe(true);
+  });
+
+  it("puts the clip lamp's threshold at 0.5 dB under full scale, under what the clipper lets through", () => {
+    const channel = createMeterChannel();
+    channel.update(block(0), 0);
+    expect(CLIP_DB).toBe(-0.5);
+    expect(channel.update(block(dbToAmplitude(-0.6)), 16).clip).toBe(false);
+    expect(channel.update(block(dbToAmplitude(-0.4)), 32).clip).toBe(true);
+    // the lamp has to be able to light on the page: the clipper's own ceiling is above it
+    expect(toDb(CLIP.ceiling)).toBeGreaterThan(CLIP_DB);
+  });
+
+  it("keeps the clip lamp lit for half a second, and not a moment more", () => {
+    const channel = createMeterChannel();
+    channel.update(block(0), 0);
+    channel.update(block(1), 1000);
+    expect(channel.update(block(0), 1499).clip).toBe(true);
+    expect(channel.update(block(0), 1501).clip).toBe(false);
+  });
+
+  it("does not light the clip lamp at the start of a clock that counts from below zero", () => {
+    expect(createMeterChannel().update(block(0), -100).clip).toBe(false);
+  });
+
+  it("rises with a 60 ms time constant: 63% of the way to a steady level after 60 ms", () => {
+    const channel = createMeterChannel();
+    channel.update(block(dbToAmplitude(-8)), 0); // the first frame: no time has passed yet
+    // 63% of the 40 dB from the floor to -8 dB is 25.3 dB, so the loudness is -22.7 dB: 7 segments
+    expect(channel.update(block(dbToAmplitude(-8)), 60).level).toBe(7);
+  });
+
+  it("lights a hit on its first frame even after a long silence: the loudness rests at the floor, not far below it", () => {
+    const channel = createMeterChannel();
+    for (let t = 0; t <= 2000; t += 16) channel.update(block(0), t);
+    expect(channel.update(block(dbToAmplitude(-10)), 2016).level).toBeGreaterThan(0);
+  });
+
+  it("takes no time from the first frame, whatever the clock says: a loud first frame at a late time reads nothing yet", () => {
+    const channel = createMeterChannel();
+    expect(channel.update(block(dbToAmplitude(-10)), 50_000).level).toBe(0);
+    expect(channel.update(block(dbToAmplitude(-10)), 50_016).level).toBeGreaterThan(0);
+    channel.reset();
+    expect(channel.update(block(dbToAmplitude(-10)), 90_000).level).toBe(0); // and the same after a reset
+  });
+
+  it("copes with a time that is not a number on the very first frame", () => {
+    const channel = createMeterChannel();
+    expect(channel.update(block(dbToAmplitude(-10)), NaN).level).toBe(0);
+    expect(channel.update(block(dbToAmplitude(-10)), 16).level).toBeGreaterThan(0);
   });
 
   it("goes back to silence on reset, the clip lamp and the clock included", () => {
