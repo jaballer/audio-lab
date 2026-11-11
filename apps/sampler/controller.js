@@ -141,15 +141,27 @@ export function createSampler({
   // pressed, a person has picked a sequence, or the sequence is not in the song. The chain then takes the sequence showing for the
   // first time round the first entry that names it.
   let songAt = null;
-  // The pass end the song last went on at (`time` on the audio clock) and where it was before it did (`from`). The scheduler tells a
-  // pass end a second time when it goes back over it to build the steps again (the sounds changed, a sequence was made shorter), and
-  // an entry that goes round again takes nothing over, so nothing else would tell the second time from a new pass end: the song goes
-  // on once for a pass end, and a second telling works it out again from where it was.
-  let wrapped = { time: -Infinity, from: null };
+  // The pass end the song last went on at (`time` on the audio clock), where it was before it did (`from`), and whether the entry went
+  // round again there (`repeat`: nothing took over). The scheduler tells a pass end a second time when it goes back over it to build
+  // the steps again (the sounds changed, a sequence was made shorter), and an entry that goes round again takes nothing over, so
+  // nothing else would tell the second time from a new pass end: the song goes on once for a pass end, and a second telling works it
+  // out again from where it was. A pass end that turns out not to be one (withdrawPassEnd) takes back a time round that was counted.
+  const NO_WRAP = { time: -Infinity, from: null, repeat: false };
+  let wrapped = NO_WRAP;
   // A person picked a sequence, or Play or Play All was pressed: where the song was means nothing now.
   function forgetSongPosition() {
     songAt = null;
-    wrapped = { time: -Infinity, from: null };
+    wrapped = NO_WRAP;
+  }
+  // The loop carries on past the pass end the scheduler had reached (a sequence made longer): it was not one, so nothing can take over
+  // there, and a time round of an entry that the song went on to at it was not one either.
+  function withdrawPassEnd() {
+    // Only while its first step is still to sound: after that the time round has begun, and it is the pass after it that is longer.
+    if (wrapped.repeat && lastWrap > clock.now()) {
+      songAt = wrapped.from;
+      wrapped = NO_WRAP;
+    }
+    lastWrap = -Infinity;
   }
   let switching = false; // inside the call that tells the scheduler the length of the sequence just picked (showSequence)
   let passId = 0; // counts the switches made at the end of a pass
@@ -216,7 +228,7 @@ export function createSampler({
       if (!asked && playAll) {
         const from = wrapped.time === time ? wrapped.from : songAt;
         const pass = nextPass(arrangement, slots.length, from, current);
-        wrapped = { time, from };
+        wrapped = { time, from, repeat: pass.sequence === current };
         songAt = { entry: pass.entry, rep: pass.rep };
         next = pass.sequence;
       }
@@ -365,7 +377,7 @@ export function createSampler({
     const next = Math.min(maxBars, Math.max(1, Math.round(value)));
     if (next === bars) return;
     const shorter = next < bars;
-    if (!shorter) lastWrap = -Infinity; // the loop carries on past the pass end the scheduler had reached: it is not one
+    if (!shorter) withdrawPassEnd(); // the loop carries on past the pass end the scheduler had reached: it is not one
     bars = next;
     slots[current].bars = bars;
     page = Math.min(page, lastPage());
@@ -443,7 +455,7 @@ export function createSampler({
     if (playAll) {
       const from = songAt;
       const pass = nextPass(arrangement, slots.length, from, current);
-      wrapped = { time: lastWrap, from };
+      wrapped = { time: lastWrap, from, repeat: pass.sequence === current };
       songAt = { entry: pass.entry, rep: pass.rep };
       // An entry that goes round again has no sequence to take over: the first step built is already the right one.
       if (pass.sequence !== current) takeOverLate(pass.sequence, { automatic: true });

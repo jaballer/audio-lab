@@ -3525,6 +3525,58 @@ describe("Play All with an arrangement", () => {
       expect(timesOf(s, 0).filter((time) => time < first)).toHaveLength(3);
     });
 
+    it("goes on once for that pass end when the sequence is made shorter and the loop ends where the scheduler is", () => {
+      const s = setup({ song: songWith(2, [entry(0, 2), entry(1)], { bars: [2, 1] }) });
+      playAll(s);
+      tick(s, 37); // 1.85 s, in the first pass of two bars
+      s.sampler.setBars(1); // the loop of one bar ends here: that is the pass end
+      run(s, 6); // 7.85 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 6.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+    });
+
+    it("takes back the decision at a pass end that is not one after all, when the sequence is made longer past it", () => {
+      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      playAll(s);
+      tick(s, 37); // 1.85 s: the pass end at 2.05 s has been reached, and the entry goes round again
+      s.sampler.setBars(2); // the loop carries on past it: it was not a pass end, so that was not a time round
+      run(s, 12); // 13.85 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05, 8.05)); // three passes of two bars
+      expect(timesOf(s, 1)).toEqual(closeTo(12.05));
+    });
+
+    it("keeps a time round that has begun when the sequence is made longer later in it: that pass end is behind", () => {
+      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      playAll(s);
+      run(s, 3.0); // the second time round began at 2.05 s, and its first step has sounded
+      s.sampler.setBars(2);
+      run(s, 8.2); // 11.2 s: the second time round is now two bars (to 6.05 s), then the third (to 10.05 s), then the second entry
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 6.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(10.05));
+    });
+
+    it("goes on once for a pass end that Play All was turned on at, when the sounds change after it", () => {
+      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      s.sampler.start();
+      tick(s, 38); // 1.9 s: the pass end at 2.05 s has been reached, and the last step before it (at 1.9375 s) is still to sound
+      s.sampler.togglePlayAll(); // the entry goes round again there
+      s.sampler.kitChanged("sound"); // the steps are built again from that one, and the scheduler tells that pass end again
+      run(s, 6.2); // 8.1 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05, 8.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(6.05));
+    });
+
+    it("does not carry what was decided at a pass end over a pick a person makes before it is told again", () => {
+      const s = setup({ song: songWith(2, [entry(1), entry(0, 3)]) });
+      playAll(s);
+      tick(s, 78); // 3.9 s: the pass end at 4.05 s has been reached, the last step before it is still to sound, and the song went
+      // round the entry again at 2.05 s and does again at this one
+      s.sampler.setSequence(1);
+      s.sampler.setSequence(0); // the steps are built again, the pass end is told again, and the song goes on from the first entry
+      run(s, 6); // 9.9 s: that names the sequence, as for any pick: the time round at 4.05 s is its second, so the entry ends at 8.05 s
+      expect(timesOf(s, 1)).toEqual(closeTo(8.05));
+    });
+
     it("goes on once for each pass end when the sounds change at each of them", () => {
       const s = setup({ song: songWith(2, [entry(0, 3), entry(1, 2)]) });
       playAll(s);
