@@ -16,6 +16,7 @@ import { createAudioNotice } from "../../shared/audio-notice.js";
 import { togglePower } from "../../shared/power.js";
 import { createAppHeader } from "../../shared/app-header.js";
 import { enableOffline } from "../../shared/offline.js";
+import { createSiteFooter } from "../../shared/site-footer.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { noteName } from "../../shared/notes.js";
 import { COMPUTER_KEYS, createComputerKeys } from "../../shared/computer-keys.js";
@@ -30,6 +31,7 @@ const FIRST_NOTE = 60; // middle C
 const OCTAVE = 12;
 
 createSiteHeader($("site-header"), { current: "tone-demo", midi: false }); // no MIDI on this page
+createSiteFooter($("site-footer"));
 enableOffline($("update-notice"));
 const header = createAppHeader($("header"), {
   brand: { name: "TONE", accent: "DEMO" },
