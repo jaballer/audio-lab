@@ -10,6 +10,7 @@ import "./keys.css";
 import "../../shared/piano.css";
 import { createAppHeader } from "../../shared/app-header.js";
 import { enableOffline } from "../../shared/offline.js";
+import { createSiteFooter } from "../../shared/site-footer.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createAudioEngine } from "../../shared/audio.js";
 import { createAudioNotice } from "../../shared/audio-notice.js";
@@ -32,6 +33,7 @@ const KEYBOARD_SOURCE = "keyboard";
 const KEYBOARD_VELOCITY = 100; // a computer key has no velocity of its own
 
 const site = createSiteHeader($("site-header"), { current: "keys" });
+createSiteFooter($("site-footer"));
 enableOffline($("update-notice"));
 const header = createAppHeader($("header"), {
   brand: { name: "KEYS" },

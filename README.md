@@ -151,7 +151,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/loading-screen.js` + `shared/loading.css` — the "Loading" overlay every page starts with, so the page does not jump while its scripts build it; removed once everything has loaded
 - `shared/page-ready.js` — resolves when the page has settled (load event, fonts, two drawn frames) or after a timeout; no DOM
 - `shared/site-header.js` — the bar above the machine, the same on every page: the site name and a link to each page; it also builds the MIDI switch, and its short status, which `app-header.js` draws in the machine's own header
-- `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test)
+- `shared/pages.js` — the list of pages the site header links to (checked against `vite.config.js` by its test), and the links in the footer
+- `shared/site-footer.js` — the strip below every page: links to the source, the documentation, the changelog and the issue tracker
 - `shared/app-header.js` — the machine's own header: its name and tagline, its action buttons (Export) and the POWER switch
 - `shared/console-log.js` — the bounded list of messages the device's header leaves out (every MIDI port the browser lists, plug and unplug, errors); no DOM
 - `shared/console-drawer.js` — the drawer along the bottom of the window that shows that list, with Copy and Clear (not mounted at the moment: the Console button is gone until it has a better place)

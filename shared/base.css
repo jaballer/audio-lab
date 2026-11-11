@@ -552,6 +552,45 @@ a:focus-visible {
   color: var(--ink);
 }
 
+/* ---------- Site footer (below the help, same on every page) ---------- */
+.site-footer {
+  width: min(980px, 100%);
+  margin-top: 6px;
+  padding: 14px 4px 4px;
+  border-top: 1px solid #34302b;
+  color: #a9a597;
+  font-size: 0.74rem;
+  text-align: center;
+}
+.site-footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 18px;
+}
+.site-footer-link {
+  padding: 3px 2px;
+  color: #ffa57a;
+  text-decoration: none;
+}
+.site-footer-link:hover {
+  text-decoration: underline;
+}
+/* The links open in a new tab; the arrow says so by eye, and its alternative says so to a screen reader instead of "north east arrow". */
+.site-footer-link::after {
+  content: " \2197";
+  content: " \2197" / " (opens in a new tab)";
+  font-size: 0.85em;
+}
+.site-footer a:focus-visible {
+  outline: 3px solid #8ab4ff;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.site-footer-note {
+  margin: 8px 0 0;
+}
+
 /* ---------- Audio notice ---------- */
 /* Shown while the browser is holding audio silent; see audio-notice.js. It floats over the
    bottom of the window rather than sitting in the page: it goes away on the first click, and

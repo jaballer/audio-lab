@@ -8,6 +8,7 @@ import "../../shared/base.css";
 import "./monitor.css";
 import { createAppHeader } from "../../shared/app-header.js";
 import { enableOffline } from "../../shared/offline.js";
+import { createSiteFooter } from "../../shared/site-footer.js";
 import { createSiteHeader } from "../../shared/site-header.js";
 import { createMidiAccess, wireMidiButton } from "../../shared/midi-access.js";
 import { KINDS, describeMessage, formatLine } from "./describe.js";
@@ -17,6 +18,7 @@ import { createMonitorView } from "./view.js";
 const $ = (id) => document.getElementById(id);
 
 const site = createSiteHeader($("site-header"), { current: "monitor" });
+createSiteFooter($("site-footer"));
 enableOffline($("update-notice"));
 createAppHeader($("header"), {
   brand: { name: "MIDI ", accent: "MONITOR" },

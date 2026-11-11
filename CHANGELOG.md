@@ -8,7 +8,10 @@ Numbers link to the pull request.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- A footer on every page with links to the source code, the documentation, the design notes, the changelog, the issue
+  tracker, the author's GitHub profile and the license. They open in a new tab, so the sampler keeps playing ([#169](https://github.com/jaballer/audio-lab/pull/169))
 
 ## 2026-11-11
 
