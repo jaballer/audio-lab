@@ -57,14 +57,21 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
   strip.setAttribute("aria-label", "Entries of the song, in the order they play");
   strip.classList.add("btn-group", "song-strip");
 
-  const add = button("Add Entry", "", { title: "Add the sequence showing to the song, after the entry selected" });
+  const add = button("Add Entry", "");
   const remove = button("Remove Entry", "");
   const earlier = button("Move Earlier", "");
   const later = button("Move Later", "");
-  // The signs are the visible text; the names say what a press does.
-  const fewer = button("Repeats −", "", { "aria-label": "Fewer repeats" });
-  const more = button("Repeats +", "", { "aria-label": "More repeats" });
-  tools.append(add, remove, earlier, later, fewer, more);
+  // The visible text is the name (a voice control says what it sees: "Repeats minus"), and a screen reader says the sign as a word.
+  const fewer = button("Repeats −", "");
+  const more = button("Repeats +", "");
+  // Three joined pairs, so that wrapping never leaves one button of a pair alone on a row.
+  const pair = (...buttons) => {
+    const group = document.createElement("div");
+    group.className = "btn-group";
+    group.append(...buttons);
+    return group;
+  };
+  tools.append(pair(add, remove), pair(earlier, later), pair(fewer, more));
   add.addEventListener("click", () => onAdd());
   remove.addEventListener("click", () => onRemove());
   earlier.addEventListener("click", () => onMove(-1));
@@ -101,6 +108,8 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
   return {
     refresh({ entries, selected, at = null, canAdd, canRemove }) {
       count = entries.length;
+      // A cell that has focus and goes (the entry was removed) must not take it with it: it goes to the one selected.
+      const hadFocus = cells.some(({ button }) => button === document.activeElement);
       syncCells(count);
       for (const { index, label, times, name, pressed, playing } of entryCells(entries, selected, at)) {
         const cell = cells[index];
@@ -113,7 +122,8 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
       }
       const chosen = cells[selected]?.button ?? cells[0].button;
       const repeats = entries[selected]?.repeats ?? 1;
-      // A title only to say why a button is off: when it is on, it would only repeat the name a screen reader reads out.
+      // A title says what Add puts in (the name does not), and for the other buttons only why one is off: when it is on, it would only
+      // repeat the name a screen reader reads out.
       setAttr(remove, "title", canRemove ? "" : "A song keeps at least one entry");
       setAttr(
         add,
@@ -130,6 +140,7 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
         [fewer, repeats <= 1, [more, chosen]],
         [more, repeats >= MAX_REPEATS, [fewer, chosen]],
       ]);
+      if (hadFocus && !cells.some(({ button }) => button === document.activeElement)) chosen.focus();
     },
   };
 }

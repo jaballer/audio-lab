@@ -309,6 +309,7 @@ const kit = createKit(SOUNDS, {
   },
 });
 
+let editingEntries = false; // inside the strip's edit of the song's entries (editEntries): the sampler's own redraw waits for it
 const sampler = createSampler({
   audio,
   kit,
@@ -316,7 +317,7 @@ const sampler = createSampler({
   maxBars: MAX_BARS,
   maxSequences: MAX_SEQUENCES,
   song,
-  onChange: render,
+  onChange: () => (editingEntries ? undefined : render()),
   onMessage: say,
   onPadHit(index) {
     padGrid.flash(index);
@@ -714,6 +715,18 @@ const sequenceRow = createSequenceRow($("seq-row"), {
 // The song: the order Play All plays the sequences in, with repeats. Which entry is selected is the page's (the strip shows it and the
 // tools act on it, and selecting one changes nothing about what plays): an edit brings the selection with it, and render keeps it in range.
 let selectedEntry = 0;
+// An edit of the entries asks the sampler to redraw before the selection has moved with it (the entry added is the one selected next),
+// and a draw with the old selection would hand focus to the wrong cell when a button goes disabled: so it is drawn once, after
+// (`editingEntries`, declared before the sampler, which draws through it).
+function editEntries(edit) {
+  editingEntries = true;
+  try {
+    edit();
+  } finally {
+    editingEntries = false;
+  }
+  render();
+}
 const chainStrip = createChainStrip(
   { strip: $("song-strip"), tools: $("song-tools") },
   {
@@ -721,24 +734,24 @@ const chainStrip = createChainStrip(
       selectedEntry = index;
       render();
     },
-    onAdd() {
-      const at = sampler.addEntry(selectedEntry + 1);
-      if (at < 0) return;
-      selectedEntry = at;
-      render();
-    },
-    onRemove() {
-      const next = sampler.removeEntry(selectedEntry);
-      if (next < 0) return;
-      selectedEntry = next;
-      render();
-    },
-    onMove(delta) {
-      selectedEntry = sampler.moveEntry(selectedEntry, delta);
-      render();
-    },
+    onAdd: () =>
+      editEntries(() => {
+        const at = sampler.addEntry(selectedEntry + 1);
+        if (at >= 0) selectedEntry = at;
+      }),
+    onRemove: () =>
+      editEntries(() => {
+        const next = sampler.removeEntry(selectedEntry);
+        if (next >= 0) selectedEntry = next;
+      }),
+    onMove: (delta) =>
+      editEntries(() => {
+        selectedEntry = sampler.moveEntry(selectedEntry, delta);
+      }),
     onRepeats: (delta) =>
-      sampler.setEntryRepeats(selectedEntry, sampler.getState().arrangement[selectedEntry].repeats + delta),
+      editEntries(() => {
+        sampler.setEntryRepeats(selectedEntry, sampler.getState().arrangement[selectedEntry].repeats + delta);
+      }),
   },
 );
 const stepsPrev = $("steps-prev");
