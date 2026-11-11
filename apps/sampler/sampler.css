@@ -699,8 +699,8 @@
     inset 0 2px 6px rgba(0, 0, 0, 0.25),
     0 1px 0 #f3f0e6;
 }
-/* Under the LCD: the settings of the sequence the LCD is showing, and the arrows for which bar the step keys show,
-   next to the length keys that decide how many bars there are. */
+/* Under the LCD, a row for the sequence's length (the length keys, and the arrows for which bar the step keys show) and one
+   below it for which sequence it is, and adding, copying and removing them. */
 .seq-bar {
   display: flex;
   align-items: center;
@@ -720,20 +720,16 @@
   gap: 8px 12px;
   margin-bottom: 8px;
 }
-/* The bar arrows sit with the length keys, on the left. Which sequence is playing sits in the bottom right corner of the
-   display, and wraps under them when there is no room. */
-.seq-pick {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-}
-/* The length keys are one joined group (.btn-group); the chosen one is pressed in, with a dark face. */
-.seq-lengths .btn {
+/* The length keys, and the keys for the sequences (sequence-row.js), are each one joined group (.btn-group); the chosen one is
+   pressed in, with a dark face. */
+.seq-lengths .btn,
+.seq-chips .btn {
   min-width: 2.8em;
 }
 .seq-lengths .btn[aria-pressed="true"],
-.seq-lengths .btn[aria-pressed="true"]:hover {
+.seq-lengths .btn[aria-pressed="true"]:hover,
+.seq-chips .btn[aria-pressed="true"],
+.seq-chips .btn[aria-pressed="true"]:hover {
   border-color: #1b1a18;
   background: linear-gradient(180deg, #3a3832, #26241f);
   color: #f3efe3;
@@ -926,7 +922,8 @@
     box-shadow: none;
   }
   /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */
-  .seq-lengths .btn[aria-pressed="true"] {
+  .seq-lengths .btn[aria-pressed="true"],
+  .seq-chips .btn[aria-pressed="true"] {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;

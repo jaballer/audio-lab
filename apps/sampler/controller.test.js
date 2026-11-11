@@ -55,7 +55,7 @@ const savedSong = ({
   ),
 });
 
-function setup({ song = null, bpm, ownCount = false } = {}) {
+function setup({ song = null, bpm, ownCount = false, maxSequences } = {}) {
   const audio = fakeAudio();
   const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
   const calls = { change: vi.fn(), message: vi.fn(), padHit: vi.fn(), padPlayed: vi.fn(), songChange: vi.fn() };
@@ -65,6 +65,7 @@ function setup({ song = null, bpm, ownCount = false } = {}) {
     kit: createKit(sounds),
     steps: STEPS,
     maxBars: 4,
+    ...(maxSequences === undefined ? {} : { maxSequences }),
     ...(ownCount ? {} : { sequenceCount: SEQUENCES }), // `ownCount`: say nothing, as the page does with no saved song
     song: song ?? (bpm ? savedSong({ bpm }) : null),
     now: () => clock,
@@ -1049,6 +1050,237 @@ describe("sequences", () => {
     advance(0);
     expect(sounds[3].play).toHaveBeenCalled();
     expect(sounds[0].play).not.toHaveBeenCalled(); // the first sequence is empty here
+  });
+});
+
+// A saved song of `count` sequences, the first of them with the given steps.
+const songOf = (count, { first = {}, bpm = 120, ...rest } = {}) => {
+  const base = savedSong({ bpm, pattern: first, ...rest });
+  return { ...base, sequences: Array.from({ length: count }, (_, i) => base.sequences[i] ?? base.sequences[1]) };
+};
+
+describe("adding, copying and removing sequences", () => {
+  describe("addSequence", () => {
+    it("adds an empty sequence at the end and shows it, naming it and asking for a save", () => {
+      const { sampler, message, songChange, change } = setup({
+        song: songOf(3, { first: { 0: [0] } }),
+        maxSequences: 6,
+      });
+      sampler.addSequence();
+      expect(sampler.getState()).toMatchObject({ sequence: 3, sequenceCount: 4, bars: 1 });
+      expect(sampler.getSong().sequences).toHaveLength(4);
+      expect(sampler.getSong().sequences[3]).toEqual({ bars: 1, pattern: {}, velocities: {} });
+      expect(sampler.getSong().sequences[0].pattern).toEqual({ 0: [0] }); // the others are as they were
+      expect(message).toHaveBeenLastCalledWith("SEQ 04 ADDED");
+      expect(songChange).toHaveBeenCalled();
+      expect(change).toHaveBeenCalled();
+    });
+
+    it("starts a new sequence on its first bar with nothing to undo, whatever was showing", () => {
+      const { sampler } = setup({ song: songOf(2, { first: { 0: [0] }, bars: 3 }), maxSequences: 6 });
+      sampler.toggleStep(5);
+      sampler.setPage(2);
+      sampler.addSequence();
+      expect(sampler.getState()).toMatchObject({ page: 0, canUndo: false, canRedo: false });
+      sampler.setSequence(0);
+      expect(sampler.getState().canUndo).toBe(true); // the first one kept its own
+    });
+
+    it("asks for a save when a step is turned on in the new sequence, as it does for any other", () => {
+      const { sampler, songChange } = setup({ song: songOf(2), maxSequences: 6 });
+      sampler.addSequence();
+      songChange.mockClear();
+      sampler.toggleStep(2);
+      expect(songChange).toHaveBeenCalled();
+    });
+
+    it("says so, and changes nothing, when there are as many as there can be", () => {
+      const { sampler, message, songChange } = setup({ song: songOf(3), maxSequences: 3 });
+      sampler.addSequence();
+      expect(message).toHaveBeenLastCalledWith("3 SEQUENCES MAX");
+      expect(sampler.getState()).toMatchObject({ sequence: 0, sequenceCount: 3 });
+      expect(songChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("copySequence", () => {
+    const original = { 0: [0, 4], 2: [9] };
+
+    it("adds a copy of the one showing (steps, velocities and length) at the end and shows it", () => {
+      const song = songOf(2, { first: original, velocities: { 0: { 4: 50 } }, bars: 2 });
+      const { sampler, message, songChange } = setup({ song, maxSequences: 6 });
+      sampler.copySequence();
+      expect(sampler.getState()).toMatchObject({ sequence: 2, sequenceCount: 3, bars: 2 });
+      expect(sampler.getSong().sequences[2]).toEqual({ bars: 2, pattern: original, velocities: { 0: { 4: 50 } } });
+      expect(message).toHaveBeenLastCalledWith("SEQ 01 COPIED TO 03");
+      expect(songChange).toHaveBeenCalled();
+    });
+
+    it("copies the sequence that is showing, not the first", () => {
+      const song = songOf(3, { first: original });
+      song.sequences[1] = { bars: 1, pattern: { 3: [3] }, velocities: {} };
+      const { sampler } = setup({ song, maxSequences: 6 });
+      sampler.setSequence(1);
+      sampler.copySequence();
+      expect(sampler.getSong().sequences[3].pattern).toEqual({ 3: [3] });
+    });
+
+    it("makes a copy that is its own: editing one leaves the other alone", () => {
+      const { sampler } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      sampler.copySequence();
+      sampler.selectPad(0);
+      sampler.toggleStep(0); // turns step 0 of pad 1 off in the copy
+      expect(sampler.getSong().sequences[1].pattern[0]).toEqual([4]);
+      expect(sampler.getSong().sequences[0].pattern[0]).toEqual([0, 4]);
+    });
+
+    it("asks for a save when a step is turned on in the copy", () => {
+      const { sampler, songChange } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      sampler.copySequence();
+      songChange.mockClear();
+      sampler.toggleStep(2);
+      expect(songChange).toHaveBeenCalled();
+    });
+
+    it("starts the copy with nothing to undo", () => {
+      const { sampler } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      sampler.toggleStep(3);
+      sampler.copySequence();
+      expect(sampler.getState().canUndo).toBe(false);
+    });
+
+    it("says so, and changes nothing, when there are as many as there can be", () => {
+      const { sampler, message, songChange } = setup({ song: songOf(2, { first: original }), maxSequences: 2 });
+      sampler.copySequence();
+      expect(message).toHaveBeenLastCalledWith("2 SEQUENCES MAX");
+      expect(sampler.getSong().sequences).toHaveLength(2);
+      expect(songChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("removeSequence", () => {
+    const four = () => {
+      const song = songOf(4, { first: { 0: [0] } });
+      song.sequences[1] = { bars: 1, pattern: { 1: [1] }, velocities: {} };
+      song.sequences[2] = { bars: 1, pattern: { 2: [2] }, velocities: {} };
+      song.sequences[3] = { bars: 1, pattern: { 3: [3] }, velocities: {} };
+      return song;
+    };
+    const rows = (sampler) => sampler.getSong().sequences.map((sequence) => Number(Object.keys(sequence.pattern)[0]));
+
+    it("removes the one showing, and the next one takes its place on the screen", () => {
+      const { sampler, message, songChange } = setup({ song: four() });
+      sampler.setSequence(1);
+      songChange.mockClear();
+      sampler.removeSequence();
+      expect(rows(sampler)).toEqual([0, 2, 3]);
+      expect(sampler.getState()).toMatchObject({ sequence: 1, sequenceCount: 3 });
+      expect(sampler.getState().stepsOn[2]).toBe(false); // pad 1 is selected: what shows is the sequence that moved up
+      expect(message).toHaveBeenLastCalledWith("SEQ 02 REMOVED");
+      expect(songChange).toHaveBeenCalled();
+    });
+
+    it("shows the new last one when the last was removed", () => {
+      const { sampler } = setup({ song: four() });
+      sampler.setSequence(3);
+      sampler.removeSequence();
+      expect(rows(sampler)).toEqual([0, 1, 2]);
+      expect(sampler.getState().sequence).toBe(2);
+    });
+
+    it("shows the new first one when the first was removed", () => {
+      const { sampler } = setup({ song: four() });
+      sampler.removeSequence();
+      expect(rows(sampler)).toEqual([1, 2, 3]);
+      expect(sampler.getState().sequence).toBe(0);
+    });
+
+    it("keeps the last sequence, and says so", () => {
+      const { sampler, message, songChange } = setup({ song: songOf(1, { first: { 0: [0] } }) });
+      sampler.removeSequence();
+      expect(message).toHaveBeenLastCalledWith("CANNOT REMOVE LAST SEQUENCE");
+      expect(sampler.getSong().sequences).toHaveLength(1);
+      expect(sampler.getSong().sequences[0].pattern).toEqual({ 0: [0] });
+      expect(songChange).not.toHaveBeenCalled();
+    });
+
+    it("leaves the other sequences their own undo", () => {
+      const { sampler } = setup({ song: songOf(2, { first: { 0: [0] } }) });
+      sampler.toggleStep(5); // an edit to the first
+      sampler.setSequence(1);
+      sampler.removeSequence();
+      expect(sampler.getState()).toMatchObject({ sequence: 0, canUndo: true });
+      sampler.undo();
+      expect(sampler.getSong().sequences[0].pattern[0]).toEqual([0]);
+    });
+
+    it("can be undone for nothing: the removed sequence's own history goes with it", () => {
+      const { sampler } = setup({ song: songOf(3, { first: { 0: [0] } }) });
+      sampler.setSequence(1);
+      sampler.toggleStep(2); // makes an undo for sequence 2, which is about to go
+      sampler.removeSequence();
+      expect(sampler.getState().canUndo).toBe(false); // the one that moved up has none of its own
+    });
+
+    it("goes back to the first bar of the sequence that is shown after it", () => {
+      const { sampler } = setup({ song: songOf(3, { bars: 2 }) });
+      sampler.setSequence(1);
+      sampler.setPage(0);
+      sampler.removeSequence();
+      expect(sampler.getState().page).toBe(0);
+    });
+
+    it("carries on playing into the sequence that is shown after it, and not the removed one's steps", () => {
+      const song = songOf(3, { first: { 0: [0, 1, 2, 3] } });
+      song.sequences[1] = { bars: 1, pattern: { 1: [0, 1, 2, 3] }, velocities: {} };
+      song.sequences[2] = { bars: 1, pattern: { 2: [0, 1, 2, 3] }, velocities: {} };
+      const { sounds, sampler, advance } = setup({ song });
+      sampler.setSequence(1);
+      sampler.start();
+      for (let i = 0; i < 5; i++) advance(0.05);
+      const fromRemoved = sounds[1].play.mock.calls.length;
+      sampler.removeSequence(); // shows what was sequence 3
+      for (let i = 0; i < 8; i++) advance(0.05);
+      expect(sounds[1].play).toHaveBeenCalledTimes(fromRemoved); // nothing more from the removed one
+      expect(sounds[2].play).toHaveBeenCalled(); // the one that took its place
+      expect(sampler.getState().playing).toBe(true);
+    });
+  });
+
+  describe("sequenceHasSteps", () => {
+    it("is false for an empty sequence and true once a step is on", () => {
+      const { sampler } = setup({ song: songOf(2), maxSequences: 6 });
+      expect(sampler.sequenceHasSteps()).toBe(false);
+      sampler.toggleStep(3);
+      expect(sampler.sequenceHasSteps()).toBe(true);
+    });
+
+    it("counts steps in a bar the sequence no longer shows", () => {
+      const { sampler } = setup({ song: songOf(1, { first: { 0: [20] }, bars: 1 }) }); // step 20 is in bar 2 of a one-bar sequence
+      expect(sampler.sequenceHasSteps()).toBe(true);
+    });
+
+    it("is about the sequence showing", () => {
+      const { sampler } = setup({ song: songOf(2, { first: { 0: [0] } }) });
+      expect(sampler.sequenceHasSteps()).toBe(true);
+      sampler.setSequence(1);
+      expect(sampler.sequenceHasSteps()).toBe(false);
+    });
+  });
+
+  describe("getState", () => {
+    it("says whether a sequence can be added and whether one can be removed", () => {
+      const { sampler } = setup({ song: songOf(1), maxSequences: 2 });
+      expect(sampler.getState()).toMatchObject({ canAddSequence: true, canRemoveSequence: false });
+      sampler.addSequence();
+      expect(sampler.getState()).toMatchObject({ canAddSequence: false, canRemoveSequence: true });
+    });
+
+    it("has no limit on adding when it is told none", () => {
+      const { sampler } = setup({ song: songOf(2) });
+      for (let i = 0; i < 20; i++) sampler.addSequence();
+      expect(sampler.getState()).toMatchObject({ sequenceCount: 22, canAddSequence: true });
+    });
   });
 });
 

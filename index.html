@@ -186,17 +186,10 @@
                   <span id="steps-range" class="sampler-visually-hidden" aria-live="polite"></span>
                   <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
                 </div>
-                <div class="seq-pick" role="group" aria-label="Sequence">
-                  <span class="small-label">Seq</span>
-                  <div class="btn-group">
-                    <button id="seq-prev" class="btn btn-small" type="button" aria-label="Previous sequence">
-                      &lt;
-                    </button>
-                    <span id="seq-number" class="btn-group-readout small-label" aria-live="polite"></span>
-                    <button id="seq-next" class="btn btn-small" type="button" aria-label="Next sequence">&gt;</button>
-                  </div>
-                </div>
               </div>
+
+              <!-- A key for each sequence, and Add, Copy and Remove: drawn by sequence-row.js. -->
+              <div id="seq-row" class="seq-bar"></div>
 
               <div class="buttons">
                 <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
@@ -386,6 +379,11 @@
           off the pad's last one), and Choke (a group number: pads in the same group cut each other off, like a closed
           hat cutting an open one) and Color (a colour for the pad's rim, to group pads by sight); press Delete or
           double-click a slider to reset it. Escape, pressed inside the editor, closes it
+        </li>
+        <li>
+          Under the Bars, each sequence has a key: press one to see and edit it. + adds an empty sequence at the end
+          (there can be eight), Copy adds a copy of the one showing, and &minus; removes the one showing (it asks first
+          when it has steps, it cannot be undone, and a beat keeps at least one)
         </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;
