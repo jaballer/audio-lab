@@ -690,7 +690,9 @@ function removeSequence() {
   sampler.removeSequence();
 }
 const sequenceRow = createSequenceRow($("seq-row"), {
-  onSelect: (index) => sampler.setSequence(index),
+  // While the beat plays, a key queues that sequence for the end of the pass, as Next Seq does on an MPC, and Shift switches to it
+  // at once; stopped, both show it. The sampler works out which.
+  onSelect: (index, { now }) => (now ? sampler.setSequence(index) : sampler.queueSequence(index)),
   onAdd: () => sampler.addSequence(),
   onCopy: () => sampler.copySequence(),
   onRemove: removeSequence,
@@ -776,6 +778,8 @@ function render() {
   sequenceRow.refresh({
     count: state.sequenceCount,
     current: state.sequence,
+    queued: state.queuedSequence,
+    playing: state.playing,
     canAdd: state.canAddSequence,
     canRemove: state.canRemoveSequence,
   });

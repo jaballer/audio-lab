@@ -26,7 +26,37 @@ describe("sequenceKeys", () => {
   });
 
   it("has one key for a beat of one sequence, pressed in", () => {
-    expect(sequenceKeys(1, 0)).toEqual([{ index: 0, label: "1", name: "Sequence 1", pressed: true }]);
+    expect(sequenceKeys(1, 0)).toEqual([
+      { index: 0, label: "1", name: "Sequence 1", pressed: true, queued: false, title: "" },
+    ]);
+  });
+
+  it("marks the sequence that plays next, and says so in its name", () => {
+    const keys = sequenceKeys(3, 0, { queued: 2 });
+    expect(keys.map((key) => key.queued)).toEqual([false, false, true]);
+    expect(keys.map((key) => key.name)).toEqual(["Sequence 1", "Sequence 2", "Sequence 3, plays next"]);
+  });
+
+  it("marks none when nothing is queued, or the one queued is not one of them", () => {
+    expect(sequenceKeys(3, 0).some((key) => key.queued)).toBe(false);
+    expect(sequenceKeys(3, 0, { queued: -1 }).some((key) => key.queued)).toBe(false);
+    expect(sequenceKeys(3, 0, { queued: 7 }).some((key) => key.queued)).toBe(false);
+  });
+
+  it("explains what a press does only while the beat plays, when it queues instead of switching", () => {
+    expect(sequenceKeys(3, 0).map((key) => key.title)).toEqual(["", "", ""]);
+    const [showing, other] = sequenceKeys(3, 0, { playing: true });
+    expect(showing.title).toBe("");
+    expect(other.title).toMatch(/plays next/i);
+    expect(other.title).toMatch(/shift/i); // the way to switch now is only written here, and in the help
+  });
+
+  it("says the queued key's press takes it back, and so does the one showing while one is queued", () => {
+    const keys = sequenceKeys(3, 0, { playing: true, queued: 2 });
+    expect(keys[2].title).toMatch(/again/i);
+    expect(keys[2].title).toMatch(/take it back/i);
+    expect(keys[0].title).toMatch(/take back/i);
+    expect(keys[1].title).toMatch(/shift/i); // another key still queues instead, and can still be switched to
   });
 
   it("is made of the same keys the view puts on the page", () => {
@@ -60,8 +90,8 @@ class FakeElement {
     (this.listeners[type] ??= []).push(handler);
   }
 
-  click() {
-    if (!this.disabled) for (const handler of this.listeners.click ?? []) handler();
+  click(event = {}) {
+    if (!this.disabled) for (const handler of this.listeners.click ?? []) handler(event);
   }
 
   appendChild(child) {
@@ -138,7 +168,7 @@ describe("createSequenceRow", () => {
   it("reports the key that was pressed, counting from 0, and each of the buttons", () => {
     refresh({ count: 4 });
     keys()[2].click();
-    expect(calls.onSelect).toHaveBeenCalledWith(2);
+    expect(calls.onSelect).toHaveBeenCalledWith(2, { now: false });
     actions()[ADD].click();
     actions()[COPY].click();
     actions()[REMOVE].click();
@@ -149,7 +179,43 @@ describe("createSequenceRow", () => {
     refresh({ count: 2 });
     refresh({ count: 5 });
     keys()[4].click();
-    expect(calls.onSelect).toHaveBeenCalledWith(4);
+    expect(calls.onSelect).toHaveBeenCalledWith(4, { now: false });
+  });
+
+  it("says the press is to switch now when Shift is held, which includes Enter or Space with it", () => {
+    refresh({ count: 3 });
+    keys()[1].click({ shiftKey: true });
+    expect(calls.onSelect).toHaveBeenCalledWith(1, { now: true });
+  });
+
+  it("marks the key that plays next, names it so, and takes the mark off when the queue goes", () => {
+    refresh({ count: 3, current: 0, queued: 2 });
+    expect(keys().map((key) => key.getAttribute("data-queued"))).toEqual(["false", "false", "true"]);
+    expect(keys()[2].getAttribute("aria-label")).toBe("Sequence 3, plays next");
+    refresh({ count: 3, current: 0, queued: -1 });
+    expect(keys().map((key) => key.getAttribute("data-queued"))).toEqual(["false", "false", "false"]);
+    expect(keys()[2].getAttribute("aria-label")).toBe("Sequence 3");
+  });
+
+  it("moves the mark when another sequence is queued", () => {
+    refresh({ count: 3, queued: 1 });
+    refresh({ count: 3, queued: 2 });
+    expect(keys().map((key) => key.getAttribute("data-queued"))).toEqual(["false", "false", "true"]);
+  });
+
+  it("gives each key a title while playing, and none when stopped", () => {
+    refresh({ count: 3, current: 0, playing: true });
+    expect(keys()[1].getAttribute("title")).toMatch(/shift/i);
+    expect(keys()[0].getAttribute("title")).toBe("");
+    refresh({ count: 3, current: 0, playing: false });
+    expect(keys().map((key) => key.getAttribute("title"))).toEqual(["", "", ""]);
+  });
+
+  it("is not out of step with a key made after the first draw: it has its mark and title as well", () => {
+    refresh({ count: 2, queued: -1 });
+    refresh({ count: 4, current: 0, queued: 3, playing: true });
+    expect(keys()[3].getAttribute("data-queued")).toBe("true");
+    expect(keys()[3].getAttribute("title")).toMatch(/again/i);
   });
 
   it("turns Add and Copy off when there is no room, Remove off when there is one sequence, and says why", () => {
