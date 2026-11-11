@@ -847,6 +847,15 @@ describe("passes", () => {
     });
   });
 
+  it("says where the next step to schedule falls on the grid, which a page that builds steps again can compare with a pass end", () => {
+    const { scheduler, advance } = withWraps({ steps: 8, bpm: 120 });
+    scheduler.start();
+    advance(0); // step 0 is scheduled, at 0.05 s
+    expect(scheduler.nextTime).toBeCloseTo(0.175);
+    scheduler.rewindTo(0, 0.05);
+    expect(scheduler.nextTime).toBeCloseTo(0.05);
+  });
+
   it("is untouched by a stall that does not cross a wrap", () => {
     const { scheduler, log, advance } = withWraps({ steps: 16, bpm: 120 });
     scheduler.start();

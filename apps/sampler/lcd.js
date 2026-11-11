@@ -3,13 +3,14 @@
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, sequence, sequenceCount, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
+//   state = { playing, recording, sequence, sequenceCount, playAll, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
 //     steps:     how many steps one bar has (the STEP line counts all of them: steps times bars)
 //     bars:      how many bars the sequence has
 //     page:      the 0-based bar the step keys show (the progress bar marks it)
 //     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
 //     sequence:  the current sequence, 0-based
 //     sequenceCount:  how many sequences there are; when given the line reads "SEQ 02/04", and without it "SEQ 02"
+//     playAll:  Play All is on, and the line reads "ALL 02/04" (or "ALL 02"): the same width
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 

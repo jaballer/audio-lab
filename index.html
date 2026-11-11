@@ -195,14 +195,7 @@
                 <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
                 <button id="play" class="btn btn-led btn-play" type="button" aria-pressed="false">Play</button>
                 <button id="stop" class="btn btn-stop" type="button">Stop</button>
-                <button
-                  id="all"
-                  class="btn btn-led"
-                  type="button"
-                  aria-pressed="false"
-                  aria-label="All: play every sequence in order, then again from the first"
-                  title="Lit: each pass is followed by the next sequence, and the last by the first"
-                >
+                <button id="all" class="btn btn-led" type="button" aria-pressed="false" aria-label="All sequences">
                   All
                 </button>
               </div>
@@ -380,8 +373,10 @@
           All, at the end of the row with Rec, Play and Stop, plays every sequence in order: lit, each pass (the whole
           of a sequence, all its bars) is followed by the next sequence, and the last by the first, until you press
           Stop. Play begins with the sequence showing, the display says ALL where it says SEQ, and the sequence keys
-          follow what plays. A sequence queued with the keys under the display goes first, and the order goes on from
-          it. All is not kept: it is off each time the page opens
+          follow what plays (a moment ahead of the sound, about a quarter of a second at 100 BPM). A sequence queued
+          with the keys under the display goes first, and the order goes on from it; a press in the last moment before a
+          pass ends goes after the next one. All is not kept: it is off each time the page opens, and a chain that plays
+          does not save the beat as it goes
         </li>
         <li>
           The two bars at the right of the display show how loud the left and right of the output are, as it is heard

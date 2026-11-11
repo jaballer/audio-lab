@@ -304,6 +304,11 @@ export function createScheduler({
     get pendingSteps() {
       return visualQueue.length;
     },
+    // Where the next step to be scheduled falls on the grid (before swing): a page that builds steps again can tell whether the
+    // scheduler has got past a pass end it knows of, or been taken back before it.
+    get nextTime() {
+      return nextTime;
+    },
     markHeard,
     forgetHeard,
   };

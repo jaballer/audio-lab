@@ -807,9 +807,17 @@ function render() {
   setAttr(playBtn, "aria-pressed", String(state.playing));
   setAttr(recBtn, "aria-pressed", String(state.recording));
   setAttr(allBtn, "aria-pressed", String(state.playAll));
+  setAttr(
+    allBtn,
+    "title",
+    state.playAll
+      ? "On: each pass is followed by the next sequence, and the last by the first"
+      : "Off: the sequence showing plays round and round",
+  );
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
   recBtn.classList.toggle("armed", state.recording && !state.playing);
-  lcd.render({ ...state, soundName, steps: STEPS });
+  // The display is of what sounds: for a moment after a sequence takes over, still the one that gave way (playheadPosition is in its numbering).
+  lcd.render({ ...state, sequence: state.playingSequence, bars: state.playingBars, soundName, steps: STEPS });
   midi.refresh();
   if (state.playing) startPaintLoop();
 }
