@@ -508,6 +508,23 @@ export function createSampler({
     wrapped = wrapped.from ? { ...wrapped, from: follow(wrapped.from) } : wrapped;
   }
 
+  // An edit made in the moment after the scheduler has reached a pass end and before its first step has sounded counts at that pass end,
+  // as a press on a sequence key does (takeOverLate): what the song picked for it is worked out again from where the song was before
+  // it, in the list as it is now. What the pass end gave was either a sequence taking over (the one that gave way is `outgoing`) or
+  // the entry going round again, and a different answer takes back the steps built for the first and builds them again. A pass end
+  // that was asked for (a queued sequence) is not the song's to change, and one that has sounded is heard from the next.
+  function reconsiderPassEnd() {
+    if (!playAll || !scheduler.playing || !passEndOpen() || wrapped.time !== lastWrap) return;
+    const ended = wrapped.repeat ? current : slots.findIndex((slot) => slot.pattern === outgoing?.pattern);
+    if (ended < 0) return;
+    const pass = nextPass(arrangement, slots.length, wrapped.from, ended);
+    songAt = { entry: pass.entry, rep: pass.rep };
+    // Still the entry going round again with nothing taken over, only if it was and is: when this takes over, even back to the sequence that
+    // ended, the pass has been restarted, so the pass end is a real one and no longer one that can be withdrawn.
+    wrapped = { ...wrapped, repeat: wrapped.repeat && pass.sequence === ended };
+    if (pass.sequence !== current) takeOverLate(pass.sequence, { automatic: true });
+  }
+
   function addEntry(at = entryCount()) {
     const edit = insertEntry(arrangement, slots.length, at, current);
     if (!edit) {
@@ -516,6 +533,7 @@ export function createSampler({
     }
     const place = Math.min(entryCount(), Math.max(0, at));
     followEdit(edit);
+    reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(place + 1)} ADDED`);
     onChange();
     onSongChange();
@@ -529,6 +547,7 @@ export function createSampler({
       return -1;
     }
     followEdit(edit);
+    reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} REMOVED`);
     onChange();
     onSongChange();
@@ -540,6 +559,7 @@ export function createSampler({
     const edit = moveArrangementEntry(arrangement, slots.length, index, to);
     if (!edit) return index; // already at that end of the song
     followEdit(edit);
+    reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} MOVED TO ${pad2(to + 1)}`);
     onChange();
     onSongChange();
@@ -555,6 +575,7 @@ export function createSampler({
     const last = (at) => (at && at.entry === index ? { ...at, rep: Math.min(at.rep, now - 1) } : at);
     songAt = last(songAt);
     wrapped = wrapped.from ? { ...wrapped, from: last(wrapped.from) } : wrapped;
+    reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} REPEATS ${now}`);
     onChange();
     onSongChange();

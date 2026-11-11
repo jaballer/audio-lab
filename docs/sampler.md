@@ -26,7 +26,10 @@ What `song.js` keeps, and `controller.js` plays:
   page's, `selectedEntry`), so nothing about what plays changes. The controller does the editing (`addEntry`, `removeEntry`,
   `moveEntry`, `setEntryRepeats`) through the pure edits in `arrangement.js`, and keeps where the song is on its entry through
   them (a position that pointed at an entry follows it), so a song that is playing goes on from where it was and hears the edit at
-  the end of the pass. The entry playing is marked from `songPass`, which leads what is heard by the lookahead as the sequence
+  the end of the pass. An edit made in the moment before that downbeat (after the scheduler has reached the pass end and before its
+  first step has sounded, up to a quarter of a second at 100 BPM) counts at it, as a press on a sequence key does
+  (`reconsiderPassEnd`: what the song picked for that pass end is worked out again, and the steps built for it are taken back and
+  built again if it is another). The entry playing is marked from `songPass`, which leads what is heard by the lookahead as the sequence
   keys do. No undo, as for the sequences' own list.
 - **Play All goes by the arrangement**: the controller keeps where the song is (`songAt`) and `nextPass` says which pass follows the
   one that ended (the next time round the entry if it repeats, else the next entry), a queued sequence goes first and the song goes
