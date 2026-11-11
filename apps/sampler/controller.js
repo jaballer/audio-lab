@@ -27,6 +27,8 @@
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setStepVelocity(5, 90, { activate: true })   // the same, and turns the step on first if it is off: one undo
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
+//   sampler.queueSequence(2)     // 0-based; while playing, the one that takes over where this pass ends (pressed again, or the one showing: taken back);
+//                                // stopped, it shows it at once
 //   sampler.addSequence()        // an empty one at the end, shown; the same for copySequence(), which copies the one showing
 //   sampler.removeSequence()     // the one showing goes, and the one after it takes its place (the last one cannot go)
 //   sampler.sequenceHasSteps()   // does the one showing have any steps, in any bar? (to ask before removing it)
@@ -43,8 +45,9 @@
 //   sampler.setSwing(58)         // 50 (straight) to 75: the second step of each pair sounds later (tempo.js)
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
-//                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
+//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
+//                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar, or in the pass that
+//                                // ends as a queued sequence takes over)
 //   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings }: what song.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
@@ -113,8 +116,17 @@ export function createSampler({
   const totalSteps = () => bars * steps;
   const lastPage = () => bars - 1;
 
+  // A sequence can be queued to take over where the pass ends (queueSequence). The scheduler hands the first step of the next
+  // pass to the audio clock before the last steps of this one have sounded, so the switch is made in state up to the lookahead
+  // early, and two things need to know which pass a step belongs to: the hits already scheduled (`pass` on each: only those of
+  // the pass that has begun are built again from the sequence now showing) and the playhead, whose step numbers are the old
+  // sequence's until it reaches `passStart`.
+  let queued = -1; // the sequence that takes over at the end of the pass, or -1
+  let passId = 0; // counts the switches made at the end of a pass
+  let passStart = -Infinity; // on the audio clock, where the pass the last switch began falls
+
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
-  const scheduledHits = []; // { time, gridTime, step, rows, bus, chokes } for each step handed to the scheduler, until its light is shown
+  const scheduledHits = []; // { time, gridTime, step, rows, bus, chokes, pass } for each step handed to the scheduler, until its light is shown
   // A pad plays one voice at a time: a hit cuts off what the pad was still playing (voices.js).
   const voices = createVoices(kit.length, {
     groupOf: (pad) => kit.settings(pad).choke,
@@ -146,8 +158,21 @@ export function createSampler({
       }
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
-      scheduledHits.push({ time, gridTime, step, rows, bus, chokes });
+      scheduledHits.push({ time, gridTime, step, rows, bus, chokes, pass: passId });
       if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
+    },
+    // The loop has come round, and the first step of the next pass is the next one to be built: if a sequence is queued,
+    // this is where it takes over, with the length it has.
+    onWrap(time) {
+      if (queued < 0) return;
+      const next = queued;
+      passId++;
+      passStart = time;
+      adoptSequence(next);
+      scheduler.startPass(totalSteps());
+      onMessage(`SEQ ${pad2(current + 1)}`);
+      onChange();
+      onSongChange();
     },
   });
 
@@ -179,6 +204,8 @@ export function createSampler({
 
   // Live recording: quantize the hit to the nearest 16th step.
   function recordHit(index, velocity) {
+    // Its step would be a place in the sequence that has just gone, and the pattern is the one that came after it. The hit sounds.
+    if (playheadInOldPass()) return;
     const step = nearestStep({
       now: clock.now(),
       playheadTime: scheduler.playheadTime,
@@ -207,6 +234,10 @@ export function createSampler({
     // across steps it chose not to sound, and those have no record (the last one found would be old).
     if (reached && reached.time === scheduler.playheadTime) for (const row of reached.rows) onPadPlayed(row);
   }
+
+  // Between the switch to a queued sequence and the moment its first step sounds, the playhead is still on the last steps of
+  // the sequence before, which are not steps of the one showing.
+  const playheadInOldPass = () => scheduler.playheadStep >= 0 && scheduler.playheadTime < passStart;
 
   // The step keys show one bar; the playhead is only on them while it is in that bar.
   function playheadOnPage(step) {
@@ -287,26 +318,65 @@ export function createSampler({
     onSongChange();
   }
 
-  // Show the sequence in slot `next`, which exists. If it is playing, the playhead carries on into it.
-  function showSequence(next) {
+  // What showing the sequence in slot `next` (which exists) changes here, apart from the scheduler.
+  function adoptSequence(next) {
+    queued = -1;
     current = next;
     pattern = slots[current].pattern;
     history = slots[current].history;
     lastMergedAt = -Infinity;
     bars = slots[current].bars;
     page = 0;
+  }
+
+  // Show the sequence in slot `next` now. If it is playing, the playhead carries on into it. It drops a sequence that was
+  // waiting for the end of the pass: a person who picks one now, or adds or removes one (which moves the numbers), is not
+  // leaving a plan behind.
+  function showSequence(next) {
+    adoptSequence(next);
     scheduler.setSteps(totalSteps());
     scheduler.forgetHeard(); // a live hit still waiting for its step was recorded into the old sequence
     rescheduleQueuedHits();
   }
 
+  const clampSequence = (value) => Math.min(slots.length - 1, Math.max(0, Math.round(value)));
+
   function setSequence(value) {
-    const next = Math.min(slots.length - 1, Math.max(0, Math.round(value)));
-    if (next === current) return;
+    const next = clampSequence(value);
+    if (next === current) {
+      cancelQueue(); // the one asked for is the one showing: there is nothing to wait for
+      return;
+    }
     showSequence(next);
     onMessage(`SEQ ${pad2(current + 1)}`);
     onChange();
     onSongChange();
+  }
+
+  // Take back the sequence that was waiting for the end of the pass, saying so.
+  function cancelQueue() {
+    if (queued < 0) return;
+    queued = -1;
+    onMessage("NEXT CANCELLED");
+    onChange();
+  }
+
+  // Next Seq, as on an MPC: while a beat plays, the sequence asked for takes over where the pass ends and the one showing plays
+  // out until then. Picking the one that is waiting, or the one showing, takes the plan back; picking another changes it.
+  // Stopped, there is no pass to wait for and it is shown at once.
+  function queueSequence(value) {
+    const next = clampSequence(value);
+    if (!scheduler.playing) {
+      setSequence(next);
+      return;
+    }
+    if (next === queued || next === current) {
+      cancelQueue();
+      return;
+    }
+    queued = next;
+    onMessage(`NEXT SEQ ${pad2(next + 1)}`);
+    onChange();
   }
 
   // The one place a sequence is made or goes, so that whatever depends on how many there are (a song that chains them, later)
@@ -407,11 +477,13 @@ export function createSampler({
   }
 
   // The steps already handed to the audio clock were built from the sequence just replaced. Silence
-  // the ones that have not started and have the scheduler build them again from the new one.
+  // the ones that have not started and have the scheduler build them again from the new one. Not the ones of a pass before
+  // a queued switch (the last steps of the sequence that was playing): they are what was meant to sound, and the new pass
+  // is not made of them.
   function rescheduleQueuedHits() {
     if (!scheduler.playing) return;
     const now = clock.now();
-    const first = scheduledHits.findIndex((hit) => hit.time > now);
+    const first = scheduledHits.findIndex((hit) => hit.pass === passId && hit.time > now);
     if (first === -1) return;
     const { step, gridTime } = scheduledHits[first];
     for (const hit of scheduledHits.splice(first)) cancelHit(hit);
@@ -452,6 +524,8 @@ export function createSampler({
   function start() {
     scheduler.stop();
     cancelQueuedHits();
+    queued = -1;
+    passStart = -Infinity;
     scheduler.start();
     onChange();
   }
@@ -462,6 +536,8 @@ export function createSampler({
     const wasPlaying = scheduler.playing;
     scheduler.stop();
     cancelQueuedHits();
+    queued = -1;
+    passStart = -Infinity;
     // Nothing to cut off before the audio exists (a fresh page), so nothing is said.
     if (!wasPlaying && audio.killSound()) onMessage("ALL SOUND OFF");
     onChange();
@@ -514,6 +590,7 @@ export function createSampler({
     setPage,
     setBars,
     setSequence,
+    queueSequence,
     addSequence,
     copySequence,
     removeSequence,
@@ -550,11 +627,12 @@ export function createSampler({
       sequenceCount: slots.length,
       canAddSequence: !atMost(),
       canRemoveSequence: slots.length > 1,
+      queuedSequence: queued,
       bars,
       page,
-      playheadStep: playheadOnPage(scheduler.playheadStep),
+      playheadStep: playheadInOldPass() ? -1 : playheadOnPage(scheduler.playheadStep),
       // The step number in the whole sequence, for the LCD.
-      playheadPosition: scheduler.playheadStep,
+      playheadPosition: playheadInOldPass() ? -1 : scheduler.playheadStep,
       stepsOn: pattern.row(selected).slice(page * steps, (page + 1) * steps),
       canUndo: history.canUndo,
       canRedo: history.canRedo,
