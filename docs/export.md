@@ -187,8 +187,10 @@ Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) were bu
 
 The Sequences choice in the dialog, Showing or All ([#117](https://github.com/jaballer/audio-lab/issues/117), step 3 of song
 mode in [#159](https://github.com/jaballer/audio-lab/issues/159)), exports every sequence in order, once each, as the Play All key
-plays them. It is the simple reading of a song: the sequences there are, in the order they are in. An order a person edits, with
-repeats, is the next step; `songPasses(song)` in `export-wav.js` is where that will change.
+played them before the beat could have an arrangement. It is the simple reading of a song: the sequences there are, in the order
+they are in. Play All now goes by the arrangement (its order and repeats, `arrangement.js`) and the export does not yet, so the
+two differ for a beat that has one (nothing can make one in the page yet); `songPasses(song)` in `export-wav.js` is where the
+export will read it.
 
 - **What is exported is a list of passes.** `planRender` builds `passList`, a pass for each stretch of the render, with the step it
   begins at and its hits. For the sequence showing it is the same one sequence over and over (the warm-up and the loops, as
