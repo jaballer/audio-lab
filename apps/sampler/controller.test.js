@@ -1391,6 +1391,596 @@ describe("adding, copying and removing sequences", () => {
   });
 });
 
+describe("the next sequence", () => {
+  // 120 BPM: a step is 0.125 s and the first falls at 0.05 s, so a pass of 16 steps ends at 2.05 s, and one of 4 bars (64 steps) at 8.05 s.
+  // Each sequence has a step 0 on a pad of its own (sequence 1 on pad 2, sequence 2 on pad 3), to tell which one is sounding.
+  const twoSequences = ({ bars = 1, bpm = 120, nextBars = 1, nextSteps = [0] } = {}) => {
+    const song = songOf(3, { bpm });
+    song.sequences[0] = { bars, pattern: { 0: [0] }, velocities: {} };
+    song.sequences[1] = { bars: nextBars, pattern: { 1: nextSteps }, velocities: {} };
+    song.sequences[2] = { bars: 1, pattern: { 2: [0] }, velocities: {} };
+    return song;
+  };
+  const run = (s, seconds) => {
+    for (let t = 0; t < seconds; t += 0.05) {
+      s.advance(0.05);
+      s.sampler.poll();
+    }
+  };
+
+  it("switches at once when nothing is playing: there is no pass to wait for", () => {
+    const { sampler, message } = setup({ song: twoSequences() });
+    sampler.queueSequence(1);
+    expect(sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
+    expect(message).toHaveBeenLastCalledWith("SEQ 02");
+  });
+
+  it("waits while playing, says which is next, and keeps the one showing", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.5);
+    s.sampler.queueSequence(1);
+    expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: 1 });
+    expect(s.message).toHaveBeenLastCalledWith("NEXT SEQ 02");
+  });
+
+  it("switches where the pass ends, and the new one sounds from its first step at that moment", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.5);
+    s.sampler.queueSequence(1);
+    run(s, 1.2); // 1.7 s: the pass ends at 2.05 s
+    expect(s.sampler.getState().sequence).toBe(0);
+    run(s, 0.45); // 2.15 s: the next pass has been scheduled
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
+    expect(s.message).toHaveBeenLastCalledWith("SEQ 02");
+    expect(s.sounds[1].play).toHaveBeenCalledTimes(1);
+    expect(s.sounds[1].play.mock.calls[0][2]).toBeCloseTo(2.05); // the first step of the new pass, on the grid
+    expect(s.sounds[0].play).toHaveBeenCalledTimes(1); // and nothing more from the old one
+  });
+
+  it("asks for a save when it switches", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    s.songChange.mockClear();
+    run(s, 2);
+    expect(s.songChange).toHaveBeenCalled();
+    expect(s.sampler.getSong().current).toBe(1);
+  });
+
+  it("goes round again in the sequence that took over, pass after pass, from where it began", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    run(s, 6.2); // 6.5 s: the pass of 16 ended at 2.05 s, and the new one has come round twice (4.05 s, 6.05 s)
+    expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([
+      expect.closeTo(2.05, 2),
+      expect.closeTo(4.05, 2),
+      expect.closeTo(6.05, 2),
+    ]);
+  });
+
+  it("waits for the end of a pass of the length the sequence showing has", () => {
+    const s = setup({ song: twoSequences({ bars: 4 }) });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    run(s, 3.5); // 3.8 s: a 1-bar pass would be over, a 4-bar one is not
+    expect(s.sampler.getState().sequence).toBe(0);
+    run(s, 4.6); // 8.4 s: the pass of 64 steps ended at 8.05 s
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, bars: 1 });
+    expect(s.sounds[1].play.mock.calls[0][2]).toBeCloseTo(8.05);
+  });
+
+  it("goes round in the length of the sequence that took over, when it is shorter", () => {
+    const s = setup({ song: twoSequences({ bars: 4 }) });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    run(s, 10.1); // 10.4 s: the pass of 64 steps ended at 8.05 s, and the 16 of the next at 10.05 s
+    expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([
+      expect.closeTo(8.05, 2),
+      expect.closeTo(10.05, 2),
+    ]);
+  });
+
+  it("goes round in the length of the sequence that took over, when it is longer", () => {
+    // Its only step is in the second bar, which a loop of the old length would never reach.
+    const s = setup({ song: twoSequences({ nextBars: 2, nextSteps: [16] }) });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    run(s, 8.1); // 8.4 s: it began at 2.05 s, its step 16 is at 4.05 s, and it comes round at 6.05 s and 8.05 s
+    expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([
+      expect.closeTo(4.05, 2),
+      expect.closeTo(8.05, 2),
+    ]);
+  });
+
+  it("redraws when the switch is made, and not before", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    s.change.mockClear();
+    run(s, 1.2);
+    expect(s.change).not.toHaveBeenCalled();
+    run(s, 0.6);
+    expect(s.change).toHaveBeenCalled();
+  });
+
+  it("takes the queue back when the sequence showing is picked to switch to now", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    s.sampler.setSequence(0);
+    expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: -1 });
+    expect(s.message).toHaveBeenLastCalledWith("NEXT CANCELLED");
+    run(s, 2.2);
+    expect(s.sampler.getState().sequence).toBe(0);
+  });
+
+  // A press just ahead of the downbeat is on time. The scheduler has the pass ended (and hands its first step to the audio clock) up to
+  // a lookahead and a step before that step sounds, so for 1.85 to 2.05 s here a queue has to take the steps back and build them again.
+  describe("queued just ahead of the end of the pass", () => {
+    const toWindow = (s, seconds = 1.85) => {
+      s.sampler.start();
+      run(s, 1.8);
+      s.advance(seconds - 1.8);
+    };
+
+    it("takes over at that end when the first step of the next pass has not been handed to the audio clock yet", () => {
+      const s = setup({ song: twoSequences() });
+      toWindow(s); // 1.85 s: the pass has ended in the scheduler; its first step, at 2.05 s, is not scheduled before 1.93 s
+      expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: -1 });
+      s.sampler.queueSequence(1);
+      // The playhead is on the last steps of the pass that is ending, which are not steps of the sequence that has taken over.
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1, playheadStep: -1 });
+      expect(s.message).toHaveBeenLastCalledWith("SEQ 02");
+      run(s, 0.3); // 2.15 s: the first step of the new pass has sounded
+      expect(s.sampler.getState().playheadStep).toBe(0);
+      run(s, 2.1); // 4.25 s
+      expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([
+        expect.closeTo(2.05, 2),
+        expect.closeTo(4.05, 2),
+      ]);
+      expect(s.sounds[0].play).toHaveBeenCalledTimes(1); // only the first step of the beat, at 0.05 s
+    });
+
+    it("takes back the first step already handed over, which was built from the sequence giving way, and builds it again", () => {
+      const s = setup({ song: twoSequences() });
+      toWindow(s, 1.95); // its first step, at 2.05 s, has been scheduled from the sequence that is giving way
+      expect(s.sounds[0].play).toHaveBeenCalledTimes(2);
+      const given = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
+      s.sampler.queueSequence(1);
+      expect(given.disconnect).toHaveBeenCalledTimes(1);
+      run(s, 0.4);
+      expect(s.sounds[1].play).toHaveBeenCalledTimes(1);
+      expect(s.sounds[1].play.mock.calls[0][2]).toBeCloseTo(2.05); // on the grid, where the beat's own step 0 was
+    });
+
+    it("leaves the last steps of the pass that is ending to sound", () => {
+      const song = twoSequences();
+      song.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
+      const s = setup({ song });
+      toWindow(s, 1.95); // step 15 sounds at 1.925 s: it is behind the clock now, and what was queued with it stays
+      const last = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
+      s.sampler.queueSequence(1);
+      expect(last.disconnect).not.toHaveBeenCalled();
+    });
+
+    it("takes over at the end of a pass of several bars, with the length it has", () => {
+      const s = setup({ song: twoSequences({ bars: 4 }) });
+      s.sampler.start();
+      run(s, 7.9); // the pass of 64 steps ends at 8.05 s
+      s.sampler.queueSequence(1);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, bars: 1 });
+      run(s, 2.5);
+      expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([
+        expect.closeTo(8.05, 2),
+        expect.closeTo(10.05, 2),
+      ]);
+    });
+
+    it("waits for the pass after once the first step of the one that has begun has sounded", () => {
+      const s = setup({ song: twoSequences() });
+      s.sampler.start();
+      run(s, 2.2); // the first step of the second pass sounded at 2.05 s
+      s.sampler.queueSequence(1);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: 1 });
+      run(s, 2);
+      expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(4.05, 2)]);
+    });
+
+    it("waits for the end of the pass the queued sequence has just taken over when another is queued in that moment", () => {
+      const s = setup({ song: twoSequences() });
+      s.sampler.start();
+      run(s, 0.3);
+      s.sampler.queueSequence(1);
+      run(s, 1.6); // 1.9 s: the second sequence has taken over, and its first step is still to sound
+      s.sampler.queueSequence(2);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: 2 });
+      run(s, 2.4); // 4.3 s
+      expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(2.05, 2)]);
+      expect(s.sounds[2].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(4.05, 2)]);
+    });
+
+    it("makes a second press in that moment the one that follows, as it does once the first has taken over", () => {
+      const s = setup({ song: twoSequences() });
+      toWindow(s);
+      s.sampler.queueSequence(1);
+      s.sampler.queueSequence(2);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: 2 });
+      run(s, 2.4); // 4.25 s
+      expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(2.05, 2)]);
+      expect(s.sounds[2].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(4.05, 2)]);
+    });
+
+    it("waits for the end of the longer pass when the loop is made longer after the pass has ended in the scheduler", () => {
+      const s = setup({ song: twoSequences() });
+      toWindow(s); // 1.85 s: the pass of one bar has ended in the scheduler, and its first step has not sounded
+      s.sampler.setBars(2); // the loop carries on into a second bar: 2.05 s is not where it ends any more
+      s.sampler.queueSequence(1);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: 1 });
+      run(s, 2.6); // 4.45 s
+      expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(4.05, 2)]);
+    });
+
+    it("waits for the end of the longer pass when a longer sequence is picked to switch to now in that moment", () => {
+      const s = setup({ song: twoSequences({ nextBars: 2 }), maxSequences: 6 });
+      toWindow(s);
+      s.sampler.setSequence(1); // two bars, carried on into
+      s.sampler.queueSequence(2);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: 2 });
+      run(s, 2.6);
+      expect(s.sounds[2].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(4.05, 2)]);
+    });
+
+    it("still takes over at that end when a shorter sequence is picked to switch to now in that moment", () => {
+      const s = setup({ song: twoSequences({ bars: 2 }), maxSequences: 6 });
+      s.sampler.start();
+      run(s, 3.8);
+      s.advance(0.05); // 3.85 s: the pass of two bars has ended in the scheduler, and its first step sounds at 4.05 s
+      s.sampler.setSequence(1); // one bar
+      s.sampler.queueSequence(2);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 2, queuedSequence: -1 });
+    });
+
+    it("still takes over at that end when the loop is made shorter in that moment", () => {
+      const s = setup({ song: twoSequences({ bars: 2 }) });
+      s.sampler.start();
+      run(s, 3.8); // the pass of two bars ends at 4.05 s
+      s.sampler.setBars(1); // a pass that ends where it did
+      s.sampler.queueSequence(1);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
+    });
+
+    // A sequence of two bars, made one bar at the moment the scheduler is at the end of the first: the loop has come round there.
+    describe("when the loop is made shorter so that it ends where the scheduler is", () => {
+      const atEndOfFirstBar = () => {
+        const s = setup({ song: twoSequences({ bars: 2 }) });
+        s.sampler.start();
+        const tick = (count) => {
+          for (let i = 0; i < count; i++) {
+            s.advance(0.05);
+            s.sampler.poll();
+          }
+        };
+        tick(6);
+        s.sampler.queueSequence(1);
+        tick(31); // 1.85 s: step 15 is scheduled, and the next is 16, which is where a loop of one bar ends
+        return s;
+      };
+
+      it("takes over there, in the pass that begins at 2.05 s", () => {
+        const s = atEndOfFirstBar();
+        s.sampler.setBars(1);
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1, bars: 1 });
+        expect(s.sampler.getSong().sequences[0].bars).toBe(1);
+        for (let i = 0; i < 12; i++) {
+          s.advance(0.05);
+          s.sampler.poll();
+        }
+        expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(2.05, 2)]);
+      });
+
+      it("says the sequence that took over, and not the length it was shortened to", () => {
+        const s = atEndOfFirstBar();
+        s.sampler.setBars(1);
+        expect(s.message).toHaveBeenLastCalledWith("SEQ 02");
+        expect(s.message).toHaveBeenCalledWith("1 BAR");
+      });
+
+      it("redraws and asks for a save", () => {
+        const s = atEndOfFirstBar();
+        s.change.mockClear();
+        s.songChange.mockClear();
+        s.sampler.setBars(1);
+        expect(s.change).toHaveBeenCalled();
+        expect(s.songChange).toHaveBeenCalled();
+      });
+
+      it("is a pass end for a sequence queued afterwards too, when none was before", () => {
+        const s = setup({ song: twoSequences({ bars: 2 }) });
+        s.sampler.start();
+        for (let i = 0; i < 37; i++) {
+          s.advance(0.05);
+          s.sampler.poll();
+        }
+        s.sampler.setBars(1); // the loop comes round here, with nothing queued
+        s.sampler.queueSequence(1); // and a press before the downbeat takes over there
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
+      });
+    });
+
+    it("is for the end of the pass before a restart, and not for the one after", () => {
+      const s = setup({ song: twoSequences() });
+      toWindow(s);
+      s.sampler.start();
+      run(s, 0.1);
+      s.sampler.queueSequence(1);
+      expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: 1 }); // the restarted beat is a pass of its own
+    });
+  });
+
+  it("takes the queue back when the queued sequence is pressed again, or the one showing is", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    s.sampler.queueSequence(1);
+    expect(s.sampler.getState().queuedSequence).toBe(-1);
+    expect(s.message).toHaveBeenLastCalledWith("NEXT CANCELLED");
+    s.sampler.queueSequence(2);
+    s.sampler.queueSequence(0);
+    expect(s.sampler.getState().queuedSequence).toBe(-1);
+    run(s, 2.2);
+    expect(s.sampler.getState().sequence).toBe(0);
+  });
+
+  it("changes which one is next when another is pressed", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    s.sampler.queueSequence(2);
+    expect(s.sampler.getState().queuedSequence).toBe(2);
+    run(s, 2);
+    expect(s.sampler.getState().sequence).toBe(2);
+  });
+
+  it.each([
+    ["Stop", (sampler) => sampler.stop()],
+    ["Play pressed again", (sampler) => sampler.start()],
+    ["picking a sequence to switch to now", (sampler) => sampler.setSequence(2)],
+    ["adding one", (sampler) => sampler.addSequence()],
+    ["removing the one showing", (sampler) => sampler.removeSequence()],
+  ])("drops the queue on %s", (_name, act) => {
+    const s = setup({ song: twoSequences(), maxSequences: 6 });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    act(s.sampler);
+    expect(s.sampler.getState().queuedSequence).toBe(-1);
+  });
+
+  it.each([
+    ["Stop", (sampler) => sampler.stop()],
+    ["Play pressed again", (sampler) => sampler.start()],
+  ])("says the queue is taken back when %s drops it, since the display still says what plays next", (_name, act) => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    act(s.sampler);
+    expect(s.message).toHaveBeenLastCalledWith("NEXT CANCELLED");
+  });
+
+  it("says nothing of a queue when Stop or Play is pressed and there was none", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.message.mockClear();
+    s.sampler.start();
+    s.sampler.stop();
+    expect(s.message).not.toHaveBeenCalledWith("NEXT CANCELLED");
+  });
+
+  it("begins to show the playhead of a beat that is restarted in the moment after a switch, not after the pass it left", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    run(s, 1.6); // 1.9 s: switched, with the old pass's last steps still to sound
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, playheadStep: -1 });
+    s.sampler.start();
+    run(s, 0.1); // the first step of the new run sounded at about 1.95 s, before the pass that was left would have ended (2.05 s)
+    expect(s.sampler.getState().playheadStep).toBe(0);
+  });
+
+  it("writes a live hit into the new sequence once its pass has begun", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.toggleRec();
+    s.sampler.queueSequence(1);
+    run(s, 2.1); // 2.4 s: the new pass began at 2.05 s
+    expect(s.sampler.getState().playheadStep).toBeGreaterThanOrEqual(0);
+    s.sampler.triggerPad(3);
+    expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
+    expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+  });
+
+  it("does not switch after Stop and Play when the queue was dropped", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    s.sampler.stop();
+    s.sampler.start();
+    run(s, 2.5);
+    expect(s.sampler.getState().sequence).toBe(0);
+  });
+
+  it("shows no playhead for the last steps of the old pass once the switch has been made, a moment before they sound", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(1);
+    run(s, 1.65); // 1.95 s: the pass ends at 2.05 s and its step 0 has just been scheduled; the playhead is on the old step 15
+    expect(s.sampler.getState().sequence).toBe(1);
+    expect(s.sampler.getState()).toMatchObject({ playheadStep: -1, playheadPosition: -1 });
+    run(s, 0.15); // 2.1 s: the playhead is on the first step of the new pass
+    expect(s.sampler.getState()).toMatchObject({ playheadStep: 0, playheadPosition: 0 });
+  });
+
+  // Between the switch and the first step of the new pass sounding, the playhead is on the last steps of the sequence that gave
+  // way, so a hit is a step of that one, or the downbeat of the one that takes over if it is nearest that.
+  describe("a live hit in the moment between a switch and the new pass", () => {
+    const recordingThroughSwitch = () => {
+      const s = setup({ song: twoSequences() });
+      s.sampler.start();
+      run(s, 0.3);
+      s.sampler.toggleRec();
+      s.sampler.queueSequence(1);
+      run(s, 1.6); // 1.9 s: switched at 1.85 s; step 15 of the old pass sounded at 1.925 s, and the new pass begins at 2.05 s
+      return s;
+    };
+
+    it("is written into the sequence that is giving way, at the step it is nearest, and sounds once", () => {
+      const s = recordingThroughSwitch();
+      run(s, 0.04); // 1.95 s: the playhead is on step 15
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, playheadStep: -1 });
+      s.sampler.triggerPad(3);
+      const song = s.sampler.getSong();
+      expect(song.sequences[0].pattern[3]).toEqual([15]);
+      expect(song.sequences[1].pattern[3]).toBeUndefined();
+      expect(s.sounds[3].play).toHaveBeenCalledTimes(1);
+    });
+
+    it("is written into the sequence that takes over, at its first step, when that is the one it is nearest", () => {
+      const s = recordingThroughSwitch();
+      run(s, 0.1); // 2.0 s, 50 ms before the downbeat: the playhead is still on step 15
+      expect(s.sampler.getState().playheadStep).toBe(-1);
+      s.sampler.triggerPad(3);
+      const song = s.sampler.getSong();
+      expect(song.sequences[1].pattern[3]).toEqual([0]);
+      expect(song.sequences[0].pattern[3]).toBeUndefined();
+      expect(s.sounds[3].play).toHaveBeenCalledTimes(1); // and it does not sound again on the downbeat
+      run(s, 0.3);
+      expect(s.sounds[3].play).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts its step in the length of the sequence that gave way, which may not be the length of the one that took over", () => {
+      const s = setup({ song: twoSequences({ bars: 2 }) }); // 32 steps, then a sequence of 16
+      s.sampler.start();
+      const tick = (count) => {
+        for (let i = 0; i < count; i++) {
+          s.advance(0.05);
+          s.sampler.poll();
+        }
+      };
+      tick(6);
+      s.sampler.toggleRec();
+      s.sampler.queueSequence(1);
+      tick(72); // 3.9 s: switched at 3.85 s; the pass of 32 steps ends at 4.05 s, and the playhead is on its step 30 (31 is at 3.925 s)
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, bars: 1, playheadStep: -1 });
+      s.sampler.triggerPad(3); // past halfway to step 31
+      expect(s.sampler.getSong().sequences[0].pattern[3]).toEqual([31]);
+      expect(s.sampler.getSong().sequences[1].pattern[3]).toBeUndefined();
+    });
+
+    it("can be undone in the sequence it was written into, and not in the one showing", () => {
+      const s = recordingThroughSwitch();
+      run(s, 0.04);
+      s.sampler.triggerPad(3);
+      expect(s.sampler.getState().canUndo).toBe(false); // the one showing has nothing to undo
+      s.sampler.setSequence(0);
+      expect(s.sampler.getState().canUndo).toBe(true);
+      s.sampler.undo();
+      expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+    });
+
+    it("asks for a save", () => {
+      const s = recordingThroughSwitch();
+      run(s, 0.04);
+      s.songChange.mockClear();
+      s.sampler.triggerPad(3);
+      expect(s.songChange).toHaveBeenCalled();
+    });
+
+    it("is written into the one showing once the new pass has begun, as before", () => {
+      const s = recordingThroughSwitch();
+      run(s, 0.3); // 2.2 s
+      s.sampler.triggerPad(3);
+      expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
+      expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+    });
+
+    it("goes into the sequence that gave way when a sequence taking over late took it over", () => {
+      const s = setup({ song: twoSequences() });
+      s.sampler.start();
+      run(s, 1.8);
+      s.sampler.toggleRec();
+      s.advance(0.05); // 1.85 s: the pass has ended in the scheduler
+      s.sampler.queueSequence(1);
+      s.advance(0.05);
+      s.sampler.triggerPad(3);
+      expect(s.sampler.getSong().sequences[0].pattern[3]).toEqual([15]);
+    });
+  });
+
+  it.each([
+    ["the sounds change", (sampler) => sampler.kitChanged("sound"), 1],
+    ["another sequence is picked to switch to now", (sampler) => sampler.setSequence(2), 2],
+  ])(
+    "builds again only the steps of the pass that has begun when %s just after the switch, and leaves the old pass's",
+    (_name, act, pad) => {
+      // 240 BPM: a step is 0.0625 s and the pass ends at 1.05 s. At 0.95 s the switch has been made, the old step 15 (at 0.9875 s)
+      // and the new step 0 (at 1.05 s) are both queued.
+      const song = twoSequences({ bpm: 240 });
+      song.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
+      const s = setup({ song });
+      s.sampler.start();
+      for (let t = 0; t < 0.6; t += 0.05) s.advance(0.05);
+      s.sampler.queueSequence(1);
+      for (let t = 0; t < 0.35; t += 0.05) s.advance(0.05); // 0.95 s
+      expect(s.sampler.getState().sequence).toBe(1);
+      const oldStep = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
+      const newStep = busOf(s.sounds[1].play.mock.calls.at(-1)[1]);
+      act(s.sampler);
+      expect(newStep.disconnect).toHaveBeenCalledTimes(1); // built again
+      expect(oldStep.disconnect).not.toHaveBeenCalled(); // the pass that was already underway keeps what it had
+      s.advance(0.1);
+      expect(s.sounds[pad].play.mock.calls.at(-1)[2]).toBeCloseTo(1.05); // and the new pass is still there, at the same time
+    },
+  );
+
+  it("makes the switch once, in the pass where it lands, when a stall skips past the end of the pass", () => {
+    const s = setup({ song: twoSequences() });
+    s.sampler.start();
+    s.advance(0.1);
+    s.sampler.queueSequence(1);
+    s.advance(3); // the timer was held up: the pass ended at 2.05 s while nothing was scheduled
+    s.sampler.poll();
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
+    expect(s.message.mock.calls.filter(([text]) => text === "SEQ 02")).toHaveLength(1);
+  });
+
+  it("says which sequence is queued in the state", () => {
+    const s = setup({ song: twoSequences() });
+    expect(s.sampler.getState().queuedSequence).toBe(-1);
+    s.sampler.start();
+    run(s, 0.2);
+    s.sampler.queueSequence(2);
+    expect(s.sampler.getState().queuedSequence).toBe(2);
+  });
+});
+
 describe("steps and clearing", () => {
   it("toggles a step of the selected pad and asks for a save", () => {
     const { sampler, songChange, change } = setup();

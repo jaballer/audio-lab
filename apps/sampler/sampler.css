@@ -760,6 +760,19 @@
   background: linear-gradient(180deg, #3a3832, #26241f);
   color: #f3efe3;
 }
+/* The sequence that plays next (sequence-row.js) is ringed and blinks to the page's orange, as the Rec key blinks when armed. It is
+   not the dark face of the chosen key, which a blink to it would be taken for. The ring stays for a person who has asked for less
+   motion, so what is queued is not only said by the blinking. */
+.seq-chips .btn[data-queued="true"] {
+  box-shadow: inset 0 0 0 2px #1b1a18;
+  animation: seq-queued 0.8s steps(1) infinite;
+}
+@keyframes seq-queued {
+  50% {
+    background: #ff7a45; /* the ink on it is 5:1 */
+    color: var(--ink);
+  }
+}
 /* Edit tools for the steps below: undo and redo, copy and paste, clear. They have a row of their own under the
    label and the bar buttons, so the header reads the same at every width. */
 .step-tools {
@@ -875,7 +888,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn-rec.armed::before {
+  .btn-rec.armed::before,
+  .seq-chips .btn[data-queued="true"] {
     animation: none;
   }
   .sampler-pad,
@@ -946,6 +960,16 @@
     background: Highlight;
     filter: none; /* the pressed rule above it has a green glow, with the same weight as the rule that removes it */
     box-shadow: none;
+  }
+  /* The sequence that plays next is a ring and a blink, which forced colors take away (a shadow, a face colour): a dashed border
+     in the system's highlight says it with a shape, and so does an underline, since in a joined group the neighbours' solid
+     borders cover the dashes at the sides of a key that is not at an end. */
+  .seq-chips .btn[data-queued="true"] {
+    border-style: dashed;
+    border-color: Highlight;
+    text-decoration: underline 2px;
+    text-underline-offset: 3px;
+    animation: none;
   }
   /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */
   .seq-lengths .btn[aria-pressed="true"],

@@ -18,7 +18,7 @@ A small set of browser audio tools built with Vite, the Web Audio API and Web MI
 
 - 4×4 grid of 16 pads (Kick, Snare, closed and open hats, Clap, Rim, toms, Cowbell, Conga, Shaker, Bass, Crash, Ride, Zap, Blip)
 - Play pads by clicking, with the keyboard (the keys mirror the pad grid: `1 2 3 4` / `Q W E R` / `A S D F` / `Z X C V`), or with a MIDI controller. Hold Shift to select a pad and open its editor without playing it
-- A looping 16-step sequencer: up to 8 sequences of 1, 2, 4 or 8 bars (a beat starts with one, and you add, copy and remove them), a velocity for every step, Undo and Redo (Ctrl/Cmd + Z), and Copy and Paste for a bar. Space toggles play/stop
+- A looping 16-step sequencer: up to 8 sequences of 1, 2, 4 or 8 bars (a beat starts with one, and you add, copy and remove them; while it plays, a press on a sequence's key makes it play next, at the end of the pass, and Shift switches at once), a velocity for every step, Undo and Redo (Ctrl/Cmd + Z), and Copy and Paste for a bar. Space toggles play/stop
 - REC mode: press Rec while playing and hit pads to record them, quantized to 16th notes, with the velocity of the hit
 - Your own sounds: drop an audio file on a pad (up to 10 seconds and 5 MB) or load one in the pad editor, which also trims it and sets each pad's gain, pitch, choke group, amplitude envelope and colour
 - Export saves the sequence showing as a looping audio file (1, 2, 4 or 8 loops in one file, in stereo or mono)
@@ -164,7 +164,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `shared/notes.js` — note names and black/white keys
 - `shared/scales.js` — slider position to value mappings (`linear`, `exp`, `squared`)
 - `shared/tempo.js` — BPM limits, step length, swing (its range and how late a step sounds), tap tempo and snapping a live hit to the nearest step; no DOM
-- `shared/scheduler.js` — the lookahead scheduler: starts and stops, tempo, and the queue the playhead is painted from, on whatever clock it is given (the sampler gives it the audio clock); no DOM
+- `shared/scheduler.js` — the lookahead scheduler: starts and stops, tempo, where a pass ends (`onWrap`, so a page can start the next one with another length), and the queue the playhead is painted from, on whatever clock it is given (the sampler gives it the audio clock); no DOM
 - `shared/step-keys.js` + `shared/step-keys.css` — the row of step keys for one pad, in groups; the sampler and the MPC Sample page use it, and each page that uses it imports the stylesheet
 - `shared/storage.js` — JSON in `localStorage` that never throws
 - `shared/offline.js` — what each page's `main.js` calls to work offline: registers the service worker (production builds only) and shows the update notice when a newer build is waiting
