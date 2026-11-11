@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSequenceRow, pressIsNow, sequenceKey, sequenceKeys } from "./sequence-row.js";
+import { createSequenceRow, latchFromStored, pressIsNow, sequenceKey, sequenceKeys } from "./sequence-row.js";
 
 describe("pressIsNow", () => {
   it("is a press that waits for the end of the pass when the latch is on, and Shift switches at once", () => {
@@ -10,6 +10,22 @@ describe("pressIsNow", () => {
   it("is a press that switches at once when the latch is off, and Shift waits for the end of the pass", () => {
     expect(pressIsNow({ latched: false, shift: false })).toBe(true);
     expect(pressIsNow({ latched: false, shift: true })).toBe(false);
+  });
+});
+
+describe("latchFromStored", () => {
+  it("is on for a first visit, and for storage that is blocked, so a person who has not chosen has the way #163 works", () => {
+    expect(latchFromStored(undefined)).toBe(true);
+    expect(latchFromStored(null)).toBe(true);
+  });
+
+  it("is off only for a stored false, and keeps what was stored on", () => {
+    expect(latchFromStored(false)).toBe(false);
+    expect(latchFromStored(true)).toBe(true);
+  });
+
+  it("is on for anything else that was stored, which a person did not put there", () => {
+    for (const odd of ["false", "yes", 0, 1, "", {}, [], "garbage{"]) expect(latchFromStored(odd)).toBe(true);
   });
 });
 
@@ -218,7 +234,8 @@ describe("createSequenceRow", () => {
     refresh();
     const latch = actions()[LATCH];
     expect(latch.textContent).toBe("Next");
-    expect(latch.getAttribute("aria-label")).toBe("Next sequence");
+    expect(latch.getAttribute("aria-label")).toBe("Next: queue sequence presses"); // starts with the "Next" it shows
+    expect(latch.className).toContain("seq-latch"); // the style hook for its pressed look, in sampler.css
     expect(latch.getAttribute("aria-pressed")).toBe("true");
     refresh({ latched: false });
     expect(latch.getAttribute("aria-pressed")).toBe("false");
@@ -227,11 +244,11 @@ describe("createSequenceRow", () => {
   it("describes the latch by what it is doing now, in both states, and does not say it differently in between", () => {
     refresh({ latched: true });
     expect(actions()[LATCH].getAttribute("title")).toBe(
-      "On: a press on a sequence waits for the end of the pass (Shift: at once)",
+      "On: while the beat plays, a press on a sequence waits for the end of the pass (Shift: at once)",
     );
     refresh({ latched: false });
     expect(actions()[LATCH].getAttribute("title")).toBe(
-      "Off: a press on a sequence switches at once (Shift: waits for the end of the pass)",
+      "Off: while the beat plays, a press on a sequence switches at once (Shift: waits for the end of the pass)",
     );
   });
 
@@ -252,7 +269,7 @@ describe("createSequenceRow", () => {
     expect(calls.onSelect).toHaveBeenLastCalledWith(1, { now: false });
   });
 
-  it("is on again for a key made after the latch was turned off, and the keys already there", () => {
+  it("reads a press on a key made after the latch was turned off by the latch it has now, as the keys already there do", () => {
     refresh({ count: 2, latched: false });
     refresh({ count: 4, latched: false });
     keys()[3].click();

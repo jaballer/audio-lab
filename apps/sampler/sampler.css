@@ -750,7 +750,7 @@
    pressed in, with a dark face. */
 .seq-lengths .btn,
 .seq-chips .btn {
-  min-width: 2.8em;
+  min-width: 2.6em; /* eight sequence keys, with Next beside +, Copy and −, fit the display's width: 2.8em was 18px too wide */
 }
 .seq-lengths .btn[aria-pressed="true"],
 .seq-lengths .btn[aria-pressed="true"]:hover,

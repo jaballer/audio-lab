@@ -20,6 +20,10 @@ import { setAttr, setDisabledMany } from "../../shared/dom-updates.js";
 // What a key says: the number on its face and its name for a screen reader (the number alone says little out of its row).
 export const sequenceKey = (index) => ({ index, label: String(index + 1), name: `Sequence ${index + 1}` });
 
+// The latch is on unless a person turned it off: only a stored false is off, so storage that is blocked, empty or holding
+// something else (a value another page wrote, an edit by hand) gives the way a beat works without it.
+export const latchFromStored = (stored) => stored !== false;
+
 // Does a press on a sequence key switch to it at once (and not wait for the end of the pass)? With the latch on a press waits and
 // Shift switches; with it off a press switches and Shift waits.
 export const pressIsNow = ({ latched, shift }) => latched === shift;
@@ -82,7 +86,7 @@ export function createSequenceRow(element, { onSelect, onLatch, onAdd, onCopy, o
   actions.setAttribute("role", "group");
   actions.setAttribute("aria-label", "Sequence tools");
   // Whether a press on a sequence waits for the end of the pass (on, as it is until a person turns it off) or switches at once.
-  const latch = button("Next", "seq-latch", { "aria-label": "Next sequence" });
+  const latch = button("Next", "seq-latch", { "aria-label": "Next: queue sequence presses" });
   const add = button("+", "", { "aria-label": "Add an empty sequence" });
   const copy = button("Copy", "", { "aria-label": "Copy this sequence to a new one" });
   const remove = button("−", "", { "aria-label": "Remove this sequence" });
@@ -121,8 +125,8 @@ export function createSequenceRow(element, { onSelect, onLatch, onAdd, onCopy, o
         latch,
         "title",
         on
-          ? "On: a press on a sequence waits for the end of the pass (Shift: at once)"
-          : "Off: a press on a sequence switches at once (Shift: waits for the end of the pass)",
+          ? "On: while the beat plays, a press on a sequence waits for the end of the pass (Shift: at once)"
+          : "Off: while the beat plays, a press on a sequence switches at once (Shift: waits for the end of the pass)",
       );
       for (const { index, pressed, queued: next, name, title } of sequenceKeys(count, current, {
         queued,

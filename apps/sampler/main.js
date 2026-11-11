@@ -29,7 +29,7 @@ import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createLevelReader } from "./level-meter.js";
 import { createLevelMeter } from "./level-meter-view.js";
-import { createSequenceRow } from "./sequence-row.js";
+import { createSequenceRow, latchFromStored } from "./sequence-row.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
@@ -693,14 +693,14 @@ function removeSequence() {
 // switches at once; off, a press switches at once and Shift waits. A touch screen has no Shift, so off is how it switches at once.
 // Kept between visits, on until a person turns it off.
 const NEXT_KEY = "pad-sampler:next";
-let queuePresses = loadJson(NEXT_KEY, true) !== false;
+let queuePresses = latchFromStored(loadJson(NEXT_KEY));
 const sequenceRow = createSequenceRow($("seq-row"), {
   // The row says which a press is (`now`), by the latch and Shift. Stopped, both show the sequence: the sampler works that out.
   onSelect: (index, { now }) => (now ? sampler.setSequence(index) : sampler.queueSequence(index)),
   onLatch: (on) => {
     queuePresses = on;
     saveJson(NEXT_KEY, on);
-    say(on ? "NEXT SEQ ON" : "NEXT SEQ OFF");
+    say(on ? "SEQ KEYS: NEXT" : "SEQ KEYS: NOW"); // not "NEXT SEQ ...", which is what the LCD says of a sequence that is queued
     render();
   },
   onAdd: () => sampler.addSequence(),
