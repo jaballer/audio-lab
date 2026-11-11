@@ -3245,10 +3245,12 @@ describe("the arrangement", () => {
       expect(arrangementOf(sampler)).toEqual([entry(1)]);
     });
 
-    it("asks for a save, as adding a sequence always does", () => {
+    it("asks for a save, as adding or copying a sequence always does, for the entry as much as for the sequence", () => {
       const { sampler, songChange } = setup({ song: withArrangement(3, [entry(1)]), maxSequences: 6 });
       sampler.addSequence();
-      expect(songChange).toHaveBeenCalled();
+      expect(songChange).toHaveBeenCalledTimes(1);
+      sampler.copySequence();
+      expect(songChange).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -3269,6 +3271,12 @@ describe("the arrangement", () => {
       sampler.setSequence(2);
       sampler.removeSequence();
       expect(arrangementOf(sampler)).toEqual([entry(0), entry(1)]);
+    });
+
+    it("asks for a save, as removing a sequence always does", () => {
+      const { sampler, songChange } = setup({ song: withArrangement(3, [entry(1), entry(2)]), maxSequences: 6 });
+      sampler.removeSequence();
+      expect(songChange).toHaveBeenCalledTimes(1);
     });
 
     it("is no arrangement when the sequence removed was all there was in it", () => {
