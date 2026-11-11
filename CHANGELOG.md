@@ -107,8 +107,8 @@ Nothing yet.
   ([#127](https://github.com/jaballer/audio-lab/pull/127), [#130](https://github.com/jaballer/audio-lab/pull/130)).
 - Sampler: an export shows its progress and can be cancelled, with the Cancel export button or Escape
   ([#129](https://github.com/jaballer/audio-lab/pull/129), [#136](https://github.com/jaballer/audio-lab/pull/136)).
-- Sampler: Export opens a window to choose 1, 2, 4 or 8 loops of the sequence in one file, and stereo or mono, with the
-  file's length and size shown before it is made ([#136](https://github.com/jaballer/audio-lab/pull/136)).
+- Sampler: Export opens a window to choose 1, 2, 4 or 8 loops of the sequence in one file, and stereo or mono, with
+  the file's length and size shown before it is made ([#136](https://github.com/jaballer/audio-lab/pull/136)).
 - Sampler: the Export window says, before the file is made, which bars have no steps (a file is as long as all its bars) and
   when it needs a lot of memory (from about 200 MB; a phone may not have it), and it says why Export is off for a
   sequence with no steps or a browser that cannot render a file
