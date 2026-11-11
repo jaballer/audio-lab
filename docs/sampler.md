@@ -20,8 +20,11 @@ What `song.js` keeps, and `controller.js` plays:
   save the beat as it goes.
 - **The arrangement** (`arrangement.js`) is the order a song plays its sequences in, each with repeats. `null`, the default,
   means every sequence once, in order, so it cannot fall out of step with the sequences until a person edits it. So far it
-  is saved data with its rules and no UI (#159, step 4a): Play All and Export's "All the sequences" still play every
-  sequence once, in order (`songPasses` in `export-wav.js` is where the export will read it).
+  is saved data with its rules and no UI (#159, steps 4a and 4b so far). Play All goes by it: the controller keeps where the
+  song is (`songAt`) and `nextPass` says which pass follows the one that ended (the next time round the entry if it repeats,
+  else the next entry), a queued sequence goes first and the song goes on from the first entry that names it. Export's
+  "All the sequences" does not read it yet and plays every sequence once, in order (`songPasses` in `export-wav.js` is where
+  the export will).
 - **Starters** (`starters.js`) are whole beats to begin from (tempo, swing, patterns, choke groups, colours). The pads'
   sounds are the same in every starter: a starter changes the beat, not the kit.
 - **Swing** is 50 (straight) to 75: how much of each pair of steps the first takes, so the second sounds later

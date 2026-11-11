@@ -5,7 +5,9 @@ import {
   afterSequenceAdded,
   afterSequenceRemoved,
   cleanArrangement,
+  nextPass,
   passOrder,
+  positionOf,
   resolveArrangement,
 } from "./arrangement.js";
 
@@ -157,5 +159,129 @@ describe("afterSequenceRemoved", () => {
     const after = afterSequenceRemoved(before, 0);
     expect(after).not.toBe(before);
     expect(before).toEqual([entry(0), entry(1)]);
+  });
+});
+
+describe("positionOf", () => {
+  it("is the first entry that names the sequence, at its first repeat", () => {
+    expect(positionOf([entry(2, 3), entry(0), entry(2)], 3, 2)).toEqual({ entry: 0, rep: 0 });
+    expect(positionOf([entry(2, 3), entry(0), entry(2)], 3, 0)).toEqual({ entry: 1, rep: 0 });
+  });
+
+  it("is null for a sequence that no entry names: it is not in the song", () => {
+    expect(positionOf([entry(2), entry(0)], 3, 1)).toBeNull();
+  });
+
+  it("is the sequence's own place when there is no arrangement: every sequence is in it, once, in order", () => {
+    expect(positionOf(null, 4, 3)).toEqual({ entry: 3, rep: 0 });
+    expect(positionOf(null, 4, 0)).toEqual({ entry: 0, rep: 0 });
+  });
+});
+
+describe("nextPass", () => {
+  // The passes a song gives, one after the other, from the first of them, the way the controller asks for them: it hands back
+  // where the last one was and the sequence that played.
+  const walk = (
+    arrangement,
+    count,
+    passes,
+    start = { played: null, sequence: resolveArrangement(arrangement, count)[0].sequence },
+  ) => {
+    const out = [];
+    let { played, sequence } = start;
+    for (let i = 0; i < passes; i++) {
+      const pass = nextPass(arrangement, count, played, sequence);
+      out.push(pass.sequence);
+      played = { entry: pass.entry, rep: pass.rep };
+      sequence = pass.sequence;
+    }
+    return out;
+  };
+
+  it("goes on to the next sequence, and from the last to the first, with no arrangement", () => {
+    expect(nextPass(null, 3, null, 0)).toEqual({ entry: 1, rep: 0, sequence: 1 });
+    expect(nextPass(null, 3, { entry: 1, rep: 0 }, 1)).toEqual({ entry: 2, rep: 0, sequence: 2 });
+    expect(nextPass(null, 3, { entry: 2, rep: 0 }, 2)).toEqual({ entry: 0, rep: 0, sequence: 0 });
+    expect(nextPass(null, 1, null, 0)).toEqual({ entry: 0, rep: 0, sequence: 0 });
+  });
+
+  it("repeats an entry before it goes on, and counts the repeat", () => {
+    const arrangement = [entry(1, 3), entry(0)];
+    expect(nextPass(arrangement, 2, { entry: 0, rep: 0 }, 1)).toEqual({ entry: 0, rep: 1, sequence: 1 });
+    expect(nextPass(arrangement, 2, { entry: 0, rep: 1 }, 1)).toEqual({ entry: 0, rep: 2, sequence: 1 });
+    expect(nextPass(arrangement, 2, { entry: 0, rep: 2 }, 1)).toEqual({ entry: 1, rep: 0, sequence: 0 });
+  });
+
+  it("goes round from the last entry to the first", () => {
+    expect(nextPass([entry(0), entry(2, 2)], 3, { entry: 1, rep: 1 }, 2)).toEqual({ entry: 0, rep: 0, sequence: 0 });
+  });
+
+  it("gives the passes of passOrder, from the first, round and round", () => {
+    const arrangement = [entry(2, 2), entry(0), entry(1, 3), entry(2)];
+    const order = passOrder(arrangement, 3);
+    const walked = walk(arrangement, 3, order.length * 3);
+    // from the first pass, so the next is the second
+    expect(walked).toEqual([...order.slice(1), ...order, ...order, order[0]]);
+  });
+
+  it("gives every sequence once, in order, round and round, with no arrangement", () => {
+    expect(walk(null, 4, 9)).toEqual([1, 2, 3, 0, 1, 2, 3, 0, 1]);
+  });
+
+  it("counts the times round a single entry and begins it again when they are over", () => {
+    const only = [entry(1, 3)];
+    expect(nextPass(only, 2, { entry: 0, rep: 0 }, 1)).toEqual({ entry: 0, rep: 1, sequence: 1 });
+    expect(nextPass(only, 2, { entry: 0, rep: 1 }, 1)).toEqual({ entry: 0, rep: 2, sequence: 1 });
+    expect(nextPass(only, 2, { entry: 0, rep: 2 }, 1)).toEqual({ entry: 0, rep: 0, sequence: 1 });
+  });
+
+  it("takes the place of the sequence that played from the first entry that names it, when it does not know where it was", () => {
+    const arrangement = [entry(0), entry(1, 2), entry(2), entry(1)];
+    expect(nextPass(arrangement, 3, null, 1)).toEqual({ entry: 1, rep: 1, sequence: 1 });
+    expect(nextPass(arrangement, 3, null, 2)).toEqual({ entry: 3, rep: 0, sequence: 1 });
+  });
+
+  it("believes where it was while that entry still names the sequence that played, and tells two entries for one sequence apart", () => {
+    const arrangement = [entry(1), entry(0), entry(1, 2)];
+    expect(nextPass(arrangement, 2, { entry: 2, rep: 0 }, 1)).toEqual({ entry: 2, rep: 1, sequence: 1 });
+    expect(nextPass(arrangement, 2, { entry: 0, rep: 0 }, 1)).toEqual({ entry: 1, rep: 0, sequence: 0 });
+  });
+
+  it("does not believe where it was when that entry names another sequence, is not there, or has no such repeat", () => {
+    const arrangement = [entry(0), entry(1, 2), entry(2)];
+    // entry 0 names sequence 0, but sequence 2 played: it was somewhere else
+    expect(nextPass(arrangement, 3, { entry: 0, rep: 0 }, 2)).toEqual({ entry: 0, rep: 0, sequence: 0 });
+    // an entry that is not there
+    expect(nextPass(arrangement, 3, { entry: 7, rep: 0 }, 2)).toEqual({ entry: 0, rep: 0, sequence: 0 });
+    // a repeat the entry does not have (it was made shorter): the first entry that names the sequence
+    expect(nextPass(arrangement, 3, { entry: 1, rep: 5 }, 1)).toEqual({ entry: 1, rep: 1, sequence: 1 });
+    expect(nextPass(arrangement, 3, { entry: 1, rep: 2 }, 1)).toEqual({ entry: 1, rep: 1, sequence: 1 }); // the entry repeats twice: 0 and 1
+  });
+
+  it("begins the song at its first entry after a sequence that is not in it", () => {
+    expect(nextPass([entry(0), entry(1)], 3, null, 2)).toEqual({ entry: 0, rep: 0, sequence: 0 });
+    expect(nextPass([entry(1, 2), entry(0)], 3, { entry: 0, rep: 0 }, 2)).toEqual({ entry: 0, rep: 0, sequence: 1 });
+  });
+
+  it("never gives a pass that is not an entry of the song", () => {
+    for (let trial = 0; trial < 300; trial++) {
+      const count = 1 + (trial % 5);
+      const arrangement =
+        trial % 4 === 0
+          ? null
+          : Array.from({ length: 1 + (trial % 7) }, (_, i) => entry((i * 3 + trial) % count, 1 + ((i + trial) % 4)));
+      const entries = resolveArrangement(arrangement, count);
+      let played = trial % 3 ? null : { entry: trial % 9, rep: trial % 5 };
+      let sequence = trial % count;
+      for (let i = 0; i < 40; i++) {
+        const pass = nextPass(arrangement, count, played, sequence);
+        expect(entries[pass.entry]).toBeDefined();
+        expect(entries[pass.entry].sequence).toBe(pass.sequence);
+        expect(pass.rep).toBeGreaterThanOrEqual(0);
+        expect(pass.rep).toBeLessThan(entries[pass.entry].repeats);
+        played = { entry: pass.entry, rep: pass.rep };
+        sequence = pass.sequence;
+      }
+    }
   });
 });
