@@ -124,6 +124,10 @@ export function createSampler({
   let queued = -1; // the sequence that takes over at the end of the pass, or -1
   let passId = 0; // counts the switches made at the end of a pass
   let passStart = -Infinity; // on the audio clock, where the pass the last switch began falls
+  // Where the pass that has just ended in the scheduler ended, on the audio clock: its first step has been or is about to be
+  // handed over, but has not sounded until this time. A sequence queued before then still takes over there (queueSequence): a
+  // person who presses just ahead of the downbeat is on time. Not set once a sequence has taken over there.
+  let lastWrap = -Infinity;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
   const scheduledHits = []; // { time, gridTime, step, rows, bus, chokes, pass } for each step handed to the scheduler, until its light is shown
@@ -164,15 +168,8 @@ export function createSampler({
     // The loop has come round, and the first step of the next pass is the next one to be built: if a sequence is queued,
     // this is where it takes over, with the length it has.
     onWrap(time) {
-      if (queued < 0) return;
-      const next = queued;
-      passId++;
-      passStart = time;
-      adoptSequence(next);
-      scheduler.startPass(totalSteps());
-      onMessage(`SEQ ${pad2(current + 1)}`);
-      onChange();
-      onSongChange();
+      if (queued < 0) lastWrap = time;
+      else takeOver(queued, time);
     },
   });
 
@@ -361,6 +358,29 @@ export function createSampler({
     onChange();
   }
 
+  // The sequence in slot `next` takes over at `time`, where the pass that is ending is followed by the first step of the one
+  // that is coming, which has the length of the sequence now.
+  function takeOver(next, time) {
+    passId++;
+    passStart = time;
+    lastWrap = -Infinity;
+    adoptSequence(next);
+    scheduler.startPass(totalSteps());
+    onMessage(`SEQ ${pad2(current + 1)}`);
+    onChange();
+    onSongChange();
+  }
+
+  // Queued after the pass ended in the scheduler, but before its next step has sounded: the steps already handed to the audio
+  // clock for that pass are of the sequence that is giving way, so take them back, build them again from the one taking over, and
+  // have it take over where the grid has the pass end. What is already queued of the pass before stays.
+  function takeOverLate(next) {
+    const first = scheduledHits.findIndex((hit) => hit.gridTime >= lastWrap);
+    if (first !== -1) for (const hit of scheduledHits.splice(first)) cancelHit(hit);
+    scheduler.rewindTo(0, lastWrap);
+    takeOver(next, lastWrap);
+  }
+
   // Next Seq, as on an MPC: while a beat plays, the sequence asked for takes over where the pass ends and the one showing plays
   // out until then. Picking the one that is waiting, or the one showing, takes the plan back; picking another changes it.
   // Stopped, there is no pass to wait for and it is shown at once.
@@ -372,6 +392,10 @@ export function createSampler({
     }
     if (next === queued || next === current) {
       cancelQueue();
+      return;
+    }
+    if (lastWrap > clock.now()) {
+      takeOverLate(next);
       return;
     }
     queued = next;
@@ -524,8 +548,9 @@ export function createSampler({
   function start() {
     scheduler.stop();
     cancelQueuedHits();
-    queued = -1;
+    cancelQueue();
     passStart = -Infinity;
+    lastWrap = -Infinity;
     scheduler.start();
     onChange();
   }
@@ -536,8 +561,7 @@ export function createSampler({
     const wasPlaying = scheduler.playing;
     scheduler.stop();
     cancelQueuedHits();
-    queued = -1;
-    passStart = -Infinity;
+    cancelQueue();
     // Nothing to cut off before the audio exists (a fresh page), so nothing is said.
     if (!wasPlaying && audio.killSound()) onMessage("ALL SOUND OFF");
     onChange();
