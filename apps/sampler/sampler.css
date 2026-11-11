@@ -711,6 +711,11 @@
 .seq-bar > .small-label {
   min-width: 3.6em;
 }
+/* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Add, Copy
+   and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too. */
+.seq-bar > :last-child {
+  margin-left: auto;
+}
 .step-head,
 .step-nav,
 .step-tools {
