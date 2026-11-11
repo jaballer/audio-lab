@@ -4,9 +4,12 @@ import {
   DEFAULT_EXPORT_OPTIONS,
   FILE_CHOICES,
   LOOP_CHOICES,
+  SCOPE_CHOICES,
+  SONG_TAIL_SECONDS,
   ZIP_BYTES_PER_FILE,
   channelCount,
   emptyBarsNote,
+  emptySequencesNote,
   exportFrames,
   exportBlockedReason,
   exportFormat,
@@ -21,6 +24,7 @@ import {
   largeExportNote,
   normalizeExportOptions,
   renderingLabel,
+  songSteps,
   stemsInfo,
 } from "./export-options.js";
 
@@ -29,7 +33,7 @@ const songOf = (bars, extra = {}) => ({ bpm: 120, current: 0, sequences: [{ bars
 
 describe("the choices", () => {
   it("are the sequence as it is by default: one loop, in stereo, as the export has always been", () => {
-    expect(DEFAULT_EXPORT_OPTIONS).toEqual({ loops: 1, channels: "stereo", files: "mix" });
+    expect(DEFAULT_EXPORT_OPTIONS).toEqual({ loops: 1, channels: "stereo", files: "mix", scope: "sequence" });
     expect(LOOP_CHOICES).toContain(DEFAULT_EXPORT_OPTIONS.loops);
     expect(CHANNEL_CHOICES).toContain(DEFAULT_EXPORT_OPTIONS.channels);
     expect(FILE_CHOICES).toContain(DEFAULT_EXPORT_OPTIONS.files);
@@ -40,22 +44,29 @@ describe("the choices", () => {
     expect(CHANNEL_CHOICES).toEqual(["stereo", "mono"]);
     expect(FILE_CHOICES).toEqual(["mix", "stems"]);
   });
+
+  it("offer the sequence showing or all of them in order, and the sequence showing is what the export has always been", () => {
+    expect(SCOPE_CHOICES).toEqual(["sequence", "all"]);
+    expect(DEFAULT_EXPORT_OPTIONS.scope).toBe("sequence");
+  });
 });
 
 describe("normalizeExportOptions", () => {
   it("keeps options that are choices", () => {
-    expect(normalizeExportOptions({ loops: 4, channels: "mono", files: "stems" })).toEqual({
+    expect(normalizeExportOptions({ loops: 4, channels: "mono", files: "stems", scope: "all" })).toEqual({
       loops: 4,
       channels: "mono",
       files: "stems",
+      scope: "all",
     });
   });
 
-  it("takes options saved before there were stems as the mix, which is what they made", () => {
+  it("takes options saved before there were stems as the mix, which is what they made, and before there was a scope as the sequence", () => {
     expect(normalizeExportOptions({ loops: 4, channels: "mono" })).toEqual({
       loops: 4,
       channels: "mono",
       files: "mix",
+      scope: "sequence",
     });
   });
 
@@ -64,18 +75,21 @@ describe("normalizeExportOptions", () => {
       loops: 1,
       channels: "mono",
       files: "stems",
+      scope: "sequence",
     });
     expect(normalizeExportOptions({ loops: 8, channels: "quad", files: "stems" })).toEqual({
       loops: 8,
       channels: "stereo",
       files: "stems",
+      scope: "sequence",
     });
-    expect(normalizeExportOptions({ loops: 8, channels: "mono", files: "zip" })).toEqual({
+    expect(normalizeExportOptions({ loops: 8, channels: "mono", files: "zip", scope: "song" })).toEqual({
       loops: 8,
       channels: "mono",
       files: "mix",
+      scope: "sequence",
     });
-    expect(normalizeExportOptions({ loops: "4", channels: 2, files: 1 })).toEqual(DEFAULT_EXPORT_OPTIONS);
+    expect(normalizeExportOptions({ loops: "4", channels: 2, files: 1, scope: 3 })).toEqual(DEFAULT_EXPORT_OPTIONS);
   });
 
   it("gives the defaults for nothing, or for something that is not an object", () => {
@@ -461,5 +475,109 @@ describe("exportNote", () => {
     expect(exportNote({ total: 0, frames }, [])).not.toBe("");
     expect(exportNote({ total: frames - 1, frames: 0 }, [])).toBe("");
     expect(exportNote({ total: 0, frames: frames - 1 }, [])).toBe("");
+  });
+});
+
+// 120 BPM: a bar is 2 s, so three sequences of 1, 2 and 1 bars are 8 s, and the tail is on the end of that.
+describe("exporting all the sequences", () => {
+  const three = { bpm: 120, current: 1, sequences: [{ bars: 1 }, { bars: 2 }, { bars: 1 }] };
+
+  it("is 4 s of tail, for what rings on after the last step", () => {
+    expect(SONG_TAIL_SECONDS).toBe(4);
+  });
+
+  it("counts the steps of every sequence, once each", () => {
+    expect(songSteps(three, 16)).toBe(64);
+    expect(songSteps({ bpm: 120, current: 0, sequences: [{ bars: 8 }] }, 16)).toBe(128);
+  });
+
+  it("is the steps of all of them and then the tail, in frames of the rate, and loops add nothing", () => {
+    expect(exportFrames(three, 16, 1, 1000, "all")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
+    expect(exportFrames(three, 16, 8, 1000, "all")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
+    expect(exportFrames(three, 16, 1, 1000, "sequence")).toBe(4 * 1000); // the one showing, the second of the three, as before
+    expect(exportFrames(three, 16, 1, 1000)).toBe(4 * 1000);
+  });
+
+  it("rounds the length once, to the nearest frame, not down", () => {
+    // 130 BPM: a bar is 1.846153… s, and with the tail 5.846153… s, which at 1900 Hz is 11107.69 frames
+    const song = { bpm: 130, current: 0, sequences: [{ bars: 1 }] };
+    expect(exportFrames(song, 16, 1, 1900, "all")).toBe(11108);
+  });
+
+  it("says how long and how big the file will be by the scope in the options, as the loops are not counted", () => {
+    const info = exportInfo(three, { loops: 4, channels: "mono", scope: "all" }, 16, 1000);
+    expect(info).toMatchObject({ frames: 12000, seconds: 12, channels: "mono" });
+    expect(info.bytes).toBe(44 + 12000 * 2);
+    const sequence = exportInfo(three, { loops: 4, channels: "mono", scope: "sequence" }, 16, 1000);
+    expect(sequence.frames).toBe(16000); // four loops of the sequence showing
+  });
+
+  it("says it for stems too: each is as long as the whole", () => {
+    const info = stemsInfo(three, { scope: "all", channels: "stereo" }, 16, 1000, 3);
+    expect(info.frames).toBe(12000);
+    expect(info.stems).toBe(3);
+  });
+
+  it("is headed by how many sequences, how many there are and the tempo", () => {
+    expect(exportTitle(three, "all")).toBe("ALL · 3 SEQUENCES · 120 BPM");
+    expect(exportTitle({ ...three, sequences: [{ bars: 1 }] }, "all")).toBe("ALL · 1 SEQUENCE · 120 BPM");
+    expect(exportTitle(three, "sequence")).toBe("SEQ 02 · 2 BARS · 120 BPM");
+    expect(exportTitle(three)).toBe("SEQ 02 · 2 BARS · 120 BPM");
+  });
+
+  it("says what the file is, in the hint, with the stems' own words for stems, and that a sound longer than the tail is cut", () => {
+    expect(exportHint("mix", "all")).toMatch(/every sequence, in order, once each/i);
+    expect(exportHint("mix", "all")).toMatch(/4 s/);
+    expect(exportHint("mix", "all")).toMatch(/longer sound is cut/i);
+    expect(exportHint("mix", "sequence")).toBe("");
+    expect(exportHint("stems", "all")).toMatch(/one file for each pad/i);
+    expect(exportHint("stems", "all")).toMatch(/every sequence, in order/i);
+    expect(exportHint("stems")).toBe(exportHint("stems", "sequence"));
+  });
+
+  it("says which sequences have no steps, and that they are in the file as silence", () => {
+    expect(emptySequencesNote([])).toBe("");
+    expect(emptySequencesNote([3])).toBe("Sequence 3 has no steps: nothing plays in it but what is still ringing.");
+    expect(emptySequencesNote([2, 3, 5])).toBe(
+      "Sequences 2–3 and 5 have no steps: nothing plays in them but what is still ringing.",
+    );
+    expect(emptySequencesNote([1, 4])).toBe(
+      "Sequences 1 and 4 have no steps: nothing plays in them but what is still ringing.",
+    );
+  });
+
+  it("advises what makes a large export of all the sequences smaller: not loops, which it does not have", () => {
+    const big = 300 * 1024 * 1024;
+    expect(largeExportNote(big, { scope: "all" })).toMatch(/Exporting one sequence at a time makes it smaller\.$/);
+    expect(largeExportNote(big, { scope: "all" })).not.toMatch(/loops/);
+    expect(largeExportNote(big, { scope: "all", stems: 4 })).toMatch(
+      /Mono, or one sequence at a time, makes it smaller\.$/,
+    );
+    expect(largeExportNote(big, { scope: "all", stems: 4 })).not.toMatch(/loops/);
+    expect(largeExportNote(big, { scope: "sequence" })).toMatch(/Fewer loops make it smaller\./);
+    expect(largeExportNote(big, { stems: 4 })).toMatch(/Fewer loops or mono make it smaller\./);
+    expect(largeExportNote(big, {})).toMatch(/Fewer loops make it smaller\./);
+  });
+
+  it("puts the empty sequences in the note in place of the empty bars, with the memory warning after them", () => {
+    const plan = { total: 1000, frames: 1000 };
+    expect(exportNote(plan, [], {}, [3])).toBe(
+      "Sequence 3 has no steps: nothing plays in it but what is still ringing.",
+    );
+    const big = { total: 40_000_000, frames: 40_000_000 };
+    expect(exportNote(big, [], {}, [3])).toMatch(/^Sequence 3 has no steps.*Making this takes about/);
+    expect(exportNote(plan, [2], {}, [])).toBe(emptyBarsNote([2]));
+  });
+
+  it("is blocked for no steps in any sequence with its own words, after the browser's", () => {
+    expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "all" })).toMatch(
+      /no sequence has any steps/i,
+    );
+    expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "sequence" })).toMatch(
+      /this sequence has no steps/i,
+    );
+    expect(exportBlockedReason({ supported: true, hasSteps: false })).toMatch(/this sequence has no steps/i);
+    expect(exportBlockedReason({ supported: false, hasSteps: false, scope: "all" })).toMatch(/cannot render audio/);
+    expect(exportBlockedReason({ supported: true, hasSteps: true, scope: "all" })).toBe("");
   });
 });

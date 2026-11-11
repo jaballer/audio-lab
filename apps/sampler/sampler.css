@@ -1082,6 +1082,10 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+/* The row sets its own display, which beats the hidden attribute: the Loops row (not offered for all the sequences) must still go. */
+.export-row[hidden] {
+  display: none;
+}
 .export-row > .small-label {
   min-width: 5em;
 }

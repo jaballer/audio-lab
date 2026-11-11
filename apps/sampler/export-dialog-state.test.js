@@ -1,9 +1,20 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXPORT_SAMPLE_RATE } from "./export-wav.js";
 import { SETTLE_MS, dialogState, exportDialogModel, isEarlyPress } from "./export-dialog-state.js";
 import { createKit } from "./kit.js";
 
 const idle = { busy: false, cancelling: false, blocked: "", hasNote: false };
+
+// The dialog hides a row with the hidden attribute (dialogState decides it), which a stylesheet that sets `display` on the row beats:
+// the Loops row stayed on the page, with buttons that did nothing, and the state said it was hidden.
+describe("the stylesheet", () => {
+  it("lets a row of the export dialog that is hidden go, as `.export-row` sets display and would otherwise keep it", () => {
+    const css = readFileSync(new URL("./sampler.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.export-row\s*\{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.export-row\[hidden\]\s*\{\s*display:\s*none/);
+  });
+});
 
 describe("dialogState", () => {
   it("is every control on, and the file box showing its hint, when it is idle", () => {
@@ -19,8 +30,15 @@ describe("dialogState", () => {
       noteHidden: true,
       cancelLabel: "Cancel",
       goLabel: "Export WAV",
+      loopsHidden: false,
       describedBy: [],
     });
+  });
+
+  it("takes the loops off for all the sequences, which have none to repeat, and for nothing else", () => {
+    expect(dialogState({ ...idle, scope: "all" }).loopsHidden).toBe(true);
+    expect(dialogState({ ...idle, scope: "sequence" }).loopsHidden).toBe(false);
+    expect(dialogState({ ...idle }).loopsHidden).toBe(false);
   });
 
   it("says Export ZIP on the button when it is the stems that will be made, and Export WAV for the mix", () => {
@@ -215,6 +233,77 @@ describe("exportDialogModel", () => {
     const m = model(song(2, {}));
     expect(m.note).toBe("");
     expect(m.blocked).toBe("This sequence has no steps yet, so there is nothing to export.");
+  });
+
+  describe("for all the sequences", () => {
+    const song3 = (patterns, bars = [1, 1, 1], extra = {}) => ({
+      bpm: 120,
+      volume: 80,
+      current: 0,
+      sequences: patterns.map((pattern, i) => ({ bars: bars[i] ?? 1, pattern, velocities: {} })),
+      ...extra,
+    });
+    const all = { loops: 4, channels: "stereo", files: "mix", scope: "all" };
+
+    it("is headed by how many there are, and says how long the whole is and how big, with the tail on the end", () => {
+      const m = model(song3([{ 0: [0] }, { 1: [0] }]), all); // two bars of 2 s, and 4 s of tail
+      expect(m.title).toBe("ALL · 2 SEQUENCES · 120 BPM");
+      expect(m.readout).toMatch(/^8\.0 s · stereo · 1\.\d MB$/);
+      expect(m.blocked).toBe("");
+    });
+
+    it("does not count loops: the same length and size whatever they say", () => {
+      const one = model(song3([{ 0: [0] }]), { ...all, loops: 1 });
+      expect(model(song3([{ 0: [0] }]), { ...all, loops: 8 }).readout).toBe(one.readout);
+    });
+
+    it("says what the file is in the hint, with the stems' own words for stems", () => {
+      expect(model(song3([{ 0: [0] }]), all).hint).toMatch(/every sequence, in order, once each/i);
+      expect(model(song3([{ 0: [0] }]), { ...all, files: "stems" }).hint).toMatch(/one file for each pad/i);
+    });
+
+    it("says which sequences have no steps, and not which bars, and that they are in the file", () => {
+      const m = model(song3([{ 0: [0] }, {}, { 1: [0] }], [1, 1, 2]), all);
+      expect(m.note).toBe("Sequence 2 has no steps: nothing plays in it but what is still ringing.");
+    });
+
+    it("does not list the empty bars of the sequence showing: the note is of sequences, for the whole", () => {
+      const m = model(song3([{ 0: [0] }, { 1: [0] }], [2, 1]), all); // the first has two bars and a step only in the first
+      expect(m.note).toBe("");
+      expect(model(song3([{ 0: [0] }, { 1: [0] }], [2, 1]), { ...all, scope: "sequence" }).note).toMatch(
+        /^Bar 2 has no steps/,
+      );
+    });
+
+    it("exports when the sequence showing is empty and another is not, and blocks only when none has a step", () => {
+      expect(model(song3([{}, { 0: [0] }]), all).blocked).toBe("");
+      expect(model(song3([{}, { 0: [0] }]), { ...all, scope: "sequence" }).blocked).toMatch(
+        /this sequence has no steps/i,
+      );
+      const none = model(song3([{}, {}]), all);
+      expect(none.blocked).toBe("No sequence has any steps yet, so there is nothing to export.");
+      expect(none.note).toBe("");
+    });
+
+    it("counts a stem for each pad of any sequence, each as long as the whole", () => {
+      const m = model(song3([{ 0: [0] }, { 3: [0] }, { 0: [4], 9: [0] }]), { ...all, files: "stems" });
+      expect(m.readout).toMatch(/^3 stems · 10\.0 s each · stereo · /); // three bars of 2 s and the tail
+    });
+
+    it("says the memory it takes where the whole is large, and what makes it smaller: not loops, which it has none of", () => {
+      const long = song3(
+        Array.from({ length: 8 }, () => ({ 0: [0] })),
+        Array.from({ length: 8 }, () => 8),
+        { bpm: 40 },
+      );
+      const mix = model(long, all).note;
+      expect(mix).toMatch(/Making this takes about \d+ MB of memory/);
+      expect(mix).toMatch(/Exporting one sequence at a time makes it smaller\.$/);
+      expect(mix).not.toMatch(/loops/);
+      const stems = model(long, { ...all, files: "stems" }).note;
+      expect(stems).toMatch(/Mono, or one sequence at a time, makes it smaller\.$/);
+      expect(stems).not.toMatch(/loops/);
+    });
   });
 
   it("blocks it, with the browser first, when the browser cannot render a file", () => {

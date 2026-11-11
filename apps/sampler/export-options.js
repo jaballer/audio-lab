@@ -1,8 +1,8 @@
-// What an export can be told, and what the Export dialog says about the file before it is made: how many times
-// the loop is repeated in the file, stereo or mono, the mix as one file or a stem for each pad in a zip, and from those
-// how long and how big the file will be. No DOM, and nothing at import time.
+// What an export can be told, and what the Export dialog says about the file before it is made: the sequence showing or all
+// of them in order, how many times the loop is repeated in the file, stereo or mono, the mix as one file or a stem for each
+// pad in a zip, and from those how long and how big the file will be. No DOM, and nothing at import time.
 //
-//   normalizeExportOptions(loadJson(KEY))                  // { loops: 1, channels: "stereo", files: "mix" }, whatever was saved
+//   normalizeExportOptions(loadJson(KEY))                  // { loops: 1, channels: "stereo", files: "mix", scope: "sequence" }, whatever was saved
 //   const info = exportInfo(song, options, 16, 44100);     // { frames, seconds, bytes, channels }
 //   exportReadout(info)                                    // "4.8 s · mono · 413 KB"
 //   stemsInfo(song, options, 16, 44100, 5)                 // the same for 5 stems in a zip: { frames, seconds, bytes, channels, stems }
@@ -17,7 +17,15 @@ export const LOOP_CHOICES = [1, 2, 4, 8];
 export const CHANNEL_CHOICES = ["stereo", "mono"];
 // The mix is one file, as the export has always been; stems are a file for each pad that has steps, in a zip.
 export const FILE_CHOICES = ["mix", "stems"];
-export const DEFAULT_EXPORT_OPTIONS = Object.freeze({ loops: 1, channels: "stereo", files: "mix" });
+// The sequence showing, looped as asked, as the export has always been; or every sequence in order, once each (see the Play All
+// key), with no loop to come round and a tail on the end for what rings on.
+export const SCOPE_CHOICES = ["sequence", "all"];
+export const DEFAULT_EXPORT_OPTIONS = Object.freeze({ loops: 1, channels: "stereo", files: "mix", scope: "sequence" });
+
+// What an export of all the sequences adds after the last step, for what is still ringing (a crash, a long sample): the file does
+// not come round to be mixed into its own start, as a loop does. A fixed time, so that the dialog can say how long the file is
+// without knowing the sounds; a sample longer than that is cut.
+export const SONG_TAIL_SECONDS = 4;
 
 // Options from anywhere (saved by an older version, edited by hand, missing): each one that is not a choice we
 // offer falls back to its default, and the other is kept.
@@ -26,14 +34,21 @@ export function normalizeExportOptions(raw) {
     loops: LOOP_CHOICES.includes(raw?.loops) ? raw.loops : DEFAULT_EXPORT_OPTIONS.loops,
     channels: CHANNEL_CHOICES.includes(raw?.channels) ? raw.channels : DEFAULT_EXPORT_OPTIONS.channels,
     files: FILE_CHOICES.includes(raw?.files) ? raw.files : DEFAULT_EXPORT_OPTIONS.files,
+    scope: SCOPE_CHOICES.includes(raw?.scope) ? raw.scope : DEFAULT_EXPORT_OPTIONS.scope,
   };
 }
 
 export const channelCount = (channels) => (channels === "mono" ? 1 : 2);
 
+// How many steps all the sequences have between them: what the file of all of them plays before its tail.
+export const songSteps = (song, stepsPerBar) => song.sequences.reduce((sum, { bars }) => sum + bars * stepsPerBar, 0);
+
 // How many frames the file has: `loops` times the sequence showing, rounded once, so eight loops are eight times
-// the length and not eight roundings of it.
-export function exportFrames(song, stepsPerBar, loops, sampleRate) {
+// the length and not eight roundings of it; or for `scope` "all" every sequence once, and the tail (loops are not counted).
+export function exportFrames(song, stepsPerBar, loops, sampleRate, scope = "sequence") {
+  if (scope === "all") {
+    return Math.round((songSteps(song, stepsPerBar) * stepSeconds(song.bpm) + SONG_TAIL_SECONDS) * sampleRate);
+  }
   const sequence = song.sequences[song.current];
   const loopSeconds = sequence.bars * stepsPerBar * stepSeconds(song.bpm);
   return Math.round(loopSeconds * loops * sampleRate);
@@ -44,8 +59,8 @@ const WAV_HEADER_BYTES = 44;
 const BYTES_PER_SAMPLE = 2;
 
 export function exportInfo(song, options, stepsPerBar, sampleRate) {
-  const { loops, channels } = normalizeExportOptions(options);
-  const frames = exportFrames(song, stepsPerBar, loops, sampleRate);
+  const { loops, channels, scope } = normalizeExportOptions(options);
+  const frames = exportFrames(song, stepsPerBar, loops, sampleRate, scope);
   return {
     frames,
     seconds: frames / sampleRate,
@@ -91,11 +106,17 @@ export function exportReadout(info) {
   return [formatDuration(info.seconds), info.channels, formatSize(info.bytes)].join(" · ");
 }
 
-// What the dialog says about the choice of files, in the place of its hint about loops: nothing for the mix (the dialog's
-// own words stay), and for stems what they are.
-export function exportHint(files) {
-  if (files !== "stems") return "";
-  return "One file for each pad that has steps, in one zip. They are not clipped, and they add up to the mix.";
+// What the dialog says about the choice of files and of scope, in the place of its hint about loops: nothing for the mix of the
+// sequence showing (the dialog's own words stay), for stems what they are, and for all the sequences what the file is.
+export function exportHint(files, scope = "sequence") {
+  return [
+    files === "stems" &&
+      "One file for each pad that has steps, in one zip. They are not clipped, and they add up to the mix.",
+    scope === "all" &&
+      `Every sequence, in order, once each, then ${SONG_TAIL_SECONDS} s for what rings on (a longer sound is cut). There is no loop to come round, so loops are not offered.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 // What every file is, on a line of its own: "16-bit 44.1 kHz" (or 48: the rate is the page's, see exportSampleRate).
@@ -103,8 +124,13 @@ export function exportFormat(sampleRate) {
   return `16-bit ${Number((sampleRate / 1000).toFixed(1))} kHz`;
 }
 
-// The dialog's heading: which sequence, how long, at what tempo ("SEQ 01 · 2 BARS · 100 BPM").
-export function exportTitle(song) {
+// The dialog's heading: which sequence, how long, at what tempo ("SEQ 01 · 2 BARS · 100 BPM"), or for all of them how many
+// ("ALL · 3 SEQUENCES · 100 BPM").
+export function exportTitle(song, scope = "sequence") {
+  if (scope === "all") {
+    const count = song.sequences.length;
+    return `ALL · ${count} ${count === 1 ? "SEQUENCE" : "SEQUENCES"} · ${Math.round(song.bpm)} BPM`;
+  }
   const bars = song.sequences[song.current].bars;
   return `SEQ ${pad2(song.current + 1)} · ${bars} ${bars === 1 ? "BAR" : "BARS"} · ${Math.round(song.bpm)} BPM`;
 }
@@ -136,17 +162,30 @@ const MEMORY_ROUNDING_MB = 10;
 
 // What the dialog says about an export before it is made, as one line: the bars with no steps (`emptyBarNumbers`, from
 // emptyBars) and a memory warning for the render `plan` (from planRender), when there is anything to say.
-export function exportNote(plan, emptyBarNumbers, memory = {}) {
-  return [emptyBarsNote(emptyBarNumbers), largeExportNote(exportMemoryBytes(plan, memory), memory)]
+// For all the sequences it is the sequences with no steps (`emptySequenceNumbers`) in place of the bars.
+export function exportNote(plan, emptyBarNumbers, memory = {}, emptySequenceNumbers = []) {
+  return [
+    emptyBarsNote(emptyBarNumbers),
+    emptySequencesNote(emptySequenceNumbers),
+    largeExportNote(exportMemoryBytes(plan, memory), memory),
+  ]
     .filter(Boolean)
     .join(" ");
 }
 
-// `{ stems }` says it is for stems, which can also be made smaller by being mono (and not by being a mix).
-export function largeExportNote(bytes, { stems = 0 } = {}) {
+// `{ stems }` says it is for stems, which can also be made smaller by being mono (and not by being a mix). `{ scope }` "all" says it
+// is for all the sequences, which have no loops to make fewer: what makes it smaller is exporting one sequence at a time.
+export function largeExportNote(bytes, { stems = 0, scope = "sequence" } = {}) {
   if (bytes < LARGE_EXPORT_BYTES) return "";
   const megabytes = Math.round(bytes / MEBIBYTE / MEMORY_ROUNDING_MB) * MEMORY_ROUNDING_MB;
-  const smaller = stems ? "Fewer loops or mono make it smaller." : "Fewer loops make it smaller.";
+  const all = scope === "all";
+  const smaller = all
+    ? stems
+      ? "Mono, or one sequence at a time, makes it smaller."
+      : "Exporting one sequence at a time makes it smaller."
+    : stems
+      ? "Fewer loops or mono make it smaller."
+      : "Fewer loops make it smaller.";
   return `Making this takes about ${megabytes} MB of memory, which a phone may not have to spare. ${smaller}`;
 }
 
@@ -184,10 +223,22 @@ export function emptyBarsNote(bars) {
   return `${one ? "Bar" : "Bars"} ${joinList(runsOf(bars))} ${one ? "has" : "have"} no steps: nothing plays in ${one ? "it" : "them"} but what is still ringing.`;
 }
 
+// What the dialog says about sequences with no steps, when all of them are exported: they are in the file, as the silence a
+// pass of them is ("Sequences 2–3 and 5 have no steps: ..."), or nothing when there are none.
+export function emptySequencesNote(numbers) {
+  if (!numbers.length) return "";
+  const one = numbers.length === 1;
+  return `${one ? "Sequence" : "Sequences"} ${joinList(runsOf(numbers))} ${one ? "has" : "have"} no steps: nothing plays in ${one ? "it" : "them"} but what is still ringing.`;
+}
+
 // Why the dialog's Export WAV is off, or nothing when it can be pressed. The browser comes first: there is no fixing
 // an empty sequence in a browser that cannot render a file.
-export function exportBlockedReason({ supported, hasSteps }) {
+export function exportBlockedReason({ supported, hasSteps, scope = "sequence" }) {
   if (!supported) return "This browser cannot render audio to a file, so Export is not available.";
-  if (!hasSteps) return "This sequence has no steps yet, so there is nothing to export.";
+  if (!hasSteps) {
+    return scope === "all"
+      ? "No sequence has any steps yet, so there is nothing to export."
+      : "This sequence has no steps yet, so there is nothing to export.";
+  }
   return "";
 }
