@@ -29,7 +29,7 @@ import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createLevelReader } from "./level-meter.js";
 import { createLevelMeter } from "./level-meter-view.js";
-import { createSequenceRow } from "./sequence-row.js";
+import { createSequenceRow, latchFromStored } from "./sequence-row.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
@@ -689,10 +689,20 @@ function removeSequence() {
   }
   sampler.removeSequence();
 }
+// Next, beside + in the sequence row: on, a press on a sequence waits for the end of the pass (as Next Seq does on an MPC) and Shift
+// switches at once; off, a press switches at once and Shift waits. A touch screen has no Shift, so off is how it switches at once.
+// Kept between visits, on until a person turns it off.
+const NEXT_KEY = "pad-sampler:next";
+let queuePresses = latchFromStored(loadJson(NEXT_KEY));
 const sequenceRow = createSequenceRow($("seq-row"), {
-  // While the beat plays, a key queues that sequence for the end of the pass, as Next Seq does on an MPC, and Shift switches to it
-  // at once; stopped, both show it. The sampler works out which.
+  // The row says which a press is (`now`), by the latch and Shift. Stopped, both show the sequence: the sampler works that out.
   onSelect: (index, { now }) => (now ? sampler.setSequence(index) : sampler.queueSequence(index)),
+  onLatch: (on) => {
+    queuePresses = on;
+    saveJson(NEXT_KEY, on);
+    say(on ? "SEQ KEYS: NEXT" : "SEQ KEYS: NOW"); // not "NEXT SEQ ...", which is what the LCD says of a sequence that is queued
+    render();
+  },
   onAdd: () => sampler.addSequence(),
   onCopy: () => sampler.copySequence(),
   onRemove: removeSequence,
@@ -780,6 +790,7 @@ function render() {
     current: state.sequence,
     queued: state.queuedSequence,
     playing: state.playing,
+    latched: queuePresses,
     canAdd: state.canAddSequence,
     canRemove: state.canRemoveSequence,
   });

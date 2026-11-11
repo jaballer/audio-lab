@@ -1,5 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSequenceRow, sequenceKey, sequenceKeys } from "./sequence-row.js";
+import { createSequenceRow, latchFromStored, pressIsNow, sequenceKey, sequenceKeys } from "./sequence-row.js";
+
+describe("pressIsNow", () => {
+  it("is a press that waits for the end of the pass when the latch is on, and Shift switches at once", () => {
+    expect(pressIsNow({ latched: true, shift: false })).toBe(false);
+    expect(pressIsNow({ latched: true, shift: true })).toBe(true);
+  });
+
+  it("is a press that switches at once when the latch is off, and Shift waits for the end of the pass", () => {
+    expect(pressIsNow({ latched: false, shift: false })).toBe(true);
+    expect(pressIsNow({ latched: false, shift: true })).toBe(false);
+  });
+});
+
+describe("latchFromStored", () => {
+  it("is on for a first visit, and for storage that is blocked, so a person who has not chosen has the way #163 works", () => {
+    expect(latchFromStored(undefined)).toBe(true);
+    expect(latchFromStored(null)).toBe(true);
+  });
+
+  it("is off only for a stored false, and keeps what was stored on", () => {
+    expect(latchFromStored(false)).toBe(false);
+    expect(latchFromStored(true)).toBe(true);
+  });
+
+  it("is on for anything else that was stored, which a person did not put there", () => {
+    for (const odd of ["false", "yes", 0, 1, "", {}, [], "garbage{"]) expect(latchFromStored(odd)).toBe(true);
+  });
+});
 
 describe("sequenceKeys", () => {
   it("gives a key for each sequence, numbered from 1", () => {
@@ -41,6 +69,17 @@ describe("sequenceKeys", () => {
     expect(sequenceKeys(3, 0).some((key) => key.queued)).toBe(false);
     expect(sequenceKeys(3, 0, { queued: -1 }).some((key) => key.queued)).toBe(false);
     expect(sequenceKeys(3, 0, { queued: 7 }).some((key) => key.queued)).toBe(false);
+  });
+
+  it("says what a press does with the latch off: it switches at once, and Shift is what waits", () => {
+    const keys = sequenceKeys(3, 0, { playing: true, queued: 2, latched: false });
+    expect(keys[1].title).toBe("Press to switch now. Hold Shift to play next, after this pass");
+    expect(keys[2].title).toBe("Press to switch to it now. Hold Shift, or press the sequence showing, to take it back");
+    expect(keys[0].title).toBe("Press to take back the sequence that plays next"); // the same as with the latch on: a press on it cancels
+  });
+
+  it("says nothing while stopped, whichever way the latch is", () => {
+    expect(sequenceKeys(3, 0, { latched: false }).map((key) => key.title)).toEqual(["", "", ""]);
   });
 
   it("explains what a press does only while the beat plays, when it queues instead of switching", () => {
@@ -133,7 +172,7 @@ describe("createSequenceRow", () => {
   let element;
 
   const keys = () => element.children[1].children;
-  const [ADD, COPY, REMOVE] = [0, 1, 2];
+  const [LATCH, ADD, COPY, REMOVE] = [0, 1, 2, 3];
   const actions = () => element.children[2].children;
   const pressed = () => keys().map((key) => key.getAttribute("aria-pressed") === "true");
   const refresh = (change = {}) => row.refresh({ count: 3, current: 1, canAdd: true, canRemove: true, ...change });
@@ -142,7 +181,7 @@ describe("createSequenceRow", () => {
     document = { activeElement: null };
     document.createElement = () => new FakeElement(document);
     vi.stubGlobal("document", document);
-    calls = { onSelect: vi.fn(), onAdd: vi.fn(), onCopy: vi.fn(), onRemove: vi.fn() };
+    calls = { onSelect: vi.fn(), onAdd: vi.fn(), onCopy: vi.fn(), onRemove: vi.fn(), onLatch: vi.fn() };
     element = new FakeElement(document);
     row = createSequenceRow(element, calls);
   });
@@ -181,6 +220,7 @@ describe("createSequenceRow", () => {
     actions()[COPY].click();
     actions()[REMOVE].click();
     expect([calls.onAdd, calls.onCopy, calls.onRemove].map((call) => call.mock.calls.length)).toEqual([1, 1, 1]);
+    expect(calls.onLatch).not.toHaveBeenCalled();
   });
 
   it("reports a key made after the first draw as well, and by its own number", () => {
@@ -188,6 +228,61 @@ describe("createSequenceRow", () => {
     refresh({ count: 5 });
     keys()[4].click();
     expect(calls.onSelect).toHaveBeenCalledWith(4, { now: false });
+  });
+
+  it("makes a key for the latch, on by default and named, pressed in while a press waits for the end of the pass", () => {
+    refresh();
+    const latch = actions()[LATCH];
+    expect(latch.textContent).toBe("Next");
+    expect(latch.getAttribute("aria-label")).toBe("Next: queue sequence presses"); // starts with the "Next" it shows
+    expect(latch.className).toContain("seq-latch"); // the style hook for its pressed look, in sampler.css
+    expect(latch.getAttribute("aria-pressed")).toBe("true");
+    refresh({ latched: false });
+    expect(latch.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("describes the latch by what it is doing now, in both states, and does not say it differently in between", () => {
+    refresh({ latched: true });
+    expect(actions()[LATCH].getAttribute("title")).toBe(
+      "On: while the beat plays, a press on a sequence waits for the end of the pass (Shift: at once)",
+    );
+    refresh({ latched: false });
+    expect(actions()[LATCH].getAttribute("title")).toBe(
+      "Off: while the beat plays, a press on a sequence switches at once (Shift: waits for the end of the pass)",
+    );
+  });
+
+  it("reports the latch as the other way round from how it is", () => {
+    refresh({ latched: true });
+    actions()[LATCH].click();
+    expect(calls.onLatch).toHaveBeenLastCalledWith(false);
+    refresh({ latched: false });
+    actions()[LATCH].click();
+    expect(calls.onLatch).toHaveBeenLastCalledWith(true);
+  });
+
+  it("reports a press as switching now when the latch is off, and as waiting when Shift is held with it off", () => {
+    refresh({ count: 3, latched: false });
+    keys()[1].click();
+    expect(calls.onSelect).toHaveBeenLastCalledWith(1, { now: true });
+    keys()[1].click({ shiftKey: true });
+    expect(calls.onSelect).toHaveBeenLastCalledWith(1, { now: false });
+  });
+
+  it("reads a press on a key made after the latch was turned off by the latch it has now, as the keys already there do", () => {
+    refresh({ count: 2, latched: false });
+    refresh({ count: 4, latched: false });
+    keys()[3].click();
+    expect(calls.onSelect).toHaveBeenLastCalledWith(3, { now: true });
+    keys()[0].click();
+    expect(calls.onSelect).toHaveBeenLastCalledWith(0, { now: true });
+  });
+
+  it("gives the keys their titles for the latch it has", () => {
+    refresh({ count: 3, current: 0, playing: true, latched: false });
+    expect(keys()[1].getAttribute("title")).toBe("Press to switch now. Hold Shift to play next, after this pass");
+    refresh({ count: 3, current: 0, playing: true, latched: true });
+    expect(keys()[1].getAttribute("title")).toBe("Press to play next, after this pass. Hold Shift to switch now");
   });
 
   it("says the press is to switch now when Shift is held", () => {
@@ -233,7 +328,8 @@ describe("createSequenceRow", () => {
 
   it("writes nothing to a key when a refresh changes nothing: the page redraws every step, and a screen reader hears a rewrite", () => {
     refresh({ count: 4, current: 1, queued: 3, playing: true });
-    const writes = () => element.children[1].children.reduce((sum, key) => sum + key.writes, 0);
+    const writes = () =>
+      [...element.children[1].children, ...element.children[2].children].reduce((sum, key) => sum + key.writes, 0);
     const before = writes();
     refresh({ count: 4, current: 1, queued: 3, playing: true });
     refresh({ count: 4, current: 1, queued: 3, playing: true });
@@ -244,16 +340,20 @@ describe("createSequenceRow", () => {
 
   it("turns Add and Copy off when there is no room, Remove off when there is one sequence, and says why", () => {
     refresh({ canAdd: false, canRemove: false });
-    expect(actions().map((button) => button.disabled)).toEqual([true, true, true]);
+    expect(actions().map((button) => button.disabled)).toEqual([false, true, true, true]); // the latch is always there to press
     expect(actions()[ADD].getAttribute("title")).toMatch(/no room/i);
     expect(actions()[REMOVE].getAttribute("title")).toMatch(/at least one/i);
     refresh({ canAdd: true, canRemove: true });
-    expect(actions().map((button) => button.disabled)).toEqual([false, false, false]);
+    expect(actions().map((button) => button.disabled)).toEqual([false, false, false, false]);
   });
 
   it("gives an enabled button no title, which would only repeat the name that is read out", () => {
     refresh();
-    expect(actions().map((button) => button.getAttribute("title"))).toEqual(["", "", ""]);
+    expect(
+      actions()
+        .slice(1)
+        .map((button) => button.getAttribute("title")),
+    ).toEqual(["", "", ""]);
   });
 
   it("hands focus to the key showing when Add goes off while it has focus", () => {
@@ -289,6 +389,6 @@ describe("createSequenceRow", () => {
     expect(element.getAttribute("role")).toBe("group");
     expect(element.getAttribute("aria-label")).toBe("Sequences");
     expect(element.children[1].getAttribute("aria-label")).toBe("Choose a sequence");
-    expect(element.children[2].getAttribute("aria-label")).toBe("Add, copy or remove a sequence");
+    expect(element.children[2].getAttribute("aria-label")).toBe("Sequence tools");
   });
 });

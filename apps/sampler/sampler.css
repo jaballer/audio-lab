@@ -718,14 +718,14 @@
   flex-wrap: wrap;
   row-gap: 2px;
 }
-/* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Add, Copy
-   and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too.
+/* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Next, Add,
+   Copy and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too.
    The two right-hand groups are one width, so the display has a column down its right side: the arrows go to the ends of
    theirs (the number between them has no label of its own: the row's label is "Bars"), and the buttons of the other share
    what is left over. The width is a little more than either needs, so a wider font does not make one wider than the other. */
 .seq-bar > :last-child {
   margin-left: auto;
-  min-width: 6.4rem;
+  min-width: 9.6rem; /* Next, +, Copy and − at the size they have at 100% text, which is 9.3rem */
 }
 .seq-bar > .step-nav {
   justify-content: space-between;
@@ -750,12 +750,14 @@
    pressed in, with a dark face. */
 .seq-lengths .btn,
 .seq-chips .btn {
-  min-width: 2.8em;
+  min-width: 2.6em; /* eight sequence keys, with Next beside +, Copy and −, fit the display's width: 2.8em was 18px too wide */
 }
 .seq-lengths .btn[aria-pressed="true"],
 .seq-lengths .btn[aria-pressed="true"]:hover,
 .seq-chips .btn[aria-pressed="true"],
-.seq-chips .btn[aria-pressed="true"]:hover {
+.seq-chips .btn[aria-pressed="true"]:hover,
+.seq-latch[aria-pressed="true"],
+.seq-latch[aria-pressed="true"]:hover {
   border-color: #1b1a18;
   background: linear-gradient(180deg, #3a3832, #26241f);
   color: #f3efe3;
@@ -975,7 +977,9 @@
   .seq-lengths .btn[aria-pressed="true"],
   .seq-lengths .btn[aria-pressed="true"]:hover,
   .seq-chips .btn[aria-pressed="true"],
-  .seq-chips .btn[aria-pressed="true"]:hover {
+  .seq-chips .btn[aria-pressed="true"]:hover,
+  .seq-latch[aria-pressed="true"],
+  .seq-latch[aria-pressed="true"]:hover {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
