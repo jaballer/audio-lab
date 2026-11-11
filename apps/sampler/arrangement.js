@@ -4,8 +4,8 @@
 //   [{ sequence: 2, repeats: 4 }, { sequence: 0, repeats: 1 }]   // sequence 3 four times, then sequence 1 once (0-based)
 //
 // A song nobody has edited has no arrangement (`null`), and that means every sequence once, in order, including one made
-// or removed later: nothing is made up for it, so it cannot go out of step with the sequences. The first edit makes the
-// list explicit (the editing helpers come with the strip that edits it); from then on a sequence made or removed has to be
+// or removed later: nothing is made up for it, so it cannot go out of step with the sequences. The first edit (insertEntry and
+// the others below) makes the list explicit; from then on a sequence made or removed has to be
 // followed here (afterSequenceAdded, afterSequenceRemoved), and `song.js` keeps it through saving and loading
 // (cleanArrangement).
 //
@@ -14,6 +14,7 @@
 //   passOrder(arrangement, count)        // the sequence of each pass, repeats counted out: [2, 2, 2, 2, 0]
 //   positionOf(arrangement, count, sequence)   // where a sequence first comes in the song, or null
 //   nextPass(arrangement, count, played, sequence)   // the pass after the one that has just ended (what a chain walks)
+//   insertEntry / removeEntry / moveEntry / setRepeats(arrangement, count, …)   // the edits the strip makes
 
 // At most this many entries, and each one repeats from MIN_REPEATS to MAX_REPEATS times: with the sequences' own
 // length (up to eight bars) a song can be long, and the export has to hold all of it in memory.
@@ -95,4 +96,55 @@ export function nextPass(arrangement, count, played, sequence) {
   if (!here) return pass(0, 0);
   if (here.rep + 1 < entries[here.entry].repeats) return pass(here.entry, here.rep + 1);
   return pass((here.entry + 1) % entries.length, 0);
+}
+
+// ---------- Editing ----------
+// What the strip does. Each edit takes the arrangement (null: every sequence once) and the number of sequences, and gives back
+// the list after it, new (what it was given is left alone, entries and all), with `entryAfter(index)`, which says where an entry
+// that was at `index` is now (-1 when it is gone) so that whatever points at one can follow it. It gives back null when nothing can
+// be done: the list is full, the entry is the last (a song is never left playing nothing), something is not where it can be, or the
+// edit would change nothing. An edit makes the list explicit, so a song nobody edited has its entries to edit from.
+
+const isIndex = (value, length) => Number.isInteger(value) && value >= 0 && value < length;
+const copyOf = (arrangement, count) =>
+  resolveArrangement(arrangement, count).map(({ sequence, repeats }) => ({ sequence, repeats }));
+
+// An entry for `sequence`, once, at the place `at` (0 is the start of the song, the length of the list the end).
+export function insertEntry(arrangement, count, at, sequence) {
+  const entries = copyOf(arrangement, count);
+  if (entries.length >= MAX_ENTRIES || !isIndex(sequence, count) || !Number.isInteger(at)) return null;
+  const place = Math.min(entries.length, Math.max(0, at));
+  entries.splice(place, 0, { sequence, repeats: MIN_REPEATS });
+  return { arrangement: entries, entryAfter: (index) => (index >= place ? index + 1 : index) };
+}
+
+// The entry at `index` goes, and the ones after it move down.
+export function removeEntry(arrangement, count, index) {
+  const entries = copyOf(arrangement, count);
+  if (entries.length < 2 || !isIndex(index, entries.length)) return null;
+  entries.splice(index, 1);
+  return { arrangement: entries, entryAfter: (at) => (at < index ? at : at === index ? -1 : at - 1) };
+}
+
+// The entry at `from` goes to the place `to`, and the ones between move over by one.
+export function moveEntry(arrangement, count, from, to) {
+  const entries = copyOf(arrangement, count);
+  if (!isIndex(from, entries.length) || !isIndex(to, entries.length) || from === to) return null;
+  entries.splice(to, 0, ...entries.splice(from, 1));
+  const entryAfter = (at) => {
+    if (at === from) return to;
+    if (from < to) return at > from && at <= to ? at - 1 : at;
+    return at >= to && at < from ? at + 1 : at;
+  };
+  return { arrangement: entries, entryAfter };
+}
+
+// How many times the entry at `index` goes round, brought into MIN_REPEATS to MAX_REPEATS; nothing when that is what it has.
+export function setRepeats(arrangement, count, index, repeats) {
+  const entries = copyOf(arrangement, count);
+  if (!isIndex(index, entries.length) || !Number.isInteger(repeats)) return null;
+  const next = Math.min(MAX_REPEATS, Math.max(MIN_REPEATS, repeats));
+  if (next === entries[index].repeats) return null;
+  entries[index].repeats = next;
+  return { arrangement: entries, entryAfter: (at) => at };
 }

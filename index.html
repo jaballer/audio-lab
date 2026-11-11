@@ -258,6 +258,17 @@
           </section>
         </div>
 
+        <section class="step-panel song-panel" aria-label="Song: the order the sequences play in">
+          <div class="step-head">
+            <!-- The heading is the button that hides the strip and its tools. chain-strip.js draws both. -->
+            <button id="song-toggle" class="small-label section-toggle" type="button" aria-expanded="true">Song</button>
+            <div id="song-tools" class="step-tools" role="group" aria-label="Edit the song"></div>
+          </div>
+          <div id="song-body">
+            <div id="song-strip"></div>
+          </div>
+        </section>
+
         <section class="step-panel" aria-label="Steps for the selected pad">
           <div class="step-head">
             <!-- The heading is the button that hides the rest of the step editor, and says whether it is shown. -->
@@ -374,13 +385,23 @@
           sound, even what is still ringing
         </li>
         <li>
-          All, at the end of the row with Rec, Play and Stop, plays every sequence in order: lit, each pass (the whole
-          of a sequence, all its bars) is followed by the next sequence, and the last by the first, until you press
-          Stop. Play begins with the sequence showing, the display says ALL where it says SEQ, and the sequence keys
-          follow what plays (a moment ahead of the sound, about a quarter of a second at 100 BPM). A sequence queued
-          with the keys under the display goes first, and the order goes on from it; a press on a sequence key just
-          ahead of the end of a pass still plays there, in place of the one the order picked. All is not kept: it is off
-          each time the page opens, and a chain that plays does not save the beat as it goes
+          All, at the end of the row with Rec, Play and Stop, plays the song: lit, each pass (the whole of a sequence,
+          all its bars) is followed by the next of the song, and the last by the first, until you press Stop. Play
+          begins with the sequence showing, the display says ALL where it says SEQ, and the sequence keys follow what
+          plays (a moment ahead of the sound, about a quarter of a second at 100 BPM). A sequence queued with the keys
+          under the display goes first, and the song goes on from the first entry that has it; a press on a sequence key
+          just ahead of the end of a pass still plays there, in place of the one the song picked. All is not kept: it is
+          off each time the page opens, and a chain that plays does not save the beat as it goes
+        </li>
+        <li>
+          Song, under the pads, is the order All plays: a cell for each entry, with its sequence and how many times it
+          goes round (×3). Until you change it, it is every sequence once, in order, and it follows the sequences you
+          add or remove. Press a cell to select it (the arrow keys, Home and End move along the row); Add Entry puts the
+          sequence showing in after it, Remove Entry takes it out (a song keeps one), Move Earlier and Move Later change
+          the order, and Repeats − and + set how many times it goes round, from 1 to 16, with up to 32 entries. While
+          All plays, the entry that plays has a triangle and shows its time round (2/3), a moment ahead of the sound as
+          the sequence keys are. A change is heard from the end of the pass, and the song is kept with the beat. Export
+          does not use it yet: it saves every sequence once, in order
         </li>
         <li>
           The two bars at the right of the display show how loud the left and right of the output are, as it is heard

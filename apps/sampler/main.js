@@ -30,6 +30,7 @@ import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createLevelReader } from "./level-meter.js";
 import { createLevelMeter } from "./level-meter-view.js";
+import { createChainStrip } from "./chain-strip.js";
 import { createSequenceRow, latchFromStored } from "./sequence-row.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
@@ -710,6 +711,36 @@ const sequenceRow = createSequenceRow($("seq-row"), {
   onCopy: () => sampler.copySequence(),
   onRemove: removeSequence,
 });
+// The song: the order Play All plays the sequences in, with repeats. Which entry is selected is the page's (the strip shows it and the
+// tools act on it, and selecting one changes nothing about what plays): an edit brings the selection with it, and render keeps it in range.
+let selectedEntry = 0;
+const chainStrip = createChainStrip(
+  { strip: $("song-strip"), tools: $("song-tools") },
+  {
+    onSelect(index) {
+      selectedEntry = index;
+      render();
+    },
+    onAdd() {
+      const at = sampler.addEntry(selectedEntry + 1);
+      if (at < 0) return;
+      selectedEntry = at;
+      render();
+    },
+    onRemove() {
+      const next = sampler.removeEntry(selectedEntry);
+      if (next < 0) return;
+      selectedEntry = next;
+      render();
+    },
+    onMove(delta) {
+      selectedEntry = sampler.moveEntry(selectedEntry, delta);
+      render();
+    },
+    onRepeats: (delta) =>
+      sampler.setEntryRepeats(selectedEntry, sampler.getState().arrangement[selectedEntry].repeats + delta),
+  },
+);
 const stepsPrev = $("steps-prev");
 const stepsNext = $("steps-next");
 const stepsRange = $("steps-range");
@@ -796,6 +827,14 @@ function render() {
     latched: queuePresses,
     canAdd: state.canAddSequence,
     canRemove: state.canRemoveSequence,
+  });
+  selectedEntry = Math.min(selectedEntry, state.arrangement.length - 1);
+  chainStrip.refresh({
+    entries: state.arrangement,
+    selected: selectedEntry,
+    at: state.songPass,
+    canAdd: state.canAddEntry,
+    canRemove: state.canRemoveEntry,
   });
   for (const { bars, button } of barButtons) setAttr(button, "aria-pressed", String(bars === state.bars));
   setText(stepsRange, `Bar ${state.page + 1} of ${state.bars}`);
@@ -1003,6 +1042,15 @@ createDisclosure({
   regions: [$("step-tools"), $("step-body")],
   open: loadJson(STEPS_KEY, true) !== false,
   onToggle: (open) => saveJson(STEPS_KEY, open),
+});
+
+// The song panel can be hidden the same way: its heading stays, the strip and its tools go. Remembered, and shown by default.
+const SONG_PANEL_KEY = "pad-sampler:song-panel";
+createDisclosure({
+  toggle: $("song-toggle"),
+  regions: [$("song-tools"), $("song-body")],
+  open: loadJson(SONG_PANEL_KEY, true) !== false,
+  onToggle: (open) => saveJson(SONG_PANEL_KEY, open),
 });
 
 // The velocity bars are off until the Velocity switch asks for them; the choice is remembered.

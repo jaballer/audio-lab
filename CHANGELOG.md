@@ -12,12 +12,18 @@ Numbers link to the pull request.
 
 - A footer on every page with links to the source code, the documentation, the design notes, the changelog, the issue
   tracker, the author's GitHub profile and the license. They open in a new tab, so the sampler keeps playing ([#169](https://github.com/jaballer/audio-lab/pull/169))
+- Sampler: a Song panel, under the pads, edits the order the All key plays. It has a cell for each entry, with its sequence and
+  how many times it goes round, and Add Entry (the sequence showing, after the entry selected), Remove Entry, Move Earlier,
+  Move Later and Repeats − and + for the entry selected: up to 32 entries, going round 1 to 16 times. Until it is changed it is
+  every sequence once, in order, as All played it, and it follows the sequences you add or remove. While All plays, the entry
+  that plays has a triangle and shows its time round (2/3). A change is heard from the end of the pass, the song is saved with
+  the beat, and the panel can be hidden. Export does not use it yet ([#174](https://github.com/jaballer/audio-lab/pull/174))
 
 ### Maintenance
 
 - A beat can carry an arrangement, the order a song will play its sequences in, each with a number of repeats (saved
-  format 10). It changes nothing on the page yet: nothing edits it, a beat saved by an older page loads as it did, and a
-  sequence added, copied or removed is followed in it ([#170](https://github.com/jaballer/audio-lab/pull/170))
+  format 10). A beat saved by an older page loads as it did, and a sequence added, copied or removed is followed in it
+  ([#170](https://github.com/jaballer/audio-lab/pull/170))
 - Play All goes by the arrangement when a beat has one: the next time round an entry that repeats, else the next entry,
   round and round, and a queued sequence goes first with the song going on from its first entry. Nothing edits an
   arrangement yet, so with no arrangement it plays every sequence once in order, as it did

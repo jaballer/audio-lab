@@ -5,10 +5,14 @@ import {
   afterSequenceAdded,
   afterSequenceRemoved,
   cleanArrangement,
+  insertEntry,
+  moveEntry,
   nextPass,
   passOrder,
   positionOf,
+  removeEntry,
   resolveArrangement,
+  setRepeats,
 } from "./arrangement.js";
 
 const entry = (sequence, repeats = 1) => ({ sequence, repeats });
@@ -283,5 +287,174 @@ describe("nextPass", () => {
         sequence = pass.sequence;
       }
     }
+  });
+});
+
+describe("editing the arrangement", () => {
+  // Each edit gives back the list after it and where each entry went, or null when it cannot be done.
+  const moved = (edit) => (index) => edit.entryAfter(index);
+
+  describe("insertEntry", () => {
+    it("puts an entry for the sequence at the place, once, and makes a song that had no arrangement explicit", () => {
+      expect(insertEntry(null, 3, 1, 2).arrangement).toEqual([entry(0), entry(2), entry(1), entry(2)]);
+      expect(insertEntry([entry(2, 4)], 3, 1, 0).arrangement).toEqual([entry(2, 4), entry(0)]);
+      expect(insertEntry([entry(2, 4)], 3, 0, 0).arrangement).toEqual([entry(0), entry(2, 4)]);
+    });
+
+    it("brings the place into the list: before the first, or after the last", () => {
+      expect(insertEntry([entry(0), entry(1)], 2, -5, 1).arrangement).toEqual([entry(1), entry(0), entry(1)]);
+      expect(insertEntry([entry(0), entry(1)], 2, 99, 1).arrangement).toEqual([entry(0), entry(1), entry(1)]);
+    });
+
+    it("says where each entry went: the ones from the place on move up one", () => {
+      const edit = insertEntry([entry(0), entry(1), entry(0)], 2, 1, 1);
+      expect([0, 1, 2].map(moved(edit))).toEqual([0, 2, 3]);
+    });
+
+    it("cannot when there are as many entries as there can be", () => {
+      const full = Array.from({ length: MAX_ENTRIES }, () => entry(0));
+      expect(insertEntry(full, 2, 3, 1)).toBeNull();
+      expect(insertEntry(full.slice(1), 2, 3, 1)).not.toBeNull();
+    });
+
+    it("brings a place before the first into the list from the start, not from the end", () => {
+      expect(insertEntry([entry(0), entry(1), entry(2)], 3, -1, 2).arrangement).toEqual([
+        entry(2),
+        entry(0),
+        entry(1),
+        entry(2),
+      ]);
+      const edit = insertEntry([entry(0), entry(1), entry(2)], 3, -1, 2);
+      expect([0, 1, 2].map(moved(edit))).toEqual([1, 2, 3]);
+    });
+
+    it("says where each entry went when the place is past the end: none of them moved", () => {
+      const edit = insertEntry([entry(0), entry(1)], 2, 99, 0);
+      expect([0, 1].map(moved(edit))).toEqual([0, 1]);
+    });
+
+    it("cannot for a place that is not a whole number", () => {
+      for (const at of [1.5, NaN, undefined, "1"]) expect(insertEntry([entry(0), entry(1)], 2, at, 0)).toBeNull();
+    });
+
+    it("cannot for a sequence the song does not have, or that is not a whole number", () => {
+      for (const sequence of [-1, 3, 1.5, "1", NaN, undefined]) expect(insertEntry(null, 3, 0, sequence)).toBeNull();
+    });
+
+    it("gives a new list, and leaves the one it was given alone", () => {
+      const before = [entry(0)];
+      const edit = insertEntry(before, 2, 1, 1);
+      expect(edit.arrangement).not.toBe(before);
+      expect(before).toEqual([entry(0)]);
+      expect(edit.arrangement[0]).not.toBe(before[0]);
+    });
+  });
+
+  describe("removeEntry", () => {
+    it("takes the entry out and keeps the others as they are, with their repeats", () => {
+      expect(removeEntry([entry(0, 2), entry(1, 3), entry(2)], 3, 1).arrangement).toEqual([entry(0, 2), entry(2)]);
+    });
+
+    it("works on the entries a song with no arrangement has, and makes them explicit", () => {
+      expect(removeEntry(null, 3, 0).arrangement).toEqual([entry(1), entry(2)]);
+    });
+
+    it("says where each entry went: the one removed is gone, the ones after it move down", () => {
+      const edit = removeEntry([entry(0), entry(1), entry(2), entry(0)], 3, 1);
+      expect([0, 1, 2, 3].map(moved(edit))).toEqual([0, -1, 1, 2]);
+    });
+
+    it("cannot take the last entry: a song is never left playing nothing", () => {
+      expect(removeEntry([entry(1, 5)], 3, 0)).toBeNull();
+      expect(removeEntry(null, 1, 0)).toBeNull();
+    });
+
+    it("cannot for an entry that is not there", () => {
+      for (const index of [-1, 2, 1.5, "0", NaN]) expect(removeEntry([entry(0), entry(1)], 2, index)).toBeNull();
+    });
+
+    it("gives a new list, and leaves the one it was given alone", () => {
+      const before = [entry(0), entry(1)];
+      const edit = removeEntry(before, 2, 0);
+      expect(edit.arrangement).not.toBe(before);
+      expect(before).toEqual([entry(0), entry(1)]);
+    });
+  });
+
+  describe("moveEntry", () => {
+    const list = [entry(0), entry(1, 2), entry(2), entry(0, 3)];
+
+    it("moves an entry to the place, later or earlier, with its repeats", () => {
+      expect(moveEntry(list, 3, 1, 3).arrangement).toEqual([entry(0), entry(2), entry(0, 3), entry(1, 2)]);
+      expect(moveEntry(list, 3, 3, 0).arrangement).toEqual([entry(0, 3), entry(0), entry(1, 2), entry(2)]);
+      expect(moveEntry(list, 3, 1, 2).arrangement).toEqual([entry(0), entry(2), entry(1, 2), entry(0, 3)]);
+    });
+
+    it("says where each entry went", () => {
+      const later = moveEntry(list, 3, 0, 2);
+      expect([0, 1, 2, 3].map(moved(later))).toEqual([2, 0, 1, 3]);
+      const earlier = moveEntry(list, 3, 3, 1);
+      expect([0, 1, 2, 3].map(moved(earlier))).toEqual([0, 2, 3, 1]);
+    });
+
+    it("cannot when it would not change anything, or for an entry or a place that is not there", () => {
+      expect(moveEntry(list, 3, 2, 2)).toBeNull();
+      for (const [from, to] of [
+        [-1, 0],
+        [0, -1],
+        [4, 0],
+        [0, 4],
+        [0.5, 1],
+        [0, "1"],
+        [NaN, 0],
+      ]) {
+        expect(moveEntry(list, 3, from, to)).toBeNull();
+      }
+    });
+
+    it("works on the entries a song with no arrangement has", () => {
+      expect(moveEntry(null, 3, 0, 2).arrangement).toEqual([entry(1), entry(2), entry(0)]);
+    });
+
+    it("gives a new list, and leaves the one it was given alone", () => {
+      const before = [entry(0), entry(1)];
+      moveEntry(before, 2, 0, 1);
+      expect(before).toEqual([entry(0), entry(1)]);
+    });
+  });
+
+  describe("setRepeats", () => {
+    it("sets how many times an entry goes round, from 1 to 16", () => {
+      expect(setRepeats([entry(0), entry(1)], 2, 1, 5).arrangement).toEqual([entry(0), entry(1, 5)]);
+      expect(setRepeats([entry(0, 4)], 2, 0, 1).arrangement).toEqual([entry(0)]);
+    });
+
+    it("brings the number into range, and is nothing when that is what it was", () => {
+      expect(setRepeats([entry(0)], 1, 0, 99).arrangement).toEqual([entry(0, MAX_REPEATS)]);
+      expect(setRepeats([entry(0, 3)], 1, 0, 0).arrangement).toEqual([entry(0)]);
+      expect(setRepeats([entry(0, 3)], 1, 0, 3)).toBeNull();
+      expect(setRepeats([entry(0, MAX_REPEATS)], 1, 0, 99)).toBeNull();
+      expect(setRepeats([entry(0)], 1, 0, -4)).toBeNull();
+    });
+
+    it("cannot for repeats that are not a whole number, or an entry that is not there", () => {
+      for (const repeats of [1.5, "2", NaN, undefined]) expect(setRepeats([entry(0)], 1, 0, repeats)).toBeNull();
+      for (const index of [-1, 1, 0.5]) expect(setRepeats([entry(0)], 1, index, 2)).toBeNull();
+    });
+
+    it("leaves every entry where it was", () => {
+      const edit = setRepeats([entry(0), entry(1)], 2, 1, 4);
+      expect([0, 1].map(moved(edit))).toEqual([0, 1]);
+    });
+
+    it("works on the entries a song with no arrangement has", () => {
+      expect(setRepeats(null, 3, 1, 2).arrangement).toEqual([entry(0), entry(1, 2), entry(2)]);
+    });
+
+    it("gives a new list, and leaves the one it was given alone", () => {
+      const before = [entry(0)];
+      setRepeats(before, 1, 0, 4);
+      expect(before).toEqual([entry(0)]);
+    });
   });
 });

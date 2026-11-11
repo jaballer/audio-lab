@@ -749,13 +749,16 @@
 /* The length keys, and the keys for the sequences (sequence-row.js), are each one joined group (.btn-group); the chosen one is
    pressed in, with a dark face. */
 .seq-lengths .btn,
-.seq-chips .btn {
+.seq-chips .btn,
+.song-strip .btn {
   min-width: 2.6em; /* eight sequence keys, with Next beside +, Copy and −, fit the display's width: 2.8em was 18px too wide */
 }
 .seq-lengths .btn[aria-pressed="true"],
 .seq-lengths .btn[aria-pressed="true"]:hover,
 .seq-chips .btn[aria-pressed="true"],
 .seq-chips .btn[aria-pressed="true"]:hover,
+.song-strip .btn[aria-pressed="true"],
+.song-strip .btn[aria-pressed="true"]:hover,
 .seq-latch[aria-pressed="true"],
 .seq-latch[aria-pressed="true"]:hover {
   border-color: #1b1a18;
@@ -774,6 +777,35 @@
     background: #ff7a45; /* the ink on it is 5:1 */
     color: var(--ink);
   }
+}
+/* ---------- The song (chain-strip.js) ---------- */
+/* A cell for each entry of the song, joined like the sequence keys and wrapping in rows (there can be 32). The one selected is pressed in,
+   with a dark face; the one Play All is playing has an orange ring and a triangle (a shape, so it is not said only by a colour), and
+   shows its time round while it repeats. The ring on the dark face is the brighter orange the blinking key uses, which the ink on it
+   has 5:1 against; on the light face it is a darker one, 4:1. */
+.song-strip {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.song-cell {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.3em;
+}
+.song-cell-times {
+  font-size: 0.78em;
+  opacity: 0.85;
+}
+.song-cell[data-playing="true"] {
+  box-shadow: inset 0 0 0 2px #c2410c;
+}
+.song-cell[data-playing="true"][aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px #ff7a45;
+}
+.song-cell[data-playing="true"]::before {
+  content: "\25B6" / ""; /* a play triangle, which a screen reader is not told of: the cell's name says it is playing */
+  font-size: 0.6em;
 }
 /* Edit tools for the steps below: undo and redo, copy and paste, clear. They have a row of their own under the
    label and the bar buttons, so the header reads the same at every width. */
@@ -973,11 +1005,21 @@
     text-underline-offset: 3px;
     animation: none;
   }
+  /* The entry that is playing is a ring in a colour, which forced colors take away; the triangle stays, and a dashed border says it
+     too (an underline does as well, as for the sequence that plays next). */
+  .song-cell[data-playing="true"] {
+    border-style: dashed;
+    border-color: Highlight;
+    text-decoration: underline 2px;
+    text-underline-offset: 3px;
+  }
   /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */
   .seq-lengths .btn[aria-pressed="true"],
   .seq-lengths .btn[aria-pressed="true"]:hover,
   .seq-chips .btn[aria-pressed="true"],
   .seq-chips .btn[aria-pressed="true"]:hover,
+  .song-strip .btn[aria-pressed="true"],
+  .song-strip .btn[aria-pressed="true"]:hover,
   .seq-latch[aria-pressed="true"],
   .seq-latch[aria-pressed="true"]:hover {
     forced-color-adjust: none;
@@ -1023,6 +1065,7 @@
    them. Only these: a step key that is not a step (a shorter sequence) is hidden another way and keeps its place. */
 .step-head > [hidden],
 #step-body[hidden],
+#song-body[hidden],
 .pad-drawer-section > [hidden] {
   display: none;
 }

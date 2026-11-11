@@ -19,12 +19,19 @@ What `song.js` keeps, and `controller.js` plays:
   turning Next off is how a touch screen, which has no Shift, switches at once (`pressIsNow` in `sequence-row.js`). All plays the sequences one after the other until Stop; it is off on every load, and a chain that plays does not
   save the beat as it goes.
 - **The arrangement** (`arrangement.js`) is the order a song plays its sequences in, each with repeats. `null`, the default,
-  means every sequence once, in order, so it cannot fall out of step with the sequences until a person edits it. So far it
-  is saved data with its rules and no UI (#159, steps 4a and 4b so far). Play All goes by it: the controller keeps where the
-  song is (`songAt`) and `nextPass` says which pass follows the one that ended (the next time round the entry if it repeats,
-  else the next entry), a queued sequence goes first and the song goes on from the first entry that names it. Export's
-  "All the sequences" does not read it yet and plays every sequence once, in order (`songPasses` in `export-wav.js` is where
-  the export will).
+  means every sequence once, in order, so it cannot fall out of step with the sequences until a person edits it; the first edit
+  makes it explicit, and from then on a sequence added gets an entry at the end and one removed takes its entries with it.
+- **The Song panel** (`chain-strip.js`, #159 step 4b) edits it: a cell for each entry, with its sequence and its repeats, and
+  tools to add the sequence showing, remove, move and repeat the entry selected. Selecting an entry only selects it (it is the
+  page's, `selectedEntry`), so nothing about what plays changes. The controller does the editing (`addEntry`, `removeEntry`,
+  `moveEntry`, `setEntryRepeats`) through the pure edits in `arrangement.js`, and keeps where the song is on its entry through
+  them (a position that pointed at an entry follows it), so a song that is playing goes on from where it was and hears the edit at
+  the end of the pass. The entry playing is marked from `songPass`, which leads what is heard by the lookahead as the sequence
+  keys do. No undo, as for the sequences' own list.
+- **Play All goes by the arrangement**: the controller keeps where the song is (`songAt`) and `nextPass` says which pass follows the
+  one that ended (the next time round the entry if it repeats, else the next entry), a queued sequence goes first and the song goes
+  on from the first entry that names it. Export's "All the sequences" does not read it yet and plays every sequence once, in order
+  (`songPasses` in `export-wav.js` is where the export will).
 - **Starters** (`starters.js`) are whole beats to begin from (tempo, swing, patterns, choke groups, colours). The pads'
   sounds are the same in every starter: a starter changes the beat, not the kit.
 - **Swing** is 50 (straight) to 75: how much of each pair of steps the first takes, so the second sounds later
