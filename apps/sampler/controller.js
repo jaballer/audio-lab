@@ -128,6 +128,9 @@ export function createSampler({
   // handed over, but has not sounded until this time. A sequence queued before then still takes over there (queueSequence): a
   // person who presses just ahead of the downbeat is on time. Not set once a sequence has taken over there.
   let lastWrap = -Infinity;
+  // What the sequence that gave way at the last switch was (its pattern, its undo history, how many steps it had), for a live
+  // hit in the moment before the playhead reaches the new pass: that hit is a step of the pass that is still sounding.
+  let outgoing = null;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
   const scheduledHits = []; // { time, gridTime, step, rows, bus, chokes, pass } for each step handed to the scheduler, until its light is shown
@@ -201,8 +204,9 @@ export function createSampler({
 
   // Live recording: quantize the hit to the nearest 16th step.
   function recordHit(index, velocity) {
-    // Its step would be a place in the sequence that has just gone, and the pattern is the one that came after it. The hit sounds.
-    if (playheadInOldPass()) return;
+    // Between a switch and the new pass sounding, the playhead is on the last steps of the sequence that gave way, so the steps
+    // are counted in its length. The one nearest the first step of the next pass is the downbeat of the one that took over.
+    const before = playheadInOldPass();
     const step = nearestStep({
       now: clock.now(),
       playheadTime: scheduler.playheadTime,
@@ -210,12 +214,13 @@ export function createSampler({
       bpm: scheduler.bpm,
       swing: scheduler.swing,
       playheadDelay: scheduler.playheadDelay,
-      steps: totalSteps(),
+      steps: before ? outgoing.steps : totalSteps(),
     });
     if (step < 0) return;
+    const into = before && step !== 0 ? outgoing : { pattern, history };
     // a hit played again over a step replaces its velocity
-    edit(() => pattern.set(index, step, true, Math.round(velocity * FULL_VELOCITY)));
-    scheduler.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
+    editOn(into, () => into.pattern.set(index, step, true, Math.round(velocity * FULL_VELOCITY)));
+    if (into !== outgoing) scheduler.markHeard(index, step); // it was just played live: don't sound it again at a slow tempo
   }
 
   // ---------- Steps ----------
@@ -246,15 +251,19 @@ export function createSampler({
   // before is kept when the change did something. `merge` is for a change made in a stream (dragging a
   // velocity), where the first one is kept and the ones right after it are part of the same undo. `fresh` starts a new
   // undo even if the last change was a moment ago (a press on another bar), and what is merged after it joins that one.
-  function edit(change, { merge = false, fresh = false } = {}) {
-    const before = pattern.state();
+  const edit = (change, options) => editOn({ pattern, history }, change, options);
+
+  // `target` is the pattern and the undo history of the sequence the change is to: the one showing, or the one that has just
+  // given way (a live hit in the moment between a switch and the new pass).
+  function editOn(target, change, { merge = false, fresh = false } = {}) {
+    const before = target.pattern.state();
     change();
-    if (JSON.stringify(pattern.state()) === JSON.stringify(before)) return;
+    if (JSON.stringify(target.pattern.state()) === JSON.stringify(before)) return;
     const at = now();
     const continues = merge && !fresh && selected === lastMergedPad && at - lastMergedAt <= MERGE_MS;
     lastMergedAt = merge ? at : -Infinity;
     lastMergedPad = selected;
-    if (!continues) history.push(before);
+    if (!continues) target.history.push(before);
   }
 
   function toggleStep(step) {
@@ -303,6 +312,7 @@ export function createSampler({
     const next = Math.min(maxBars, Math.max(1, Math.round(value)));
     if (next === bars) return;
     const shorter = next < bars;
+    if (!shorter) lastWrap = -Infinity; // the loop carries on past the pass end the scheduler had reached: it is not one
     bars = next;
     slots[current].bars = bars;
     scheduler.setSteps(totalSteps());
@@ -330,6 +340,7 @@ export function createSampler({
   // waiting for the end of the pass: a person who picks one now, or adds or removes one (which moves the numbers), is not
   // leaving a plan behind.
   function showSequence(next) {
+    if (slots[next].bars > bars) lastWrap = -Infinity; // as for setBars: a longer one carries on past the pass end
     adoptSequence(next);
     scheduler.setSteps(totalSteps());
     scheduler.forgetHeard(); // a live hit still waiting for its step was recorded into the old sequence
@@ -364,6 +375,7 @@ export function createSampler({
     passId++;
     passStart = time;
     lastWrap = -Infinity;
+    outgoing = { pattern, history, steps: totalSteps() };
     adoptSequence(next);
     scheduler.startPass(totalSteps());
     onMessage(`SEQ ${pad2(current + 1)}`);
