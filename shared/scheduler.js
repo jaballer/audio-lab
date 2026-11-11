@@ -1,10 +1,11 @@
 // The sequencer's clock: a lookahead scheduler. No DOM. Shared by every page that runs a step
 // sequencer; the sampler's runs on the audio clock.
 //
-//   const scheduler = createScheduler({ clock, steps: 16, onStep });   // also bpm, bpmRange: { min, max }
+//   const scheduler = createScheduler({ clock, steps: 16, onStep });   // also bpm, bpmRange: { min, max }, onWrap
 //   scheduler.start();      // false if it was already playing; start(at) puts the first step at time `at`
 //   scheduler.stop();
 //   scheduler.setSteps(32); // change the loop length, while playing too
+//   scheduler.startPass(8); // from onWrap: the pass that is beginning is 8 steps long, whatever the last one was
 //   scheduler.setBpm(120);  // returns the tempo actually set (clamped to bpmRange, 40-240 by default)
 //   scheduler.setSwing(58); // 50 (straight) to 75: the odd steps sound later (tempo.js); `swing` in the options starts it there
 //   scheduler.poll();       // call every animation frame; true when the playhead moved
@@ -26,6 +27,13 @@
 // separately: each scheduled step is queued, and `poll()` moves the playhead
 // to the latest step whose time has actually arrived.
 //
+// `onWrap(time)` is called when the loop comes round, just before the first step of the next pass is scheduled, with the
+// time that step falls (on the grid, before swing). It is where a pass can be a different length from the one before:
+// `startPass(steps)` begins the pass that is coming at its first step with that many, which `setSteps` cannot do (it carries
+// on into the new length from where the old one ended, for a person changing the length of a loop that is playing). The steps
+// already queued for the playhead are left as they were. A stall that skips past the end of a pass calls it once, for the
+// pass that began there, and lands in it where the grid is.
+//
 // `onStep(step, time, heard)` also gets `heard`, a Set of the rows (pads) that
 // must stay silent on this pass because they were just heard live: see
 // markHeard(). It is part of the scheduler, not the sampler, because it is tied to which
@@ -46,6 +54,7 @@ export function createScheduler({
   clock,
   steps: initialSteps,
   onStep,
+  onWrap,
   bpm: initialBpm = 100,
   bpmRange,
   swing: initialSwing = SWING_DEFAULT,
@@ -91,10 +100,16 @@ export function createScheduler({
     if (missed <= 0) return;
     const last = missed - 1;
     forgetHeard(); // its step is skipped; a later pass over it is a new one
-    const lastStep = (nextStep + last) % steps;
-    visualQueue.push({ step: lastStep, time: soundsAt(last), delay: swingDelay(lastStep, bpm, swing) });
+    // A pass that ended in the stall: the next one began where the loop would have come round, and may be another length.
+    const from = nextStep;
+    const oldSteps = steps;
+    if (from + missed >= oldSteps) onWrap?.(nextTime + (oldSteps - from) * length);
+    const indexOf = (k) => (from + k >= oldSteps ? (from + k - oldSteps) % steps : from + k);
+    const lastStep = indexOf(last);
+    const delay = swingDelay(lastStep, bpm, swing);
+    visualQueue.push({ step: lastStep, time: nextTime + last * length + delay, delay });
     nextTime += missed * length;
-    nextStep = (nextStep + missed) % steps;
+    nextStep = indexOf(missed);
   }
 
   // poll() only uses the newest step that has arrived, but it runs from
@@ -142,6 +157,7 @@ export function createScheduler({
       nextTime += stepSeconds(bpm);
       nextStep = (nextStep + 1) % steps;
       scheduledAny = true;
+      if (nextStep === 0) onWrap?.(nextTime);
     }
   }
 
@@ -204,6 +220,13 @@ export function createScheduler({
     if (heardStep >= steps) forgetHeard();
   }
 
+  // The pass that is beginning is `value` steps long, from its first step: for onWrap. Nothing already queued is touched, so
+  // the steps of the pass that ended keep the numbers they were scheduled with.
+  function startPass(value) {
+    steps = value;
+    nextStep = 0;
+  }
+
   // Take back the steps scheduled from `step` (at `time`) on, and schedule them again from there: the
   // page replaced what they were built from (a different sequence), after the scheduler had already
   // handed the next step or two to the audio clock. The caller silences the old ones itself.
@@ -232,6 +255,7 @@ export function createScheduler({
     setBpm,
     setSwing,
     setSteps,
+    startPass,
     rewindTo,
     get playing() {
       return playing;

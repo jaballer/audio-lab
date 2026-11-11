@@ -488,6 +488,136 @@ describe("createScheduler", () => {
   });
 });
 
+describe("passes", () => {
+  // A scheduler that reports each step and each wrap, in the order they happen.
+  function withWraps({ steps = 4, bpm = 120, onWrap = () => {} } = {}) {
+    const clock = fakeClock();
+    const log = [];
+    const scheduler = createScheduler({
+      clock,
+      steps,
+      bpm,
+      onStep: (step, time) => log.push(`step ${step} @${time.toFixed(3)}`),
+      onWrap: (time) => {
+        log.push(`wrap @${time.toFixed(3)}`);
+        onWrap(time, scheduler);
+      },
+    });
+    const advance = (seconds) => {
+      clock.time += seconds;
+      vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    };
+    const run = (seconds) => {
+      for (let t = 0; t < seconds; t += SCHEDULER_TICK_MS / 1000) advance(SCHEDULER_TICK_MS / 1000);
+    };
+    return { clock, scheduler, log, advance, run };
+  }
+
+  it("calls onWrap each time the loop comes round, before the first step of the new pass, with the time that step falls", () => {
+    const { scheduler, log, run } = withWraps({ steps: 4, bpm: 120 }); // steps fall at 0.05 + n * 0.125 s
+    scheduler.start();
+    run(0.9);
+    expect(log.slice(0, 7)).toEqual([
+      "step 0 @0.050",
+      "step 1 @0.175",
+      "step 2 @0.300",
+      "step 3 @0.425",
+      "wrap @0.550",
+      "step 0 @0.550",
+      "step 1 @0.675",
+    ]);
+  });
+
+  it("does not call onWrap before a loop has come round, or once it is stopped", () => {
+    const { scheduler, log, run } = withWraps({ steps: 4, bpm: 120 });
+    scheduler.start();
+    run(0.3); // steps 0 to 2
+    expect(log.some((entry) => entry.startsWith("wrap"))).toBe(false);
+    scheduler.stop();
+    log.length = 0;
+    run(2);
+    expect(log).toEqual([]);
+  });
+
+  it("starts a pass of another length from its first step: shorter", () => {
+    const { scheduler, log, run } = withWraps({ steps: 4, onWrap: (_time, s) => s.startPass(2) });
+    scheduler.start();
+    run(1.2);
+    const steps = log.filter((entry) => entry.startsWith("step")).map((entry) => Number(entry.split(" ")[1]));
+    expect(steps.slice(0, 10)).toEqual([0, 1, 2, 3, 0, 1, 0, 1, 0, 1]);
+  });
+
+  it("starts a pass of another length from its first step: longer, and not carried on from where the old one ended", () => {
+    let first = true;
+    const { scheduler, log, run } = withWraps({
+      steps: 2,
+      onWrap: (_time, s) => {
+        if (first) s.startPass(4);
+        first = false;
+      },
+    });
+    scheduler.start();
+    run(1.4);
+    const steps = log.filter((entry) => entry.startsWith("step")).map((entry) => Number(entry.split(" ")[1]));
+    expect(steps.slice(0, 10)).toEqual([0, 1, 0, 1, 2, 3, 0, 1, 2, 3]); // the first pass of 4 starts at 0, where setSteps would have gone on to 2
+  });
+
+  it("leaves the steps already queued for the playhead as they were when a pass of another length begins", () => {
+    const { scheduler, run, clock } = withWraps({ steps: 4, bpm: 120, onWrap: (_time, s) => s.startPass(2) });
+    scheduler.start();
+    run(0.5); // steps 0 to 3 are scheduled, and the wrap at 0.55 is about to come
+    clock.time = 0.43;
+    scheduler.poll();
+    expect(scheduler.playheadStep).toBe(3); // not wrapped into 2 steps, as setSteps would
+  });
+
+  it("calls onWrap once for a stall that skips past the end of a pass, and lands in the pass that began there", () => {
+    let first = true;
+    const { scheduler, log, advance } = withWraps({
+      steps: 4,
+      bpm: 120,
+      onWrap: (_time, s) => {
+        if (first) s.startPass(8);
+        first = false;
+      },
+    });
+    scheduler.start();
+    advance(0); // step 0 at 0.05
+    log.length = 0;
+    advance(1); // the timer was blocked for a second: steps 1 to 7 are long past, the pass of 4 ended at 0.55 s
+    expect(log.filter((entry) => entry.startsWith("wrap"))).toEqual(["wrap @0.550"]);
+    // The grid has the pass of 8 beginning at 0.55 s, so the step that falls at 1.05 s is its step 4.
+    expect(log.filter((entry) => entry.startsWith("step"))).toEqual(["step 4 @1.050"]);
+  });
+
+  it("puts the playhead after a stall on a step of the pass that began in it, as long as that pass is", () => {
+    let first = true;
+    const { scheduler, advance, clock } = withWraps({
+      steps: 4,
+      bpm: 120,
+      onWrap: (_time, s) => {
+        if (first) s.startPass(16);
+        first = false;
+      },
+    });
+    scheduler.start();
+    advance(0);
+    advance(1);
+    clock.time = 1.0;
+    scheduler.poll();
+    expect(scheduler.playheadStep).toBe(3); // step 7 of the old grid is step 3 of the pass of 16 that began at 0.55 s
+  });
+
+  it("is untouched by a stall that does not cross a wrap", () => {
+    const { scheduler, log, advance } = withWraps({ steps: 16, bpm: 120 });
+    scheduler.start();
+    advance(0);
+    log.length = 0;
+    advance(0.6);
+    expect(log.some((entry) => entry.startsWith("wrap"))).toBe(false);
+  });
+});
+
 describe("playhead queue", () => {
   // requestAnimationFrame stops in a hidden tab while the scheduler keeps running,
   // so nothing calls poll() for as long as the tab stays in the background.
