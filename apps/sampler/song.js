@@ -63,7 +63,10 @@ function trimBlankSequences(song) {
   if (!Array.isArray(song.sequences) || song.sequences.length === 0) return song;
   let keep = song.sequences.length;
   while (keep > 1 && isBlankSequence(song.sequences[keep - 1])) keep--;
-  const current = Number.isInteger(song.current) && song.current >= keep ? keep - 1 : song.current;
+  // Only a `current` that pointed at one that went: one that was never in range reads as the first, as it always did.
+  const pointedAtOneThatWent =
+    Number.isInteger(song.current) && song.current >= keep && song.current < song.sequences.length;
+  const current = pointedAtOneThatWent ? keep - 1 : song.current;
   return { ...song, sequences: song.sequences.slice(0, keep), current };
 }
 
@@ -157,7 +160,8 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
   if (!raw.sequences.every((sequence) => isObject(sequence) && isObject(sequence.pattern))) return null;
 
   // As many as the song has, from one (a song with none gets an empty one) up to `maxSequences`: extra ones are dropped.
-  const count = Math.min(maxSequences, Math.max(1, raw.sequences.length));
+  const most = Number.isInteger(maxSequences) && maxSequences > 0 ? maxSequences : 1; // there is always at least one
+  const count = Math.min(most, Math.max(1, raw.sequences.length));
   const sequences = Array.from({ length: count }, (_, i) => {
     const saved = raw.sequences[i];
     if (!saved) return { bars: 1, pattern: {}, velocities: {} };

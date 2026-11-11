@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { PAD_COLUMNS, PAD_COUNT, PAD_ROWS, STEPS, STEP_GROUP, padColumn, padIndex, padRow } from "./layout.js";
+import {
+  MAX_SEQUENCES,
+  PAD_COLUMNS,
+  PAD_COUNT,
+  PAD_ROWS,
+  STEPS,
+  STEP_GROUP,
+  padColumn,
+  padIndex,
+  padRow,
+} from "./layout.js";
+import { STARTERS } from "./starters.js";
 import { KEY_ROWS } from "./pads.js";
 import { SOUNDS } from "../../shared/sounds.js";
 
@@ -11,6 +22,14 @@ describe("layout", () => {
   it("has a computer key for every pad", () => {
     expect(KEY_ROWS).toHaveLength(PAD_ROWS);
     for (const row of KEY_ROWS) expect(row).toHaveLength(PAD_COLUMNS);
+  });
+
+  it("allows eight sequences: the help text, the README and the layout of the keys all say so", () => {
+    expect(MAX_SEQUENCES).toBe(8);
+  });
+
+  it("has room for the sequences of every starter", () => {
+    for (const starter of STARTERS) expect(starter.sequences.length).toBeLessThanOrEqual(MAX_SEQUENCES);
   });
 
   it("splits the steps into whole groups", () => {

@@ -88,6 +88,14 @@ describe("parseSong", () => {
     expect(parse({ ...serializeSong(song), sequences: [] }).sequences).toEqual([empty]);
   });
 
+  it.each([0, -3, NaN, 1.5, undefined, "4"])(
+    "keeps at least one sequence when the most there can be is %s",
+    (maxSequences) => {
+      const many = { ...serializeSong(song), sequences: [song.sequences[0], song.sequences[1], empty] };
+      expect(parseSong(stored(many), { ...SHAPE, maxSequences }).sequences).toHaveLength(1);
+    },
+  );
+
   it("brings the current sequence into the ones the song has", () => {
     const two = { ...serializeSong(song), sequences: [song.sequences[0], song.sequences[1]] };
     expect(parse({ ...two, current: 1 }).current).toBe(1);
@@ -395,6 +403,18 @@ describe("songs saved by version 8", () => {
     expect(loaded.sequences[1].bars).toBe(4);
   });
 
+  it("keep a sequence with a single step on a single pad", () => {
+    const loaded = load(v8([used, { bars: 1, pattern: { 5: [3] }, velocities: {} }, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[1].pattern).toEqual({ 5: [3] });
+  });
+
+  it("keep an empty sequence given two bars", () => {
+    const loaded = load(v8([used, { bars: 2, pattern: {}, velocities: {} }, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[1].bars).toBe(2);
+  });
+
   it("count a pad with an empty list of steps as no steps", () => {
     const loaded = load(v8([used, { bars: 1, pattern: { 3: [] }, velocities: {} }, blank]));
     expect(loaded.sequences).toHaveLength(1);
@@ -409,6 +429,13 @@ describe("songs saved by version 8", () => {
     expect(load(v8(sequences, 1)).current).toBe(1);
     expect(load(v8(sequences, 2)).current).toBe(1); // the first one that went
     expect(load(v8(sequences, 5)).current).toBe(1);
+  });
+
+  it("read a current sequence that was never one of theirs as the first, as they always did, and not as the last one left", () => {
+    const sequences = [used, used, blank, blank, blank, blank, blank, blank];
+    expect(load(v8(sequences, 99)).current).toBe(0);
+    expect(load(v8(sequences, -1)).current).toBe(0);
+    expect(load(v8(sequences, 1.5)).current).toBe(0);
   });
 
   it("keep the tempo, swing, volume and pad settings", () => {

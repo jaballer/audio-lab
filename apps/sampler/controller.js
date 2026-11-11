@@ -96,7 +96,7 @@ export function createSampler({
     history: createHistory(), // undo and redo are per sequence
     pattern: createPattern(kit.length, steps * maxBars, initial, { onChange: onSongChange, velocities }),
   });
-  const slots = Array.from({ length: song ? song.sequences.length : sequenceCount }, (_, i) => {
+  const slots = Array.from({ length: Math.max(1, song ? song.sequences.length : sequenceCount) }, (_, i) => {
     const saved = song?.sequences[i];
     return makeSlot({
       bars: saved?.bars,
