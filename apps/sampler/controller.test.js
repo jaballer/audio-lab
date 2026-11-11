@@ -1542,8 +1542,7 @@ describe("the next sequence", () => {
       expect(s.sampler.getState()).toMatchObject({
         sequence: 1,
         queuedSequence: -1,
-        playingSequence: 0,
-        playingBars: 1,
+        heard: { sequence: 0, bars: 1 },
       });
       expect(s.message).toHaveBeenLastCalledWith("SEQ 02");
       run(s, 0.3); // 2.15 s: the first step of the new pass has sounded
@@ -1836,7 +1835,7 @@ describe("the next sequence", () => {
     run(s, 0.3);
     s.sampler.queueSequence(1);
     run(s, 1.6); // 1.9 s: switched, with the old pass's last steps still to sound
-    expect(s.sampler.getState()).toMatchObject({ sequence: 1, playingSequence: 0 });
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
     s.sampler.start();
     run(s, 0.1); // the first step of the new run sounded at about 1.95 s, before the pass that was left would have ended (2.05 s)
     expect(s.sampler.getState().playheadStep).toBe(0);
@@ -1876,13 +1875,16 @@ describe("the next sequence", () => {
     // The display goes on with the pass that sounds, in its numbering and its length: step 16 of 16 of the sequence giving way, and
     // the keys are for the one showing.
     expect(s.sampler.getState()).toMatchObject({
-      playingSequence: 0,
-      playingBars: 1,
+      heard: { sequence: 0, bars: 1 },
       playheadPosition: 15,
       playheadStep: 15,
     });
     run(s, 0.15); // 2.1 s: the playhead is on the first step of the new pass
-    expect(s.sampler.getState()).toMatchObject({ playingSequence: 1, playheadStep: 0, playheadPosition: 0 });
+    expect(s.sampler.getState()).toMatchObject({
+      heard: { sequence: 1, playheadStep: 0 },
+      playheadStep: 0,
+      playheadPosition: 0,
+    });
   });
 
   // Between the switch and the first step of the new pass sounding, the playhead is on the last steps of the sequence that gave
@@ -1901,7 +1903,7 @@ describe("the next sequence", () => {
     it("is written into the sequence that is giving way, at the step it is nearest, and sounds once", () => {
       const s = recordingThroughSwitch();
       run(s, 0.04); // 1.95 s: the playhead is on step 15
-      expect(s.sampler.getState()).toMatchObject({ sequence: 1, playingSequence: 0 });
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
       s.sampler.triggerPad(3);
       const song = s.sampler.getSong();
       expect(song.sequences[0].pattern[3]).toEqual([15]);
@@ -1939,8 +1941,7 @@ describe("the next sequence", () => {
       expect(s.sampler.getState()).toMatchObject({
         sequence: 1,
         bars: 1,
-        playingSequence: 0,
-        playingBars: 2,
+        heard: { sequence: 0, bars: 2 },
         playheadPosition: 30,
       });
       s.sampler.triggerPad(3); // past halfway to step 31
@@ -2146,6 +2147,110 @@ describe("Play All", () => {
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 8.05));
   });
 
+  describe("turned on or off just ahead of the end of the pass", () => {
+    it("takes effect at that end when turned on before the next pass's first step is handed to the audio clock", () => {
+      const s = setup({ song: chain(3) });
+      s.sampler.start();
+      tick(s, 38); // 1.9 s: the pass has ended in the scheduler, which has built nothing of the next
+      s.message.mockClear();
+      s.songChange.mockClear();
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState()).toMatchObject({ playAll: true, sequence: 1 });
+      expect(s.message.mock.calls.map(([text]) => text)).toEqual(["PLAY ALL ON"]); // and the switch is the chain's: quiet
+      expect(s.songChange).not.toHaveBeenCalled();
+      run(s, 0.5);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+    });
+
+    it("takes back the first step already built, and builds it again, when turned on after it was handed over", () => {
+      const s = setup({ song: chain(3) });
+      s.sampler.start();
+      tick(s, 40); // 2.0 s: the first step of the next pass, at 2.05 s, was built from the sequence that gives way
+      const built = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
+      s.sampler.togglePlayAll();
+      expect(built.disconnect).toHaveBeenCalledTimes(1);
+      run(s, 0.5);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05)); // the one built again was never a second sound
+    });
+
+    it("waits for the end of the next pass when turned on after the first step of the pass that began has sounded", () => {
+      const s = setup({ song: chain(3) });
+      s.sampler.start();
+      run(s, 2.2);
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState().sequence).toBe(0);
+      run(s, 2.2); // 4.4 s
+      expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+    });
+
+    it("does nothing at that end with one sequence, or when a queued sequence has taken over there", () => {
+      const one = setup({ song: chain(1) });
+      one.sampler.start();
+      tick(one, 40); // 2.0 s: the first step of the next pass is built
+      const built = busOf(one.sounds[0].play.mock.calls.at(-1)[1]);
+      one.sampler.togglePlayAll();
+      expect(built.disconnect).not.toHaveBeenCalled(); // it is not taken back and built again for nothing
+      const queued = setup({ song: chain(3) });
+      queued.sampler.start();
+      run(queued, 0.3);
+      queued.sampler.queueSequence(2);
+      tick(queued, 31); // 1.85 s: the queued sequence has taken over, and its pass end is closed to a press
+      queued.sampler.togglePlayAll();
+      expect(queued.sampler.getState().sequence).toBe(2);
+    });
+
+    it("takes back the chain's pick, so the sequence goes round again, when turned off after the pass end took it", () => {
+      const s = setup({ song: chain(3) });
+      s.sampler.togglePlayAll();
+      s.sampler.start();
+      tick(s, 38); // 1.9 s: the chain has picked the second sequence, and the display is still on the first
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
+      s.message.mockClear();
+      s.songChange.mockClear();
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState()).toMatchObject({ playAll: false, sequence: 0 });
+      expect(s.message.mock.calls.map(([text]) => text)).toEqual(["PLAY ALL OFF"]);
+      expect(s.songChange).not.toHaveBeenCalled();
+      run(s, 3.2); // 5.1 s: the first sequence went round again at 2.05 s and 4.05 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05));
+      expect(timesOf(s, 1)).toEqual([]);
+    });
+
+    it("takes back the pick's first step, if it was built, when turned off", () => {
+      const s = setup({ song: chain(3) });
+      s.sampler.togglePlayAll();
+      s.sampler.start();
+      tick(s, 40); // 2.0 s
+      const picked = busOf(s.sounds[1].play.mock.calls[0][1]);
+      s.sampler.togglePlayAll();
+      expect(picked.disconnect).toHaveBeenCalledTimes(1);
+      run(s, 0.5);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05));
+    });
+
+    it("is left to the end of the next pass when turned off after the pass that began has sounded", () => {
+      const s = setup({ song: chain(3) });
+      s.sampler.togglePlayAll();
+      s.sampler.start();
+      run(s, 2.2);
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState().sequence).toBe(1);
+      run(s, 2.2); // 4.4 s
+      expect(s.sampler.getState().sequence).toBe(1);
+    });
+
+    it("does not undo a sequence a person has picked since the chain's pick: that one stands", () => {
+      const s = setup({ song: chain(3), maxSequences: 6 });
+      s.sampler.togglePlayAll();
+      s.sampler.start();
+      tick(s, 38); // the first sequence gave way to the second
+      s.sampler.setSequence(2); // a person switches to the third now: the chain's pass end is not what it was
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState().sequence).toBe(2); // not sent back to the first
+    });
+  });
+
   it("takes effect at the end of the pass when turned on while it plays, and stops there when turned off", () => {
     const s = setup({ song: chain(3) });
     s.sampler.start();
@@ -2246,7 +2351,7 @@ describe("Play All", () => {
     s.advance(4.5); // the timer was held up: the passes ended at 2.05 s and 4.05 s
     s.sampler.poll();
     expect(s.sampler.getState().sequence).toBe(2); // one switch for a stall that crosses two pass ends would be on 1
-    expect(s.sampler.getState().playingSequence).toBe(2);
+    expect(s.sampler.getState().heard.sequence).toBe(2);
   });
 
   it("writes a live hit into the sequence that plays", () => {
@@ -2268,7 +2373,7 @@ describe("Play All", () => {
       s.sampler.togglePlayAll();
       s.sampler.start();
       tick(s, 38); // 1.9 s: the chain has picked 2 at 1.85 s; its first step, at 2.05 s, is not built before 1.93 s
-      expect(s.sampler.getState()).toMatchObject({ sequence: 1, playingSequence: 0 });
+      expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
       s.sampler.queueSequence(3);
       expect(s.sampler.getState()).toMatchObject({ sequence: 3, queuedSequence: -1 });
       expect(s.message).toHaveBeenLastCalledWith("SEQ 04");
@@ -2334,7 +2439,7 @@ describe("Play All", () => {
     s.sampler.toggleRec();
     s.sampler.start();
     tick(s, 39); // 1.95 s: switched at 1.85 s, and the playhead is on step 15
-    expect(s.sampler.getState()).toMatchObject({ sequence: 1, playingSequence: 0 });
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
     s.sampler.triggerPad(3);
     expect(s.sampler.getSong().sequences[0].pattern[3]).toEqual([15]);
     expect(s.sampler.getSong().sequences[1].pattern[3]).toBeUndefined();
@@ -2345,11 +2450,67 @@ describe("Play All", () => {
     s.sampler.togglePlayAll();
     s.sampler.start();
     tick(s, 118); // 5.9 s: the third sequence sounds until 6.05 s, and the chain has picked the first
-    expect(s.sampler.getState()).toMatchObject({ sequence: 0, playingSequence: 2, sequenceCount: 3 });
+    expect(s.sampler.getState()).toMatchObject({ sequence: 0, heard: { sequence: 2 }, sequenceCount: 3 });
     s.sampler.removeSequence();
     const state = s.sampler.getState();
     expect(state.sequenceCount).toBe(2);
-    expect(state.playingSequence).toBeLessThan(state.sequenceCount);
+    expect(state.heard.sequence).toBeLessThan(state.sequenceCount);
+  });
+
+  describe("what sounds, for the display, in the moment after a switch", () => {
+    // The first sequence has steps 0 and 5 of pad 0, the second step 2 (and the pad selected is pad 0): the display's ruler is of the
+    // one that sounds until the new pass does, as are its label and its playhead; the step keys are of the one showing.
+    const steppy = (bars = [1, 1]) => {
+      const song = songOf(2);
+      song.sequences[0] = { bars: bars[0], pattern: { 0: [0, 5] }, velocities: {} };
+      song.sequences[1] = { bars: bars[1], pattern: { 0: [2] }, velocities: {} };
+      return song;
+    };
+    const lit = (row) => row.map((value, i) => (value ? i : -1)).filter((i) => i >= 0);
+
+    it("gives the display's ruler the steps of the sequence that sounds, and the keys those of the one showing", () => {
+      const s = setup({ song: steppy() });
+      s.sampler.start();
+      run(s, 0.3);
+      s.sampler.queueSequence(1);
+      run(s, 1.65); // 1.95 s: switched at 1.85 s, and the playhead is on step 15 of the first
+      const state = s.sampler.getState();
+      expect(lit(state.heard.stepsOn)).toEqual([0, 5]);
+      expect(lit(state.stepsOn)).toEqual([2]);
+      expect(state.heard).toMatchObject({ sequence: 0, bars: 1, page: 0, playheadStep: 15 });
+      run(s, 0.15); // 2.1 s: the new pass sounds
+      expect(lit(s.sampler.getState().heard.stepsOn)).toEqual([2]);
+    });
+
+    it("gives the bar of the sequence that sounds that the person was looking at, and the playhead in it", () => {
+      const song = songOf(2);
+      song.sequences[0] = { bars: 2, pattern: { 0: [16, 20] }, velocities: {} }; // the second bar's steps 0 and 4
+      song.sequences[1] = { bars: 1, pattern: { 0: [2] }, velocities: {} };
+      const s = setup({ song });
+      s.sampler.start();
+      s.sampler.setPage(1);
+      run(s, 0.3);
+      s.sampler.queueSequence(1);
+      run(s, 3.6); // 3.9 s: switched at 3.85 s; the playhead is on step 30 of 32, the 15th of the second bar
+      const heard = s.sampler.getState().heard;
+      expect(heard).toMatchObject({ sequence: 0, bars: 2, page: 1, playheadStep: 14 });
+      expect(lit(heard.stepsOn)).toEqual([0, 4]);
+      expect(s.sampler.getState().page).toBe(0); // the keys are of the sequence showing, from its first bar
+    });
+
+    it("is the sequence showing, its bar and its playhead when nothing is taking over", () => {
+      const s = setup({ song: steppy() });
+      s.sampler.start();
+      run(s, 0.5);
+      const state = s.sampler.getState();
+      expect(state.heard).toEqual({
+        sequence: state.sequence,
+        bars: state.bars,
+        page: state.page,
+        stepsOn: state.stepsOn,
+        playheadStep: state.playheadStep,
+      });
+    });
   });
 
   it("shows what sounds on the display for the last steps of every pass, in that sequence's numbering", () => {
@@ -2357,19 +2518,17 @@ describe("Play All", () => {
     s.sampler.togglePlayAll();
     s.sampler.start();
     tick(s, 78); // 3.9 s: the pass of 64 steps ends at 8.05 s
-    expect(s.sampler.getState()).toMatchObject({ sequence: 0, playingSequence: 0, playingBars: 4 });
+    expect(s.sampler.getState()).toMatchObject({ sequence: 0, heard: { sequence: 0, bars: 4 } });
     tick(s, 80); // 7.9 s: the chain has picked 2 (at about 7.85 s), and the playhead is on step 62 of the first
     expect(s.sampler.getState()).toMatchObject({
       sequence: 1,
-      playingSequence: 0,
-      playingBars: 4,
+      heard: { sequence: 0, bars: 4 },
       playheadPosition: 62,
     });
     tick(s, 6); // 8.2 s
     expect(s.sampler.getState()).toMatchObject({
       sequence: 1,
-      playingSequence: 1,
-      playingBars: 1,
+      heard: { sequence: 1, bars: 1 },
       playheadPosition: 1,
     });
   });

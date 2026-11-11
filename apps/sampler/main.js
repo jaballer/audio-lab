@@ -817,7 +817,9 @@ function render() {
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
   recBtn.classList.toggle("armed", state.recording && !state.playing);
   // The display is of what sounds: for a moment after a sequence takes over, still the one that gave way (playheadPosition is in its numbering).
-  lcd.render({ ...state, sequence: state.playingSequence, bars: state.playingBars, soundName, steps: STEPS });
+  lcd.render({ ...state, ...state.heard, soundName, steps: STEPS });
+  // A sequence that takes over while the Export dialog is open (Play All) is the one Export would save: the dialog says so.
+  if (exportDialog?.isOpen && state.sequence !== exportedSequence) refreshExportDialog();
   midi.refresh();
   if (state.playing) startPaintLoop();
 }
@@ -878,10 +880,13 @@ function sayExport(text) {
 // resampled into a context at another rate, and the file's would be a second resampling), or 44.1 kHz before there is audio.
 const exportRate = () => exportSampleRate(audio.ctx?.sampleRate);
 
+let exportedSequence = -1; // the sequence the open Export dialog describes
 function refreshExportDialog() {
+  const song = sampler.getSong();
+  exportedSequence = song.current;
   exportDialog.refresh(
     exportDialogModel({
-      song: sampler.getSong(),
+      song,
       kit,
       options: exportOptions,
       stepsPerBar: STEPS,
