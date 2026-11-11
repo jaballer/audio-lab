@@ -26,6 +26,7 @@ export function formatLcd({
   recording,
   sequence = 0,
   sequenceCount,
+  playAll = false,
   selected,
   soundName,
   bpm,
@@ -45,7 +46,8 @@ export function formatLcd({
     // One value to a line, so that a line has one job and one rate of change: the tempo changes when it is turned, the
     // bar and the step with every beat. A song's position and repeats can have lines of their own the same way.
     lines: [
-      `SEQ ${sequenceLabel}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
+      // ALL for SEQ while Play All is on: the same width, and it says the sequence number is a place in the chain
+      `${playAll ? "ALL" : "SEQ"} ${sequenceLabel}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
       `PAD ${pad2(selected + 1)}  ${soundName}`,
       `BPM ${bpm.toFixed(1)}`,
       `BAR ${barLabel}/${pad2(bars)}`,

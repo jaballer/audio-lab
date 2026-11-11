@@ -1981,6 +1981,208 @@ describe("the next sequence", () => {
   });
 });
 
+describe("Play All", () => {
+  // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
+  // step 0 on pad i, to tell which one is sounding.
+  const chain = (count = 3, { bars = [], bpm = 120 } = {}) => {
+    const song = songOf(count, { bpm });
+    for (let i = 0; i < count; i++) song.sequences[i] = { bars: bars[i] ?? 1, pattern: { [i]: [0] }, velocities: {} };
+    return song;
+  };
+  const tick = (s, count) => {
+    for (let i = 0; i < count; i++) {
+      s.advance(0.05);
+      s.sampler.poll();
+    }
+  };
+  const run = (s, seconds) => tick(s, Math.round(seconds / 0.05));
+  const timesOf = (s, pad) => s.sounds[pad].play.mock.calls.map((call) => call[2]);
+  const closeTo = (...times) => times.map((time) => expect.closeTo(time, 2));
+
+  it("is off to begin with, and a beat stays on the sequence it is on", () => {
+    const s = setup({ song: chain(3) });
+    expect(s.sampler.getState().playAll).toBe(false);
+    s.sampler.start();
+    run(s, 6.2);
+    expect(s.sampler.getState().sequence).toBe(0);
+    expect(timesOf(s, 1)).toEqual([]);
+  });
+
+  it("is turned on and off by togglePlayAll, which says so and redraws", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    expect(s.sampler.getState().playAll).toBe(true);
+    expect(s.message).toHaveBeenLastCalledWith("PLAY ALL ON");
+    expect(s.change).toHaveBeenCalled();
+    s.sampler.togglePlayAll();
+    expect(s.sampler.getState().playAll).toBe(false);
+    expect(s.message).toHaveBeenLastCalledWith("PLAY ALL OFF");
+  });
+
+  it("plays the sequences in order, one pass each, and starts again from the first after the last", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 7.2); // 7.2 s: the fourth pass began at 6.05 s, and the fifth begins at 8.05 s
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+    expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(4.05));
+    expect(s.sampler.getState().sequence).toBe(0);
+  });
+
+  it("shows the sequence that plays, and says it each time it changes, and asks for a save", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 1.5);
+    expect(s.sampler.getState().sequence).toBe(0);
+    s.message.mockClear();
+    s.songChange.mockClear();
+    run(s, 0.6); // 2.1 s: the second pass has begun
+    expect(s.sampler.getState().sequence).toBe(1);
+    expect(s.message).toHaveBeenLastCalledWith("SEQ 02");
+    expect(s.songChange).toHaveBeenCalled();
+    expect(s.sampler.getSong().current).toBe(1);
+    run(s, 2);
+    expect(s.sampler.getState().sequence).toBe(2);
+    expect(s.message).toHaveBeenLastCalledWith("SEQ 03");
+  });
+
+  it("begins with the sequence showing, then goes on in order", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.setSequence(1);
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 5.2); // the fourth pass begins at 6.05 s
+    expect(timesOf(s, 1)).toEqual(closeTo(0.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+    expect(timesOf(s, 0)).toEqual(closeTo(4.05));
+  });
+
+  it("goes round in the length of each sequence", () => {
+    const s = setup({ song: chain(3, { bars: [2, 1, 1] }) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 8.2); // the first is two bars (4 s), then 2 s each: 4.05, 6.05, 8.05
+    expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(6.05));
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 8.05));
+  });
+
+  it("takes effect at the end of the pass when turned on while it plays, and stops there when turned off", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.start();
+    run(s, 0.5);
+    s.sampler.togglePlayAll();
+    expect(s.sampler.getState().sequence).toBe(0); // not at once
+    run(s, 2); // 2.5 s
+    expect(s.sampler.getState().sequence).toBe(1);
+    s.sampler.togglePlayAll();
+    run(s, 4); // 6.5 s: the passes at 4.05 and 6.05 s keep the sequence they were on
+    expect(s.sampler.getState().sequence).toBe(1);
+    expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05));
+  });
+
+  it("goes to a queued sequence first, and on from there", () => {
+    const s = setup({ song: chain(4) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 0.3);
+    s.sampler.queueSequence(2);
+    run(s, 6.9); // 7.2 s: 0, then the queued 2, then 3, then 0 again at 6.05 s, and 1 would begin at 8.05 s
+    expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+    expect(timesOf(s, 3)).toEqual(closeTo(4.05));
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+    expect(timesOf(s, 1)).toEqual([]);
+  });
+
+  it("goes on from a sequence switched to now", () => {
+    const s = setup({ song: chain(4) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 0.5);
+    s.sampler.setSequence(2);
+    run(s, 4.0); // 4.5 s: the pass that began at 0.05 s ends at 2.05 s
+    expect(s.sampler.getState().sequence).toBe(0); // 2 -> 3 -> 0
+    expect(timesOf(s, 3)).toEqual(closeTo(2.05));
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+  });
+
+  it("makes no switch with one sequence, says nothing and saves nothing, and goes on playing it", () => {
+    const s = setup({ song: chain(1) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 0.3);
+    s.message.mockClear();
+    s.songChange.mockClear();
+    run(s, 4.2);
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05));
+    expect(s.message).not.toHaveBeenCalled();
+    expect(s.songChange).not.toHaveBeenCalled();
+  });
+
+  it("goes on through the sequences there are when one is added or removed while it plays", () => {
+    const s = setup({ song: chain(3), maxSequences: 6 });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 2.5);
+    expect(s.sampler.getState().sequence).toBe(1);
+    s.sampler.removeSequence(); // the one showing goes, and the one after takes its place (index 1 of two)
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, sequenceCount: 2 });
+    run(s, 2); // 4.5 s: the pass ended at 4.05 s
+    expect(s.sampler.getState().sequence).toBe(0);
+  });
+
+  it("stays on through Stop, and Play begins again at the sequence showing", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 2.5);
+    s.sampler.stop();
+    expect(s.sampler.getState()).toMatchObject({ playAll: true, playing: false, sequence: 1 });
+    s.sampler.start();
+    run(s, 2.7); // the restarted beat began at about 2.55 s with the one showing, and its second pass at about 4.6 s
+    expect(s.sampler.getState().sequence).toBe(2);
+    expect(timesOf(s, 1).at(-1)).toBeGreaterThan(2.5); // it began again with the one showing
+  });
+
+  it("stays in step through a stall that skips several pass ends", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    s.advance(0.1);
+    s.message.mockClear();
+    s.advance(4.5); // the timer was held up: the passes ended at 2.05 s and 4.05 s
+    s.sampler.poll();
+    expect(s.sampler.getState().sequence).toBe(2);
+    expect(s.message.mock.calls.map(([text]) => text).filter((text) => text.startsWith("SEQ"))).toEqual([
+      "SEQ 02",
+      "SEQ 03",
+    ]);
+  });
+
+  it("writes a live hit into the sequence that plays", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    s.sampler.toggleRec();
+    s.sampler.start();
+    run(s, 2.7); // the second pass began at 2.05 s
+    s.sampler.triggerPad(3);
+    expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
+    expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+  });
+
+  it("leaves a press just after a switch to wait for the end of the pass it began, as after a queued one", () => {
+    const s = setup({ song: chain(4) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    run(s, 1.9); // the chain switched at 1.85 s, and the second pass's first step has not sounded
+    expect(s.sampler.getState().sequence).toBe(1);
+    s.sampler.queueSequence(3);
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: 3 });
+  });
+});
+
 describe("steps and clearing", () => {
   it("toggles a step of the selected pad and asks for a save", () => {
     const { sampler, songChange, change } = setup();

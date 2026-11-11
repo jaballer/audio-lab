@@ -171,6 +171,7 @@ function toggleLights() {
 
 const playBtn = $("play");
 const recBtn = $("rec");
+const allBtn = $("all");
 
 // ---------- Saved song ----------
 // The pattern, tempo and volume come back on the next visit. This is read first
@@ -805,6 +806,7 @@ function render() {
   swingKnob.render(state.swing);
   setAttr(playBtn, "aria-pressed", String(state.playing));
   setAttr(recBtn, "aria-pressed", String(state.recording));
+  setAttr(allBtn, "aria-pressed", String(state.playAll));
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
   recBtn.classList.toggle("armed", state.recording && !state.playing);
   lcd.render({ ...state, soundName, steps: STEPS });
@@ -835,6 +837,7 @@ function paintLoop() {
 playBtn.addEventListener("click", sampler.start);
 $("stop").addEventListener("click", sampler.stop);
 recBtn.addEventListener("click", sampler.toggleRec);
+allBtn.addEventListener("click", sampler.togglePlayAll);
 $("clear").addEventListener("click", sampler.clearPad);
 $("clear-all").addEventListener("click", sampler.clearAll);
 $("copy").addEventListener("click", sampler.copySteps);
