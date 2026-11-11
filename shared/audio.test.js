@@ -47,7 +47,10 @@ function installAudioContext({ analysers = false, splitter = analysers } = {}) {
     };
   }
   if (splitter) {
+    // `splittersMade` says whether the engine built one; "throws" is a context whose splitter fails
     FakeAudioContext.prototype.createChannelSplitter = function (outputs) {
+      this.splittersMade = (this.splittersMade ?? 0) + 1;
+      if (splitter === "throws") throw new Error("cannot split");
       return { outputs, connect: vi.fn() };
     };
   }
@@ -504,6 +507,38 @@ describe("channel analysers", () => {
     expect(audio.channelAnalysers).toBeNull();
   });
 
+  it("has none when the context can split channels but cannot make analysers", () => {
+    installAudioContext({ analysers: false, splitter: true });
+    const audio = createAudioEngine();
+    expect(() => audio.ensure()).not.toThrow();
+    expect(audio.channelAnalysers).toBeNull();
+  });
+
+  it("builds nothing for them until they are asked for, so a page that never reads them pays nothing", () => {
+    installAudioContext({ analysers: true });
+    const audio = createAudioEngine();
+    const ctx = audio.ensure();
+    expect(ctx.splittersMade).toBeUndefined();
+    const first = audio.channelAnalysers;
+    expect(ctx.splittersMade).toBe(1);
+    expect(audio.channelAnalysers).toBe(first); // built once
+    expect(ctx.splittersMade).toBe(1);
+  });
+
+  it("gives none, and leaves the engine and its graph as they were, when building them fails", () => {
+    installAudioContext({ analysers: true, splitter: "throws" });
+    const audio = createAudioEngine();
+    const ctx = audio.ensure();
+    const clipperOutput = audio.master.connect.mock.calls[0][0].connect.mock.calls[0][0];
+    const connectionsBefore = clipperOutput.connect.mock.calls.length;
+    expect(() => audio.channelAnalysers).not.toThrow();
+    expect(audio.channelAnalysers).toBeNull();
+    expect(ctx.splittersMade).toBe(1); // tried once, not on every read
+    expect(clipperOutput.connect.mock.calls).toHaveLength(connectionsBefore); // nothing was left wired
+    expect(audio.master).not.toBeNull();
+    expect(audio.ensure()).toBe(ctx); // still the same working engine
+  });
+
   it("has none when the context cannot split channels, though it has the one analyser", () => {
     installAudioContext({ analysers: true, splitter: false });
     const audio = createAudioEngine();
@@ -543,6 +578,7 @@ describe("channel analysers", () => {
     installAudioContext({ analysers: true });
     const audio = createAudioEngine();
     audio.ensure();
+    const analysers = audio.channelAnalysers; // built when asked
     const clipperOutput = audio.master.connect.mock.calls[0][0].connect.mock.calls[0][0]; // master -> half -> shaper
     const stereo = clipperOutput.connect.mock.calls.map(([node]) => node).find((node) => node.channelCount === 2);
     expect(stereo).toBeDefined();
@@ -552,8 +588,8 @@ describe("channel analysers", () => {
     const splitter = stereo.connect.mock.calls[0][0];
     expect(splitter.outputs).toBe(2);
     expect(splitter.connect.mock.calls).toEqual([
-      [audio.channelAnalysers[0], 0],
-      [audio.channelAnalysers[1], 1],
+      [analysers[0], 0],
+      [analysers[1], 1],
     ]);
   });
 
