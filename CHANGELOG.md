@@ -22,7 +22,7 @@ Numbers link to the pull request.
 - The docs are a short set with an index, `docs/README.md`, for people and coding agents alike: `architecture.md` (how
   the code fits together, and the file-by-file list that was in the README), `sampler.md`, `export.md` and
   `mpc-sample.md`. The sequencer and step-editing notes are folded into them, `AGENTS.md` links to `CLAUDE.md`, and the
-  footer's Design notes link says what it now holds
+  footer's Design notes link says what it now holds ([#172](https://github.com/jaballer/audio-lab/pull/172))
 
 ## 2026-11-11
 
@@ -49,7 +49,7 @@ Numbers link to the pull request.
 ### Maintenance
 
 - The export's plan is a list of passes (the sequence showing looped, or every sequence once each), which an edited
-  order of sequences can fill later; `docs/export-design.md` says how all the sequences are exported and what was
+  order of sequences can fill later; `docs/export.md` says how all the sequences are exported and what was
   measured ([#167](https://github.com/jaballer/audio-lab/pull/167))
 
 ## 2026-11-10
@@ -196,7 +196,7 @@ Numbers link to the pull request.
 - The export's render split into a plan and pieces, and the kit can be snapshotted so a render never hears a pad edited under
   it ([#138](https://github.com/jaballer/audio-lab/pull/138)).
 - What the Export dialog shows and allows is pure and tested, apart from the DOM it is drawn into, and
-  `docs/export-design.md` records how the export works, what was measured and what stems and a whole-song bounce will need
+  `docs/export.md` records how the export works, what was measured and what stems and a whole-song bounce will need
   ([#141](https://github.com/jaballer/audio-lab/pull/141)).
 - The engine for per-pad stems (a pad rendered on its own, with its choke group's cuts, so the stems add up to the mix) and
   a zip writer for them; the page does not offer stems yet ([#143](https://github.com/jaballer/audio-lab/pull/143)).

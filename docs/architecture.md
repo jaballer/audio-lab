@@ -40,11 +40,18 @@ pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pa
                               shared/audio.js: master gain ──> soft clipper ──> speakers + analysers (lights, level meter)
 ```
 
-- **One engine.** `shared/audio.js` owns the `AudioContext` and the master gain. Nothing else makes either. The context is
-  created on the first user gesture (`audio.ensure()`), because browsers do not allow sound before one.
+- **One engine.** `shared/audio.js` owns the `AudioContext` and the master gain: every page plays through them, and nothing
+  else builds a master or a second engine. The context is created on the first user gesture (`audio.ensure()`), because
+  browsers do not allow sound before one. One exception in who builds the context: the Tone.js demo passes
+  `createContext: () => Tone.getContext().rawContext`, because Tone must wrap the context itself (handed a plain
+  `AudioContext`, its setup throws in Firefox); the engine still owns the graph and the master on it.
 - **The audio clock, not timers.** `shared/scheduler.js` wakes on a timer but schedules each step at an `AudioContext` time
-  about 0.12 s ahead; the playhead on screen follows separately. The MPC Sample page runs the same scheduler on
-  `performance.now()` time and sends MIDI notes with timestamps instead of making sound.
+  about 0.12 s ahead; the playhead on screen follows separately.
+- **The MPC Sample page follows the device instead.** It makes no sound and runs no lookahead: the device is the clock.
+  Its Start or Continue calls `sequencer.follow()` (`apps/mpc-sample/main.js`), each MIDI clock tick reaches
+  `sequencer.tick()`, and every sixth tick plays a step by sending its notes at once. Its sequencer still wraps the shared
+  scheduler (`sequencer.start()`), but no page calls that, because the device distorted while following a clock the page
+  sent ([mpc-sample.md](mpc-sample.md)).
 - **Export is the same graph, offline.** The WAV export plays the song into an `OfflineAudioContext` with the same kit, voices
   and clipper, so the file is what the page plays ([export.md](export.md)).
 
@@ -215,6 +222,12 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `AGENTS.md` — a link to `CLAUDE.md`, for coding agents that look for that name
 - `CHANGELOG.md` — what changed on the live site, by day, newest first
 - `LICENSE` — the PolyForm Noncommercial License 1.0.0 (see License below)
+- `package.json` + `package-lock.json` — the scripts (`dev`, `check`, `test`, `build`...), the dev dependencies and Tone.js, and the Node versions (`engines`; `.nvmrc` names 22)
+- `vite.config.js` — the build: one entry per page (`build.rollupOptions.input`, checked against `shared/pages.js` by its test), and two plugins, `emit-service-worker` (fills in `shared/sw-template.js` as `sw.js`) and `emit-license` (copies `LICENSE` into `dist/`)
+- `eslint.config.js`, `.prettierrc.json`, `.prettierignore`, `.editorconfig` — lint and format rules, the source of truth for code style
+- `.github/workflows/` — `ci.yml` runs `npm run check` on pull requests; `deploy.yml` runs it on a push to `main`, then builds and publishes to GitHub Pages
+- `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/`, `.github/dependabot.yml` — the pull request and issue templates, and the Dependabot settings
+- `Dockerfile` + `.dockerignore` — an nginx image that serves a built `dist/`
 - `.claude/skills/dependabot/` — a Claude Code skill for triaging, verifying and merging Dependabot PRs
 - `.claude/skills/` (the rest) — how work is shipped here, as Claude Code skills: `ship-pr` (branch to open PR, bundled), `pre-pr-review` (an independent read-only review before a PR), `try-in-page` (drive the change in the running page), `handle-review-events` (Codex and CI events), `land-prs` (merge in order, sync main, clean up)
 

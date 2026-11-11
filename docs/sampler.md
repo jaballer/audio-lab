@@ -14,8 +14,9 @@ What `song.js` keeps, and `controller.js` plays:
 - **Sequences.** A beat starts with one sequence and has up to eight (`MAX_SEQUENCES` in `layout.js`), each 1, 2, 4 or 8
   bars of 16 steps, with its own pattern and velocities. Tempo, swing and volume belong to the song, not to a sequence.
 - **Switching while playing.** A sequence key queues that sequence to take over at the end of the pass (`queueSequence`,
-  through the scheduler's `onWrap`), so the beat never jumps mid-bar; Shift, or the Next latch on a touch screen, switches
-  at once. All plays the sequences one after the other until Stop; it is off on every load, and a chain that plays does not
+  through the scheduler's `onWrap`), so the beat never jumps mid-bar, and Shift switches at once. That is with the Next
+  latch on, as it is until a person turns it off; with Next off the two swap, a press switches at once and Shift waits, so
+  turning Next off is how a touch screen, which has no Shift, switches at once (`pressIsNow` in `sequence-row.js`). All plays the sequences one after the other until Stop; it is off on every load, and a chain that plays does not
   save the beat as it goes.
 - **The arrangement** (`arrangement.js`) is the order a song plays its sequences in, each with repeats. `null`, the default,
   means every sequence once, in order, so it cannot fall out of step with the sequences until a person edits it. So far it
