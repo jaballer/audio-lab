@@ -3592,6 +3592,38 @@ describe("Play All with an arrangement", () => {
     });
   });
 
+  it("tells one pass end from the next at the fastest tempo, where they are a second apart", () => {
+    const base = songOf(2, { bpm: 240 });
+    for (let i = 0; i < 2; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
+    const s = setup({ song: { ...base, arrangement: [entry(0, 2), entry(1)] } });
+    playAll(s);
+    run(s, 5.2);
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 1.05, 3.05, 4.05)); // two times round the first entry, then the second, and round
+    expect(timesOf(s, 1)).toEqual(closeTo(2.05, 5.05));
+  });
+
+  it("goes on once for a pass end told again after a stall, though the scheduler's two ways of counting its time differ by a rounding", () => {
+    // 200 BPM: a step is 0.075 s, so a rewind of the steps built in the lookahead goes back two or more, and a stall after it counts the
+    // grid again with a multiplication instead of a step at a time: the same pass end (3.65 s) comes back one rounding away. The scheduler
+    // is woken every 5 ms here, as a page does, so that the grid it has counted a step at a time carries the roundings of that.
+    const base = songOf(3, { bpm: 200 });
+    for (let i = 0; i < 3; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
+    const s = setup({ song: { ...base, arrangement: [entry(0, 4), entry(1)] } });
+    playAll(s);
+    while (s.audio.ctx.currentTime < 3.455) {
+      s.advance(0.005);
+      s.sampler.poll();
+    }
+    s.sampler.kitChanged("sound");
+    s.advance(1); // the timer was held up for a second
+    s.sampler.poll();
+    run(s, 6); // 10.5 s
+    const once = (pad) => [...new Set(timesOf(s, pad).map((time) => time.toFixed(2)))].map(Number);
+    // the pass at 3.65 s was in the stall and is not sounded; the entry has had its four times round and the song goes on to the second
+    expect(once(1)).toEqual(closeTo(4.85));
+    expect(once(0)).toEqual(closeTo(0.05, 1.25, 2.45, 6.05, 7.25, 8.45, 9.65));
+  });
+
   describe("forgets where it was, so that a stale position is not taken for one that fits", () => {
     it("when a sequence was queued, and then another, which brings it back to a sequence the song had been at", () => {
       const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2), entry(1, 2)]) });

@@ -164,6 +164,11 @@ export function createSampler({
   // nothing else would tell the second time from a new pass end: the song goes on once for a pass end, and a second telling works it
   // out again from where it was. A pass end that turns out not to be one (withdrawPassEnd) takes back a time round that was counted.
   const NO_WRAP = { time: -Infinity, from: null, repeat: false };
+  // The same pass end comes back from the scheduler with a time that differs by a rounding (it counts the grid a step at a time, and
+  // after a stall with a multiplication), so two times are one pass end when they are this close: two pass ends are at least a step
+  // apart, 62 ms at the fastest tempo.
+  const SAME_PASS_END_S = 0.01;
+  const isSamePassEnd = (a, b) => Math.abs(a - b) < SAME_PASS_END_S;
   let wrapped = NO_WRAP;
   // A person picked a sequence, or Play or Play All was pressed: where the song was means nothing now.
   function forgetSongPosition() {
@@ -243,7 +248,7 @@ export function createSampler({
       const asked = queued >= 0;
       let next = asked ? queued : current;
       if (!asked && playAll) {
-        const from = wrapped.time === time ? wrapped.from : songAt;
+        const from = isSamePassEnd(wrapped.time, time) ? wrapped.from : songAt;
         // Where that pass was, worked out now, so that what is remembered of it can follow an edit (a position not known is the first
         // entry that names the sequence in the list as it is, and an edit changes the list).
         const here = wherePassWas(arrangement, slots.length, from, current);
