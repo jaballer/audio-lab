@@ -37,7 +37,7 @@ export const FOOTER_LINKS = [
     id: "design",
     href: `${REPO_URL}/tree/main/docs`,
     label: "Design notes",
-    title: "How the sequencer, export and the MPC Sample page were designed",
+    title: "How the code fits together, and why the sampler, export and the MPC Sample page work as they do",
   },
   {
     id: "changelog",

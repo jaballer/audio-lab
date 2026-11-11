@@ -26,8 +26,8 @@ skill stops at an open PR: merging is `land-prs`, and only when the user says so
 2. **Plan.** Read the existing code and any issue first. If the user has a decision to make, give a recommendation
    with the reasoning, not a menu.
 3. **Build with tests.** New pure logic gets a test in the same commit; a bug fix starts with a failing test.
-4. **Docs.** Update the Layout section of `README.md` and the module lists in `CLAUDE.md` when files are added,
-   moved or removed. Update the relevant `docs/` page when a decision was made.
+4. **Docs.** Follow "Keeping them true" in `docs/README.md`: the Files list in `docs/architecture.md` and the module
+   lists in `CLAUDE.md` when files are added, moved or removed; the page for the area when a decision was made.
 5. **`npm run check`** (lint, format, tests, build). Fix everything it reports; do not skip hooks.
 6. **Try it in the page** with `try-in-page`, and leave the dev server running and tell the user the URL.
 7. **Independent review** with `pre-pr-review`. Fix what is real.

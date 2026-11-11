@@ -4,6 +4,11 @@ Vite + vanilla JS (ES modules) + Web Audio / Web MIDI. No framework, and no runt
 Tone.js, which only `tone-demo.html` + `apps/tone-demo/` may import: never from `shared/` or another app, or it
 lands in their bundles. Everything is synthesized in the browser.
 
+Start with [docs/README.md](docs/README.md): it lists the few docs there are and what each answers.
+[docs/architecture.md](docs/architecture.md) has how the code fits together and every file; read the page for the area
+(sampler, export, MPC Sample) before changing it, so a decision recorded there is not undone. `AGENTS.md` is a link to
+this file.
+
 ## Commands
 
 Node 22.13 or newer, skipping the odd-numbered 23 and 25 (`.nvmrc` says 22, `engines` in `package.json` has the exact range).
@@ -25,7 +30,7 @@ failing check blocks the deploy.
 - Five pages, each an HTML file plus `apps/<name>/`: `index.html` + `apps/sampler/` (the pad sampler),
   `keyboard.html` + `apps/keys/` (MIDI keyboard), `monitor.html` + `apps/monitor/` (MIDI monitor),
   `mpc-sample.html` + `apps/mpc-sample/` (Akai MPC Sample companion), `tone-demo.html` + `apps/tone-demo/` (Tone.js).
-  `public/` holds files served as they are (the favicon). `README.md` has the file-by-file Layout.
+  `public/` holds files served as they are (the favicon). `docs/architecture.md` has the file-by-file list.
 - `shared/`: code used by more than one app. App-only code stays under `apps/<name>/`.
 - A new page needs an entry in `vite.config.js` (`build.rollupOptions.input`) and in `shared/pages.js` (the site header's links); the test checks they agree. Copy the loading overlay (`#loading` markup, `shared/loading.css` link and `shared/loading-screen.js` script) from another page's HTML.
 
@@ -139,7 +144,8 @@ One PR is one change that could be reverted on its own. Keep unrelated cleanups 
 
 - Small, single-purpose commits; format-only changes go in their own commit, separate from behaviour changes.
 - Refactors say "no intended behaviour change" and are checked against the running page.
-- Update the Layout section of `README.md` when files are added, moved or removed.
+- Keep the docs true in the same PR (`docs/README.md`, "Keeping them true"): the Files list in `docs/architecture.md`
+  when files are added, moved or removed, and the page for the area when a design decision is made.
 - A change a visitor can see or hear adds an entry under `[Unreleased]` in `CHANGELOG.md` in the same PR (Added,
   Changed or Fixed; internals under Maintenance), ending with the PR's link. The entries are cut into a dated section
   by merge day after the merge, and the compare link at the foot of the file (`[Unreleased]`) moves to the last

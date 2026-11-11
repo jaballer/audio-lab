@@ -19,6 +19,10 @@ Numbers link to the pull request.
   format 10). It changes nothing on the page yet: nothing reads or edits it, a beat saved by an older page loads as it
   did, and a sequence added, copied or removed is followed in it
   ([#170](https://github.com/jaballer/audio-lab/pull/170))
+- The docs are a short set with an index, `docs/README.md`, for people and coding agents alike: `architecture.md` (how
+  the code fits together, and the file-by-file list that was in the README), `sampler.md`, `export.md` and
+  `mpc-sample.md`. The sequencer and step-editing notes are folded into them, `AGENTS.md` links to `CLAUDE.md`, and the
+  footer's Design notes link says what it now holds
 
 ## 2026-11-11
 
