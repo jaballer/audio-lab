@@ -14,6 +14,7 @@
 //                                  // inaudible, but a held note would be heard again at power on)
 //   audio.running                  // true only while sound can be heard: powered, and the context running
 //   audio.analyser                 // an AnalyserNode listening after the clipper (what is heard), or null; for meters and lights
+//   audio.channelAnalysers         // [left, right]: an AnalyserNode for each side of what is heard (a mono sound is on both), or null; for a level meter. Built the first time it is read, so a page that does not read it pays nothing
 //   audio.killSound()              // cut off everything sounding now, tails and all; sounds made after it are heard
 //
 // Power off mutes the master gain and leaves the context running. Suspending it would freeze
@@ -37,6 +38,9 @@ export const POWER_SWITCH = "[data-power-switch]";
 
 const ANALYSER_SIZE = 2048; // samples per reading: bins about 23 Hz wide, fine enough to tell a kick from a hat
 const ANALYSER_SMOOTHING = 0.4; // of the spectrum, between readings: the default 0.8 smears a hit over a second
+// Samples in each side's reading, which a meter reads whole: 46 ms at 44.1 kHz, so even a page drawn at 30 frames a second
+// sees every peak (a frame is 33 ms).
+const CHANNEL_ANALYSER_SIZE = 2048;
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
 // Killing sound is a faster fade (still no click), and the cut-off master is disconnected once it is inaudible.
 const KILL_TIME_CONSTANT = 0.004;
@@ -71,10 +75,38 @@ export function createClipper(ctx) {
   return { input: half, output: shaper };
 }
 
+// An analyser for each side of `source`, which only read: nothing is wired onward. Null when the context cannot split
+// channels or make analysers. A splitter on its own treats a mono signal as a left channel with nothing on the right (its
+// channels are "discrete"), so the signal first goes through a gain that is made two channels and upmixed as speakers are: a
+// mono sound is then on both sides, as it is when it is heard. The nodes are all made and joined to each other first, and
+// `source` is connected last, so if anything fails on the way the engine's own graph has not been touched.
+function createChannelAnalysers(ctx, source) {
+  for (const make of ["createGain", "createChannelSplitter", "createAnalyser"]) {
+    if (typeof ctx[make] !== "function") return null;
+  }
+  const stereo = ctx.createGain();
+  stereo.channelCount = 2;
+  stereo.channelCountMode = "explicit";
+  stereo.channelInterpretation = "speakers";
+  const splitter = ctx.createChannelSplitter(2);
+  const analysers = [0, 1].map(() => {
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = CHANNEL_ANALYSER_SIZE;
+    return analyser;
+  });
+  stereo.connect(splitter);
+  analysers.forEach((analyser, channel) => splitter.connect(analyser, channel));
+  source.connect(stereo);
+  return analysers;
+}
+
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
   let master = null;
   let analyser = null;
+  let tap = null; // the clipper's output, which is what the analysers listen to
+  let channelAnalysers = null;
+  let channelAnalysersTried = false; // one try: a context that cannot make them is not asked again on every read
   let sink = null; // what every master connects to: the clipper's input, or the speakers
   let level = volume;
 
@@ -109,6 +141,7 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
           analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
           clipper.output.connect(analyser);
         }
+        tap = clipper.output;
       }
       sink = clipper ? clipper.input : ctx.destination;
       master = createMaster();
@@ -181,6 +214,17 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
     },
     get analyser() {
       return analyser;
+    },
+    get channelAnalysers() {
+      if (!channelAnalysersTried && ctx && tap) {
+        channelAnalysersTried = true;
+        try {
+          channelAnalysers = createChannelAnalysers(ctx, tap);
+        } catch {
+          channelAnalysers = null; // a page that wants a meter does without one: the engine itself must not break
+        }
+      }
+      return channelAnalysers;
     },
     powerOff,
     powerOn,

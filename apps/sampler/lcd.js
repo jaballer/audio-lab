@@ -1,13 +1,15 @@
-// The sampler's LCD: a progress bar along the top, three text lines, a step ruler and a short-lived message.
+// The sampler's LCD: five text lines (one value each: sequence, pad, tempo, bar, step), a short-lived message, then a
+// timeline along the bottom (a step ruler over a progress bar).
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, sequence, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
-//     steps:     how many steps one bar has
+//   state = { playing, recording, sequence, sequenceCount, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
+//     steps:     how many steps one bar has (the STEP line counts all of them: steps times bars)
 //     bars:      how many bars the sequence has
 //     page:      the 0-based bar the step keys show (the progress bar marks it)
 //     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
 //     sequence:  the current sequence, 0-based
+//     sequenceCount:  how many sequences there are; when given the line reads "SEQ 02/04", and without it "SEQ 02"
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 
@@ -23,6 +25,7 @@ export function formatLcd({
   playing,
   recording,
   sequence = 0,
+  sequenceCount,
   selected,
   soundName,
   bpm,
@@ -33,17 +36,26 @@ export function formatLcd({
   stepsOn,
 }) {
   const located = playheadPosition >= 0 && playing;
-  const stepLabel = located ? pad2((playheadPosition % steps) + 1) : "--";
+  // The step in the whole sequence, as the step keys are numbered (the keys of the second bar are 17 to 32), out of all of
+  // them: the bar line says which bar it is in.
+  const stepLabel = located ? pad2(playheadPosition + 1) : "--";
   const barLabel = located ? pad2(Math.floor(playheadPosition / steps) + 1) : "--";
+  const sequenceLabel = sequenceCount ? `${pad2(sequence + 1)}/${pad2(sequenceCount)}` : pad2(sequence + 1);
   return {
-    line1: `SEQ ${pad2(sequence + 1)}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
-    line2: `PAD ${pad2(selected + 1)}  ${soundName}`,
-    line3: `BPM ${bpm.toFixed(1)}  BAR ${barLabel}/${pad2(bars)}  STEP ${stepLabel}/${steps}`,
+    // One value to a line, so that a line has one job and one rate of change: the tempo changes when it is turned, the
+    // bar and the step with every beat. A song's position and repeats can have lines of their own the same way.
+    lines: [
+      `SEQ ${sequenceLabel}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
+      `PAD ${pad2(selected + 1)}  ${soundName}`,
+      `BPM ${bpm.toFixed(1)}`,
+      `BAR ${barLabel}/${pad2(bars)}`,
+      `STEP ${stepLabel}/${steps * bars}`,
+    ],
     ruler: stepsOn.map((on, i) => ({ on, now: playing && i === playheadStep })),
   };
 }
 
-// The progress bar along the top of the display: how far the playhead is through the whole sequence (all its bars,
+// The progress bar at the very bottom of the display, under the step ruler: how far the playhead is through the whole sequence (all its bars,
 // where the ruler shows only the bar the step keys show), how many bars it has, and which of them is showing.
 //
 //   lcdProgress({ playing, playheadPosition, steps, bars, page })   // { bars, shown, fraction }
@@ -61,7 +73,7 @@ export function lcdProgress({ playing, playheadPosition = -1, steps, bars = 1, p
   };
 }
 
-// `elements` is { lines: [el, el, el], message, ruler, progress }, and `steps` is how many cells the ruler has.
+// `elements` is { lines: [el, el, el, el, el], message, ruler, progress }, and `steps` is how many cells the ruler has.
 // `progress` (optional) is the element the progress bar is drawn in: it is given its shape as CSS custom properties.
 // The progress bar's values as the CSS custom properties that draw it (strings) and whether there is more than one bar. A
 // fraction to four decimals is a hundredth of a per cent of the bar: finer than a pixel on any screen.
@@ -100,9 +112,7 @@ export function createLcd({ lines, message, ruler, progress = null, screen = nul
 
   function draw(state) {
     const text = formatLcd(state);
-    setText(lines[0], text.line1);
-    setText(lines[1], text.line2);
-    setText(lines[2], text.line3);
+    text.lines.forEach((line, i) => setText(lines[i], line));
     cells.forEach((cell, i) => {
       cell.classList.toggle("on", text.ruler[i].on);
       cell.classList.toggle("now", text.ruler[i].now);
@@ -136,7 +146,7 @@ export function createLcd({ lines, message, ruler, progress = null, screen = nul
       } else if (next === "on" && lastState) draw(lastState);
     },
 
-    // A short message on the fourth line, cleared after a moment.
+    // A short message under the five lines, cleared after a moment.
     showMessage(text) {
       message.textContent = text;
       clearTimeout(messageTimer);
