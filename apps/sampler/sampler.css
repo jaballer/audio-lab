@@ -707,6 +707,10 @@
   flex-wrap: wrap;
   gap: 10px;
 }
+/* The two rows' labels are one width, a little wider than "Bars" is, so the two groups of keys start at the same place. */
+.seq-bar > .small-label {
+  min-width: 3.6em;
+}
 .step-head,
 .step-nav,
 .step-tools {
