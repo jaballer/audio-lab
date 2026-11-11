@@ -490,13 +490,14 @@ describe("createScheduler", () => {
 
 describe("passes", () => {
   // A scheduler that reports each step and each wrap, in the order they happen.
-  function withWraps({ steps = 4, bpm = 120, onWrap = () => {} } = {}) {
+  function withWraps({ steps = 4, bpm = 120, swing, onWrap = () => {} } = {}) {
     const clock = fakeClock();
     const log = [];
     const scheduler = createScheduler({
       clock,
       steps,
       bpm,
+      ...(swing === undefined ? {} : { swing }),
       onStep: (step, time) => log.push(`step ${step} @${time.toFixed(3)}`),
       onWrap: (time) => {
         log.push(`wrap @${time.toFixed(3)}`);
@@ -590,6 +591,86 @@ describe("passes", () => {
     expect(log.filter((entry) => entry.startsWith("step"))).toEqual(["step 4 @1.050"]);
   });
 
+  // What a policy that changes the length at every wrap, as a chain of sequences would, does the same in a stall as it does when
+  // the steps are scheduled one by one: each pass end the stall crossed is told, in order, and the next pass is the length the
+  // last one chose.
+  it("calls onWrap for each pass end a stall crosses, so a length chosen at each of them lands the grid where uninterrupted play does", () => {
+    const lengths = () => {
+      const next = [8, 2, 4, 8];
+      return (_time, s) => {
+        if (next.length) s.startPass(next.shift());
+      };
+    };
+    const steady = withWraps({ steps: 4, bpm: 120, onWrap: lengths() });
+    steady.scheduler.start();
+    steady.run(2.6);
+    const stalled = withWraps({ steps: 4, bpm: 120, onWrap: lengths() });
+    stalled.scheduler.start();
+    stalled.advance(0.1);
+    stalled.advance(1.9); // the timer was held up for two seconds, across three pass ends
+    stalled.run(0.6);
+    const wraps = (log) => log.filter((entry) => entry.startsWith("wrap"));
+    expect(wraps(stalled.log)).toEqual(wraps(steady.log));
+    expect(wraps(steady.log).slice(0, 4)).toEqual(["wrap @0.550", "wrap @1.550", "wrap @1.800", "wrap @2.300"]);
+    const stepsFrom = (log, time) =>
+      log.filter((entry) => entry.startsWith("step") && Number(entry.split("@")[1]) >= time);
+    expect(stepsFrom(stalled.log, 2.0)).toEqual(stepsFrom(steady.log, 2.0));
+    expect(stepsFrom(stalled.log, 2.0)[0]).toBe("step 2 @2.050");
+  });
+
+  // 120 BPM, 4 steps: they fall at 0.05, 0.175, 0.3, 0.425, and the pass ends at 0.55; after the first tick the next step is 1,
+  // at 0.175, and a step is late enough to be skipped once it is 0.03 s behind the clock.
+  it("calls onWrap, and begins the next pass, when a stall ends exactly where the pass does", () => {
+    const { scheduler, log, advance } = withWraps({ steps: 4, bpm: 120, onWrap: (_time, s) => s.startPass(2) });
+    scheduler.start();
+    advance(0);
+    log.length = 0;
+    advance(0.5); // steps 1, 2 and 3 are past: the pass is over at 0.55 s, and the next begins
+    expect(log).toEqual(["wrap @0.550", "step 0 @0.550"]);
+  });
+
+  it("calls no onWrap for a stall that ends a step before the pass does, and then does where the pass ends", () => {
+    const { scheduler, log, advance } = withWraps({ steps: 4, bpm: 120 });
+    scheduler.start();
+    advance(0);
+    log.length = 0;
+    advance(0.4); // steps 1 and 2 are past
+    expect(log).toEqual(["step 3 @0.425", "wrap @0.550"]);
+  });
+
+  it("puts the playhead after a stall at where the last step it skipped sounded, swing and all", () => {
+    let first = true;
+    const { scheduler, advance, clock } = withWraps({
+      steps: 4,
+      bpm: 120,
+      swing: 66, // the odd steps sound 0.04 s late
+      onWrap: (_time, s) => {
+        if (first) s.startPass(8);
+        first = false;
+      },
+    });
+    scheduler.start();
+    advance(0);
+    advance(1);
+    clock.time = 1.0;
+    scheduler.poll();
+    expect(scheduler.playheadStep).toBe(3); // step 7 of the grid is the pass of 8's step 3, an odd one
+    expect(scheduler.playheadTime).toBeCloseTo(0.05 + 7 * 0.125 + 0.04);
+    expect(scheduler.playheadDelay).toBeCloseTo(0.04); // what a live hit is quantized against: how late that step sounds
+  });
+
+  it("numbers the playhead after a stall by the pass that began in it, whichever length that is", () => {
+    const { scheduler, log, advance, clock } = withWraps({ steps: 4, bpm: 120, onWrap: (_time, s) => s.startPass(2) });
+    scheduler.start();
+    advance(0);
+    log.length = 0;
+    advance(1);
+    clock.time = 1.0;
+    scheduler.poll();
+    expect(scheduler.playheadStep).toBe(1); // steps 4 to 7 of the grid are 0, 1, 0, 1 of passes of 2: not 7 % 4
+    expect(log.filter((entry) => entry.startsWith("step"))).toEqual(["step 0 @1.050"]);
+  });
+
   it("puts the playhead after a stall on a step of the pass that began in it, as long as that pass is", () => {
     let first = true;
     const { scheduler, advance, clock } = withWraps({
@@ -606,6 +687,106 @@ describe("passes", () => {
     clock.time = 1.0;
     scheduler.poll();
     expect(scheduler.playheadStep).toBe(3); // step 7 of the old grid is step 3 of the pass of 16 that began at 0.55 s
+  });
+
+  it("does not go on scheduling when onWrap stops it, and leaves nothing for a restart to find", () => {
+    const { scheduler, log, run, advance } = withWraps({ steps: 4, bpm: 120, onWrap: (_time, s) => s.stop() });
+    scheduler.start();
+    run(1);
+    expect(log).toEqual(["step 0 @0.050", "step 1 @0.175", "step 2 @0.300", "step 3 @0.425", "wrap @0.550"]);
+    // The same in a late tick, which has to work out where the pass ends first.
+    const late = withWraps({ steps: 4, bpm: 120, onWrap: (_time, s) => s.stop() });
+    late.scheduler.start();
+    late.advance(0);
+    late.log.length = 0;
+    late.advance(1);
+    expect(late.log).toEqual(["wrap @0.550"]);
+    expect(late.scheduler.pendingSteps).toBe(0);
+    expect(late.scheduler.playing).toBe(false);
+    advance(0);
+  });
+
+  it("carries on from the wrap when onWrap throws, in a tick that was late as in one that was not", () => {
+    const throwOnce = () => {
+      let thrown = false;
+      return (_time, s) => {
+        s.startPass(8);
+        if (!thrown) {
+          thrown = true;
+          throw new Error("a view failed");
+        }
+      };
+    };
+    const { scheduler, log, advance } = withWraps({ steps: 4, bpm: 120, onWrap: throwOnce() });
+    scheduler.start();
+    advance(0);
+    log.length = 0;
+    expect(() => advance(1)).toThrow("a view failed");
+    advance(0); // the next tick: the clock is where it was
+    // The pass of 8 began at 0.55 s, so what falls at 1.05 s is its step 4 (not a step the failed tick had half worked out).
+    expect(log.filter((entry) => entry.startsWith("step"))).toEqual(["step 4 @1.050"]);
+    expect(scheduler.playing).toBe(true);
+  });
+
+  it("ignores a pass length that is not a whole number of steps, at least one", () => {
+    const { scheduler, log, run } = withWraps({
+      steps: 4,
+      onWrap: (_time, s) => {
+        for (const bad of [0, -1, NaN, 2.5, Infinity]) s.startPass(bad);
+      },
+    });
+    scheduler.start();
+    run(1.5);
+    const steps = log.filter((entry) => entry.startsWith("step")).map((entry) => entry.split(" ")[1]);
+    expect(steps.slice(0, 10)).toEqual(["0", "1", "2", "3", "0", "1", "2", "3", "0", "1"]);
+  });
+
+  // At 40 BPM a step is 0.375 s and the lookahead 0.12 s, so the first step of the pass that comes is not scheduled until well after
+  // onWrap: for that long, a person changing the length of the loop is changing the pass that has not begun.
+  it("begins the new pass at its first step when the loop is made longer before that step is scheduled", () => {
+    const { scheduler, log, run } = withWraps({ steps: 4, bpm: 40, onWrap: (_time, s) => s.startPass(2) });
+    scheduler.start();
+    run(1.1); // steps 0 to 3 are scheduled; the wrap is at 1.55 s
+    expect(log[log.length - 1]).toBe("wrap @1.550");
+    scheduler.setSteps(8);
+    run(0.6);
+    expect(log.filter((entry) => entry.startsWith("step"))[4]).toBe("step 0 @1.550"); // not step 2, carried on from where a pass of 2 ended
+  });
+
+  // A pass begun by startPass is fresh only until its first step is scheduled: a wrap after it is a wrap like any other.
+  it("carries on into a longer loop from a wrap that came after a pass began by startPass", () => {
+    let wraps = 0;
+    const { scheduler, log, run } = withWraps({
+      steps: 4,
+      bpm: 40,
+      onWrap: (_time, s) => {
+        if (wraps++ === 0) s.startPass(4);
+      },
+    });
+    scheduler.start();
+    run(2.8); // the first wrap is at 1.55 s, the second at 3.05 s: the last step of the pass is scheduled at about 2.6 s
+    expect(log[log.length - 1]).toBe("wrap @3.050");
+    scheduler.setSteps(8);
+    run(0.3);
+    expect(log.filter((entry) => entry.startsWith("step")).at(-1)).toBe("step 4 @3.050");
+  });
+
+  it("carries on into a longer loop when a stall crossed a pass begun by startPass and then a plain one, ending where it ends", () => {
+    let wraps = 0;
+    const { scheduler, log, advance, run } = withWraps({
+      steps: 4,
+      bpm: 40,
+      onWrap: (_time, s) => {
+        if (wraps++ === 0) s.startPass(4);
+      },
+    });
+    scheduler.start();
+    advance(0);
+    advance(2.8); // two pass ends at 1.55 s and 3.05 s: the stall ends exactly at the second, and its first step is not scheduled yet
+    expect(log[log.length - 1]).toBe("wrap @3.050");
+    scheduler.setSteps(8);
+    run(0.3);
+    expect(log.filter((entry) => entry.startsWith("step")).at(-1)).toBe("step 4 @3.050");
   });
 
   it("is untouched by a stall that does not cross a wrap", () => {
