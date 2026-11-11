@@ -3302,3 +3302,234 @@ describe("the arrangement", () => {
     });
   });
 });
+
+describe("Play All with an arrangement", () => {
+  // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
+  // step 0 on pad i, to tell which one is sounding, and `arrangement` is the order and the repeats the chain goes in.
+  const entry = (sequence, repeats = 1) => ({ sequence, repeats });
+  const songWith = (count, arrangement, { bars = [] } = {}) => {
+    const base = songOf(count, { bpm: 120 });
+    for (let i = 0; i < count; i++) base.sequences[i] = { bars: bars[i] ?? 1, pattern: { [i]: [0] }, velocities: {} };
+    return arrangement ? { ...base, arrangement } : base;
+  };
+  const tick = (s, count) => {
+    for (let i = 0; i < count; i++) {
+      s.advance(0.05);
+      s.sampler.poll();
+    }
+  };
+  const run = (s, seconds) => tick(s, Math.round(seconds / 0.05));
+  const timesOf = (s, pad) => s.sounds[pad].play.mock.calls.map((call) => call[2]);
+  const closeTo = (...times) => times.map((time) => expect.closeTo(time, 2));
+  const playAll = (s) => {
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+  };
+
+  it("plays each entry as many times as it repeats before it goes on, round and round", () => {
+    const s = setup({ song: songWith(3, [entry(0, 2), entry(1), entry(2, 3)]) });
+    playAll(s);
+    run(s, 15.2); // the passes begin every 2 s from 0.05 s: two of the first, one of the second, three of the third, then again
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 12.05, 14.05));
+    expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(6.05, 8.05, 10.05));
+  });
+
+  it("goes in the order of the entries, not the order of the sequences", () => {
+    const s = setup({ song: songWith(3, [entry(0), entry(2), entry(1)]) });
+    playAll(s);
+    run(s, 6.2);
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+    expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+  });
+
+  it("begins with the sequence showing, at the first entry that names it, and goes on from there", () => {
+    const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+    s.sampler.setSequence(1);
+    playAll(s);
+    run(s, 11.2);
+    expect(timesOf(s, 1)).toEqual(closeTo(0.05, 2.05, 8.05, 10.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(4.05));
+    expect(timesOf(s, 0)).toEqual(closeTo(6.05));
+  });
+
+  it("tells two entries for one sequence apart: it is the entry it has gone on to, not the first that names it", () => {
+    const s = setup({ song: songWith(2, [entry(0), entry(1), entry(0, 2)]) });
+    playAll(s);
+    run(s, 11.2); // the passes: 0, 1, 0, 0 (the third entry twice), 0 (the first entry again), 1
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05, 6.05, 8.05));
+    expect(timesOf(s, 1)).toEqual(closeTo(2.05, 10.05));
+  });
+
+  it("goes round in the length of each sequence, repeats included", () => {
+    const s = setup({ song: songWith(2, [entry(0, 2), entry(1)], { bars: [2, 1] }) });
+    playAll(s);
+    run(s, 15.2); // two passes of 4 s, one of 2 s, and round
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05, 10.05, 14.05));
+    expect(timesOf(s, 1)).toEqual(closeTo(8.05));
+  });
+
+  it("is the same as it was when there is no arrangement: every sequence once, in order", () => {
+    const plain = setup({ song: songWith(3, null) });
+    const explicit = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+    for (const s of [plain, explicit]) {
+      playAll(s);
+      run(s, 8.2);
+    }
+    for (const pad of [0, 1, 2]) expect(timesOf(explicit, pad)).toEqual(timesOf(plain, pad));
+  });
+
+  it("says nothing and saves nothing for a repeat, and the sequence showing stays", () => {
+    const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+    playAll(s);
+    run(s, 0.5);
+    s.message.mockClear();
+    s.songChange.mockClear();
+    run(s, 3.6); // 4.1 s: the second pass has begun, and the third at 4.05 s
+    expect(s.sampler.getState().sequence).toBe(0);
+    expect(s.message).not.toHaveBeenCalled();
+    expect(s.songChange).not.toHaveBeenCalled();
+  });
+
+  describe("a queued sequence", () => {
+    it("goes first, and the song goes on from the first entry that names it, with its repeats", () => {
+      const s = setup({ song: songWith(3, [entry(0, 2), entry(1, 2), entry(2)]) });
+      playAll(s);
+      run(s, 0.3);
+      s.sampler.queueSequence(1);
+      run(s, 9.0); // 9.3 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 8.05)); // the first pass; then the queued one, its second repeat, the third entry, and round
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05));
+      expect(timesOf(s, 2)).toEqual(closeTo(6.05));
+    });
+
+    it("plays once, and the song begins again at its first entry, when no entry names it", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]), maxSequences: 6 });
+      playAll(s);
+      run(s, 0.3);
+      s.sampler.queueSequence(2);
+      run(s, 7.0); // 7.3 s
+      expect(timesOf(s, 2)).toEqual(closeTo(2.05)); // once
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(6.05));
+    });
+
+    it("takes over late, just ahead of a downbeat, and the song goes on from it all the same", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      playAll(s);
+      tick(s, 38); // 1.9 s: the pass has ended in the scheduler, and the chain has picked the second sequence for it
+      s.sampler.queueSequence(2); // a person asks for the third in that moment, and it takes over there instead
+      run(s, 6.3); // 8.2 s: the third sequence at 2.05 s, then the song goes on from its entry: the first, then the second twice
+      expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(6.05, 8.05));
+    });
+  });
+
+  it("goes on from the first entry that names a sequence a person has picked, with its repeats", () => {
+    const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+    playAll(s);
+    run(s, 0.5);
+    s.sampler.setSequence(1); // now: the loop carries on in it, and the song goes on from where it is at the end of the pass
+    run(s, 6.0); // 6.5 s
+    expect(timesOf(s, 1)).toEqual(closeTo(2.05)); // the second repeat of that entry
+    expect(timesOf(s, 2)).toEqual(closeTo(4.05));
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+  });
+
+  it("begins at the sequence showing again when Play is pressed again, and counts its repeats from the first", () => {
+    const s = setup({ song: songWith(3, [entry(0), entry(1, 3), entry(2)]) });
+    s.sampler.setSequence(1);
+    playAll(s);
+    run(s, 4.2); // 4.05 s: the third pass of the entry has begun
+    const restart = s.audio.ctx.currentTime;
+    s.sampler.start();
+    run(s, 6.5);
+    expect(timesOf(s, 1).slice(3)).toEqual(closeTo(restart + 0.05, restart + 2.05, restart + 4.05));
+    expect(timesOf(s, 2)).toEqual(closeTo(restart + 6.05));
+  });
+
+  it("goes on by one entry or repeat for each pass end a stall crosses, in order", () => {
+    const s = setup({ song: songWith(2, [entry(0, 2), entry(1)]) });
+    playAll(s);
+    s.advance(0.1);
+    s.advance(5); // the timer was held up: the passes ended at 2.05 s and 4.05 s while nothing was scheduled
+    s.sampler.poll();
+    // the first pass end was the repeat, and the second went on to the second entry
+    expect(s.sampler.getState().sequence).toBe(1);
+  });
+
+  describe("turned on or off just ahead of the end of a pass that repeats", () => {
+    it("does nothing when turned on at an end where the entry repeats: it is not taken back and built again", () => {
+      const s = setup({ song: songWith(2, [entry(0, 2), entry(1)]) });
+      s.sampler.start();
+      tick(s, 38); // 1.9 s: the pass has ended in the scheduler, and the first step of the next is built from this sequence
+      const built = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
+      s.sampler.togglePlayAll();
+      expect(built.disconnect).not.toHaveBeenCalled();
+      expect(s.sampler.getState().sequence).toBe(0);
+      run(s, 2.6); // 4.5 s: and the pass after that goes on to the second entry
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+    });
+
+    it("does not take back the pick of the pass end before when turned off at an end where the entry repeats", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      playAll(s);
+      tick(s, 78); // 3.9 s: the chain picked the second sequence at 2.05 s, and this end is a repeat of it
+      expect(s.sampler.getState().sequence).toBe(1);
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState().sequence).toBe(1); // not sent back to the first
+      run(s, 3.2); // 7.1 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05)); // and it goes on in the second, as it does with no chain
+    });
+  });
+
+  describe("forgets where it was, so that a stale position is not taken for one that fits", () => {
+    it("when a sequence was queued, and then another, which brings it back to a sequence the song had been at", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2), entry(1, 2)]) });
+      s.sampler.setSequence(1);
+      playAll(s); // the sequences 1 and 2, then 1 again, at its last entry
+      run(s, 4.3);
+      s.sampler.queueSequence(0); // takes over at 6.05 s
+      run(s, 2.0);
+      s.sampler.queueSequence(1); // takes over at 8.05 s, and the song goes on from the first entry that names it, not the one it was at
+      run(s, 4.0); // 10.3 s
+      expect(timesOf(s, 1)).toEqual(closeTo(0.05, 4.05, 8.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(6.05));
+      expect(timesOf(s, 2)).toEqual(closeTo(2.05, 10.05));
+    });
+
+    it("when a person has picked another sequence and then this one again", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      playAll(s);
+      run(s, 4.3); // the second entry, its second time round
+      s.sampler.setSequence(0);
+      s.sampler.setSequence(1);
+      run(s, 5.0); // 9.3 s: from the first time round it again, so the song is not at the end of the entry at 8.05 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 8.05));
+    });
+
+    it("when Play All was turned off and on again", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      playAll(s);
+      run(s, 4.3);
+      s.sampler.togglePlayAll();
+      s.sampler.togglePlayAll();
+      run(s, 5.0); // 9.3 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 8.05));
+    });
+  });
+
+  it("repeats a single entry's sequence round and round, with one sequence", () => {
+    const s = setup({ song: songWith(1, [entry(0, 4)]) });
+    playAll(s);
+    run(s, 6.2);
+    expect(s.sampler.getState().sequence).toBe(0);
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05, 6.05));
+  });
+});

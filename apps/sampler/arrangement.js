@@ -12,6 +12,8 @@
 //   cleanArrangement(raw, count)         // what storage gave, as a list of entries or null
 //   resolveArrangement(arrangement, count)   // the entries as they play: the list, or every sequence once
 //   passOrder(arrangement, count)        // the sequence of each pass, repeats counted out: [2, 2, 2, 2, 0]
+//   positionOf(arrangement, count, sequence)   // where a sequence first comes in the song, or null
+//   nextPass(arrangement, count, played, sequence)   // the pass after the one that has just ended (what a chain walks)
 
 // At most this many entries, and each one repeats from MIN_REPEATS to MAX_REPEATS times: with the sequences' own
 // length (up to eight bars) a song can be long, and the export has to hold all of it in memory.
@@ -66,4 +68,31 @@ export function afterSequenceRemoved(arrangement, removed) {
     .filter(({ sequence }) => sequence !== removed)
     .map(({ sequence, repeats }) => ({ sequence: sequence > removed ? sequence - 1 : sequence, repeats }));
   return kept.length ? kept : null;
+}
+
+// Where a pass sits in the song: `entry` is the index of an entry as the song plays them (resolveArrangement), and `rep` is
+// which time round that entry it is, from 0.
+
+// Where a sequence first comes in the song, at its first time round, or null when no entry names it (it is not in the song).
+export function positionOf(arrangement, count, sequence) {
+  const entry = resolveArrangement(arrangement, count).findIndex((each) => each.sequence === sequence);
+  return entry === -1 ? null : { entry, rep: 0 };
+}
+
+// The pass that follows the one that has just ended: the next time round its entry if it repeats, else the next entry, and the
+// first entry after the last (a song goes round until the end of song comes, with its Loop switch).
+//
+// `played` is where the controller says that pass was, and `sequence` is the sequence that played: what it says is believed only
+// while it still fits (the entry is there, names that sequence, and has that time round), since a sequence picked by a person, or
+// added or removed, leaves a position that means nothing. Otherwise the pass counts as the first time round the first entry that
+// names the sequence, which is also where a song that has just begun is. A sequence that is not in the song hands over to the
+// song's first entry.
+export function nextPass(arrangement, count, played, sequence) {
+  const entries = resolveArrangement(arrangement, count);
+  const pass = (entry, rep) => ({ entry, rep, sequence: entries[entry].sequence });
+  const fits = played && entries[played.entry]?.sequence === sequence && played.rep < entries[played.entry].repeats;
+  const here = fits ? played : positionOf(arrangement, count, sequence);
+  if (!here) return pass(0, 0);
+  if (here.rep + 1 < entries[here.entry].repeats) return pass(here.entry, here.rep + 1);
+  return pass((here.entry + 1) % entries.length, 0);
 }
