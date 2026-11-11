@@ -25,13 +25,15 @@ Numbers link to the pull request.
   format 10). A beat saved by an older page loads as it did, and a sequence added, copied or removed is followed in it
   ([#170](https://github.com/jaballer/audio-lab/pull/170))
 - Play All goes by the arrangement when a beat has one: the next time round an entry that repeats, else the next entry,
-  round and round, and a queued sequence goes first with the song going on from its first entry. Nothing edits an
-  arrangement yet, so with no arrangement it plays every sequence once in order, as it did
-  ([#173](https://github.com/jaballer/audio-lab/pull/173))
+  round and round, and a queued sequence goes first with the song going on from its first entry. With no
+  arrangement it plays every sequence once in order, as it did ([#173](https://github.com/jaballer/audio-lab/pull/173))
 - The docs are a short set with an index, `docs/README.md`, for people and coding agents alike: `architecture.md` (how
   the code fits together, and the file-by-file list that was in the README), `sampler.md`, `export.md` and
   `mpc-sample.md`. The sequencer and step-editing notes are folded into them, `AGENTS.md` links to `CLAUDE.md`, and the
   footer's Design notes link says what it now holds ([#172](https://github.com/jaballer/audio-lab/pull/172))
+- The sampler's controller keeps the sequence that plays apart from the sequence that shows (they are the same sequence for
+  now), so that a song can later play one while another is edited. No change to the page
+  ([#175](https://github.com/jaballer/audio-lab/pull/175))
 
 ## 2026-11-11
 
