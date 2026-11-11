@@ -3168,3 +3168,137 @@ describe("volume", () => {
     expect(songChange).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("the arrangement", () => {
+  const entry = (sequence, repeats = 1) => ({ sequence, repeats });
+  const withArrangement = (count, arrangement) => ({ ...songOf(count), arrangement });
+  const arrangementOf = (sampler) => sampler.getSong().arrangement;
+
+  it("is not in the song while there is none, and adding, copying and removing sequences do not make one", () => {
+    const { sampler } = setup({ song: songOf(3), maxSequences: 6 });
+    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    sampler.addSequence();
+    sampler.copySequence();
+    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    sampler.removeSequence();
+    sampler.removeSequence();
+    expect(sampler.getSong().sequences).toHaveLength(3);
+    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+  });
+
+  it("is kept as the song had it, in its order and with its repeats", () => {
+    const arrangement = [entry(2, 3), entry(0), entry(2, 16)];
+    const { sampler } = setup({ song: withArrangement(3, arrangement) });
+    expect(arrangementOf(sampler)).toEqual(arrangement);
+  });
+
+  it("is handed back as a copy, so what the page does with it cannot change the sampler's", () => {
+    const { sampler } = setup({ song: withArrangement(3, [entry(1, 2)]) });
+    arrangementOf(sampler)[0].repeats = 9;
+    arrangementOf(sampler).push(entry(0));
+    expect(arrangementOf(sampler)).toEqual([entry(1, 2)]);
+  });
+
+  it("is not changed by what was in the song it was given: it is the sampler's own", () => {
+    const given = withArrangement(3, [entry(1, 2)]);
+    const { sampler } = setup({ song: given });
+    given.arrangement[0].repeats = 9;
+    expect(arrangementOf(sampler)).toEqual([entry(1, 2)]);
+  });
+
+  it("is cleaned on the way in: an entry for a sequence the song does not have is dropped", () => {
+    const { sampler } = setup({ song: withArrangement(3, [entry(0), entry(3, 2), entry(2)]) });
+    expect(arrangementOf(sampler)).toEqual([entry(0), entry(2)]);
+  });
+
+  it("is no arrangement when nothing in it names a sequence the song has", () => {
+    const { sampler } = setup({ song: withArrangement(3, [entry(5), entry(7, 2)]) });
+    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+  });
+
+  describe("when a sequence is added or copied", () => {
+    it("gets an entry for it at the end, with one repeat", () => {
+      const { sampler } = setup({ song: withArrangement(3, [entry(2, 4), entry(0)]), maxSequences: 6 });
+      sampler.addSequence();
+      expect(arrangementOf(sampler)).toEqual([entry(2, 4), entry(0), entry(3)]);
+    });
+
+    it("gets an entry for the copy, and none for the sequence that was copied", () => {
+      const { sampler } = setup({ song: withArrangement(3, [entry(2, 4), entry(0)]), maxSequences: 6 });
+      sampler.setSequence(1);
+      sampler.copySequence();
+      expect(arrangementOf(sampler)).toEqual([entry(2, 4), entry(0), entry(3)]);
+    });
+
+    it("gets none when there are as many entries as there can be: the sequence is made, and is not in the song", () => {
+      const full = Array.from({ length: 32 }, (_, i) => entry(i % 3));
+      const { sampler } = setup({ song: withArrangement(3, full), maxSequences: 6 });
+      sampler.addSequence();
+      expect(sampler.getSong().sequences).toHaveLength(4);
+      expect(arrangementOf(sampler)).toEqual(full);
+    });
+
+    it("gets none when the sequence is not made because there are as many as there can be", () => {
+      const { sampler } = setup({ song: withArrangement(3, [entry(1)]), maxSequences: 3 });
+      sampler.addSequence();
+      sampler.copySequence();
+      expect(arrangementOf(sampler)).toEqual([entry(1)]);
+    });
+
+    it("asks for a save, as adding or copying a sequence always does, for the entry as much as for the sequence", () => {
+      const { sampler, songChange } = setup({ song: withArrangement(3, [entry(1)]), maxSequences: 6 });
+      sampler.addSequence();
+      expect(songChange).toHaveBeenCalledTimes(1);
+      sampler.copySequence();
+      expect(songChange).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("when a sequence is removed", () => {
+    it("loses the entries that named it, and the ones for the sequences after it move down", () => {
+      const { sampler } = setup({
+        song: withArrangement(4, [entry(0, 2), entry(1, 3), entry(0), entry(3, 4), entry(2)]),
+        maxSequences: 6,
+      });
+      sampler.setSequence(1);
+      sampler.removeSequence();
+      expect(sampler.getSong().sequences).toHaveLength(3);
+      expect(arrangementOf(sampler)).toEqual([entry(0, 2), entry(0), entry(2, 4), entry(1)]);
+    });
+
+    it("removes the sequence that is showing: the last one too, with nothing after it to move", () => {
+      const { sampler } = setup({ song: withArrangement(3, [entry(2, 5), entry(0), entry(1)]), maxSequences: 6 });
+      sampler.setSequence(2);
+      sampler.removeSequence();
+      expect(arrangementOf(sampler)).toEqual([entry(0), entry(1)]);
+    });
+
+    it("asks for a save, as removing a sequence always does", () => {
+      const { sampler, songChange } = setup({ song: withArrangement(3, [entry(1), entry(2)]), maxSequences: 6 });
+      sampler.removeSequence();
+      expect(songChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("is no arrangement when the sequence removed was all there was in it", () => {
+      const { sampler } = setup({ song: withArrangement(3, [entry(1, 4), entry(1)]), maxSequences: 6 });
+      sampler.setSequence(1);
+      sampler.removeSequence();
+      expect(sampler.getSong().sequences).toHaveLength(2);
+      expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    });
+
+    it("is left as it was when the last sequence cannot be removed", () => {
+      const { sampler } = setup({ song: withArrangement(1, [entry(0, 3)]) });
+      sampler.removeSequence();
+      expect(arrangementOf(sampler)).toEqual([entry(0, 3)]);
+    });
+
+    it("follows a sequence added after one was removed: the new one has the number the removed one left free", () => {
+      const { sampler } = setup({ song: withArrangement(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
+      sampler.setSequence(0);
+      sampler.removeSequence(); // sequences 0 and 1 are what were 1 and 2
+      sampler.addSequence();
+      expect(arrangementOf(sampler)).toEqual([entry(0), entry(1), entry(2)]);
+    });
+  });
+});
