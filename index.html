@@ -176,6 +176,9 @@
             </div>
 
             <div class="console-lower">
+              <!-- A key for each sequence, and Add, Copy and Remove: drawn by sequence-row.js. -->
+              <div id="seq-row" class="seq-bar"></div>
+
               <div class="seq-bar">
                 <span class="small-label">Bars</span>
                 <div id="bars" class="seq-lengths btn-group" role="group" aria-label="Sequence length in bars"></div>
@@ -187,9 +190,6 @@
                   <button id="steps-next" class="btn btn-small" type="button" aria-label="Next bar">&gt;</button>
                 </div>
               </div>
-
-              <!-- A key for each sequence, and Add, Copy and Remove: drawn by sequence-row.js. -->
-              <div id="seq-row" class="seq-bar"></div>
 
               <div class="buttons">
                 <button id="rec" class="btn btn-led btn-rec" type="button" aria-pressed="false">Rec</button>
@@ -381,9 +381,10 @@
           double-click a slider to reset it. Escape, pressed inside the editor, closes it
         </li>
         <li>
-          Under the Bars, each sequence has a key: press one to see and edit it. + adds an empty sequence at the end
+          Under the display, each sequence has a key: press one to see and edit it. + adds an empty sequence at the end
           (there can be eight), Copy adds a copy of the one showing, and &minus; removes the one showing (it asks first
-          when it has steps, it cannot be undone, and a beat keeps at least one)
+          when it has steps, it cannot be undone, and a beat keeps at least one). Under them, Bars sets how long the
+          sequence is, and the arrows choose which bar the step keys show
         </li>
         <li>
           <kbd>Ctrl</kbd>/<kbd>&#8984;</kbd> <kbd>Z</kbd> undoes a change to the steps, with <kbd>Shift</kbd> it redoes;

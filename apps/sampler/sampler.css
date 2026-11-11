@@ -699,8 +699,8 @@
     inset 0 2px 6px rgba(0, 0, 0, 0.25),
     0 1px 0 #f3f0e6;
 }
-/* Under the LCD, a row for the sequence's length (the length keys, and the arrows for which bar the step keys show) and one
-   below it for which sequence it is, and adding, copying and removing them. */
+/* Under the LCD, in the order the display lists them: a row for which sequence it is, and adding, copying and removing
+   them, and below it a row for that sequence's length (the length keys, and the arrows for which bar the step keys show). */
 .seq-bar {
   display: flex;
   align-items: center;
