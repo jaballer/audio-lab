@@ -1,52 +1,51 @@
-# Step editing for the sampler: design
+# The sampler: design decisions
 
-The sampler has 16 pads (no banks) and a step sequencer whose steps, when this was written, were only on or off. This records why step editing
-starts with per-step velocity, and how. The phases and their status are tracked in the GitHub epic
-[#87](https://github.com/jaballer/audio-lab/issues/87), not here.
+Why the sampler (`index.html`, `apps/sampler/`) works the way it does: the song and its sequences, step velocity, the pad
+editor and each pad setting. What it can do is in the [README](../README.md); where each file is, in
+[architecture.md](architecture.md); the export, in [export.md](export.md). Work still to do is tracked in the GitHub
+issues (song mode [#159](https://github.com/jaballer/audio-lab/issues/159), step editing
+[#87](https://github.com/jaballer/audio-lab/issues/87), sound editing [#21](https://github.com/jaballer/audio-lab/issues/21)),
+not here.
 
-Editing the sounds themselves (trim, gain, pitch per pad) is a separate track, [#21](https://github.com/jaballer/audio-lab/issues/21).
+## The song
 
-## What constrained the design
+What `song.js` keeps, and `controller.js` plays:
 
-These describe the code when the work began. Since then (#94 and after) the pattern stores a velocity per step
-(`shared/pattern.js`, 1-127, beside the booleans), saved songs are at version 4 (velocity, then per-pad settings), the
-sequencer's hits go through `withVelocity` and `withGain`, and recording keeps the velocity of the hit.
+- **Sequences.** A beat starts with one sequence and has up to eight (`MAX_SEQUENCES` in `layout.js`), each 1, 2, 4 or 8
+  bars of 16 steps, with its own pattern and velocities. Tempo, swing and volume belong to the song, not to a sequence.
+- **Switching while playing.** A sequence key queues that sequence to take over at the end of the pass (`queueSequence`,
+  through the scheduler's `onWrap`), so the beat never jumps mid-bar, and Shift switches at once. That is with the Next
+  latch on, as it is until a person turns it off; with Next off the two swap, a press switches at once and Shift waits, so
+  turning Next off is how a touch screen, which has no Shift, switches at once (`pressIsNow` in `sequence-row.js`). All plays the sequences one after the other until Stop; it is off on every load, and a chain that plays does not
+  save the beat as it goes.
+- **The arrangement** (`arrangement.js`) is the order a song plays its sequences in, each with repeats. `null`, the default,
+  means every sequence once, in order, so it cannot fall out of step with the sequences until a person edits it. So far it
+  is saved data with its rules and no UI (#159, step 4a): Play All and Export's "All the sequences" still play every
+  sequence once, in order (`songPasses` in `export-wav.js` is where the export will read it).
+- **Starters** (`starters.js`) are whole beats to begin from (tempo, swing, patterns, choke groups, colours). The pads'
+  sounds are the same in every starter: a starter changes the beat, not the kit.
+- **Swing** is 50 (straight) to 75: how much of each pair of steps the first takes, so the second sounds later
+  (`shared/tempo.js`). The live scheduler and the export both apply it.
+- **Saved as a versioned shape.** Every change to what is saved bumps `SONG_VERSION` and adds a migration, so a beat saved
+  by an older page still loads, and a song from a newer page is left alone rather than misread. The storage key is still
+  `pad-sampler:song`, the project's old name: renaming it would orphan every saved beat.
 
-- **The pattern is on/off only.** `shared/pattern.js` is a boolean grid. The MPC Sample page uses the same module, so
-  velocity is added beside it: `isOn` stays boolean and existing callers keep working.
-- **Playback already has a place for a gain.** In `apps/sampler/controller.js`, each step's hits go through a `bus`
-  gain of their own (so they can be cut off on Stop). Only the live-hit path, `playSound` in `shared/sounds.js`,
-  has a velocity stage. The sequencer needs the same, from one shared helper rather than two copies.
-- **Live recording discards velocity.** `triggerPad(index, velocity)` receives it, but `recordHit` drops it.
-- **Saved songs are at version 2** (sequences of one to eight bars). Storing velocity is version 3 with a migration,
-  through the `MIGRATIONS` hook in `apps/sampler/song.js`.
-- **The step keys show one bar at a time** (`setPage`), so any strip under them shows the same bar.
-- **Step keys can only toggle.** There is no way to select a step without flipping it.
-- **Pad selection already gives the editing context.** The selected pad is the row and the step is the column, so
-  editing needs no banks. Banks only matter for more than 16 sounds.
+## Step velocity
 
-## Decision: a velocity strip, not an Edit mode
+A step has a velocity, 1-127, beside its on/off (`shared/pattern.js`; `isOn` stays boolean, so the MPC Sample page, which
+shares the module, kept working).
 
-A strip of vertical bars under the step keys, dragged to set. It needs no modes, works with mouse and touch, and shows
-every value at once. An Edit mode (pick a step, turn the knob, as on the MPC) suits hardware but hides the values.
-It is added only if the Launchpad or MPC should edit velocity too.
-
-## Decisions made
-
-- **Velocity is stored as 1-127** (MIDI, and what the MPC page sends) and converted to a 0-1 gain where it is played
-  (`withVelocity` in `shared/sounds.js`).
-- **Mouse first.** The strip is the way to edit; there is no Edit mode for the Launchpad or MPC yet. Add one when
-  hardware should edit steps too.
-- **Undo is per sequence and covers the steps**, not tempo, volume, length or which sequence is showing. Velocity
-  changes made within a moment of each other (a drag) are one undo.
-- **Copy and paste is one bar of one pad** (the bar showing), velocities included, and it can be pasted onto another
-  bar, pad or sequence; pasting onto the next bar of the same pad is how a bar is repeated (#98). It began as a whole pad.
-
-## Later
-
-More per-step settings (nudge, probability, ratchets) should not be ruled out by the velocity data shape: they would
-be more sparse maps beside `velocities`, in the same version of the song. Banks, only if more than 16 sounds are
-wanted. See the epic for what is left.
+- **A strip, not an Edit mode.** Vertical bars under the step keys, dragged to set: no modes, mouse and touch both work, and
+  every value shows at once. An Edit mode (pick a step, turn the knob, as on the MPC) suits hardware but hides the values;
+  add one only when the Launchpad or MPC should edit steps.
+- **Stored as MIDI velocity, played as a gain** (`withVelocity` in `shared/sounds.js`), by live hits and the sequencer
+  alike. Recording keeps the velocity of the hit.
+- **Undo is per sequence and covers the steps**, not tempo, volume, length or which sequence is showing. Velocity changes
+  made within a moment of each other (a drag) are one undo.
+- **Copy and paste is one bar of one pad** (the bar showing), velocities included, onto another bar, pad or sequence;
+  pasting onto the next bar of the same pad is how a bar is repeated (#98).
+- **Later:** more per-step settings (nudge, probability, ratchets) would be more sparse maps beside `velocities`. Banks only
+  if more than 16 sounds are wanted.
 
 ## The pad editor drawer
 
