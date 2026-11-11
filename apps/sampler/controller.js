@@ -10,7 +10,8 @@
 //     kit,                 // the sounds on the pads (kit.js)
 //     steps,               // steps in one bar (the pattern is up to maxBars of them)
 //     maxBars,
-//     sequenceCount,       // how many sequences there are to choose from
+//     sequenceCount,       // how many sequences a start with no saved song has (1); a saved song brings its own
+//     maxSequences,        // the most there can be (default: no limit)
 //     song,                // a parseSong() result to start from, or null for the starter beat
 //     onChange,            // something on screen is out of date: read getState() and redraw
 //     onMessage,           // (text) a short note for the LCD
@@ -26,6 +27,9 @@
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setStepVelocity(5, 90, { activate: true })   // the same, and turns the step on first if it is off: one undo
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
+//   sampler.addSequence()        // an empty one at the end, shown; the same for copySequence(), which copies the one showing
+//   sampler.removeSequence()     // the one showing goes, and the one after it takes its place (the last one cannot go)
+//   sampler.sequenceHasSteps()   // does the one showing have any steps, in any bar? (to ask before removing it)
 //   sampler.setBars(2); sampler.setPage(1)   // how long the sequence is; which bar the step keys show
 //   sampler.start()              // from the first step, even if it is already playing
 //   sampler.stop()               // stops the sequence; pressed again while stopped, it cuts off all sound (tails too)
@@ -39,7 +43,7 @@
 //   sampler.setSwing(58)         // 50 (straight) to 75: the second step of each pair sounds later (tempo.js)
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
+//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar)
 //   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings }: what song.js saves
 //
@@ -69,6 +73,7 @@ export function createSampler({
   steps,
   maxBars = 1,
   sequenceCount = 1,
+  maxSequences = Infinity,
   song = null,
   now = () => performance.now(),
   onChange = noop,
@@ -86,17 +91,18 @@ export function createSampler({
   // Each sequence has its own steps and length; tempo and volume are shared. With no saved song the
   // first sequence is the starter beat and the rest are empty. A pattern has room for every bar, so
   // shortening a sequence keeps what was in the bars it drops.
-  const slots = Array.from({ length: sequenceCount }, (_, i) => {
+  const makeSlot = ({ bars = 1, pattern: initial = {}, velocities } = {}) => ({
+    bars: Math.min(maxBars, bars),
+    history: createHistory(), // undo and redo are per sequence
+    pattern: createPattern(kit.length, steps * maxBars, initial, { onChange: onSongChange, velocities }),
+  });
+  const slots = Array.from({ length: Math.max(1, song ? song.sequences.length : sequenceCount) }, (_, i) => {
     const saved = song?.sequences[i];
-    const initial = saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {};
-    return {
-      bars: Math.min(maxBars, saved?.bars ?? 1),
-      history: createHistory(), // undo and redo are per sequence
-      pattern: createPattern(kit.length, steps * maxBars, initial, {
-        onChange: onSongChange,
-        velocities: saved?.velocities,
-      }),
-    };
+    return makeSlot({
+      bars: saved?.bars,
+      pattern: saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {},
+      velocities: saved?.velocities,
+    });
   });
   let pattern = slots[current].pattern;
   let history = slots[current].history;
@@ -281,10 +287,8 @@ export function createSampler({
     onSongChange();
   }
 
-  // Switch to another sequence. If it is playing, the playhead carries on into the new one.
-  function setSequence(value) {
-    const next = Math.min(sequenceCount - 1, Math.max(0, Math.round(value)));
-    if (next === current) return;
+  // Show the sequence in slot `next`, which exists. If it is playing, the playhead carries on into it.
+  function showSequence(next) {
     current = next;
     pattern = slots[current].pattern;
     history = slots[current].history;
@@ -294,10 +298,61 @@ export function createSampler({
     scheduler.setSteps(totalSteps());
     scheduler.forgetHeard(); // a live hit still waiting for its step was recorded into the old sequence
     rescheduleQueuedHits();
+  }
+
+  function setSequence(value) {
+    const next = Math.min(slots.length - 1, Math.max(0, Math.round(value)));
+    if (next === current) return;
+    showSequence(next);
     onMessage(`SEQ ${pad2(current + 1)}`);
     onChange();
     onSongChange();
   }
+
+  // The one place a sequence is made or goes, so that whatever depends on how many there are (a song that chains them, later)
+  // has one place to follow. A new one is always at the end and is shown, and what was queued for the playhead is built again
+  // from it, as when another sequence is picked.
+  const atMost = () => slots.length >= maxSequences;
+  const full = () => {
+    onMessage(`${maxSequences} SEQUENCES MAX`);
+    return true;
+  };
+
+  function addSequence() {
+    if (atMost() && full()) return;
+    slots.push(makeSlot());
+    showSequence(slots.length - 1);
+    onMessage(`SEQ ${pad2(current + 1)} ADDED`);
+    onChange();
+    onSongChange();
+  }
+
+  function copySequence() {
+    if (atMost() && full()) return;
+    const from = current;
+    slots.push(makeSlot({ bars, pattern: pattern.snapshot(), velocities: pattern.velocitySnapshot() }));
+    showSequence(slots.length - 1);
+    onMessage(`SEQ ${pad2(from + 1)} COPIED TO ${pad2(current + 1)}`);
+    onChange();
+    onSongChange();
+  }
+
+  // Not undoable (undo is of the steps of one sequence), so the page asks first when there is anything in it (sequenceHasSteps).
+  function removeSequence() {
+    if (slots.length === 1) {
+      onMessage("CANNOT REMOVE LAST SEQUENCE");
+      return;
+    }
+    const removed = current;
+    slots.splice(removed, 1);
+    showSequence(Math.min(removed, slots.length - 1));
+    onMessage(`SEQ ${pad2(removed + 1)} REMOVED`);
+    onChange();
+    onSongChange();
+  }
+
+  // Any step on any pad, in any bar: a sequence made shorter keeps the steps of the bars it dropped.
+  const sequenceHasSteps = () => Object.keys(pattern.snapshot()).length > 0;
 
   function clearPad() {
     edit(() => pattern.clearRow(selected));
@@ -459,6 +514,10 @@ export function createSampler({
     setPage,
     setBars,
     setSequence,
+    addSequence,
+    copySequence,
+    removeSequence,
+    sequenceHasSteps,
     clearPad,
     clearAll,
     kitChanged,
@@ -488,7 +547,9 @@ export function createSampler({
       swing: scheduler.swing,
       volume,
       sequence: current,
-      sequenceCount,
+      sequenceCount: slots.length,
+      canAddSequence: !atMost(),
+      canRemoveSequence: slots.length > 1,
       bars,
       page,
       playheadStep: playheadOnPage(scheduler.playheadStep),

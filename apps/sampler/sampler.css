@@ -699,13 +699,39 @@
     inset 0 2px 6px rgba(0, 0, 0, 0.25),
     0 1px 0 #f3f0e6;
 }
-/* Under the LCD: the settings of the sequence the LCD is showing, and the arrows for which bar the step keys show,
-   next to the length keys that decide how many bars there are. */
+/* Under the LCD, in the order the display lists them: a row for which sequence it is, and adding, copying and removing
+   them, and below it a row for that sequence's length (the length keys, and the arrows for which bar the step keys show). */
 .seq-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+}
+/* The two rows' labels are one width, a little wider than "Bars" is, so the two groups of keys start at the same place. */
+.seq-bar > .small-label {
+  min-width: 3.6em;
+}
+/* Eight keys do not fit in the display's width at a larger text size (200% at the wide layout, 125% on a phone), and a row of
+   keys that cannot wrap is as wide as all of them: it pushed the display under the pads, or out of the chassis. So the keys wrap
+   inside their group, in rows, instead. */
+.seq-chips {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+/* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Add, Copy
+   and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too.
+   The two right-hand groups are one width, so the display has a column down its right side: the arrows go to the ends of
+   theirs (the number between them has no label of its own: the row's label is "Bars"), and the buttons of the other share
+   what is left over. The width is a little more than either needs, so a wider font does not make one wider than the other. */
+.seq-bar > :last-child {
+  margin-left: auto;
+  min-width: 6.4rem;
+}
+.seq-bar > .step-nav {
+  justify-content: space-between;
+}
+.seq-bar > .btn-group:last-child > .btn {
+  flex: 1 1 auto;
 }
 .step-head,
 .step-nav,
@@ -720,20 +746,16 @@
   gap: 8px 12px;
   margin-bottom: 8px;
 }
-/* The bar arrows sit with the length keys, on the left. Which sequence is playing sits in the bottom right corner of the
-   display, and wraps under them when there is no room. */
-.seq-pick {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-}
-/* The length keys are one joined group (.btn-group); the chosen one is pressed in, with a dark face. */
-.seq-lengths .btn {
+/* The length keys, and the keys for the sequences (sequence-row.js), are each one joined group (.btn-group); the chosen one is
+   pressed in, with a dark face. */
+.seq-lengths .btn,
+.seq-chips .btn {
   min-width: 2.8em;
 }
 .seq-lengths .btn[aria-pressed="true"],
-.seq-lengths .btn[aria-pressed="true"]:hover {
+.seq-lengths .btn[aria-pressed="true"]:hover,
+.seq-chips .btn[aria-pressed="true"],
+.seq-chips .btn[aria-pressed="true"]:hover {
   border-color: #1b1a18;
   background: linear-gradient(180deg, #3a3832, #26241f);
   color: #f3efe3;
@@ -926,7 +948,10 @@
     box-shadow: none;
   }
   /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */
-  .seq-lengths .btn[aria-pressed="true"] {
+  .seq-lengths .btn[aria-pressed="true"],
+  .seq-lengths .btn[aria-pressed="true"]:hover,
+  .seq-chips .btn[aria-pressed="true"],
+  .seq-chips .btn[aria-pressed="true"]:hover {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;

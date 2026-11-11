@@ -16,8 +16,8 @@ export const STEP_GROUP = 4; // steps drawn together, one beat of 16ths
 export const BAR_CHOICES = [1, 2, 4, 8];
 export const MAX_BARS = BAR_CHOICES[BAR_CHOICES.length - 1];
 
-// Separate patterns to choose between, each with its own steps and length.
-export const SEQUENCE_COUNT = 8;
+// Separate patterns to choose between, each with its own steps and length. A beat starts with one and has up to this many.
+export const MAX_SEQUENCES = 8;
 
 // Pad 1 sits bottom-left and the numbers run along each row, so the top row of
 // the grid holds the highest pads. `row` counts from the top, as drawn.

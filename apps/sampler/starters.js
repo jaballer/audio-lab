@@ -6,7 +6,7 @@
 // visit starts with.
 //
 //   STARTERS                            // [{ id, name, description, bpm, swing?, sequences: [{ pads }], padSettings }]
-//   starterSong(STARTERS[0], { rows: 16, steps: 16, maxBars: 8, sequenceCount: 8, volume: 80, keep: { 0: { gain: -6 } } })
+//   starterSong(STARTERS[0], { rows: 16, steps: 16, maxBars: 8, maxSequences: 8, volume: 80, keep: { 0: { gain: -6 } } })
 //                                       // the song as song.js saves it, or null if it does not fit those limits
 //
 // `swing` (tempo.js: 50 straight to 75) is how much of each pair of steps the first takes; a starter that does not say is
@@ -202,12 +202,12 @@ function buildSequence({ pads }) {
 // pads that are not on their built-in sound (a loaded sample): the settings the person gave it (gain, pitch, envelope...)
 // stay, with only what the starter itself sets for that pad (a choke group, a colour) put over them. Null when a
 // sequence's grid is not a whole number of bars, or does not fit.
-export function starterSong(starter, { rows, steps, maxBars, sequenceCount, volume, keep = {} }) {
+export function starterSong(starter, { rows, steps, maxBars, maxSequences, volume, keep = {} }) {
   const sequences = starter.sequences.map(buildSequence);
   if (sequences.some(({ bars }) => bars < 1 || bars > maxBars)) return null;
   const padSettings = { ...starter.padSettings };
   for (const [pad, settings] of Object.entries(keep)) padSettings[pad] = { ...settings, ...starter.padSettings[pad] };
   const raw = serializeSong({ bpm: starter.bpm, swing: starter.swing, volume, current: 0, sequences, padSettings });
-  const song = parseSong(raw, { rows, steps, maxBars, sequenceCount });
+  const song = parseSong(raw, { rows, steps, maxBars, maxSequences });
   return song && serializeSong(song);
 }

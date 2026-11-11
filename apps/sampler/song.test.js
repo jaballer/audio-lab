@@ -12,7 +12,7 @@ import {
   upgradeSong,
 } from "./song.js";
 
-const SHAPE = { rows: 16, steps: 16, maxBars: 8, sequenceCount: 4 };
+const SHAPE = { rows: 16, steps: 16, maxBars: 8, maxSequences: 4 };
 const empty = { bars: 1, pattern: {}, velocities: {} };
 const song = {
   bpm: 96.5,
@@ -73,11 +73,34 @@ describe("parseSong", () => {
     expect(sequences[0].pattern).toEqual({ 0: [3, 16, 127] });
   });
 
-  it("fills in the sequences a song does not have, and drops extra ones", () => {
-    const short = { ...serializeSong(song), sequences: [song.sequences[0]] };
-    expect(parse(short).sequences).toEqual([song.sequences[0], empty, empty, empty]);
-    const long = { ...serializeSong(song), sequences: Array.from({ length: 9 }, () => song.sequences[0]) };
-    expect(parse(long).sequences).toHaveLength(4);
+  it("keeps as many sequences as the song has, and drops the ones past the most there can be", () => {
+    const some = (count) => ({
+      ...serializeSong(song),
+      sequences: Array.from({ length: count }, () => song.sequences[0]),
+    });
+    expect(parse(some(1)).sequences).toEqual([song.sequences[0]]);
+    expect(parse(some(3)).sequences).toHaveLength(3);
+    expect(parse(some(4)).sequences).toHaveLength(4);
+    expect(parse(some(9)).sequences).toHaveLength(4);
+  });
+
+  it("gives a song with no sequences one empty one: there is always something to play and edit", () => {
+    expect(parse({ ...serializeSong(song), sequences: [] }).sequences).toEqual([empty]);
+  });
+
+  it.each([0, -3, NaN, 1.5, undefined, "4"])(
+    "keeps at least one sequence when the most there can be is %s",
+    (maxSequences) => {
+      const many = { ...serializeSong(song), sequences: [song.sequences[0], song.sequences[1], empty] };
+      expect(parseSong(stored(many), { ...SHAPE, maxSequences }).sequences).toHaveLength(1);
+    },
+  );
+
+  it("brings the current sequence into the ones the song has", () => {
+    const two = { ...serializeSong(song), sequences: [song.sequences[0], song.sequences[1]] };
+    expect(parse({ ...two, current: 1 }).current).toBe(1);
+    expect(parse({ ...two, current: 2 }).current).toBe(0);
+    expect(parse({ ...two, current: 3 }).current).toBe(0);
   });
 
   it.each([
@@ -337,6 +360,107 @@ describe("pad settings", () => {
   });
 });
 
+describe("songs saved by version 8", () => {
+  // What a page of version 8 kept: always eight sequences, the ones nobody used empty.
+  const blank = { bars: 1, pattern: {}, velocities: {} };
+  const used = { bars: 1, pattern: { 0: [0, 4] }, velocities: { 0: { 4: 90 } } };
+  const v8 = (sequences, current = 0) => ({
+    version: 8,
+    bpm: 100,
+    swing: 58,
+    volume: 50,
+    current,
+    padSettings: {},
+    sequences,
+  });
+  const eight = { ...SHAPE, maxSequences: 8 };
+  const load = (raw) => parseSong(stored(raw), eight);
+
+  it("lose the empty sequences at the end, and keep the ones that were used", () => {
+    const loaded = load(v8([used, { ...used, bars: 2 }, blank, blank, blank, blank, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[0]).toEqual(used);
+    expect(loaded.sequences[1].bars).toBe(2);
+  });
+
+  it("keep an empty sequence that has a used one after it: the numbers after it matter", () => {
+    const loaded = load(v8([used, blank, blank, used, blank, blank, blank, blank]));
+    expect(loaded.sequences).toHaveLength(4);
+    expect(loaded.sequences[1]).toEqual(blank);
+    expect(loaded.sequences[3]).toEqual(used);
+  });
+
+  it("keep a sequence with no steps showing but some in a bar it no longer shows", () => {
+    const hidden = { bars: 1, pattern: { 2: [20, 21] }, velocities: {} }; // bar 2 of a one-bar sequence
+    const loaded = load(v8([used, hidden, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[1].pattern).toEqual({ 2: [20, 21] });
+  });
+
+  it("keep an empty sequence that was given a length", () => {
+    const loaded = load(v8([used, { bars: 4, pattern: {}, velocities: {} }, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[1].bars).toBe(4);
+  });
+
+  it("keep a sequence with a single step on a single pad", () => {
+    const loaded = load(v8([used, { bars: 1, pattern: { 5: [3] }, velocities: {} }, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[1].pattern).toEqual({ 5: [3] });
+  });
+
+  it("keep an empty sequence given two bars", () => {
+    const loaded = load(v8([used, { bars: 2, pattern: {}, velocities: {} }, blank, blank]));
+    expect(loaded.sequences).toHaveLength(2);
+    expect(loaded.sequences[1].bars).toBe(2);
+  });
+
+  it("count a pad with an empty list of steps as no steps", () => {
+    const loaded = load(v8([used, { bars: 1, pattern: { 3: [] }, velocities: {} }, blank]));
+    expect(loaded.sequences).toHaveLength(1);
+  });
+
+  it("become one empty sequence when every one was empty", () => {
+    expect(load(v8([blank, blank, blank, blank])).sequences).toEqual([blank]);
+  });
+
+  it("keep the sequence that was showing, or the last one left when it was one of those that went", () => {
+    const sequences = [used, used, blank, blank, blank, blank, blank, blank];
+    expect(load(v8(sequences, 1)).current).toBe(1);
+    expect(load(v8(sequences, 2)).current).toBe(1); // the first one that went
+    expect(load(v8(sequences, 5)).current).toBe(1);
+  });
+
+  it("read a current sequence that was never one of theirs as the first, as they always did, and not as the last one left", () => {
+    const sequences = [used, used, blank, blank, blank, blank, blank, blank];
+    expect(load(v8(sequences, 99)).current).toBe(0);
+    expect(load(v8(sequences, -1)).current).toBe(0);
+    expect(load(v8(sequences, 1.5)).current).toBe(0);
+  });
+
+  it("keep the tempo, swing, volume and pad settings", () => {
+    const loaded = load({ ...v8([used, blank]), padSettings: { 1: { gain: -6 } } });
+    expect(loaded).toMatchObject({ bpm: 100, swing: 58, volume: 50 });
+    expect(loaded.padSettings[1].gain).toBe(-6);
+  });
+
+  it("are left for the loader to refuse when the sequences are not a list", () => {
+    expect(load(v8("none"))).toBeNull();
+    expect(load({ ...v8([]), sequences: undefined })).toBeNull();
+  });
+
+  it("are not made usable by trimming: a sequence that is not shaped like one is kept, and the song refused", () => {
+    expect(load(v8([used, { bars: 1 }, blank]))).toBeNull();
+    expect(load(v8([used, null]))).toBeNull();
+    expect(load(v8([used, blank, "x"]))).toBeNull();
+  });
+
+  it("are stamped as the current version", () => {
+    expect(upgradeSong(stored(v8([used, blank]))).version).toBe(SONG_VERSION);
+    expect(SONG_VERSION).toBe(9);
+  });
+});
+
 describe("songs saved by version 6", () => {
   it("load with every pad's envelope at its defaults, keeping the other settings", () => {
     const v6 = {
@@ -424,7 +548,7 @@ describe("songs saved by version 3", () => {
       current: 0,
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
-    expect(parse(v3)).toMatchObject({ padSettings: {}, sequences: [{ pattern: { 0: [0] } }, empty, empty, empty] });
+    expect(parse(v3)).toMatchObject({ padSettings: {}, sequences: [{ pattern: { 0: [0] } }] });
   });
 });
 
@@ -450,7 +574,7 @@ describe("songs saved by version 1", () => {
       swing: 50,
       volume: 70,
       current: 0,
-      sequences: [{ bars: 1, pattern: { 0: [0, 8], 2: [4] }, velocities: {} }, empty, empty, empty],
+      sequences: [{ bars: 1, pattern: { 0: [0, 8], 2: [4] }, velocities: {} }],
       padSettings: {},
     });
   });

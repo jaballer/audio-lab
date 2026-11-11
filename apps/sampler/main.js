@@ -29,9 +29,10 @@ import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
 import { createLevelReader } from "./level-meter.js";
 import { createLevelMeter } from "./level-meter-view.js";
+import { createSequenceRow } from "./sequence-row.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
-import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
+import { BAR_CHOICES, MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
 import { createPadGrid, padForKeyEvent, padPressAction } from "./pads.js";
@@ -181,7 +182,7 @@ const song = parseSong(storedSong, {
   rows: PAD_COUNT,
   steps: STEPS,
   maxBars: MAX_BARS,
-  sequenceCount: SEQUENCE_COUNT,
+  maxSequences: MAX_SEQUENCES,
 });
 
 // A song this page cannot read (from a newer page, or damaged) is kept under another key before the first edit
@@ -309,7 +310,7 @@ const sampler = createSampler({
   kit,
   steps: STEPS,
   maxBars: MAX_BARS,
-  sequenceCount: SEQUENCE_COUNT,
+  maxSequences: MAX_SEQUENCES,
   song,
   onChange: render,
   onMessage: say,
@@ -386,7 +387,7 @@ const openProject = (file) =>
       rows: PAD_COUNT,
       steps: STEPS,
       maxBars: MAX_BARS,
-      sequenceCount: SEQUENCE_COUNT,
+      maxSequences: MAX_SEQUENCES,
     });
     if (!project.ok) return say(project.reason);
     // Every sample has to decode here, in this browser, before anything is replaced: one it cannot read would leave its
@@ -528,7 +529,7 @@ const loadStarter = (starter) =>
       rows: PAD_COUNT,
       steps: STEPS,
       maxBars: MAX_BARS,
-      sequenceCount: SEQUENCE_COUNT,
+      maxSequences: MAX_SEQUENCES,
       volume: current.volume,
       keep,
     });
@@ -673,11 +674,27 @@ const velocityBars = createVelocityBars($("velocity"), {
   group: STEP_GROUP,
   onChange: (step, value, options) => sampler.setStepVelocity(step, value, options),
 });
-const seqPrev = $("seq-prev");
-const seqNext = $("seq-next");
-const seqNumber = $("seq-number");
-seqPrev.addEventListener("click", () => sampler.setSequence(sampler.getState().sequence - 1));
-seqNext.addEventListener("click", () => sampler.setSequence(sampler.getState().sequence + 1));
+// Removing a sequence cannot be undone (undo is of the steps of one sequence), so ask first when there is anything in it. The
+// question is the browser's own, like the one for Open and for a starter, and a browser holds the page still while it is open:
+// the beat pauses until it is answered. When it is declined, or cannot be shown at all (a page that has dialogs turned off), say
+// so, rather than leave a press of the button looking as if it did nothing.
+function removeSequence() {
+  const number = sampler.getState().sequence + 1;
+  if (
+    sampler.sequenceHasSteps() &&
+    !window.confirm(`Remove sequence ${number}? Its steps will be lost, and this cannot be undone.`)
+  ) {
+    say(`SEQ ${pad2(number)} KEPT`);
+    return;
+  }
+  sampler.removeSequence();
+}
+const sequenceRow = createSequenceRow($("seq-row"), {
+  onSelect: (index) => sampler.setSequence(index),
+  onAdd: () => sampler.addSequence(),
+  onCopy: () => sampler.copySequence(),
+  onRemove: removeSequence,
+});
 const stepsPrev = $("steps-prev");
 const stepsNext = $("steps-next");
 const stepsRange = $("steps-range");
@@ -756,14 +773,15 @@ function render() {
   });
   stepKeys.paintPlayhead(state.playing, state.playheadStep);
   knob.render(state.bpm);
-  setText(seqNumber, pad2(state.sequence + 1));
-  setDisabledMany([
-    [seqPrev, state.sequence === 0, seqNext],
-    [seqNext, state.sequence === state.sequenceCount - 1, seqPrev],
-  ]);
+  sequenceRow.refresh({
+    count: state.sequenceCount,
+    current: state.sequence,
+    canAdd: state.canAddSequence,
+    canRemove: state.canRemoveSequence,
+  });
   for (const { bars, button } of barButtons) setAttr(button, "aria-pressed", String(bars === state.bars));
   setText(stepsRange, `Bar ${state.page + 1} of ${state.bars}`);
-  setText(stepsRangeText, `Bar ${state.page + 1}/${state.bars}`);
+  setText(stepsRangeText, `${state.page + 1}/${state.bars}`); // the Bars label is the row's: a screen reader gets "Bar 1 of 2" above
   setDisabledMany([
     [stepsPrev, state.page === 0, [stepsNext, barButtons[0].button]],
     [stepsNext, state.page === state.bars - 1, [stepsPrev, barButtons[0].button]],
