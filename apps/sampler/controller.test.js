@@ -2499,6 +2499,14 @@ describe("Play All", () => {
     });
 
     it("is the sequence showing, its bar and its playhead when nothing is taking over", () => {
+      const stopped = setup({ song: steppy() });
+      stopped.sampler.start();
+      run(stopped, 0.3);
+      stopped.sampler.queueSequence(1);
+      run(stopped, 1.65); // 1.95 s: switched, with the old pass's last steps still to sound
+      stopped.sampler.stop(); // and stopped there: the display is of the sequence showing, from then on
+      expect(stopped.sampler.getState().heard).toMatchObject({ sequence: 1, playheadStep: -1 });
+
       const s = setup({ song: steppy() });
       s.sampler.start();
       run(s, 0.5);
@@ -2511,6 +2519,23 @@ describe("Play All", () => {
         playheadStep: state.playheadStep,
       });
     });
+  });
+
+  it("has nothing left sounding on the display when it is stopped in the moment after a chain switch", () => {
+    const s = setup({ song: chain(3) });
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+    tick(s, 39); // 1.95 s: the chain has picked the second sequence, and the display is still on the first
+    expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
+    s.sampler.stop();
+    expect(s.sampler.getState()).toMatchObject({
+      playing: false,
+      sequence: 1,
+      heard: { sequence: 1 },
+      playheadStep: -1,
+    });
+    run(s, 0.5); // and it stays so: nothing is waiting to clear it
+    expect(s.sampler.getState().heard.sequence).toBe(1);
   });
 
   it("shows what sounds on the display for the last steps of every pass, in that sequence's numbering", () => {
