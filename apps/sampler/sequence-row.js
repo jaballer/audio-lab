@@ -1,6 +1,6 @@
 // The sequence row above the Bars row: a key for each sequence, the one showing pressed in, and buttons to add an empty
-// sequence, copy the one showing and remove it. It shows and reports; the sampler decides (addSequence, copySequence,
-// removeSequence, setSequence), and the page asks before a sequence with steps is removed.
+// sequence, copy the one showing and remove it. It shows and reports; the sampler decides (queueSequence, setSequence,
+// addSequence, copySequence, removeSequence), and the page asks before a sequence with steps is removed.
 //
 //   const row = createSequenceRow(element, { onSelect, onAdd, onCopy, onRemove });   // onSelect(index, { now }), 0-based
 //   row.refresh({ count: 3, current: 1, queued: 2, playing: true, canAdd: true, canRemove: true });
@@ -22,9 +22,11 @@ export const sequenceKey = (index) => ({ index, label: String(index + 1), name: 
 // What a press does is only worth saying while the beat plays, when it waits for the end of the pass instead of switching.
 function keyTitle({ playing, pressed, queued, waiting }) {
   if (!playing) return "";
-  if (queued) return "Plays next, after this pass. Press again to take it back";
+  // Read after the key's name as its description, so an instruction: "Sequence 2, Plays next" would say it is already queued.
+  // The queued key's name says so already.
+  if (queued) return "Press again to take it back";
   if (pressed) return waiting ? "Press to take back the sequence that plays next" : "";
-  return "Plays next, after this pass. Hold Shift to switch now";
+  return "Press to play next, after this pass. Hold Shift to switch now";
 }
 
 // Each key: whether it is the pressed one (the sequence showing), whether it is the one that plays next, and a title for
@@ -87,7 +89,8 @@ export function createSequenceRow(element, { onSelect, onAdd, onCopy, onRemove }
       const index = chips.length;
       const { label, name } = sequenceKey(index);
       const chip = button(label, "", { "aria-label": name });
-      // Shift held, with a click or with Enter or Space on the key, is a press to switch now.
+      // Shift held is a press to switch now: with a click, and with Enter or Space on the key, for which a browser sends a click
+      // that carries the key's state. A touch screen has no Shift (see the help text).
       chip.addEventListener("click", (event) => onSelect(index, { now: Boolean(event.shiftKey) }));
       keys.appendChild(chip);
       chips.push(chip);

@@ -962,10 +962,13 @@
     box-shadow: none;
   }
   /* The sequence that plays next is a ring and a blink, which forced colors take away (a shadow, a face colour): a dashed border
-     says it with a shape, in the system's highlight. */
+     in the system's highlight says it with a shape, and so does an underline, since in a joined group the neighbours' solid
+     borders cover the dashes at the sides of a key that is not at an end. */
   .seq-chips .btn[data-queued="true"] {
     border-style: dashed;
     border-color: Highlight;
+    text-decoration: underline 2px;
+    text-underline-offset: 3px;
     animation: none;
   }
   /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */

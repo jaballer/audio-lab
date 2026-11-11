@@ -47,16 +47,22 @@ describe("sequenceKeys", () => {
     expect(sequenceKeys(3, 0).map((key) => key.title)).toEqual(["", "", ""]);
     const [showing, other] = sequenceKeys(3, 0, { playing: true });
     expect(showing.title).toBe("");
-    expect(other.title).toMatch(/plays next/i);
-    expect(other.title).toMatch(/shift/i); // the way to switch now is only written here, and in the help
+    // An instruction: read after "Sequence 2, not pressed" as a description, "plays next" would say it is already queued.
+    expect(other.title).toBe("Press to play next, after this pass. Hold Shift to switch now");
   });
 
   it("says the queued key's press takes it back, and so does the one showing while one is queued", () => {
     const keys = sequenceKeys(3, 0, { playing: true, queued: 2 });
-    expect(keys[2].title).toMatch(/again/i);
-    expect(keys[2].title).toMatch(/take it back/i);
-    expect(keys[0].title).toMatch(/take back/i);
+    // The key's name already says "plays next": the title does not say it a second time, only what a press does.
+    expect(keys[2].title).toBe("Press again to take it back");
+    expect(keys[0].title).toBe("Press to take back the sequence that plays next");
     expect(keys[1].title).toMatch(/shift/i); // another key still queues instead, and can still be switched to
+  });
+
+  it("takes back through the key showing when the one queued is the first, which is not the one showing", () => {
+    const keys = sequenceKeys(3, 1, { playing: true, queued: 0 });
+    expect(keys[0].queued).toBe(true);
+    expect(keys[1].title).toBe("Press to take back the sequence that plays next");
   });
 
   it("is made of the same keys the view puts on the page", () => {
@@ -73,12 +79,14 @@ class FakeElement {
     this.children = [];
     this.listeners = {};
     this.disabled = false;
+    this.writes = 0; // setAttribute calls, since a page that redraws every step must not rewrite what has not changed
     this.textContent = "";
     this.className = "";
     this.parent = null;
   }
 
   setAttribute(name, value) {
+    this.writes++;
     this.attributes[name] = String(value);
   }
 
@@ -182,7 +190,7 @@ describe("createSequenceRow", () => {
     expect(calls.onSelect).toHaveBeenCalledWith(4, { now: false });
   });
 
-  it("says the press is to switch now when Shift is held, which includes Enter or Space with it", () => {
+  it("says the press is to switch now when Shift is held", () => {
     refresh({ count: 3 });
     keys()[1].click({ shiftKey: true });
     expect(calls.onSelect).toHaveBeenCalledWith(1, { now: true });
@@ -216,6 +224,22 @@ describe("createSequenceRow", () => {
     refresh({ count: 4, current: 0, queued: 3, playing: true });
     expect(keys()[3].getAttribute("data-queued")).toBe("true");
     expect(keys()[3].getAttribute("title")).toMatch(/again/i);
+  });
+
+  it("has no title for a refresh that says nothing about playing, which is the beat being stopped", () => {
+    row.refresh({ count: 3, current: 0, canAdd: true, canRemove: true });
+    expect(keys().map((key) => key.getAttribute("title"))).toEqual(["", "", ""]);
+  });
+
+  it("writes nothing to a key when a refresh changes nothing: the page redraws every step, and a screen reader hears a rewrite", () => {
+    refresh({ count: 4, current: 1, queued: 3, playing: true });
+    const writes = () => element.children[1].children.reduce((sum, key) => sum + key.writes, 0);
+    const before = writes();
+    refresh({ count: 4, current: 1, queued: 3, playing: true });
+    refresh({ count: 4, current: 1, queued: 3, playing: true });
+    expect(writes()).toBe(before);
+    refresh({ count: 4, current: 1, queued: 2, playing: true });
+    expect(writes()).toBeGreaterThan(before); // and it does write when something has
   });
 
   it("turns Add and Copy off when there is no room, Remove off when there is one sequence, and says why", () => {
