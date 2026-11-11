@@ -142,4 +142,5 @@ One PR is one change that could be reverted on its own. Keep unrelated cleanups 
 - Update the Layout section of `README.md` when files are added, moved or removed.
 - A change a visitor can see or hear adds an entry under `[Unreleased]` in `CHANGELOG.md` in the same PR (Added,
   Changed or Fixed; internals under Maintenance), ending with the PR's link. The entries are cut into a dated section
-  by merge day after the merge, so the log does not fall behind again.
+  by merge day after the merge, and the compare link at the foot of the file (`[Unreleased]`) moves to the last
+  commit covered, so the log does not fall behind again.

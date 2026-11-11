@@ -20,9 +20,9 @@ Nothing yet.
   where it says SEQ. It is off each time the page opens, and a chain that plays does not save the beat as it goes, so
   another open tab is not told it is out of date ([#166](https://github.com/jaballer/audio-lab/pull/166))
 - Sampler: Export can save all the sequences in order. A Sequences choice in the Export window, Showing or All, saves
-  every sequence once each as one file, or a stem for each pad in a zip, with four seconds on the end for what rings
-  on and no loop to come round (a longer sound is cut). An empty sequence is a stretch of silence, as Play All plays
-  it, and the window names it. The files are called `pad16-all-…`
+  every sequence once each as one file, or as a zip with a stem for each pad that has a step, with four seconds on the
+  end for what rings on and no loop to come round (a longer sound is cut). An empty sequence is a stretch of silence,
+  as Play All plays it, and the window names it. The files are called `pad16-all-…`
   ([#167](https://github.com/jaballer/audio-lab/pull/167))
 
 ### Changed
@@ -107,6 +107,8 @@ Nothing yet.
   ([#127](https://github.com/jaballer/audio-lab/pull/127), [#130](https://github.com/jaballer/audio-lab/pull/130)).
 - Sampler: an export shows its progress and can be cancelled, with the Cancel export button or Escape
   ([#129](https://github.com/jaballer/audio-lab/pull/129), [#136](https://github.com/jaballer/audio-lab/pull/136)).
+- Sampler: Export opens a window to choose 1, 2, 4 or 8 loops of the sequence in one file, and stereo or mono, with the
+  file's length and size shown before it is made ([#136](https://github.com/jaballer/audio-lab/pull/136)).
 - Sampler: the Export window says, before the file is made, which bars have no steps (a file is as long as all its bars) and
   when it needs a lot of memory (from about 200 MB; a phone may not have it), and it says why Export is off for a
   sequence with no steps or a browser that cannot render a file
@@ -150,7 +152,7 @@ Nothing yet.
 - Sampler: a new layout. The pads move to the right, so the pad editor opens beside them; a row of the machine's own
   controls (Volume, Tempo with a Tap key, Seq, Edit Pad) sits above the display; Volume is a rotary knob like the
   tempo knob, and the bar lengths are one joined group with the chosen one pressed in. POWER is a rocker switch in the
-  machine's header on every page ([#145](https://github.com/jaballer/audio-lab/pull/145))
+  machine's header on the sampler, keyboard and Tone.js pages ([#145](https://github.com/jaballer/audio-lab/pull/145))
 - Sampler: a pass of polish. Lime and cyan are gone from the pad colours (a colour saved from lime on shows as
   another one), pressing an empty velocity bar turns its step on at that height, Rec is red, the bar arrows sit with
   the Bars keys, and Help is collapsible on every page ([#146](https://github.com/jaballer/audio-lab/pull/146))
@@ -215,9 +217,7 @@ Nothing yet.
   End to trim it ([#104](https://github.com/jaballer/audio-lab/pull/104)).
 - Sampler: Export, in the machine's header beside Power, saves the sequence showing as an audio file of exactly its
   length, so it loops. It is rendered as the page plays it: the sounds and samples, each step's velocity, the pads'
-  settings and the master volume ([#111](https://github.com/jaballer/audio-lab/pull/111)). It opens a window to choose
-  1, 2, 4 or 8 loops of the sequence in one file, and stereo or mono, with the file's length and size shown before it is
-  made ([#136](https://github.com/jaballer/audio-lab/pull/136)).
+  settings and the master volume ([#111](https://github.com/jaballer/audio-lab/pull/111)).
 - Sampler: Stop pressed again, while the sequence is already stopped, cuts off all sound, such as a crash's tail or a
   long sample ([#109](https://github.com/jaballer/audio-lab/pull/109)).
 - Sampler: choke groups. A Choke slider in the pad editor puts a pad in a group from 1 to 8; pads in the same group
@@ -362,4 +362,4 @@ First day, before pull requests were required.
 - The sampler and keyboard become separate apps with shared modules (`ffcbeec`); Prettier, ESLint and Vitest are added
   (`de70131`, `8da31fa`, `20421a1`); `CLAUDE.md` conventions are written (`7a60b93`).
 
-[Unreleased]: https://github.com/jaballer/audio-lab/compare/e8dadc1...main
+[Unreleased]: https://github.com/jaballer/audio-lab/compare/07b2f9a...main
