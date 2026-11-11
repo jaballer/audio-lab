@@ -712,9 +712,19 @@
   min-width: 3.6em;
 }
 /* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Add, Copy
-   and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too. */
+   and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too.
+   The two right-hand groups are one width, so the display has a column down its right side: the arrows go to the ends of
+   theirs (the number between them has no label of its own: the row's label is "Bars"), and the buttons of the other share
+   what is left over. The width is a little more than either needs, so a wider font does not make one wider than the other. */
 .seq-bar > :last-child {
   margin-left: auto;
+  min-width: 6.4rem;
+}
+.seq-bar > .step-nav {
+  justify-content: space-between;
+}
+.seq-bar > .btn-group:last-child > .btn {
+  flex: 1 1 auto;
 }
 .step-head,
 .step-nav,

@@ -776,7 +776,7 @@ function render() {
   });
   for (const { bars, button } of barButtons) setAttr(button, "aria-pressed", String(bars === state.bars));
   setText(stepsRange, `Bar ${state.page + 1} of ${state.bars}`);
-  setText(stepsRangeText, `Bar ${state.page + 1}/${state.bars}`);
+  setText(stepsRangeText, `${state.page + 1}/${state.bars}`); // the Bars label is the row's: a screen reader gets "Bar 1 of 2" above
   setDisabledMany([
     [stepsPrev, state.page === 0, [stepsNext, barButtons[0].button]],
     [stepsNext, state.page === state.bars - 1, [stepsPrev, barButtons[0].button]],
