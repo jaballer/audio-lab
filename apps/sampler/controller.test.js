@@ -55,7 +55,7 @@ const savedSong = ({
   ),
 });
 
-function setup({ song = null, bpm } = {}) {
+function setup({ song = null, bpm, ownCount = false } = {}) {
   const audio = fakeAudio();
   const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
   const calls = { change: vi.fn(), message: vi.fn(), padHit: vi.fn(), padPlayed: vi.fn(), songChange: vi.fn() };
@@ -65,7 +65,7 @@ function setup({ song = null, bpm } = {}) {
     kit: createKit(sounds),
     steps: STEPS,
     maxBars: 4,
-    sequenceCount: SEQUENCES,
+    ...(ownCount ? {} : { sequenceCount: SEQUENCES }), // `ownCount`: say nothing, as the page does with no saved song
     song: song ?? (bpm ? savedSong({ bpm }) : null),
     now: () => clock,
     onChange: calls.change,
@@ -943,6 +943,24 @@ describe("sequences", () => {
   it("starts on the saved one, and says how many there are", () => {
     const { sampler } = setup({ song: savedSong({ current: 2 }) });
     expect(sampler.getState()).toMatchObject({ sequence: 2, sequenceCount: SEQUENCES });
+  });
+
+  it("starts with one sequence when there is no saved song, and cannot go to another", () => {
+    const { sampler } = setup({ ownCount: true });
+    expect(sampler.getState()).toMatchObject({ sequence: 0, sequenceCount: 1 });
+    expect(sampler.getSong().sequences).toEqual([{ bars: 1, pattern: STARTER_BEAT, velocities: {} }]);
+    sampler.setSequence(1);
+    expect(sampler.getState().sequence).toBe(0);
+  });
+
+  it("has as many sequences as the saved song has, not the number the page was told to start with", () => {
+    const song = savedSong({ pattern: { 0: [0] } });
+    song.sequences = song.sequences.slice(0, 2);
+    const { sampler } = setup({ song });
+    expect(sampler.getState().sequenceCount).toBe(2);
+    expect(sampler.getSong().sequences).toHaveLength(2);
+    sampler.setSequence(99);
+    expect(sampler.getState().sequence).toBe(1);
   });
 
   it("switches to another, names it and asks for a save", () => {

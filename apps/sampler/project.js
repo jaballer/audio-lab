@@ -4,7 +4,7 @@
 // passes in what to read and where to write, so it can be tested.
 //
 //   const blob = projectBlob({ song, samples: [{ pad, name, trim, bytes }] });      // song as sampler.getSong() gives it
-//   const result = parseProject(await file.arrayBuffer(), { rows, steps, maxBars, sequenceCount });
+//   const result = parseProject(await file.arrayBuffer(), { rows, steps, maxBars, maxSequences });
 //   // { ok: true, song, samples: [{ pad, name, trim, bytes }] }  or  { ok: false, reason, detail }
 //   const { samples, missing } = await collectSamples({ map: loadJson(SAMPLES_KEY), store, padCount });   // what the page has kept, to save
 //   projectFileName(new Date());   // "pad16-beat-2026-11-09.audiolab"
@@ -70,7 +70,7 @@ export function buildProject({ song, samples, savedAt = new Date() }) {
 export const projectBlob = (project, date) =>
   new Blob(zipParts(buildProject(project), date), { type: "application/octet-stream" });
 
-export function parseProject(input, { rows, steps, maxBars, sequenceCount }) {
+export function parseProject(input, { rows, steps, maxBars, maxSequences }) {
   if (input.byteLength > MAX_PROJECT_BYTES) return refuse(REASONS.tooBig);
   let files;
   try {
@@ -94,7 +94,7 @@ export function parseProject(input, { rows, steps, maxBars, sequenceCount }) {
   if (manifest.version > PROJECT_VERSION)
     return refuse(REASONS.newer, `Project version ${manifest.version} is newer than this page reads.`);
 
-  const song = parseSong(manifest.song, { rows, steps, maxBars, sequenceCount });
+  const song = parseSong(manifest.song, { rows, steps, maxBars, maxSequences });
   if (!song) return refuse(REASONS.damaged, "The beat in the project cannot be read.");
 
   if (!isObject(manifest.samples)) return refuse(REASONS.damaged, "The project's samples are not listed.");

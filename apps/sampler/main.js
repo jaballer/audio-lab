@@ -31,7 +31,7 @@ import { createLevelReader } from "./level-meter.js";
 import { createLevelMeter } from "./level-meter-view.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
-import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
+import { BAR_CHOICES, MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
 import { createColorSwatches } from "./color-swatches.js";
 import { createPadGrid, padForKeyEvent, padPressAction } from "./pads.js";
@@ -181,7 +181,7 @@ const song = parseSong(storedSong, {
   rows: PAD_COUNT,
   steps: STEPS,
   maxBars: MAX_BARS,
-  sequenceCount: SEQUENCE_COUNT,
+  maxSequences: MAX_SEQUENCES,
 });
 
 // A song this page cannot read (from a newer page, or damaged) is kept under another key before the first edit
@@ -309,7 +309,6 @@ const sampler = createSampler({
   kit,
   steps: STEPS,
   maxBars: MAX_BARS,
-  sequenceCount: SEQUENCE_COUNT,
   song,
   onChange: render,
   onMessage: say,
@@ -386,7 +385,7 @@ const openProject = (file) =>
       rows: PAD_COUNT,
       steps: STEPS,
       maxBars: MAX_BARS,
-      sequenceCount: SEQUENCE_COUNT,
+      maxSequences: MAX_SEQUENCES,
     });
     if (!project.ok) return say(project.reason);
     // Every sample has to decode here, in this browser, before anything is replaced: one it cannot read would leave its
@@ -528,7 +527,7 @@ const loadStarter = (starter) =>
       rows: PAD_COUNT,
       steps: STEPS,
       maxBars: MAX_BARS,
-      sequenceCount: SEQUENCE_COUNT,
+      maxSequences: MAX_SEQUENCES,
       volume: current.volume,
       keep,
     });

@@ -2,7 +2,7 @@
 // and the volume. No DOM, and no storage of its own (the caller passes `save`),
 // so it can be tested. Storage itself is shared/storage.js.
 //
-//   const song = parseSong(loadJson(SONG_KEY), { rows: 16, steps: 16, maxBars: 8, sequenceCount: 8 });   // null if unusable
+//   const song = parseSong(loadJson(SONG_KEY), { rows: 16, steps: 16, maxBars: 8, maxSequences: 8 });   // null if unusable
 //   const saver = createSongSaver({ read, save });
 //   saver.schedule();   // something changed: save once things settle
 //   saver.flush();      // about to leave the page: save now if a change is waiting
@@ -19,7 +19,7 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 8;
+export const SONG_VERSION = 9;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
 // field itself is set by upgradeSong.
@@ -40,9 +40,32 @@ const MIGRATIONS = {
   6: (song) => song,
   // Version 8 adds `swing` (50 to 75, 50 straight). A version 7 song has none, which reads as straight.
   7: (song) => song,
+  // Version 9 has as many sequences as the person made, from one up, where version 8 always had eight and the ones nobody
+  // used were empty. Those empty ones at the end go (see trimBlankSequences).
+  8: trimBlankSequences,
 };
 
 const VOLUME_MAX = 100;
+
+// A sequence with nothing in it: no steps on any pad, in any bar (a sequence made shorter keeps the steps of the bars it dropped,
+// so those count), and the default length (an empty sequence given 4 bars was set up on purpose). One that is not shaped like a
+// sequence is not blank: it is left for parseSong to refuse the song for.
+function isBlankSequence(sequence) {
+  if (!isObject(sequence) || !isObject(sequence.pattern)) return false;
+  const hasSteps = Object.values(sequence.pattern).some((on) => Array.isArray(on) && on.length > 0);
+  return !hasSteps && !(Number.isInteger(sequence.bars) && sequence.bars > 1);
+}
+
+// Version 8 to 9: the empty sequences at the end of the list go, keeping at least one. An empty one with a used one after it
+// stays, because the numbers after it would move. The sequence that was showing stays showing, or is the last one left when
+// it was one of those that went.
+function trimBlankSequences(song) {
+  if (!Array.isArray(song.sequences) || song.sequences.length === 0) return song;
+  let keep = song.sequences.length;
+  while (keep > 1 && isBlankSequence(song.sequences[keep - 1])) keep--;
+  const current = Number.isInteger(song.current) && song.current >= keep ? keep - 1 : song.current;
+  return { ...song, sequences: song.sequences.slice(0, keep), current };
+}
 
 // `sequences` is a list of { bars, pattern, velocities }, where `pattern` is pattern.snapshot():
 // { pad row: [steps that are on] }, and `velocities` is pattern.velocitySnapshot(): { pad row: { step: 1-127 } }
@@ -127,14 +150,15 @@ export function upgradeSong(raw, migrations = MIGRATIONS) {
 // Turn whatever was in storage into a song, or null when it is not one we can
 // trust (missing, corrupt, from a version it cannot upgrade). Values that are the right
 // kind but out of range are brought back into range rather than rejected.
-export function parseSong(stored, { rows, steps, maxBars = 1, sequenceCount = 1 }) {
+export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }) {
   const raw = upgradeSong(stored);
   if (!raw) return null;
   if (!Number.isFinite(raw.bpm) || !Number.isFinite(raw.volume) || !Array.isArray(raw.sequences)) return null;
   if (!raw.sequences.every((sequence) => isObject(sequence) && isObject(sequence.pattern))) return null;
 
-  // Always `sequenceCount` of them: ones the song does not have are empty, and extra ones are dropped.
-  const sequences = Array.from({ length: sequenceCount }, (_, i) => {
+  // As many as the song has, from one (a song with none gets an empty one) up to `maxSequences`: extra ones are dropped.
+  const count = Math.min(maxSequences, Math.max(1, raw.sequences.length));
+  const sequences = Array.from({ length: count }, (_, i) => {
     const saved = raw.sequences[i];
     if (!saved) return { bars: 1, pattern: {}, velocities: {} };
     const pattern = cleanPattern(saved.pattern, { rows, steps: steps * maxBars });
@@ -150,7 +174,7 @@ export function parseSong(stored, { rows, steps, maxBars = 1, sequenceCount = 1 
     bpm: clampBpm(raw.bpm),
     swing: clampSwing(raw.swing),
     volume: Math.round(Math.min(VOLUME_MAX, Math.max(0, raw.volume))),
-    current: isIndex(raw.current, sequenceCount) ? raw.current : 0,
+    current: isIndex(raw.current, count) ? raw.current : 0,
     sequences,
     padSettings: parsePadSettings(raw.padSettings, rows),
   };

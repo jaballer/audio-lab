@@ -10,7 +10,7 @@
 //     kit,                 // the sounds on the pads (kit.js)
 //     steps,               // steps in one bar (the pattern is up to maxBars of them)
 //     maxBars,
-//     sequenceCount,       // how many sequences there are to choose from
+//     sequenceCount,       // how many sequences a start with no saved song has (1); a saved song brings its own
 //     song,                // a parseSong() result to start from, or null for the starter beat
 //     onChange,            // something on screen is out of date: read getState() and redraw
 //     onMessage,           // (text) a short note for the LCD
@@ -86,7 +86,7 @@ export function createSampler({
   // Each sequence has its own steps and length; tempo and volume are shared. With no saved song the
   // first sequence is the starter beat and the rest are empty. A pattern has room for every bar, so
   // shortening a sequence keeps what was in the bars it drops.
-  const slots = Array.from({ length: sequenceCount }, (_, i) => {
+  const slots = Array.from({ length: song ? song.sequences.length : sequenceCount }, (_, i) => {
     const saved = song?.sequences[i];
     const initial = saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {};
     return {
@@ -283,7 +283,7 @@ export function createSampler({
 
   // Switch to another sequence. If it is playing, the playhead carries on into the new one.
   function setSequence(value) {
-    const next = Math.min(sequenceCount - 1, Math.max(0, Math.round(value)));
+    const next = Math.min(slots.length - 1, Math.max(0, Math.round(value)));
     if (next === current) return;
     current = next;
     pattern = slots[current].pattern;
@@ -488,7 +488,7 @@ export function createSampler({
       swing: scheduler.swing,
       volume,
       sequence: current,
-      sequenceCount,
+      sequenceCount: slots.length,
       bars,
       page,
       playheadStep: playheadOnPage(scheduler.playheadStep),

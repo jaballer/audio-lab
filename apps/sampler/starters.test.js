@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS } from "./layout.js";
+import { MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS } from "./layout.js";
 import { SONG_VERSION, parseSong, serializeSong } from "./song.js";
 import { SOFT_VELOCITY, STARTERS, sequenceBars, starterSong } from "./starters.js";
 import { SWING_DEFAULT, SWING_MAX, SWING_MIN, clampBpm } from "../../shared/tempo.js";
 
-const limits = { rows: PAD_COUNT, steps: STEPS, maxBars: MAX_BARS, sequenceCount: SEQUENCE_COUNT };
+const limits = { rows: PAD_COUNT, steps: STEPS, maxBars: MAX_BARS, maxSequences: MAX_SEQUENCES };
 const song = (starter, volume = 80) => starterSong(starter, { ...limits, volume });
 
 describe("sequenceBars", () => {
@@ -34,7 +34,7 @@ describe("STARTERS", () => {
     expect(result.bpm).toBe(starter.bpm);
     // Already inside the tempo range: nothing was clamped.
     expect(clampBpm(starter.bpm)).toBe(starter.bpm);
-    expect(result.sequences).toHaveLength(SEQUENCE_COUNT);
+    expect(result.sequences).toHaveLength(starter.sequences.length); // a starter has the sequences it wrote, no more
     expect(result.current).toBe(0);
     // Saving it and reading it again changes nothing, so the page that loads it sees exactly this.
     expect(serializeSong(parseSong(result, limits))).toEqual(result);
@@ -150,8 +150,9 @@ describe("starterSong", () => {
     expect(song({ ...starter, sequences: [{ pads: { 0: "X...X..." } }] })).toBeNull();
   });
 
-  it("leaves the sequences it does not have empty, one bar each", () => {
+  it("has just the sequences it wrote: a starter of one sequence is a beat of one", () => {
     const result = song({ ...starter, sequences: [{ pads: { 0: "X...X...X...X..." } }] });
-    expect(result.sequences[1]).toEqual({ bars: 1, pattern: {}, velocities: {} });
+    expect(result.sequences).toHaveLength(1);
+    expect(result.current).toBe(0);
   });
 });

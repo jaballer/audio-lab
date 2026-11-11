@@ -18,7 +18,7 @@ import { SAMPLES_VERSION, sampleKey } from "./samples.js";
 import { SONG_VERSION, parseSong } from "./song.js";
 import { readZip, zipParts } from "./zip.js";
 
-const LAYOUT = { rows: 16, steps: 16, maxBars: 8, sequenceCount: 8 };
+const LAYOUT = { rows: 16, steps: 16, maxBars: 8, maxSequences: 8 };
 const song = {
   bpm: 96,
   volume: 70,

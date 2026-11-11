@@ -74,7 +74,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `index.html` + `apps/sampler/` — the pad sampler
   - `main.js` — wires the page: connects the pads, step keys, tempo knob, computer keyboard and MIDI to the sampler and the views
   - `controller.js` — the sampler's state (selected pad, recording, volume, the current sequence) and every action on it (hit a pad, toggle a step, record, tap tempo...), with the follow-ups each one needs (LCD message, save, redraw); no DOM
-  - `layout.js` — how many pads (and in what grid), steps per bar, bars and sequences the sampler has, decided once; the pad grid, step keys, key map and Launchpad profile read it; no DOM
+  - `layout.js` — how many pads (and in what grid), steps per bar, the most bars and the most sequences the sampler has, decided once (a beat starts with one sequence); the pad grid, step keys, key map and Launchpad profile read it; no DOM
   - `format.js` — small text helpers for the display, messages and the pad editor (a sample's name, size and length); no DOM
   - `knob-moves.js` — how far a drag, wheel turn or key press moves the tempo knob (whole BPM, Shift for tenths or tens), which the volume knob uses too, and the angle a knob's pointer turns to; no DOM
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
