@@ -13,6 +13,7 @@
 //   resolveArrangement(arrangement, count)   // the entries as they play: the list, or every sequence once
 //   passOrder(arrangement, count)        // the sequence of each pass, repeats counted out: [2, 2, 2, 2, 0]
 //   positionOf(arrangement, count, sequence)   // where a sequence first comes in the song, or null
+//   wherePassWas(arrangement, count, played, sequence)   // where the pass that has just ended was, or null
 //   nextPass(arrangement, count, played, sequence)   // the pass after the one that has just ended (what a chain walks)
 //   insertEntry / removeEntry / moveEntry / setRepeats(arrangement, count, …)   // the edits the strip makes
 
@@ -80,19 +81,23 @@ export function positionOf(arrangement, count, sequence) {
   return entry === -1 ? null : { entry, rep: 0 };
 }
 
-// The pass that follows the one that has just ended: the next time round its entry if it repeats, else the next entry, and the
-// first entry after the last (a song goes round and round for now: stopping at its end, with a Loop switch, is a later step).
-//
-// `played` is where the controller says that pass was, and `sequence` is the sequence that played: what it says is believed only
-// while it still fits (the entry is there, names that sequence, and has that time round), since a sequence picked by a person, or
-// added or removed, leaves a position that means nothing. Otherwise the pass counts as the first time round the first entry that
-// names the sequence, which is also where a song that has just begun is. A sequence that is not in the song hands over to the
-// song's first entry.
+// Where the pass that has just ended was. `played` is where the controller says it was, and `sequence` is the sequence that played:
+// what it says is believed only while it still fits (the entry is there, names that sequence, and has that time round), since a
+// sequence picked by a person, or added or removed, leaves a position that means nothing. Otherwise the pass counts as the first time
+// round the first entry that names the sequence, which is also where a song that has just begun is; null when no entry names it.
+export function wherePassWas(arrangement, count, played, sequence) {
+  const entries = resolveArrangement(arrangement, count);
+  const fits = played && entries[played.entry]?.sequence === sequence && played.rep < entries[played.entry].repeats;
+  return fits ? { entry: played.entry, rep: played.rep } : positionOf(arrangement, count, sequence);
+}
+
+// The pass that follows the one that has just ended: the next time round its entry if it repeats, else the next entry, and the first
+// entry after the last (a song goes round and round for now: stopping at its end, with a Loop switch, is a later step). A sequence that
+// is not in the song hands over to the song's first entry.
 export function nextPass(arrangement, count, played, sequence) {
   const entries = resolveArrangement(arrangement, count);
   const pass = (entry, rep) => ({ entry, rep, sequence: entries[entry].sequence });
-  const fits = played && entries[played.entry]?.sequence === sequence && played.rep < entries[played.entry].repeats;
-  const here = fits ? played : positionOf(arrangement, count, sequence);
+  const here = wherePassWas(arrangement, count, played, sequence);
   if (!here) return pass(0, 0);
   if (here.rep + 1 < entries[here.entry].repeats) return pass(here.entry, here.rep + 1);
   return pass((here.entry + 1) % entries.length, 0);

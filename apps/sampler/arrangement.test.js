@@ -13,6 +13,7 @@ import {
   removeEntry,
   resolveArrangement,
   setRepeats,
+  wherePassWas,
 } from "./arrangement.js";
 
 const entry = (sequence, repeats = 1) => ({ sequence, repeats });
@@ -179,6 +180,37 @@ describe("positionOf", () => {
   it("is the sequence's own place when there is no arrangement: every sequence is in it, once, in order", () => {
     expect(positionOf(null, 4, 3)).toEqual({ entry: 3, rep: 0 });
     expect(positionOf(null, 4, 0)).toEqual({ entry: 0, rep: 0 });
+  });
+});
+
+describe("wherePassWas", () => {
+  it("is where the controller says while that still fits: the entry names the sequence and has that time round", () => {
+    expect(wherePassWas([entry(1), entry(0, 3)], 2, { entry: 1, rep: 2 }, 0)).toEqual({ entry: 1, rep: 2 });
+  });
+
+  it("is the first time round the first entry that names the sequence when the controller does not know, or what it says no longer fits", () => {
+    const arrangement = [entry(1), entry(0, 3), entry(0)];
+    expect(wherePassWas(arrangement, 2, null, 0)).toEqual({ entry: 1, rep: 0 });
+    expect(wherePassWas(arrangement, 2, { entry: 0, rep: 0 }, 0)).toEqual({ entry: 1, rep: 0 }); // that entry names another
+    expect(wherePassWas(arrangement, 2, { entry: 1, rep: 3 }, 0)).toEqual({ entry: 1, rep: 0 }); // it has no such time round
+    expect(wherePassWas(arrangement, 2, { entry: 9, rep: 0 }, 0)).toEqual({ entry: 1, rep: 0 }); // there is no such entry
+  });
+
+  it("is null for a sequence that is in no entry", () => {
+    expect(wherePassWas([entry(1)], 2, null, 0)).toBeNull();
+    expect(wherePassWas([entry(1)], 2, { entry: 0, rep: 0 }, 0)).toBeNull();
+  });
+
+  it("is the sequence's own place when there is no arrangement", () => {
+    expect(wherePassWas(null, 3, null, 2)).toEqual({ entry: 2, rep: 0 });
+  });
+
+  it("is what nextPass goes on from", () => {
+    const arrangement = [entry(1), entry(0, 3), entry(0)];
+    for (const played of [null, { entry: 1, rep: 1 }, { entry: 2, rep: 0 }, { entry: 0, rep: 0 }]) {
+      const here = wherePassWas(arrangement, 2, played, 0);
+      expect(nextPass(arrangement, 2, here, 0)).toEqual(nextPass(arrangement, 2, played, 0));
+    }
   });
 });
 

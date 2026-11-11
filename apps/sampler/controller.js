@@ -75,6 +75,7 @@ import {
   removeEntry as removeArrangementEntry,
   resolveArrangement,
   setRepeats,
+  wherePassWas,
 } from "./arrangement.js";
 import { createVoices } from "./voices.js";
 import { createHistory } from "../../shared/history.js";
@@ -243,8 +244,11 @@ export function createSampler({
       let next = asked ? queued : current;
       if (!asked && playAll) {
         const from = wrapped.time === time ? wrapped.from : songAt;
-        const pass = nextPass(arrangement, slots.length, from, current);
-        wrapped = { time, from, repeat: pass.sequence === current };
+        // Where that pass was, worked out now, so that what is remembered of it can follow an edit (a position not known is the first
+        // entry that names the sequence in the list as it is, and an edit changes the list).
+        const here = wherePassWas(arrangement, slots.length, from, current);
+        const pass = nextPass(arrangement, slots.length, here, current);
+        wrapped = { time, from: here, repeat: pass.sequence === current };
         songAt = { entry: pass.entry, rep: pass.rep };
         next = pass.sequence;
       }
@@ -469,9 +473,9 @@ export function createSampler({
     // (An open pass end has nothing queued: a sequence queued in that moment takes over at once.)
     if (!scheduler.playing || !passEndOpen()) return;
     if (playAll) {
-      const from = songAt;
-      const pass = nextPass(arrangement, slots.length, from, current);
-      wrapped = { time: lastWrap, from, repeat: pass.sequence === current };
+      const here = wherePassWas(arrangement, slots.length, songAt, current);
+      const pass = nextPass(arrangement, slots.length, here, current);
+      wrapped = { time: lastWrap, from: here, repeat: pass.sequence === current };
       songAt = { entry: pass.entry, rep: pass.rep };
       // An entry that goes round again has no sequence to take over: the first step built is already the right one.
       if (pass.sequence !== current) takeOverLate(pass.sequence, { automatic: true });
@@ -491,6 +495,9 @@ export function createSampler({
   const entryRepeats = (index) => resolveArrangement(arrangement, slots.length)[index]?.repeats ?? -1;
 
   function followEdit({ arrangement: next, entryAfter }) {
+    // A pass that is playing and has not been told yet (the first after Play, or after a pick) is on the first entry that names its
+    // sequence, in the list as it is now: said before the list changes, so that the edit moves it and does not choose it again.
+    if (!songAt && playAll && scheduler.playing) songAt = positionOf(arrangement, slots.length, current);
     arrangement = next;
     const follow = (at) => {
       if (!at) return at;
@@ -545,7 +552,9 @@ export function createSampler({
     followEdit(edit);
     const now = entryRepeats(index);
     // Made to go round fewer times than it has: this is its last time round (a position past the end would be taken for a stale one).
-    if (songAt && songAt.entry === index) songAt = { ...songAt, rep: Math.min(songAt.rep, now - 1) };
+    const last = (at) => (at && at.entry === index ? { ...at, rep: Math.min(at.rep, now - 1) } : at);
+    songAt = last(songAt);
+    wrapped = wrapped.from ? { ...wrapped, from: last(wrapped.from) } : wrapped;
     onMessage(`ENTRY ${pad2(index + 1)} REPEATS ${now}`);
     onChange();
     onSongChange();
