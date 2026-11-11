@@ -2368,6 +2368,17 @@ describe("exporting all the sequences", () => {
       expect(names).toEqual(["pad16-all-120bpm-pad01-a.wav", "pad16-all-120bpm-pad03-c.wav"]);
     });
 
+    it("makes stems of all the sequences when the sequence showing is empty, and says there is nothing only when none has a step", async () => {
+      render.mockClear();
+      const song = allSong([sequence({}), sequence({ 1: [0] })], { current: 0 });
+      const { done, onMessage } = run(exportStems, song, { scope: "all", files: "stems" });
+      expect(await done).toBe(true);
+      expect(onMessage).toHaveBeenLastCalledWith("EXPORTED pad16-all-120bpm-stems.zip");
+      const none = run(exportStems, allSong([sequence({}), sequence({})]), { scope: "all", files: "stems" });
+      expect(await none.done).toBe(false);
+      expect(none.onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
+    });
+
     it("weighs the stems by their work over every sequence", async () => {
       // Pad 1 has a step in the second sequence and pad 3 has three in the first: a stem is a pass for each sequence and the
       // sounds in them, so pad 1's is (1 + 0) + (1 + 1) = 3 and pad 3's is (1 + 3) + (1 + 0) = 5

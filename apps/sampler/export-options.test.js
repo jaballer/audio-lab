@@ -482,7 +482,7 @@ describe("exportNote", () => {
 describe("exporting all the sequences", () => {
   const three = { bpm: 120, current: 1, sequences: [{ bars: 1 }, { bars: 2 }, { bars: 1 }] };
 
-  it("has a tail for what rings on after the last step, which is the only time the file has that the steps do not", () => {
+  it("is 4 s of tail, for what rings on after the last step", () => {
     expect(SONG_TAIL_SECONDS).toBe(4);
   });
 
@@ -496,6 +496,12 @@ describe("exporting all the sequences", () => {
     expect(exportFrames(three, 16, 8, 1000, "all")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
     expect(exportFrames(three, 16, 1, 1000, "sequence")).toBe(4 * 1000); // the one showing, the second of the three, as before
     expect(exportFrames(three, 16, 1, 1000)).toBe(4 * 1000);
+  });
+
+  it("rounds the length once, to the nearest frame, not down", () => {
+    // 130 BPM: a bar is 1.846153… s, and with the tail 5.846153… s, which at 1900 Hz is 11107.69 frames
+    const song = { bpm: 130, current: 0, sequences: [{ bars: 1 }] };
+    expect(exportFrames(song, 16, 1, 1900, "all")).toBe(11108);
   });
 
   it("says how long and how big the file will be by the scope in the options, as the loops are not counted", () => {
@@ -519,9 +525,10 @@ describe("exporting all the sequences", () => {
     expect(exportTitle(three)).toBe("SEQ 02 · 2 BARS · 120 BPM");
   });
 
-  it("says what the file is, in the hint, with the stems' own words for stems", () => {
+  it("says what the file is, in the hint, with the stems' own words for stems, and that a sound longer than the tail is cut", () => {
     expect(exportHint("mix", "all")).toMatch(/every sequence, in order, once each/i);
     expect(exportHint("mix", "all")).toMatch(/4 s/);
+    expect(exportHint("mix", "all")).toMatch(/longer sound is cut/i);
     expect(exportHint("mix", "sequence")).toBe("");
     expect(exportHint("stems", "all")).toMatch(/one file for each pad/i);
     expect(exportHint("stems", "all")).toMatch(/every sequence, in order/i);
@@ -537,6 +544,19 @@ describe("exporting all the sequences", () => {
     expect(emptySequencesNote([1, 4])).toBe(
       "Sequences 1 and 4 have no steps: nothing plays in them but what is still ringing.",
     );
+  });
+
+  it("advises what makes a large export of all the sequences smaller: not loops, which it does not have", () => {
+    const big = 300 * 1024 * 1024;
+    expect(largeExportNote(big, { scope: "all" })).toMatch(/Exporting one sequence at a time makes it smaller\.$/);
+    expect(largeExportNote(big, { scope: "all" })).not.toMatch(/loops/);
+    expect(largeExportNote(big, { scope: "all", stems: 4 })).toMatch(
+      /Mono, or one sequence at a time, makes it smaller\.$/,
+    );
+    expect(largeExportNote(big, { scope: "all", stems: 4 })).not.toMatch(/loops/);
+    expect(largeExportNote(big, { scope: "sequence" })).toMatch(/Fewer loops make it smaller\./);
+    expect(largeExportNote(big, { stems: 4 })).toMatch(/Fewer loops or mono make it smaller\./);
+    expect(largeExportNote(big, {})).toMatch(/Fewer loops make it smaller\./);
   });
 
   it("puts the empty sequences in the note in place of the empty bars, with the memory warning after them", () => {

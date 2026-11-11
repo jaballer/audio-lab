@@ -1,9 +1,20 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXPORT_SAMPLE_RATE } from "./export-wav.js";
 import { SETTLE_MS, dialogState, exportDialogModel, isEarlyPress } from "./export-dialog-state.js";
 import { createKit } from "./kit.js";
 
 const idle = { busy: false, cancelling: false, blocked: "", hasNote: false };
+
+// The dialog hides a row with the hidden attribute (dialogState decides it), which a stylesheet that sets `display` on the row beats:
+// the Loops row stayed on the page, with buttons that did nothing, and the state said it was hidden.
+describe("the stylesheet", () => {
+  it("lets a row of the export dialog that is hidden go, as `.export-row` sets display and would otherwise keep it", () => {
+    const css = readFileSync(new URL("./sampler.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.export-row\s*\{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.export-row\[hidden\]\s*\{\s*display:\s*none/);
+  });
+});
 
 describe("dialogState", () => {
   it("is every control on, and the file box showing its hint, when it is idle", () => {
@@ -241,7 +252,7 @@ describe("exportDialogModel", () => {
       expect(m.blocked).toBe("");
     });
 
-    it("does not count loops, or follow them", () => {
+    it("does not count loops: the same length and size whatever they say", () => {
       const one = model(song3([{ 0: [0] }]), { ...all, loops: 1 });
       expect(model(song3([{ 0: [0] }]), { ...all, loops: 8 }).readout).toBe(one.readout);
     });
@@ -279,13 +290,19 @@ describe("exportDialogModel", () => {
       expect(m.readout).toMatch(/^3 stems · 10\.0 s each · stereo · /); // three bars of 2 s and the tail
     });
 
-    it("says the memory it takes where the whole is large", () => {
+    it("says the memory it takes where the whole is large, and what makes it smaller: not loops, which it has none of", () => {
       const long = song3(
         Array.from({ length: 8 }, () => ({ 0: [0] })),
         Array.from({ length: 8 }, () => 8),
         { bpm: 40 },
       );
-      expect(model(long, all).note).toMatch(/Making this takes about \d+ MB of memory/);
+      const mix = model(long, all).note;
+      expect(mix).toMatch(/Making this takes about \d+ MB of memory/);
+      expect(mix).toMatch(/Exporting one sequence at a time makes it smaller\.$/);
+      expect(mix).not.toMatch(/loops/);
+      const stems = model(long, { ...all, files: "stems" }).note;
+      expect(stems).toMatch(/Mono, or one sequence at a time, makes it smaller\.$/);
+      expect(stems).not.toMatch(/loops/);
     });
   });
 

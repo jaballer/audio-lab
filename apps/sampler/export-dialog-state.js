@@ -59,7 +59,7 @@ export function exportDialogModel({ song, kit, options, stepsPerBar, sampleRate,
   const nothing = !hasSteps(song, stepsPerBar, scope);
   const stemsChosen = options.files === "stems";
   const stems = stemsChosen ? stemPads(song, stepsPerBar, scope).length : 0;
-  const memory = stems ? { stems, channels: options.channels } : {};
+  const memory = { ...(stems ? { stems, channels: options.channels } : {}), scope }; // (what the note advises depends on the scope)
   const note = nothing
     ? ""
     : exportNote(

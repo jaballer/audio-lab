@@ -113,7 +113,7 @@ export function exportHint(files, scope = "sequence") {
     files === "stems" &&
       "One file for each pad that has steps, in one zip. They are not clipped, and they add up to the mix.",
     scope === "all" &&
-      `Every sequence, in order, once each, then ${SONG_TAIL_SECONDS} s for what rings on. There is no loop to come round, so loops are not offered.`,
+      `Every sequence, in order, once each, then ${SONG_TAIL_SECONDS} s for what rings on (a longer sound is cut). There is no loop to come round, so loops are not offered.`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -173,11 +173,19 @@ export function exportNote(plan, emptyBarNumbers, memory = {}, emptySequenceNumb
     .join(" ");
 }
 
-// `{ stems }` says it is for stems, which can also be made smaller by being mono (and not by being a mix).
-export function largeExportNote(bytes, { stems = 0 } = {}) {
+// `{ stems }` says it is for stems, which can also be made smaller by being mono (and not by being a mix). `{ scope }` "all" says it
+// is for all the sequences, which have no loops to make fewer: what makes it smaller is exporting one sequence at a time.
+export function largeExportNote(bytes, { stems = 0, scope = "sequence" } = {}) {
   if (bytes < LARGE_EXPORT_BYTES) return "";
   const megabytes = Math.round(bytes / MEBIBYTE / MEMORY_ROUNDING_MB) * MEMORY_ROUNDING_MB;
-  const smaller = stems ? "Fewer loops or mono make it smaller." : "Fewer loops make it smaller.";
+  const all = scope === "all";
+  const smaller = all
+    ? stems
+      ? "Mono, or one sequence at a time, makes it smaller."
+      : "Exporting one sequence at a time makes it smaller."
+    : stems
+      ? "Fewer loops or mono make it smaller."
+      : "Fewer loops make it smaller.";
   return `Making this takes about ${megabytes} MB of memory, which a phone may not have to spare. ${smaller}`;
 }
 

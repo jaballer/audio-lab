@@ -1,8 +1,9 @@
 # Export: how it works, and why
 
-The sampler's Export saves the sequence showing as a 16-bit WAV file, rendered as the page plays it. It was built over
-several pull requests and then audited as a whole (fidelity to live playback, robustness, UX, and what a whole-song
-bounce will need). This records the decisions and what was measured. What is still to do is tracked in the
+The sampler's Export saves the sequence showing (looped), or all the sequences in order, as a 16-bit WAV file, rendered as the
+page plays it. It was built over several pull requests and then audited as a whole (fidelity to live playback, robustness, UX,
+and what a whole-song bounce would need, which is now built as "All the sequences" below). This records the decisions and what
+was measured. What is still to do is tracked in the
 GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 [#117](https://github.com/jaballer/audio-lab/issues/117) whole song,
 [#118](https://github.com/jaballer/audio-lab/issues/118) the speed-ups and guards still open in it: skipping hits that cannot reach the file), not here.
@@ -206,13 +207,22 @@ repeats, is the next step; `songPasses(song)` in `export-wav.js` is where that w
   "all"; an older saved option means the sequence showing).
 - **Stems** are a stem of each pad that has a step in any sequence, each as long as the whole (the same timeline, so they add up to the
   mix), weighed by `plan.cost` (the sounds in every pass).
-- **Checked in a real browser:** a hip hop starter with an empty third sequence made a 14.67 s file at 48 kHz (3 bars of sound, the empty
-  sequence, and the tail), the length the dialog said.
+- **Checked in a real browser (Chromium, 48 kHz):**
+  - A hip hop starter with an empty third sequence made `pad16-all-90bpm.wav`, 14.67 s and 2,816,044 bytes (3 bars of sound, the empty
+    sequence, and the tail), what the dialog said; the stems zip and the mono files were the sizes it said too.
+  - Every hit was within a frame and a half of where the grid puts it, with swing across the end of a sequence, from 22.05 to 96 kHz and 57
+    to 240 BPM; the file begins at its first step; an empty sequence is silent apart from what rings through it; a pad's hit cuts its earlier
+    one from the sequence before; and the stems, with loaded samples, trims, pitches, a long release and choke groups, sum to the mix to
+    within -108 to -118 dB.
+  - A sound longer than the tail is cut at the end of the file with no fade (an 8 s sample hit in the last bar leaves the file at about
+    -35 dBFS), which the dialog's hint says: a loop never does that, as its tail comes round to its start.
 
 What is not built: an edited order and repeats (step 4 of #159), and a render that is not one buffer.
 
 - **Memory.** A bounce of eight 8-bar sequences at 40 BPM is 384 s (6.4 minutes) and 4 s: about as large as the biggest export today
-  (8 loops of 8 bars, about 275 MB at the peak), so one buffer can still do it, and the dialog's memory note says so. It grows with
+  (8 loops of 8 bars, about 275 MB at the peak), so one buffer can still do it: measured, 388 s at 40 BPM finished in 4.1 s, and its peak was
+  260 MB over the page across the browser's processes (the render, the WAV and the Blob) against the 261 MB the note works out, which
+  is what the dialog's memory note says (and, since there are no loops, that exporting one sequence at a time makes it smaller). It grows with
   anything that repeats: the audit's synthetic case of eight 384 s sequences (3,072 s) held 1.08 GB of float for the render alone, and 517 MB each of
   WAV and Blob, which would kill a phone's tab. Beyond today's size it needs chunked rendering and output (a file built from
   encoded chunks and a Blob of them), not one buffer; with repeats (step 4) it can come to that.

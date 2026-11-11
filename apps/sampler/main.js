@@ -858,9 +858,9 @@ undoBtn.addEventListener("click", sampler.undo);
 redoBtn.addEventListener("click", sampler.redo);
 $("tap").addEventListener("click", sampler.tapTempo);
 // ---------- Export ----------
-// The sequence showing, rendered offline and saved as a WAV file (export-wav.js decides when it may run and what it
-// renders). The File group's Export button opens a dialog for the choices (the mix or a stem for each pad in a zip,
-// loops, stereo or mono), which are kept
+// The sequence showing, or all of them in order, rendered offline and saved as a WAV file (export-wav.js decides when it may run
+// and what it renders). The File group's Export button opens a dialog for the choices (which sequences, the mix or a stem for
+// each pad in a zip, loops, stereo or mono), which are kept
 // between visits; the dialog says how long and how big the file will be, shows how far a long render has got, and
 // cancels it. A message goes to the dialog as well as the LCD: the LCD is behind the dialog, and out of reach of a
 // screen reader while it is open.
