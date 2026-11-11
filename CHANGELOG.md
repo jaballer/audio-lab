@@ -41,8 +41,8 @@ Numbers link to the pull request.
   song ([#125](https://github.com/jaballer/audio-lab/pull/125)).
 - Sampler: the step editor, and the pad editor's Tune and Envelope sections, can be collapsed with a button on their
   headings. The page remembers which are open ([#126](https://github.com/jaballer/audio-lab/pull/126)).
-- Sampler: a thin progress bar along the top of the display shows where the playhead is in the whole sequence, one
-  segment per bar ([#128](https://github.com/jaballer/audio-lab/pull/128)).
+- Sampler: a thin progress bar along the bottom of the display, under the step ruler, shows where the playhead is in the
+  whole sequence, one segment per bar ([#128](https://github.com/jaballer/audio-lab/pull/128)).
 - Sampler: Shift with a click on a pad, or with the pad's computer key, selects the pad and opens the pad editor
   without playing it, so a pad can be set up in the middle of a take. Opened by key, focus moves to the editor
   ([#127](https://github.com/jaballer/audio-lab/pull/127), [#130](https://github.com/jaballer/audio-lab/pull/130)).

@@ -526,7 +526,7 @@ function say(text) {
 }
 
 const lcd = createLcd({
-  lines: [$("lcd-1"), $("lcd-2"), $("lcd-3")],
+  lines: [$("lcd-1"), $("lcd-2"), $("lcd-3"), $("lcd-4"), $("lcd-5")],
   message: $("lcd-msg"),
   ruler: $("ruler"),
   progress: $("lcd-progress"),

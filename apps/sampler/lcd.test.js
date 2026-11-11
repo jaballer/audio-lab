@@ -14,47 +14,70 @@ const stopped = {
 
 describe("formatLcd", () => {
   it("shows the stopped state with no playhead", () => {
-    expect(formatLcd(stopped)).toMatchObject({
-      line1: "SEQ 01  STOPPED",
-      line2: "PAD 01  Kick",
-      line3: "BPM 100.0  BAR --/01  STEP --/16",
-    });
+    expect(formatLcd(stopped).lines).toEqual([
+      "SEQ 01  STOPPED",
+      "PAD 01  Kick",
+      "BPM 100.0",
+      "BAR --/01",
+      "STEP --/16",
+    ]);
   });
 
   it("shows the sequence number, counting from 1", () => {
-    expect(formatLcd({ ...stopped, sequence: 2 }).line1).toBe("SEQ 03  STOPPED");
+    expect(formatLcd({ ...stopped, sequence: 2 }).lines[0]).toBe("SEQ 03  STOPPED");
+  });
+
+  it("shows how many sequences there are after the number, when it is told", () => {
+    expect(formatLcd({ ...stopped, sequence: 0, sequenceCount: 4 }).lines[0]).toBe("SEQ 01/04  STOPPED");
+    expect(formatLcd({ ...stopped, sequence: 7, sequenceCount: 8, playing: true, recording: true }).lines[0]).toBe(
+      "SEQ 08/08  PLAYING  REC",
+    );
   });
 
   it("shows PLAYING and the step number, counting from 1", () => {
     const text = formatLcd({ ...stopped, playing: true, playheadStep: 4 });
-    expect(text.line1).toBe("SEQ 01  PLAYING");
-    expect(text.line3).toBe("BPM 100.0  BAR 01/01  STEP 05/16");
+    expect(text.lines[0]).toBe("SEQ 01  PLAYING");
+    expect(text.lines.slice(3)).toEqual(["BAR 01/01", "STEP 05/16"]);
   });
 
-  it("shows the bar the playhead is in, out of all the bars, and the step within it", () => {
+  it("shows the bar the playhead is in, out of all the bars, and the step in the whole sequence", () => {
     const text = formatLcd({ ...stopped, playing: true, bars: 4, playheadPosition: 37, playheadStep: -1 });
-    expect(text.line3).toBe("BPM 100.0  BAR 03/04  STEP 06/16");
+    expect(text.lines.slice(3)).toEqual(["BAR 03/04", "STEP 38/64"]);
+  });
+
+  it("counts the steps of every bar, as the step keys are numbered", () => {
+    const at = (playheadPosition) => formatLcd({ ...stopped, playing: true, bars: 2, playheadPosition });
+    expect(at(0).lines.slice(3)).toEqual(["BAR 01/02", "STEP 01/32"]);
+    expect(at(15).lines.slice(3)).toEqual(["BAR 01/02", "STEP 16/32"]);
+    expect(at(16).lines.slice(3)).toEqual(["BAR 02/02", "STEP 17/32"]);
+    expect(at(31).lines.slice(3)).toEqual(["BAR 02/02", "STEP 32/32"]);
+    expect(formatLcd({ ...stopped, bars: 2 }).lines.slice(3)).toEqual(["BAR --/02", "STEP --/32"]);
+  });
+
+  it("counts up to the last step of the longest sequence", () => {
+    const last = formatLcd({ ...stopped, playing: true, bars: 8, playheadPosition: 127 });
+    expect(last.lines.slice(3)).toEqual(["BAR 08/08", "STEP 128/128"]);
   });
 
   it("hides a stale playhead step while stopped", () => {
-    expect(formatLcd({ ...stopped, playheadStep: 7 }).line3).toBe("BPM 100.0  BAR --/01  STEP --/16");
+    expect(formatLcd({ ...stopped, playheadStep: 7 }).lines.slice(3)).toEqual(["BAR --/01", "STEP --/16"]);
   });
 
   it("shows no step before the first one plays", () => {
-    expect(formatLcd({ ...stopped, playing: true, playheadStep: -1 }).line3).toContain("STEP --");
+    expect(formatLcd({ ...stopped, playing: true, playheadStep: -1 }).lines[4]).toBe("STEP --/16");
   });
 
   it("flags recording", () => {
-    expect(formatLcd({ ...stopped, recording: true }).line1).toBe("SEQ 01  STOPPED  REC");
-    expect(formatLcd({ ...stopped, playing: true, recording: true }).line1).toBe("SEQ 01  PLAYING  REC");
+    expect(formatLcd({ ...stopped, recording: true }).lines[0]).toBe("SEQ 01  STOPPED  REC");
+    expect(formatLcd({ ...stopped, playing: true, recording: true }).lines[0]).toBe("SEQ 01  PLAYING  REC");
   });
 
   it("names the selected pad, counting from 1", () => {
-    expect(formatLcd({ ...stopped, selected: 11, soundName: "Bass" }).line2).toBe("PAD 12  Bass");
+    expect(formatLcd({ ...stopped, selected: 11, soundName: "Bass" }).lines[1]).toBe("PAD 12  Bass");
   });
 
   it("shows the tempo to one decimal place", () => {
-    expect(formatLcd({ ...stopped, bpm: 99.9 }).line3).toContain("BPM 99.9");
+    expect(formatLcd({ ...stopped, bpm: 99.9 }).lines[2]).toBe("BPM 99.9");
   });
 
   it("marks the steps that are on, and the playhead only while playing", () => {
