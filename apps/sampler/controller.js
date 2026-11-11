@@ -31,6 +31,10 @@
 //                                // stopped, it shows it at once
 //   sampler.togglePlayAll()      // Play All: while it plays, each pass is followed by the next of the song (every sequence once, in order, or the arrangement
 //                                // with its repeats), and the last by the first
+//   sampler.addEntry(at)         // the sequence showing, once, as an entry of the song at that place (default: the end); its place, or -1
+//   sampler.removeEntry(index)   // the entry goes (the last cannot); the one to be on after it, or -1
+//   sampler.moveEntry(index, 1)  // an entry one place later (-1: earlier); where it is now
+//   sampler.setEntryRepeats(index, 3)   // how many times the entry goes round, 1 to 16; what it is now
 //   sampler.addSequence()        // an empty one at the end, shown; the same for copySequence(), which copies the one showing
 //   sampler.removeSequence()     // the one showing goes, and the one after it takes its place (the last one cannot go)
 //   sampler.sequenceHasSteps()   // does the one showing have any steps, in any bar? (to ask before removing it)
@@ -59,7 +63,20 @@
 
 import { withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
-import { afterSequenceAdded, afterSequenceRemoved, cleanArrangement, nextPass, positionOf } from "./arrangement.js";
+import {
+  MAX_ENTRIES,
+  afterSequenceAdded,
+  afterSequenceRemoved,
+  cleanArrangement,
+  insertEntry,
+  moveEntry as moveArrangementEntry,
+  nextPass,
+  positionOf,
+  removeEntry as removeArrangementEntry,
+  resolveArrangement,
+  setRepeats,
+  wherePassWas,
+} from "./arrangement.js";
 import { createVoices } from "./voices.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
@@ -147,6 +164,11 @@ export function createSampler({
   // nothing else would tell the second time from a new pass end: the song goes on once for a pass end, and a second telling works it
   // out again from where it was. A pass end that turns out not to be one (withdrawPassEnd) takes back a time round that was counted.
   const NO_WRAP = { time: -Infinity, from: null, repeat: false };
+  // The same pass end comes back from the scheduler with a time that differs by a rounding (it counts the grid a step at a time, and
+  // after a stall with a multiplication), so two times are one pass end when they are this close: two pass ends are at least a step
+  // apart, 62 ms at the fastest tempo.
+  const SAME_PASS_END_S = 0.01;
+  const isSamePassEnd = (a, b) => Math.abs(a - b) < SAME_PASS_END_S;
   let wrapped = NO_WRAP;
   // A person picked a sequence, or Play or Play All was pressed: where the song was means nothing now.
   function forgetSongPosition() {
@@ -226,9 +248,12 @@ export function createSampler({
       const asked = queued >= 0;
       let next = asked ? queued : current;
       if (!asked && playAll) {
-        const from = wrapped.time === time ? wrapped.from : songAt;
-        const pass = nextPass(arrangement, slots.length, from, current);
-        wrapped = { time, from, repeat: pass.sequence === current };
+        const from = isSamePassEnd(wrapped.time, time) ? wrapped.from : songAt;
+        // Where that pass was, worked out now, so that what is remembered of it can follow an edit (a position not known is the first
+        // entry that names the sequence in the list as it is, and an edit changes the list).
+        const here = wherePassWas(arrangement, slots.length, from, current);
+        const pass = nextPass(arrangement, slots.length, here, current);
+        wrapped = { time, from: here, repeat: pass.sequence === current };
         songAt = { entry: pass.entry, rep: pass.rep };
         next = pass.sequence;
       }
@@ -453,9 +478,9 @@ export function createSampler({
     // (An open pass end has nothing queued: a sequence queued in that moment takes over at once.)
     if (!scheduler.playing || !passEndOpen()) return;
     if (playAll) {
-      const from = songAt;
-      const pass = nextPass(arrangement, slots.length, from, current);
-      wrapped = { time: lastWrap, from, repeat: pass.sequence === current };
+      const here = wherePassWas(arrangement, slots.length, songAt, current);
+      const pass = nextPass(arrangement, slots.length, here, current);
+      wrapped = { time: lastWrap, from: here, repeat: pass.sequence === current };
       songAt = { entry: pass.entry, rep: pass.rep };
       // An entry that goes round again has no sequence to take over: the first step built is already the right one.
       if (pass.sequence !== current) takeOverLate(pass.sequence, { automatic: true });
@@ -464,6 +489,102 @@ export function createSampler({
     if (chained !== pattern) return;
     const back = slots.findIndex((slot) => slot.pattern === outgoing.pattern);
     if (back !== -1) takeOverLate(back, { automatic: true });
+  }
+
+  // ---------- The song's entries ----------
+  // What the strip edits: the arrangement, through these four, which is the one place it changes apart from following the sequences.
+  // They work on the entries as they play (a song nobody edited has every sequence once, and the first edit makes that explicit), and a
+  // song that is playing goes on from its entry: where it is, and what is remembered of the last pass end, move with it. What it
+  // plays next is worked out at the next pass end, so an edit is heard from there. No undo, as for the sequences' own list.
+  const entryCount = () => resolveArrangement(arrangement, slots.length).length;
+  const entryRepeats = (index) => resolveArrangement(arrangement, slots.length)[index]?.repeats ?? -1;
+
+  function followEdit({ arrangement: next, entryAfter }) {
+    // A pass that is playing and has not been told yet (the first after Play, or after a pick) is on the first entry that names its
+    // sequence, in the list as it is now: said before the list changes, so that the edit moves it and does not choose it again.
+    if (!songAt && playAll && scheduler.playing) songAt = positionOf(arrangement, slots.length, current);
+    arrangement = next;
+    const follow = (at) => {
+      if (!at) return at;
+      const entry = entryAfter(at.entry);
+      return entry < 0 ? null : { entry, rep: at.rep };
+    };
+    songAt = follow(songAt);
+    wrapped = wrapped.from ? { ...wrapped, from: follow(wrapped.from) } : wrapped;
+  }
+
+  // An edit made in the moment after the scheduler has reached a pass end and before its first step has sounded counts at that pass end,
+  // as a press on a sequence key does (takeOverLate): what the song picked for it is worked out again from where the song was before
+  // it, in the list as it is now. What the pass end gave was either a sequence taking over (the one that gave way is `outgoing`) or
+  // the entry going round again, and a different answer takes back the steps built for the first and builds them again. A pass end
+  // that was asked for (a queued sequence) is not the song's to change, and one that has sounded is heard from the next.
+  function reconsiderPassEnd() {
+    if (!playAll || !scheduler.playing || !passEndOpen() || wrapped.time !== lastWrap) return;
+    const ended = wrapped.repeat ? current : slots.findIndex((slot) => slot.pattern === outgoing?.pattern);
+    if (ended < 0) return;
+    const pass = nextPass(arrangement, slots.length, wrapped.from, ended);
+    songAt = { entry: pass.entry, rep: pass.rep };
+    // Still the entry going round again with nothing taken over, only if it was and is: when this takes over, even back to the sequence that
+    // ended, the pass has been restarted, so the pass end is a real one and no longer one that can be withdrawn.
+    wrapped = { ...wrapped, repeat: wrapped.repeat && pass.sequence === ended };
+    if (pass.sequence !== current) takeOverLate(pass.sequence, { automatic: true });
+  }
+
+  function addEntry(at = entryCount()) {
+    const edit = insertEntry(arrangement, slots.length, at, current);
+    if (!edit) {
+      onMessage(`${MAX_ENTRIES} ENTRIES MAX`);
+      return -1;
+    }
+    const place = Math.min(entryCount(), Math.max(0, at));
+    followEdit(edit);
+    reconsiderPassEnd();
+    onMessage(`ENTRY ${pad2(place + 1)} ADDED`);
+    onChange();
+    onSongChange();
+    return place;
+  }
+
+  function removeEntry(index) {
+    const edit = removeArrangementEntry(arrangement, slots.length, index);
+    if (!edit) {
+      if (entryCount() === 1) onMessage("CANNOT REMOVE LAST ENTRY");
+      return -1;
+    }
+    followEdit(edit);
+    reconsiderPassEnd();
+    onMessage(`ENTRY ${pad2(index + 1)} REMOVED`);
+    onChange();
+    onSongChange();
+    return Math.min(index, entryCount() - 1);
+  }
+
+  function moveEntry(index, delta) {
+    const to = Math.min(entryCount() - 1, Math.max(0, index + delta));
+    const edit = moveArrangementEntry(arrangement, slots.length, index, to);
+    if (!edit) return index; // already at that end of the song
+    followEdit(edit);
+    reconsiderPassEnd();
+    onMessage(`ENTRY ${pad2(index + 1)} MOVED TO ${pad2(to + 1)}`);
+    onChange();
+    onSongChange();
+    return to;
+  }
+
+  function setEntryRepeats(index, repeats) {
+    const edit = setRepeats(arrangement, slots.length, index, repeats);
+    if (!edit) return entryRepeats(index);
+    followEdit(edit);
+    const now = entryRepeats(index);
+    // Made to go round fewer times than it has: this is its last time round (a position past the end would be taken for a stale one).
+    const last = (at) => (at && at.entry === index ? { ...at, rep: Math.min(at.rep, now - 1) } : at);
+    songAt = last(songAt);
+    wrapped = wrapped.from ? { ...wrapped, from: last(wrapped.from) } : wrapped;
+    reconsiderPassEnd();
+    onMessage(`ENTRY ${pad2(index + 1)} REPEATS ${now}`);
+    onChange();
+    onSongChange();
+    return now;
   }
 
   // Take back the sequence that was waiting for the end of the pass, saying so.
@@ -752,6 +873,10 @@ export function createSampler({
     addSequence,
     copySequence,
     removeSequence,
+    addEntry,
+    removeEntry,
+    moveEntry,
+    setEntryRepeats,
     sequenceHasSteps,
     clearPad,
     clearAll,
@@ -790,6 +915,19 @@ export function createSampler({
         canRemoveSequence: slots.length > 1,
         queuedSequence: queued,
         playAll,
+        // The song's entries as they play (a copy), whether a person has edited them, and where the song is while Play All plays it, which
+        // leads what is heard by the lookahead as the sequence keys do: the entry and the time round it, or null (not playing it, or the
+        // sequence playing is in no entry).
+        arrangement: resolveArrangement(arrangement, slots.length).map((entry) => ({ ...entry })),
+        arrangementEdited: arrangement !== null,
+        canAddEntry: entryCount() < MAX_ENTRIES,
+        canRemoveEntry: entryCount() > 1,
+        songPass:
+          playAll && scheduler.playing
+            ? songAt
+              ? { ...songAt }
+              : positionOf(arrangement, slots.length, current)
+            : null,
         // What sounds, for the display: until the new pass sounds, a sequence that has taken over is not yet the one heard, and the
         // playhead is on the last steps of the one that gave way, in its numbering and its length, in the bar that was showing.
         // `sequence`, `bars`, `page`, `stepsOn` and `playheadStep` below are the one showing, for the keys and for editing.

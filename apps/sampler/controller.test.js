@@ -3592,6 +3592,38 @@ describe("Play All with an arrangement", () => {
     });
   });
 
+  it("tells one pass end from the next at the fastest tempo, where they are a second apart", () => {
+    const base = songOf(2, { bpm: 240 });
+    for (let i = 0; i < 2; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
+    const s = setup({ song: { ...base, arrangement: [entry(0, 2), entry(1)] } });
+    playAll(s);
+    run(s, 5.2);
+    expect(timesOf(s, 0)).toEqual(closeTo(0.05, 1.05, 3.05, 4.05)); // two times round the first entry, then the second, and round
+    expect(timesOf(s, 1)).toEqual(closeTo(2.05, 5.05));
+  });
+
+  it("goes on once for a pass end told again after a stall, though the scheduler's two ways of counting its time differ by a rounding", () => {
+    // 200 BPM: a step is 0.075 s, so a rewind of the steps built in the lookahead goes back two or more, and a stall after it counts the
+    // grid again with a multiplication instead of a step at a time: the same pass end (3.65 s) comes back one rounding away. The scheduler
+    // is woken every 5 ms here, as a page does, so that the grid it has counted a step at a time carries the roundings of that.
+    const base = songOf(3, { bpm: 200 });
+    for (let i = 0; i < 3; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
+    const s = setup({ song: { ...base, arrangement: [entry(0, 4), entry(1)] } });
+    playAll(s);
+    while (s.audio.ctx.currentTime < 3.455) {
+      s.advance(0.005);
+      s.sampler.poll();
+    }
+    s.sampler.kitChanged("sound");
+    s.advance(1); // the timer was held up for a second
+    s.sampler.poll();
+    run(s, 6); // 10.5 s
+    const once = (pad) => [...new Set(timesOf(s, pad).map((time) => time.toFixed(2)))].map(Number);
+    // the pass at 3.65 s was in the stall and is not sounded; the entry has had its four times round and the song goes on to the second
+    expect(once(1)).toEqual(closeTo(4.85));
+    expect(once(0)).toEqual(closeTo(0.05, 1.25, 2.45, 6.05, 7.25, 8.45, 9.65));
+  });
+
   describe("forgets where it was, so that a stale position is not taken for one that fits", () => {
     it("when a sequence was queued, and then another, which brings it back to a sequence the song had been at", () => {
       const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2), entry(1, 2)]) });
@@ -3627,6 +3659,574 @@ describe("Play All with an arrangement", () => {
       run(s, 5.0); // 9.3 s
       expect(timesOf(s, 0)).toEqual(closeTo(0.05));
       expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 8.05));
+    });
+  });
+});
+
+describe("editing the song's entries", () => {
+  // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
+  // step 0 on pad i, to tell which one is sounding.
+  const entry = (sequence, repeats = 1) => ({ sequence, repeats });
+  const songWith = (count, arrangement) => {
+    const base = songOf(count, { bpm: 120 });
+    for (let i = 0; i < count; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
+    return arrangement ? { ...base, arrangement } : base;
+  };
+  const tick = (s, count) => {
+    for (let i = 0; i < count; i++) {
+      s.advance(0.05);
+      s.sampler.poll();
+    }
+  };
+  const run = (s, seconds) => tick(s, Math.round(seconds / 0.05));
+  const timesOf = (s, pad) => s.sounds[pad].play.mock.calls.map((call) => call[2]);
+  const closeTo = (...times) => times.map((time) => expect.closeTo(time, 2));
+  const playAll = (s) => {
+    s.sampler.togglePlayAll();
+    s.sampler.start();
+  };
+  const entriesOf = (s) => s.sampler.getState().arrangement;
+
+  describe("what the state says", () => {
+    it("lists the entries as they play: every sequence once, in order, while nobody has edited the song", () => {
+      const s = setup({ song: songWith(3, null) });
+      expect(entriesOf(s)).toEqual([entry(0), entry(1), entry(2)]);
+      expect(s.sampler.getState()).toMatchObject({ arrangementEdited: false, canAddEntry: true, canRemoveEntry: true });
+    });
+
+    it("lists the arrangement once there is one, and says it has been edited", () => {
+      const s = setup({ song: songWith(3, [entry(2, 4), entry(0)]) });
+      expect(entriesOf(s)).toEqual([entry(2, 4), entry(0)]);
+      expect(s.sampler.getState().arrangementEdited).toBe(true);
+    });
+
+    it("hands the entries over as a copy", () => {
+      const s = setup({ song: songWith(3, [entry(2, 4)]) });
+      entriesOf(s)[0].repeats = 9;
+      entriesOf(s).push(entry(0));
+      expect(entriesOf(s)).toEqual([entry(2, 4)]);
+    });
+
+    it("says an entry cannot be added when there are as many as there can be, and one cannot be removed when there is one", () => {
+      const full = setup({
+        song: songWith(
+          3,
+          Array.from({ length: 32 }, (_, i) => entry(i % 3)),
+        ),
+      });
+      expect(full.sampler.getState()).toMatchObject({ canAddEntry: false, canRemoveEntry: true });
+      const one = setup({ song: songWith(3, [entry(1)]) });
+      expect(one.sampler.getState()).toMatchObject({ canAddEntry: true, canRemoveEntry: false });
+    });
+
+    it("says where the song is while Play All plays it, and nothing otherwise", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      expect(s.sampler.getState().songPass).toBeNull(); // stopped
+      s.sampler.start();
+      run(s, 0.5);
+      expect(s.sampler.getState().songPass).toBeNull(); // Play All is off
+      s.sampler.togglePlayAll();
+      expect(s.sampler.getState().songPass).toEqual({ entry: 0, rep: 0 }); // the first entry that names the sequence showing
+      run(s, 2.0); // 2.5 s: the second entry's first time round has begun
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 0 });
+      run(s, 2.0); // 4.5 s
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 1 });
+      s.sampler.stop();
+      expect(s.sampler.getState().songPass).toBeNull();
+    });
+
+    it("hands over where the song is as a copy", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 3), entry(2)]) });
+      playAll(s);
+      run(s, 2.5); // the second entry's first time round
+      s.sampler.getState().songPass.rep = 9;
+      s.sampler.getState().songPass.entry = 2;
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 0 });
+    });
+
+    it("says nothing about where the song is when the sequence playing is in no entry", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      s.sampler.setSequence(2);
+      playAll(s);
+      expect(s.sampler.getState().songPass).toBeNull();
+    });
+  });
+
+  describe("addEntry", () => {
+    it("puts the sequence showing at the end of the song, once, and gives back where it is", () => {
+      const s = setup({ song: songWith(3, null) });
+      s.sampler.setSequence(1);
+      expect(s.sampler.addEntry()).toBe(3);
+      expect(entriesOf(s)).toEqual([entry(0), entry(1), entry(2), entry(1)]);
+      expect(s.sampler.getState().arrangementEdited).toBe(true);
+    });
+
+    it("gives back where it went when the place is outside the song: the start, or the end", () => {
+      const s = setup({ song: songWith(3, [entry(2, 4), entry(0), entry(1)]) });
+      expect(s.sampler.addEntry(-3)).toBe(0);
+      expect(s.sampler.addEntry(99)).toBe(4);
+      expect(entriesOf(s)).toEqual([entry(0), entry(2, 4), entry(0), entry(1), entry(0)]);
+    });
+
+    it("puts it at the place it is given", () => {
+      const s = setup({ song: songWith(3, [entry(2, 4), entry(0)]) });
+      s.sampler.setSequence(1);
+      expect(s.sampler.addEntry(1)).toBe(1);
+      expect(entriesOf(s)).toEqual([entry(2, 4), entry(1), entry(0)]);
+      expect(s.sampler.addEntry(0)).toBe(0);
+      expect(entriesOf(s)[0]).toEqual(entry(1));
+    });
+
+    it("says so, saves and redraws", () => {
+      const s = setup({ song: songWith(3, null) });
+      s.message.mockClear();
+      s.songChange.mockClear();
+      s.change.mockClear();
+      s.sampler.addEntry();
+      expect(s.message).toHaveBeenLastCalledWith("ENTRY 04 ADDED");
+      expect(s.songChange).toHaveBeenCalled();
+      expect(s.change).toHaveBeenCalled();
+      expect(s.sampler.getSong().arrangement).toEqual([entry(0), entry(1), entry(2), entry(0)]);
+    });
+
+    it("says so and changes nothing when there are as many entries as there can be", () => {
+      const full = Array.from({ length: 32 }, (_, i) => entry(i % 3));
+      const s = setup({ song: songWith(3, full) });
+      s.songChange.mockClear();
+      expect(s.sampler.addEntry()).toBe(-1);
+      expect(s.message).toHaveBeenLastCalledWith("32 ENTRIES MAX");
+      expect(entriesOf(s)).toEqual(full);
+      expect(s.songChange).not.toHaveBeenCalled();
+    });
+
+    it("does not touch the sequences", () => {
+      const s = setup({ song: songWith(3, null) });
+      const before = s.sampler.getSong().sequences;
+      s.sampler.addEntry();
+      expect(s.sampler.getSong().sequences).toEqual(before);
+    });
+  });
+
+  describe("removeEntry", () => {
+    it("takes the entry out, and gives back the one to be on after it: the next, or the last", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      expect(s.sampler.removeEntry(1)).toBe(1);
+      expect(entriesOf(s)).toEqual([entry(0), entry(2)]);
+      expect(s.sampler.removeEntry(1)).toBe(0);
+      expect(entriesOf(s)).toEqual([entry(0)]);
+    });
+
+    it("says so, saves and redraws", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      s.songChange.mockClear();
+      s.change.mockClear();
+      s.sampler.removeEntry(0);
+      expect(s.message).toHaveBeenLastCalledWith("ENTRY 01 REMOVED");
+      expect(s.songChange).toHaveBeenCalled();
+      expect(s.change).toHaveBeenCalled();
+    });
+
+    it("cannot take the last entry, and says so", () => {
+      const s = setup({ song: songWith(3, [entry(1, 3)]) });
+      s.songChange.mockClear();
+      expect(s.sampler.removeEntry(0)).toBe(-1);
+      expect(s.message).toHaveBeenLastCalledWith("CANNOT REMOVE LAST ENTRY");
+      expect(entriesOf(s)).toEqual([entry(1, 3)]);
+      expect(s.songChange).not.toHaveBeenCalled();
+    });
+
+    it("says nothing, and changes nothing, for an entry that is not there", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      s.message.mockClear();
+      s.songChange.mockClear();
+      expect(s.sampler.removeEntry(7)).toBe(-1);
+      expect(s.message).not.toHaveBeenCalled();
+      expect(s.songChange).not.toHaveBeenCalled();
+      expect(entriesOf(s)).toEqual([entry(0), entry(1), entry(2)]);
+    });
+
+    it("works on the entries a song nobody edited has", () => {
+      const s = setup({ song: songWith(3, null) });
+      s.sampler.removeEntry(1);
+      expect(entriesOf(s)).toEqual([entry(0), entry(2)]);
+    });
+  });
+
+  describe("moveEntry", () => {
+    it("moves an entry one place earlier or later, and gives back where it is", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      expect(s.sampler.moveEntry(1, 1)).toBe(2);
+      expect(entriesOf(s)).toEqual([entry(0), entry(2), entry(1, 2)]);
+      expect(s.sampler.moveEntry(2, -2)).toBe(0);
+      expect(entriesOf(s)).toEqual([entry(1, 2), entry(0), entry(2)]);
+    });
+
+    it("moves it as far as there is room when it is asked for more than that", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      expect(s.sampler.moveEntry(0, 9)).toBe(2);
+      expect(entriesOf(s)).toEqual([entry(1), entry(2), entry(0)]);
+      expect(s.sampler.moveEntry(1, -9)).toBe(0);
+      expect(entriesOf(s)).toEqual([entry(2), entry(1), entry(0)]);
+    });
+
+    it("says so, saves and redraws", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      s.songChange.mockClear();
+      s.change.mockClear();
+      s.sampler.moveEntry(0, 1);
+      expect(s.message).toHaveBeenLastCalledWith("ENTRY 01 MOVED TO 02");
+      expect(s.songChange).toHaveBeenCalled();
+      expect(s.change).toHaveBeenCalled();
+    });
+
+    it("keeps the entry where it is, saying nothing and saving nothing, at either end of the song", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      s.songChange.mockClear();
+      s.message.mockClear();
+      expect(s.sampler.moveEntry(0, -1)).toBe(0);
+      expect(s.sampler.moveEntry(1, 1)).toBe(1);
+      expect(entriesOf(s)).toEqual([entry(0), entry(1)]);
+      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.message).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("setEntryRepeats", () => {
+    it("sets how many times an entry goes round, from 1 to 16, and gives back what it is now", () => {
+      const s = setup({ song: songWith(3, null) });
+      expect(s.sampler.setEntryRepeats(1, 3)).toBe(3);
+      expect(entriesOf(s)).toEqual([entry(0), entry(1, 3), entry(2)]);
+      expect(s.sampler.setEntryRepeats(1, 99)).toBe(16);
+      expect(s.sampler.setEntryRepeats(1, 0)).toBe(1);
+    });
+
+    it("says so, saves and redraws", () => {
+      const s = setup({ song: songWith(3, null) });
+      s.songChange.mockClear();
+      s.change.mockClear();
+      s.sampler.setEntryRepeats(2, 4);
+      expect(s.message).toHaveBeenLastCalledWith("ENTRY 03 REPEATS 4");
+      expect(s.songChange).toHaveBeenCalled();
+      expect(s.change).toHaveBeenCalled();
+    });
+
+    it("says nothing and saves nothing when it is what the entry has", () => {
+      const s = setup({ song: songWith(3, [entry(0, 3)]) });
+      s.songChange.mockClear();
+      s.message.mockClear();
+      expect(s.sampler.setEntryRepeats(0, 3)).toBe(3);
+      expect(s.sampler.setEntryRepeats(0, 99)).toBe(16);
+      s.songChange.mockClear();
+      expect(s.sampler.setEntryRepeats(0, 99)).toBe(16);
+      expect(s.songChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("while the song plays", () => {
+    // The passes: seq 0 at 0.05 s (entry 0), seq 1 at 2.05, 4.05, 6.05 (the three times round entry 1), seq 2 at 8.05 (entry 2), then
+    // the song goes round to seq 0 at 10.05. Each edit is made in the middle of the second time round, at 4.3 s.
+    const midway = (arrangement = [entry(0), entry(1, 3), entry(2)]) => {
+      const s = setup({ song: songWith(3, arrangement) });
+      playAll(s);
+      run(s, 4.3);
+      return s;
+    };
+
+    it("goes on from the entry it is at when an entry is put in before it", () => {
+      const s = midway();
+      s.sampler.addEntry(0); // names the sequence showing, the second: the song is now 1, 0, 1 x3, 2 and is at its third entry
+      run(s, 6.9); // 11.2 s
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 10.05)); // the entry's third time round, then the new first entry
+      expect(timesOf(s, 2)).toEqual(closeTo(8.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+    });
+
+    it("goes on from the entry it is at when an entry is taken out before it", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(2), entry(1), entry(2, 2), entry(0)]) });
+      playAll(s);
+      run(s, 6.3); // the fourth entry's first time round began at 6.05 s
+      s.sampler.removeEntry(0);
+      run(s, 4.9); // 11.2 s: its second time round, then the last entry, then round to the first (now the sequence 3)
+      expect(timesOf(s, 2)).toEqual(closeTo(2.05, 6.05, 8.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 10.05));
+    });
+
+    it("goes on from the entry it is at when that entry is moved", () => {
+      const s = midway();
+      s.sampler.moveEntry(1, 1); // the song is now 1, 3, 2 x3: the entry playing is its third
+      run(s, 6.9); // 11.2 s
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05)); // the rest of its times round
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 8.05)); // then round to the first
+      expect(timesOf(s, 2)).toEqual(closeTo(10.05));
+    });
+
+    it("goes on at the last time round when the entry playing is made to repeat less than it has gone round", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 4)]) });
+      playAll(s);
+      run(s, 6.3); // the third time round of the entry began at 6.05 s
+      s.sampler.setEntryRepeats(1, 2); // it has been round more than that: this is its last
+      run(s, 4.9); // 11.2 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 8.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 10.05)); // and the entry begins again at 10.05 s
+    });
+
+    it("keeps the time round the song is at when another entry is made to repeat less than that", () => {
+      const s = setup({ song: songWith(3, [entry(0, 3), entry(1, 4)]) });
+      playAll(s);
+      run(s, 10.3); // the first entry's three passes, and the third time round of the second (it began at 10.05 s)
+      s.sampler.setEntryRepeats(0, 1); // the entry before it: the position of this one is not changed by it
+      run(s, 5.0); // 15.3 s
+      expect(timesOf(s, 1)).toEqual(closeTo(6.05, 8.05, 10.05, 12.05)); // all four times round, and then the song goes round
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05, 14.05));
+    });
+
+    it("goes round the entry again when it is made to repeat more, in the pass that was to be its last", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1, 2)]) });
+      playAll(s);
+      run(s, 4.3); // the second and last time round of the entry began at 4.05 s
+      s.sampler.setEntryRepeats(1, 3);
+      run(s, 4.9); // 9.2 s
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 8.05));
+    });
+
+    it("goes on once for the pass end it was at, from its new entry, when the steps are built again after an edit", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      playAll(s);
+      tick(s, 77); // 3.85 s: the pass end at 4.05 s has been reached, and the entry goes round again at it
+      s.sampler.addEntry(0); // before it: the entry is now the third, and what is remembered of that pass end moves with it
+      s.sampler.kitChanged("sound"); // the steps are built again, and the pass end is told again
+      run(s, 7.3); // 11.15 s
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05, 8.05)); // three times round, then the new first entry (the sequence 2)
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 10.05));
+    });
+
+    it("goes on from the last time round when the entry is made to repeat less just before its pass end is told again", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(0, 4)]) });
+      playAll(s);
+      tick(s, 198); // 9.9 s: the third time round of the last entry began at 8.05 s, and its pass end at 10.05 s has been told
+      s.sampler.setEntryRepeats(2, 2); // it has been round more than that
+      s.sampler.kitChanged("sound"); // the pass end is told again, and what was remembered of it is the time round that is gone
+      run(s, 3.2); // 13.1 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05, 6.05, 8.05, 10.05)); // the first entry follows, as it would a pass later
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 12.05));
+    });
+
+    it("goes on from the entry it was on when an entry is put in before it during the first pass, before any pass end has told where it is", () => {
+      const s = setup({ song: songWith(3, null) });
+      s.sampler.setSequence(1);
+      playAll(s);
+      run(s, 0.5);
+      s.sampler.addEntry(0); // the sequence showing, the second, at the start: the song is 2, 1, 2, 3 and is on its third entry
+      expect(s.sampler.getState().songPass).toEqual({ entry: 2, rep: 0 });
+      run(s, 6.7); // 7.2 s
+      expect(timesOf(s, 1)).toEqual(closeTo(0.05, 4.05));
+      expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(6.05));
+    });
+
+    it("goes on from the entry it was on when another that names the same sequence is moved, before any pass end has told where it is", () => {
+      const s = setup({ song: songWith(2, [entry(1), entry(0), entry(1)]) });
+      s.sampler.setSequence(1);
+      playAll(s);
+      run(s, 0.5);
+      s.sampler.moveEntry(2, -2); // the song is now 2, 2, 1: the entry it was on is its second
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 0 });
+      run(s, 8.0); // 8.5 s
+      expect(timesOf(s, 1)).toEqual(closeTo(0.05, 4.05, 6.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(2.05, 8.05));
+    });
+
+    it("goes on from the entry a pass end that was told when the position was not known has gone on from, when an entry is put in before it and the pass end is told again", () => {
+      const s = setup({ song: songWith(3, [entry(1, 3), entry(2)]) });
+      s.sampler.setSequence(1);
+      playAll(s);
+      tick(s, 38); // 1.9 s: the first pass end has been told, with no position known, and the entry goes round again at it
+      s.sampler.addEntry(0); // before it, naming the same sequence
+      s.sampler.kitChanged("sound"); // the pass end is told again
+      run(s, 7.3); // 9.2 s
+      expect(timesOf(s, 1)).toEqual(closeTo(0.05, 2.05, 4.05, 8.05)); // three times round the entry, in its new place, then the next, then round to the new first
+      expect(timesOf(s, 2)).toEqual(closeTo(6.05));
+    });
+
+    it("does the same when Play All was turned on at that pass end", () => {
+      const s = setup({ song: songWith(3, [entry(1, 3), entry(2)]) });
+      s.sampler.setSequence(1);
+      s.sampler.start();
+      tick(s, 38); // 1.9 s: the pass end has been told, and Play All is turned on at it
+      s.sampler.togglePlayAll();
+      s.sampler.addEntry(0);
+      s.sampler.kitChanged("sound");
+      run(s, 7.3); // 9.2 s
+      expect(timesOf(s, 1)).toEqual(closeTo(0.05, 2.05, 4.05, 8.05));
+      expect(timesOf(s, 2)).toEqual(closeTo(6.05));
+    });
+
+    describe("an edit made just ahead of a pass end counts at that pass end", () => {
+      // The pass end at 2.05 s has been told by 1.9 s, and the song has picked what plays there; the first step after it is built a
+      // moment later (1.93 s). An edit in that moment is heard at that pass end, as a press on a sequence key is, and not a pass late.
+      it("takes the entry that was picked out of the song, when it is removed", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the song has picked the second entry
+        expect(s.sampler.getState().sequence).toBe(1);
+        s.sampler.removeEntry(1);
+        expect(s.sampler.getState()).toMatchObject({ sequence: 2, songPass: { entry: 1, rep: 0 } });
+        run(s, 4.3); // 6.2 s: the song is now 1, 3 and goes round
+        expect(timesOf(s, 1)).toEqual([]);
+        expect(timesOf(s, 2)).toEqual(closeTo(2.05, 6.05));
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+      });
+
+      it("takes back the first step already built for the entry that goes, and builds it again", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        tick(s, 39); // 1.95 s: the first step of the next pass, at 2.05 s, is built from the second sequence
+        const built = busOf(s.sounds[1].play.mock.calls.at(-1)[1]);
+        s.sampler.removeEntry(1);
+        expect(built.disconnect).toHaveBeenCalledTimes(1);
+        run(s, 0.5);
+        expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+      });
+
+      it("goes round the entry again when it is made to repeat more and the pass end had gone on to the next", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the song has picked the second entry
+        s.sampler.setEntryRepeats(0, 2); // the first entry goes round twice: that pass end is its second time round
+        expect(s.sampler.getState()).toMatchObject({ sequence: 0, songPass: { entry: 0, rep: 1 } });
+        run(s, 4.3); // 6.2 s: two times round the first entry, the second, and round to the first
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 6.05));
+        expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+      });
+
+      it("goes on to the next entry when an entry that was to go round again is made to repeat less", () => {
+        const s = setup({ song: songWith(3, [entry(0, 3), entry(1)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the entry goes round again at the pass end
+        s.sampler.setEntryRepeats(0, 1);
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, songPass: { entry: 1, rep: 0 } });
+        run(s, 4.3); // 6.2 s: the song is now 1, 2 and goes round
+        expect(timesOf(s, 1)).toEqual(closeTo(2.05, 6.05));
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+      });
+
+      it("picks another entry when the one that was picked is moved away from where the song goes next", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the song has picked the second entry
+        s.sampler.moveEntry(1, 1); // the song is now 1, 3, 2: the second entry names the third sequence
+        expect(s.sampler.getState().sequence).toBe(2);
+        run(s, 4.3);
+        expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+        expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+      });
+
+      it("leaves what was built alone when the edit does not change what plays there", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        tick(s, 39); // 1.95 s
+        const built = busOf(s.sounds[1].play.mock.calls.at(-1)[1]);
+        s.sampler.setEntryRepeats(2, 4); // a later entry
+        s.sampler.addEntry(3);
+        expect(built.disconnect).not.toHaveBeenCalled();
+        run(s, 0.5);
+        expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+      });
+
+      it("keeps what the song went on to when an edit made the entry that was to go round again go on, and the loop is then made longer", () => {
+        const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the entry goes round again at the pass end
+        s.sampler.setEntryRepeats(0, 1); // it does not: the song goes on to the second entry, which takes over there
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, songPass: { entry: 1, rep: 0 } });
+        s.sampler.setBars(2); // the second sequence is longer: the pass it began is real, and counted
+        expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 0 });
+      });
+
+      it("leaves a sequence that was queued alone: that was asked for, and an edit does not take it back", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        tick(s, 38);
+        s.sampler.queueSequence(2); // takes over at once, in place of the one the song picked
+        s.sampler.removeEntry(1);
+        expect(s.sampler.getState().sequence).toBe(2);
+        run(s, 0.5);
+        expect(timesOf(s, 2)).toEqual(closeTo(2.05));
+      });
+
+      it("leaves the sequence showing alone when the beat was stopped in that moment", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the song has picked the second entry
+        s.sampler.stop();
+        s.sampler.removeEntry(1);
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, playing: false });
+      });
+
+      it("leaves a pass end alone that a person's pick made, which is not the song's to decide", () => {
+        const song = songWith(3, [entry(0), entry(1), entry(2)]);
+        song.sequences[1] = { bars: 2, pattern: { 1: [0] }, velocities: {} }; // the second sequence is two bars long
+        const s = setup({ song });
+        playAll(s);
+        run(s, 5.0); // 5.0 s: the second sequence (it began at 2.05 s) is in its second bar
+        s.sampler.setSequence(2); // one bar: the position carries over past its end, which is a pass end, told from inside the pick
+        s.sampler.removeEntry(0);
+        expect(s.sampler.getState().sequence).toBe(2);
+      });
+
+      it("goes on from where the pass that ended was when that sequence has two entries, not from the first that names it", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(0), entry(2)]) });
+        playAll(s);
+        tick(s, 118); // 5.9 s: the third entry (the sequence 1 again) has ended at 6.05 s, and the song has picked the fourth
+        expect(s.sampler.getState().sequence).toBe(2);
+        s.sampler.setEntryRepeats(3, 2); // the entry picked: that does not change which is picked
+        expect(s.sampler.getState()).toMatchObject({ sequence: 2, songPass: { entry: 3, rep: 0 } });
+        run(s, 3.0);
+        expect(timesOf(s, 2)).toEqual(closeTo(6.05, 8.05));
+        expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+      });
+
+      it("keeps the time round when the pass end became the entry going round again by an edit, and the loop is then made longer: the pass was restarted", () => {
+        const s = setup({ song: songWith(2, [entry(0), entry(1)]) });
+        playAll(s);
+        tick(s, 38); // 1.9 s: the song has picked the second entry
+        s.sampler.setEntryRepeats(0, 3); // the first goes round: this pass end is its second time round, made a new pass
+        expect(s.sampler.getState()).toMatchObject({ sequence: 0, songPass: { entry: 0, rep: 1 } });
+        s.sampler.setBars(2); // the pass that began is two bars long, and was counted
+        expect(s.sampler.getState().songPass).toEqual({ entry: 0, rep: 1 });
+        run(s, 11.5); // 13.4 s: the second time round (to 6.05 s), the third (to 10.05 s), the second entry, and round to the first
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 6.05, 12.05));
+        expect(timesOf(s, 1)).toEqual(closeTo(10.05));
+      });
+
+      it("does not touch a pass end whose first step has sounded: the edit is heard from the next", () => {
+        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        playAll(s);
+        run(s, 2.3); // the second entry is playing
+        s.sampler.removeEntry(1);
+        expect(s.sampler.getState().sequence).toBe(1); // it plays out its pass
+        run(s, 2.0); // 4.3 s: and the song, which lost its place, begins again at its first entry
+        expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+      });
+    });
+
+    it("says where the song is, on its new entry, after an edit before it", () => {
+      const s = midway();
+      s.sampler.addEntry(0);
+      expect(s.sampler.getState().songPass).toEqual({ entry: 2, rep: 1 });
+      s.sampler.removeEntry(0);
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 1 });
+    });
+
+    it("loses where it is when the entry it is at is removed, and goes on from the first entry that names the sequence", () => {
+      const s = midway();
+      s.sampler.removeEntry(1); // the song is now 1, 3: the sequence 2 is playing and is in no entry
+      expect(s.sampler.getState().songPass).toBeNull();
+      run(s, 2.0); // 6.3 s: its pass ended at 6.05 s, and the song begins again at the first entry
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
     });
   });
 });
