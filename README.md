@@ -25,7 +25,7 @@ A small set of browser audio tools built with Vite, the Web Audio API and Web MI
 - Tempo knob (drag, scroll, or arrow keys), tap tempo, and a volume fader
 - Your sequences, tempo, volume, pad settings and samples are kept in your browser between visits (nothing is uploaded). Save writes all of it to a `.audiolab` project file, and Open puts one back, in case the browser's storage is cleared
 
-[CHANGELOG.md](CHANGELOG.md) lists what has changed, by day.
+[Using the sampler](docs/using-the-sampler.md) is a short tour of it, and [CHANGELOG.md](CHANGELOG.md) lists what has changed, by day.
 
 ## MIDI
 
@@ -116,6 +116,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `log.js` — the bounded message list and the running tally of notes hit; no DOM
   - `view.js` — the on-screen message list and notes table
   - `monitor.css` — monitor-only styles
+- `docs/README.md` — the index of the docs
+- `docs/using-the-sampler.md` — a short tour of the sampler for someone using it: pads, beats, sequences, your own sounds, saving, MIDI
 - `docs/mpc-sample.md` — reference notes on the Akai MPC Sample's MIDI settings, with links to its user guide
 - `docs/sequencer-design.md` — which parts of the sequencer are shared between pages, and why the MPC Sample page does not reuse the sampler's transport as it is
 - `docs/sample-editing-plan.md` — the design for editing the sampler's steps (velocity first); the phases are tracked in epic #87

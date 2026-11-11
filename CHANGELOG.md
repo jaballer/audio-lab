@@ -15,6 +15,7 @@ Numbers link to the pull request.
 
 ### Maintenance
 
+- Docs: an index in `docs/README.md` and a short tour of the sampler, `docs/using-the-sampler.md`, linked from the README
 - A beat can carry an arrangement, the order a song will play its sequences in, each with a number of repeats (saved
   format 10). It changes nothing on the page yet: nothing reads or edits it, a beat saved by an older page loads as it
   did, and a sequence added, copied or removed is followed in it
