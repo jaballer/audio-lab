@@ -51,13 +51,14 @@
 //                                // after a sequence takes over (queued, or the next of Play All) what sounds is still the one that gave way: `heard` is
 //                                // { sequence, bars, page, stepsOn, playheadStep } of what sounds, for the display (playheadPosition is in its numbering);
 //                                // the rest, with sequence, bars and page, is the one showing, for the keys and for editing
-//   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings }: what song.js saves
+//   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings, arrangement? }: what song.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
 
 import { withVelocity } from "../../shared/sounds.js";
 import { pad2 } from "./format.js";
+import { afterSequenceAdded, afterSequenceRemoved, cleanArrangement } from "./arrangement.js";
 import { createVoices } from "./voices.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
@@ -110,6 +111,10 @@ export function createSampler({
       velocities: saved?.velocities,
     });
   });
+  // The order the sequences play in, with repeats, once a person has edited it (arrangement.js); null until then, which is every
+  // sequence once, in order. Nothing reads it yet: it is kept, saved and followed through adding, copying and removing sequences,
+  // so that a song that plays it has an order that is always about the sequences there are.
+  let arrangement = cleanArrangement(song?.arrangement, slots.length);
   let pattern = slots[current].pattern;
   let history = slots[current].history;
   let clipboard = null; // a bar of one pad's steps and velocities, from copySteps; kept across sequences
@@ -491,6 +496,7 @@ export function createSampler({
   function addSequence() {
     if (atMost() && full()) return;
     slots.push(makeSlot());
+    arrangement = afterSequenceAdded(arrangement, slots.length - 1);
     showSequence(slots.length - 1);
     onMessage(`SEQ ${pad2(current + 1)} ADDED`);
     onChange();
@@ -501,6 +507,7 @@ export function createSampler({
     if (atMost() && full()) return;
     const from = current;
     slots.push(makeSlot({ bars, pattern: pattern.snapshot(), velocities: pattern.velocitySnapshot() }));
+    arrangement = afterSequenceAdded(arrangement, slots.length - 1);
     showSequence(slots.length - 1);
     onMessage(`SEQ ${pad2(from + 1)} COPIED TO ${pad2(current + 1)}`);
     onChange();
@@ -515,6 +522,7 @@ export function createSampler({
     }
     const removed = current;
     slots.splice(removed, 1);
+    arrangement = afterSequenceRemoved(arrangement, removed);
     showSequence(Math.min(removed, slots.length - 1));
     onMessage(`SEQ ${pad2(removed + 1)} REMOVED`);
     onChange();
@@ -770,6 +778,8 @@ export function createSampler({
         pattern: slot.pattern.snapshot(),
         velocities: slot.pattern.velocitySnapshot(),
       })),
+      // A copy, and left out while there is none (a song nobody edited is saved as it always was).
+      ...(arrangement ? { arrangement: arrangement.map((entry) => ({ ...entry })) } : {}),
     }),
   };
 }

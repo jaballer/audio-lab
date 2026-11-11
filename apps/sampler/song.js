@@ -9,6 +9,7 @@
 //   saver.cancel();     // something else is about to replace the saved song: drop a change that is waiting
 
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
+import { cleanArrangement } from "./arrangement.js";
 import { parsePadSettings } from "./pad-settings.js";
 import { SWING_DEFAULT, clampBpm, clampSwing } from "../../shared/tempo.js";
 
@@ -19,7 +20,7 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 9;
+export const SONG_VERSION = 10;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
 // field itself is set by upgradeSong.
@@ -43,6 +44,9 @@ const MIGRATIONS = {
   // Version 9 has as many sequences as the person made, from one up, where version 8 always had eight and the ones nobody
   // used were empty. Those empty ones at the end go (see trimBlankSequences).
   8: trimBlankSequences,
+  // Version 10 adds the optional `arrangement` (the order a song plays its sequences in, arrangement.js). A version 9 song has
+  // none, which reads as every sequence once, in order: what Play All and Export all already did.
+  9: (song) => song,
 };
 
 const VOLUME_MAX = 100;
@@ -77,7 +81,18 @@ function trimBlankSequences(song) {
 // `swing` is how much of each pair of steps the first takes, in per cent, 50 (straight) to 75 (tempo.js).
 //
 // `padSettings` is { pad: { gain, pitch, choke, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
-export const serializeSong = ({ bpm, swing = SWING_DEFAULT, volume, current, sequences, padSettings = {} }) => ({
+//
+// `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a song that has none: a song
+// nobody edited is saved as it always was.
+export const serializeSong = ({
+  bpm,
+  swing = SWING_DEFAULT,
+  volume,
+  current,
+  sequences,
+  padSettings = {},
+  arrangement = null,
+}) => ({
   version: SONG_VERSION,
   bpm,
   swing,
@@ -85,6 +100,7 @@ export const serializeSong = ({ bpm, swing = SWING_DEFAULT, volume, current, seq
   current,
   sequences,
   padSettings,
+  ...(arrangement ? { arrangement } : {}),
 });
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -174,6 +190,8 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
     };
   });
 
+  // Against the sequences kept, not the ones saved: an entry for one that was dropped goes with it.
+  const arrangement = cleanArrangement(raw.arrangement, count);
   return {
     bpm: clampBpm(raw.bpm),
     swing: clampSwing(raw.swing),
@@ -181,6 +199,7 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
     current: isIndex(raw.current, count) ? raw.current : 0,
     sequences,
     padSettings: parsePadSettings(raw.padSettings, rows),
+    ...(arrangement ? { arrangement } : {}),
   };
 }
 

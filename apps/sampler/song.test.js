@@ -457,7 +457,90 @@ describe("songs saved by version 8", () => {
 
   it("are stamped as the current version", () => {
     expect(upgradeSong(stored(v8([used, blank]))).version).toBe(SONG_VERSION);
-    expect(SONG_VERSION).toBe(9);
+    expect(SONG_VERSION).toBe(10);
+  });
+});
+
+describe("songs saved by version 9", () => {
+  // What a page of version 9 kept: the sequences in order and no arrangement, which is every sequence once, in order.
+  const v9 = { ...serializeSong(song), version: 9 };
+
+  it("load as they were saved, with no arrangement", () => {
+    const loaded = parseSong(stored(v9), SHAPE);
+    expect(loaded).toEqual(song);
+    expect(loaded).not.toHaveProperty("arrangement");
+  });
+
+  it("are changed by the upgrade in nothing but the version", () => {
+    expect(upgradeSong(stored(v9))).toEqual({ ...stored(v9), version: SONG_VERSION });
+  });
+});
+
+describe("the arrangement", () => {
+  const arrangement = [
+    { sequence: 1, repeats: 3 },
+    { sequence: 0, repeats: 1 },
+    { sequence: 1, repeats: 16 },
+  ];
+  const withArrangement = (value) => ({ ...serializeSong(song), arrangement: value });
+
+  it("is left out of a song that has none, so a song nobody edited is saved as it was", () => {
+    expect(serializeSong(song)).not.toHaveProperty("arrangement");
+    expect(serializeSong({ ...song, arrangement: null })).not.toHaveProperty("arrangement");
+    expect(parse(serializeSong(song))).not.toHaveProperty("arrangement");
+  });
+
+  it("is saved with the song, and comes back as it was, in its order and with its repeats", () => {
+    expect(serializeSong({ ...song, arrangement })).toEqual({ ...serializeSong(song), arrangement });
+    expect(parse(serializeSong({ ...song, arrangement }))).toEqual({ ...song, arrangement });
+  });
+
+  it("is brought into range: entries for a sequence the song does not have go, repeats are kept from 1 to 16", () => {
+    const loaded = parse(
+      withArrangement([
+        { sequence: 0, repeats: 0 },
+        { sequence: 4, repeats: 2 },
+        { sequence: 3, repeats: 99 },
+        { sequence: -1, repeats: 2 },
+        { sequence: 2, repeats: 2.5 },
+      ]),
+    );
+    expect(loaded.arrangement).toEqual([
+      { sequence: 0, repeats: 1 },
+      { sequence: 3, repeats: 16 },
+      { sequence: 2, repeats: 1 },
+    ]);
+  });
+
+  it("is checked against the sequences the song keeps: the ones past the most there can be take their entries with them", () => {
+    const loaded = parseSong(
+      stored(
+        withArrangement([
+          { sequence: 3, repeats: 2 },
+          { sequence: 1, repeats: 2 },
+        ]),
+      ),
+      { ...SHAPE, maxSequences: 2 },
+    );
+    expect(loaded.arrangement).toEqual([{ sequence: 1, repeats: 2 }]);
+  });
+
+  it("is dropped when nothing in it can be used, as a song with none: every sequence plays once", () => {
+    for (const raw of [[], [{ sequence: 9, repeats: 1 }], {}, "1,2", 3, null]) {
+      expect(parse(withArrangement(raw))).not.toHaveProperty("arrangement");
+    }
+  });
+
+  it("has at most 32 entries", () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ sequence: i % 4, repeats: 1 }));
+    expect(parse(withArrangement(many)).arrangement).toEqual(many.slice(0, 32));
+  });
+
+  it("is a copy: changing the song that was read does not change what it was read from", () => {
+    const raw = stored(withArrangement(arrangement));
+    const loaded = parseSong(raw, SHAPE);
+    loaded.arrangement[0].repeats = 9;
+    expect(raw.arrangement[0].repeats).toBe(3);
   });
 });
 
