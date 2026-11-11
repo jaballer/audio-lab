@@ -689,10 +689,20 @@ function removeSequence() {
   }
   sampler.removeSequence();
 }
+// Next, beside + in the sequence row: on, a press on a sequence waits for the end of the pass (as Next Seq does on an MPC) and Shift
+// switches at once; off, a press switches at once and Shift waits. A touch screen has no Shift, so off is how it switches at once.
+// Kept between visits, on until a person turns it off.
+const NEXT_KEY = "pad-sampler:next";
+let queuePresses = loadJson(NEXT_KEY, true) !== false;
 const sequenceRow = createSequenceRow($("seq-row"), {
-  // While the beat plays, a key queues that sequence for the end of the pass, as Next Seq does on an MPC, and Shift switches to it
-  // at once; stopped, both show it. The sampler works out which.
+  // The row says which a press is (`now`), by the latch and Shift. Stopped, both show the sequence: the sampler works that out.
   onSelect: (index, { now }) => (now ? sampler.setSequence(index) : sampler.queueSequence(index)),
+  onLatch: (on) => {
+    queuePresses = on;
+    saveJson(NEXT_KEY, on);
+    say(on ? "NEXT SEQ ON" : "NEXT SEQ OFF");
+    render();
+  },
   onAdd: () => sampler.addSequence(),
   onCopy: () => sampler.copySequence(),
   onRemove: removeSequence,
@@ -780,6 +790,7 @@ function render() {
     current: state.sequence,
     queued: state.queuedSequence,
     playing: state.playing,
+    latched: queuePresses,
     canAdd: state.canAddSequence,
     canRemove: state.canRemoveSequence,
   });
