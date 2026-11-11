@@ -132,43 +132,6 @@
   gap: 3px;
   margin: 4px 0 6px;
 }
-
-/* The level meter at the right of the display: a bar for the left side of the output and one for the right, each a column of
-   cells that light from the bottom, with a clip lamp on top (level-meter.js; the cells are made by level-meter-view.js). It
-   is as tall as the five text lines, from the top of the letters of the first to the baseline of the last, so that it
-   reads as one block with them. That is in ems of the display's mono font at its 1.55 line height: the five lines are 7.75em,
-   the capitals start 0.32em below the top of the first and the last baseline is 0.5em above the bottom of the fifth. The
-   12px and 14px are the display's own padding (base.css). If the font or the line height changes, so do these. */
-.lcd-screen {
-  position: relative;
-}
-.lcd-meter {
-  position: absolute;
-  top: calc(12px + 0.32em);
-  right: 14px;
-  height: 6.93em;
-  display: flex;
-  gap: 5px;
-}
-.lcd-meter[hidden] {
-  display: none;
-}
-.lcd-meter-bar {
-  display: flex;
-  flex-direction: column-reverse; /* the first cell is the bottom one */
-  gap: 2px;
-  height: 100%;
-}
-.lcd-meter-cell {
-  flex: 1 1 0;
-  width: 14px;
-  box-sizing: border-box;
-  border: 1px solid var(--lcd-ink);
-  border-radius: 1px;
-}
-.lcd-meter-cell.on {
-  background: var(--lcd-ink);
-}
 .ruler span {
   flex: 1;
   height: 14px;
@@ -188,6 +151,64 @@
 }
 .ruler span:last-child {
   margin-right: 0;
+}
+
+/* The level meter at the right of the display: a bar for the left side of the output and one for the right, each a column of
+   cells that light from the bottom, with a clip lamp on top (level-meter.js; the cells are made by level-meter-view.js). It
+   is as tall as the five text lines, from the top of the letters of the first to the baseline of the last, so that it
+   reads as one block with them. That is in ems of the display's mono font at its 1.55 line height: the five lines are 7.75em,
+   the capitals start 0.32em below the top of the first and the last baseline is 0.5em above the bottom of the fifth. The
+   12px and 14px are the display's own padding (base.css). If the font or the line height changes, so do these. */
+.lcd-screen {
+  position: relative;
+  --lcd-meter-cell: 14px; /* the width of a cell */
+  --lcd-meter-gap: 5px; /* between the two bars */
+}
+.lcd-meter {
+  position: absolute;
+  top: calc(12px + 0.32em);
+  right: 14px;
+  height: 6.93em;
+  display: flex;
+  gap: var(--lcd-meter-gap);
+}
+.lcd-meter[hidden] {
+  display: none;
+}
+.lcd-meter-bar {
+  display: flex;
+  flex-direction: column-reverse; /* the first cell is the bottom one */
+  gap: 2px;
+  height: 100%;
+}
+.lcd-meter-cell {
+  flex: 1 1 0;
+  width: var(--lcd-meter-cell);
+  box-sizing: border-box;
+  border: 1px solid var(--lcd-ink);
+  border-radius: 1px;
+}
+.lcd-meter-cell.on {
+  background: var(--lcd-ink);
+}
+/* Forced colors (a high contrast mode) paints a background in the page's own colour, which would leave a lit cell looking
+   like an unlit one: the lit ones are painted in the highlight colour. */
+@media (forced-colors: active) {
+  .lcd-meter-cell.on {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+  }
+}
+/* A line of text stops where the meter starts and is cut off there if it is longer (the lines never wrap), instead of running
+   under the cells at a larger text size. The 4px is a gap between them. The message line is below the meter. */
+.lcd-screen .lcd-line:not(.lcd-msg) {
+  margin-right: calc(2 * var(--lcd-meter-cell) + var(--lcd-meter-gap) + 4px);
+}
+/* Every line is as tall as a line with text in it, whether it has any or not. Lines 4 and 5 have none while the display is off or
+   booting, and without this the display was 28px shorter then and jumped when it came on, taking the controls under it along. */
+.lcd-screen .lcd-line {
+  min-height: 1.55em;
 }
 
 /* ---------- The display and its controls ---------- */

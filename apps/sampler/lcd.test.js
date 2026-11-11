@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatLcd, lcdProgress, progressVars } from "./lcd.js";
 
@@ -21,6 +22,17 @@ describe("formatLcd", () => {
       "BAR --/01",
       "STEP --/16",
     ]);
+  });
+
+  it("has a line on the page for each line it gives", () => {
+    const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+    const ids = [...html.matchAll(/id="lcd-(\d+)"/g)].map((match) => Number(match[1]));
+    expect(ids).toEqual(Array.from({ length: formatLcd(stopped).lines.length }, (_, i) => i + 1));
+  });
+
+  it("leaves the count off when there is none to show, or it is zero", () => {
+    expect(formatLcd({ ...stopped, sequenceCount: 0 }).lines[0]).toBe("SEQ 01  STOPPED");
+    expect(formatLcd({ ...stopped, sequenceCount: undefined }).lines[0]).toBe("SEQ 01  STOPPED");
   });
 
   it("shows the sequence number, counting from 1", () => {
