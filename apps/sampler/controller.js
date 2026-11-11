@@ -315,12 +315,15 @@ export function createSampler({
     if (!shorter) lastWrap = -Infinity; // the loop carries on past the pass end the scheduler had reached: it is not one
     bars = next;
     slots[current].bars = bars;
+    page = Math.min(page, lastPage());
+    onMessage(`${bars} ${bars === 1 ? "BAR" : "BARS"}`);
+    // Made shorter, the loop may end exactly where the scheduler is, which is a pass end: a queued sequence takes over there,
+    // from inside this call, and says so (after the message above, which was of the sequence that has gone). So everything
+    // that is of this sequence is settled before it, and nothing after it is.
     scheduler.setSteps(totalSteps());
     // A step queued from a bar that is gone must not sound: build the queued ones again. (Made longer,
     // what is queued is still right.)
     if (shorter) rescheduleQueuedHits();
-    page = Math.min(page, lastPage());
-    onMessage(`${bars} ${bars === 1 ? "BAR" : "BARS"}`);
     onChange();
     onSongChange();
   }

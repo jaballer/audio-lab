@@ -789,6 +789,64 @@ describe("passes", () => {
     expect(log.filter((entry) => entry.startsWith("step")).at(-1)).toBe("step 4 @3.050");
   });
 
+  // 120 BPM, 8 steps: they fall at 0.05, 0.175, 0.3, 0.425, 0.55... After the tick at 0.325 step 3 is scheduled and the next is 4.
+  describe("a loop made shorter", () => {
+    const atStepFour = (options = {}) => {
+      const w = withWraps({ steps: 8, bpm: 120, ...options });
+      w.scheduler.start();
+      w.run(0.325); // the tick at 0.325 schedules step 3, at 0.425 s
+      expect(w.log[w.log.length - 1]).toBe("step 3 @0.425");
+      return w;
+    };
+
+    it("that ends where the scheduler is has come round: onWrap is told, with where the next step falls", () => {
+      const { scheduler, log, run } = atStepFour();
+      scheduler.setSteps(4); // step 4 of 8 is step 0 of 4
+      expect(log[log.length - 1]).toBe("wrap @0.550");
+      run(0.6); // the pass of 4 that begins at 0.55 s ends at 1.05 s
+      expect(log.filter((entry) => entry.startsWith("wrap"))).toEqual(["wrap @0.550", "wrap @1.050"]);
+      expect(log[log.indexOf("wrap @0.550") + 1]).toBe("step 0 @0.550");
+    });
+
+    it("lets onWrap begin the pass that comes at another length", () => {
+      const { scheduler, log, run } = atStepFour({ onWrap: (_time, s) => s.startPass(2) });
+      scheduler.setSteps(4);
+      run(0.5);
+      const steps = log.filter((entry) => entry.startsWith("step")).map((entry) => Number(entry.split(" ")[1]));
+      expect(steps.slice(-4)).toEqual([0, 1, 0, 1]);
+    });
+
+    it("that ends somewhere else in the loop has not come round", () => {
+      const { scheduler, log } = atStepFour();
+      scheduler.setSteps(3); // step 4 of 8 is step 1 of 3
+      expect(log.some((entry) => entry.startsWith("wrap"))).toBe(false);
+    });
+
+    it("tells onWrap once, not again, when the loop had already come round", () => {
+      const { scheduler, log, run } = withWraps({ steps: 4, bpm: 40 });
+      scheduler.start();
+      run(1.1); // the last step of the pass is scheduled and the loop has come round, with the first step of the next not yet
+      expect(log.filter((entry) => entry.startsWith("wrap"))).toHaveLength(1);
+      scheduler.setSteps(2);
+      expect(log.filter((entry) => entry.startsWith("wrap"))).toHaveLength(1);
+    });
+
+    it("says nothing once it is stopped, wherever the loop had got to", () => {
+      const { scheduler, log } = atStepFour();
+      scheduler.stop();
+      scheduler.setSteps(4); // the step that would have been next is where a loop of 4 ends
+      expect(log.some((entry) => entry.startsWith("wrap"))).toBe(false);
+    });
+
+    it("says nothing before there is a loop to come round", () => {
+      const { scheduler, log } = withWraps({ steps: 8, bpm: 120 });
+      scheduler.setSteps(4);
+      scheduler.start();
+      scheduler.setSteps(2);
+      expect(log.some((entry) => entry.startsWith("wrap"))).toBe(false);
+    });
+  });
+
   it("is untouched by a stall that does not cross a wrap", () => {
     const { scheduler, log, advance } = withWraps({ steps: 16, bpm: 120 });
     scheduler.start();

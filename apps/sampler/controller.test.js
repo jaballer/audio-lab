@@ -1659,6 +1659,64 @@ describe("the next sequence", () => {
       expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
     });
 
+    // A sequence of two bars, made one bar at the moment the scheduler is at the end of the first: the loop has come round there.
+    describe("when the loop is made shorter so that it ends where the scheduler is", () => {
+      const atEndOfFirstBar = () => {
+        const s = setup({ song: twoSequences({ bars: 2 }) });
+        s.sampler.start();
+        const tick = (count) => {
+          for (let i = 0; i < count; i++) {
+            s.advance(0.05);
+            s.sampler.poll();
+          }
+        };
+        tick(6);
+        s.sampler.queueSequence(1);
+        tick(31); // 1.85 s: step 15 is scheduled, and the next is 16, which is where a loop of one bar ends
+        return s;
+      };
+
+      it("takes over there, in the pass that begins at 2.05 s", () => {
+        const s = atEndOfFirstBar();
+        s.sampler.setBars(1);
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1, bars: 1 });
+        expect(s.sampler.getSong().sequences[0].bars).toBe(1);
+        for (let i = 0; i < 12; i++) {
+          s.advance(0.05);
+          s.sampler.poll();
+        }
+        expect(s.sounds[1].play.mock.calls.map((call) => call[2])).toEqual([expect.closeTo(2.05, 2)]);
+      });
+
+      it("says the sequence that took over, and not the length it was shortened to", () => {
+        const s = atEndOfFirstBar();
+        s.sampler.setBars(1);
+        expect(s.message).toHaveBeenLastCalledWith("SEQ 02");
+        expect(s.message).toHaveBeenCalledWith("1 BAR");
+      });
+
+      it("redraws and asks for a save", () => {
+        const s = atEndOfFirstBar();
+        s.change.mockClear();
+        s.songChange.mockClear();
+        s.sampler.setBars(1);
+        expect(s.change).toHaveBeenCalled();
+        expect(s.songChange).toHaveBeenCalled();
+      });
+
+      it("is a pass end for a sequence queued afterwards too, when none was before", () => {
+        const s = setup({ song: twoSequences({ bars: 2 }) });
+        s.sampler.start();
+        for (let i = 0; i < 37; i++) {
+          s.advance(0.05);
+          s.sampler.poll();
+        }
+        s.sampler.setBars(1); // the loop comes round here, with nothing queued
+        s.sampler.queueSequence(1); // and a press before the downbeat takes over there
+        expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
+      });
+    });
+
     it("is for the end of the pass before a restart, and not for the one after", () => {
       const s = setup({ song: twoSequences() });
       toWindow(s);

@@ -34,7 +34,8 @@
 // (it carries on into the new length from where the old one ended, for a person changing the length of a loop that is playing).
 // The steps already queued for the playhead are left as they were. A stall that skips past the end of a pass calls it for each
 // one it crosses, in order, so a page that picks the length at every wrap ends on the same grid as one that was not stalled,
-// and lands in the last pass where the grid is. A page that stops the scheduler from here is not scheduled for again.
+// and lands in the last pass where the grid is. A page that stops the scheduler from here is not scheduled for again. A loop made shorter with
+// `setSteps` so that it ends exactly where the scheduler is has come round too, and `onWrap` is called from inside that call.
 //
 // `onStep(step, time, heard)` also gets `heard`, a Set of the rows (pads) that
 // must stay silent on this pass because they were just heard live: see
@@ -229,11 +230,16 @@ export function createScheduler({
   function setSteps(value) {
     const wrappedJustNow = scheduledAny && nextStep === 0 && !freshPass;
     const oldSteps = steps;
+    const landed = nextStep;
     steps = value;
     nextStep = value > oldSteps && wrappedJustNow ? oldSteps : nextStep % steps;
     if (playheadStep >= steps) playheadStep %= steps;
     for (const queued of visualQueue) queued.step %= steps;
     if (heardStep >= steps) forgetHeard();
+    // A loop made shorter that ends exactly where the scheduler is has come round, as if its last step had just been scheduled:
+    // the page is told, for a pass that is not begun, as it is at any other wrap. (Where it already was at the start of a pass,
+    // it was told then.)
+    if (scheduledAny && landed !== 0 && nextStep === 0) onWrap?.(nextTime);
   }
 
   // The pass that is beginning is `value` steps long, from its first step: for onWrap. Nothing already queued is touched, so
