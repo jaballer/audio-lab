@@ -170,6 +170,8 @@
                    sequence the playhead is, with that bar marked over the progress bar. -->
                 <div class="ruler" id="ruler" aria-hidden="true"></div>
                 <div class="lcd-progress" id="lcd-progress" aria-hidden="true"></div>
+                <!-- How loud the left and right of the output are: a bar for each, drawn by level-meter-view.js. -->
+                <div class="lcd-meter" id="lcd-meter" aria-hidden="true"></div>
               </div>
             </div>
 
@@ -370,6 +372,10 @@
         <li>
           <kbd>Space</kbd> plays or stops the sequence; Stop pressed again, when it is already stopped, cuts off all
           sound, even what is still ringing
+        </li>
+        <li>
+          The two bars at the right of the display show how loud the left and right of the output are, as it is heard
+          (after the soft clipper); the top box lights when the sound is pressed against the clipper's ceiling
         </li>
         <li>
           Drop an audio file on a pad to play it there (up to 10 seconds and 5 MB); it is kept in this browser. Edit Pad

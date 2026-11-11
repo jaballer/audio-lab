@@ -14,6 +14,7 @@
 //                                  // inaudible, but a held note would be heard again at power on)
 //   audio.running                  // true only while sound can be heard: powered, and the context running
 //   audio.analyser                 // an AnalyserNode listening after the clipper (what is heard), or null; for meters and lights
+//   audio.channelAnalysers         // [left, right]: an AnalyserNode for each side of what is heard (a mono sound is on both), or null; for a level meter
 //   audio.killSound()              // cut off everything sounding now, tails and all; sounds made after it are heard
 //
 // Power off mutes the master gain and leaves the context running. Suspending it would freeze
@@ -37,6 +38,9 @@ export const POWER_SWITCH = "[data-power-switch]";
 
 const ANALYSER_SIZE = 2048; // samples per reading: bins about 23 Hz wide, fine enough to tell a kick from a hat
 const ANALYSER_SMOOTHING = 0.4; // of the spectrum, between readings: the default 0.8 smears a hit over a second
+// Samples in each side's reading, which a meter reads whole: 46 ms at 44.1 kHz, so even a page drawn at 30 frames a second
+// sees every peak (a frame is 33 ms).
+const CHANNEL_ANALYSER_SIZE = 2048;
 const FADE_TIME_CONSTANT = 0.01; // seconds: smooth enough not to click
 // Killing sound is a faster fade (still no click), and the cut-off master is disconnected once it is inaudible.
 const KILL_TIME_CONSTANT = 0.004;
@@ -71,10 +75,32 @@ export function createClipper(ctx) {
   return { input: half, output: shaper };
 }
 
+// An analyser for each side of `source`, which only read: nothing is wired onward. Null when the context cannot split
+// channels. A splitter on its own treats a mono signal as a left channel with nothing on the right (its channels are
+// "discrete"), so the signal first goes through a gain that is made two channels and upmixed as speakers are: a mono sound
+// is then on both sides, as it is when it is heard.
+function createChannelAnalysers(ctx, source) {
+  if (typeof ctx.createChannelSplitter !== "function") return null;
+  const stereo = ctx.createGain();
+  stereo.channelCount = 2;
+  stereo.channelCountMode = "explicit";
+  stereo.channelInterpretation = "speakers";
+  const splitter = ctx.createChannelSplitter(2);
+  source.connect(stereo);
+  stereo.connect(splitter);
+  return [0, 1].map((channel) => {
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = CHANNEL_ANALYSER_SIZE;
+    splitter.connect(analyser, channel);
+    return analyser;
+  });
+}
+
 export function createAudioEngine({ volume = 1, onStateChange, createContext = () => new AudioContext() } = {}) {
   let ctx = null;
   let master = null;
   let analyser = null;
+  let channelAnalysers = null;
   let sink = null; // what every master connects to: the clipper's input, or the speakers
   let level = volume;
 
@@ -108,6 +134,7 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
           analyser.fftSize = ANALYSER_SIZE;
           analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
           clipper.output.connect(analyser);
+          channelAnalysers = createChannelAnalysers(ctx, clipper.output);
         }
       }
       sink = clipper ? clipper.input : ctx.destination;
@@ -181,6 +208,9 @@ export function createAudioEngine({ volume = 1, onStateChange, createContext = (
     },
     get analyser() {
       return analyser;
+    },
+    get channelAnalysers() {
+      return channelAnalysers;
     },
     powerOff,
     powerOn,

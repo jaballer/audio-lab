@@ -27,6 +27,8 @@ import { padColorCss } from "./pad-colors.js";
 import { createKit } from "./kit.js";
 import { pitchToRate } from "./pad-settings.js";
 import { createLcd } from "./lcd.js";
+import { createLevelReader } from "./level-meter.js";
+import { createLevelMeter } from "./level-meter-view.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, PAD_COUNT, SEQUENCE_COUNT, STEPS, STEP_GROUP } from "./layout.js";
@@ -233,6 +235,39 @@ const tabSync = createTabSync({
 });
 
 // ---------- Audio and sequencer ----------
+// ---------- Level meter ----------
+// A bar for each side of what is heard. Unlike the playhead it also moves for a pad hit while stopped and for a tail after
+// Stop, so it runs whenever sound can be heard, and ends itself when it cannot (the power goes off, the context is
+// suspended): the engine's state change starts it again.
+const levelMeterElement = $("lcd-meter");
+const levelMeter = createLevelMeter(levelMeterElement);
+let levelReader = null; // built once the engine has its analysers
+let metering = false;
+
+function startLevelMeter() {
+  if (metering) return;
+  metering = true;
+  requestAnimationFrame(levelLoop);
+}
+
+function levelLoop(now) {
+  if (!audio.running) {
+    metering = false;
+    levelReader?.reset();
+    levelMeter.clear();
+    return;
+  }
+  levelReader ??= createLevelReader(audio.channelAnalysers);
+  // A context that cannot make the analysers (an old browser) has no meter to show.
+  if (!levelReader.count) {
+    metering = false;
+    setHidden(levelMeterElement, true);
+    return;
+  }
+  levelMeter.render(levelReader.read(now));
+  requestAnimationFrame(levelLoop);
+}
+
 // The notice comes first: the engine reports its state as soon as it is told to
 // listen, and that first report is what shows the notice on a fresh load.
 let powerSequence = null; // built once the LCD and pads exist (below); the engine can report before that
@@ -243,6 +278,7 @@ const audio = createAudioEngine({
     audioNotice.update(state);
     header.setPowered(state === "running");
     powerSequence?.set(state === "running"); // the screen and pads boot or shut down with the switch's lamp
+    if (state === "running") startLevelMeter();
     // Where kept samples cannot be decoded before the first click (see `samples` below), do it then.
     if (state === "running" && !decodesEarly) samples.restore();
     // The export is made at the rate the context runs at, which is known once it exists.

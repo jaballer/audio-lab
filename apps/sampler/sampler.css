@@ -132,6 +132,43 @@
   gap: 3px;
   margin: 4px 0 6px;
 }
+
+/* The level meter at the right of the display: a bar for the left side of the output and one for the right, each a column of
+   cells that light from the bottom, with a clip lamp on top (level-meter.js; the cells are made by level-meter-view.js). It
+   is as tall as the five text lines, from the top of the letters of the first to the baseline of the last, so that it
+   reads as one block with them. That is in ems of the display's mono font at its 1.55 line height: the five lines are 7.75em,
+   the capitals start 0.32em below the top of the first and the last baseline is 0.5em above the bottom of the fifth. The
+   12px and 14px are the display's own padding (base.css). If the font or the line height changes, so do these. */
+.lcd-screen {
+  position: relative;
+}
+.lcd-meter {
+  position: absolute;
+  top: calc(12px + 0.32em);
+  right: 14px;
+  height: 6.93em;
+  display: flex;
+  gap: 5px;
+}
+.lcd-meter[hidden] {
+  display: none;
+}
+.lcd-meter-bar {
+  display: flex;
+  flex-direction: column-reverse; /* the first cell is the bottom one */
+  gap: 2px;
+  height: 100%;
+}
+.lcd-meter-cell {
+  flex: 1 1 0;
+  width: 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--lcd-ink);
+  border-radius: 1px;
+}
+.lcd-meter-cell.on {
+  background: var(--lcd-ink);
+}
 .ruler span {
   flex: 1;
   height: 14px;
@@ -1119,7 +1156,14 @@
 .lcd-screen[data-power="shutdown"] .lcd-progress,
 .lcd-screen[data-power="off"] .lcd-progress,
 .lcd-screen[data-power="shutdown"] .ruler,
-.lcd-screen[data-power="off"] .ruler {
+.lcd-screen[data-power="off"] .ruler,
+.lcd-screen[data-power="shutdown"] .lcd-meter,
+.lcd-screen[data-power="off"] .lcd-meter {
+  opacity: 0;
+}
+/* The meter waits for the display to be on: while it boots, the boot lines type themselves and the progress bar fills, and the
+   meter's empty cells beside them are only in the way. */
+.lcd-screen[data-power="booting"] .lcd-meter {
   opacity: 0;
 }
 /* The boot lines type themselves across. */
