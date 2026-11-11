@@ -674,14 +674,19 @@ const velocityBars = createVelocityBars($("velocity"), {
   group: STEP_GROUP,
   onChange: (step, value, options) => sampler.setStepVelocity(step, value, options),
 });
-// Removing a sequence cannot be undone (undo is of the steps of one sequence), so ask first when there is anything in it.
+// Removing a sequence cannot be undone (undo is of the steps of one sequence), so ask first when there is anything in it. The
+// question is the browser's own, like the one for Open and for a starter, and a browser holds the page still while it is open:
+// the beat pauses until it is answered. When it is declined, or cannot be shown at all (a page that has dialogs turned off), say
+// so, rather than leave a press of the button looking as if it did nothing.
 function removeSequence() {
   const number = sampler.getState().sequence + 1;
   if (
     sampler.sequenceHasSteps() &&
     !window.confirm(`Remove sequence ${number}? Its steps will be lost, and this cannot be undone.`)
-  )
+  ) {
+    say(`SEQ ${pad2(number)} KEPT`);
     return;
+  }
   sampler.removeSequence();
 }
 const sequenceRow = createSequenceRow($("seq-row"), {

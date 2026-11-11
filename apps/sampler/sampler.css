@@ -711,6 +711,13 @@
 .seq-bar > .small-label {
   min-width: 3.6em;
 }
+/* Eight keys do not fit in the display's width at a larger text size (200% at the wide layout, 125% on a phone), and a row of
+   keys that cannot wrap is as wide as all of them: it pushed the display under the pads, or out of the chassis. So the keys wrap
+   inside their group, in rows, instead. */
+.seq-chips {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
 /* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Add, Copy
    and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too.
    The two right-hand groups are one width, so the display has a column down its right side: the arrows go to the ends of
@@ -942,7 +949,9 @@
   }
   /* The chosen sequence length is a darker face, a colour; say it with the system's highlight instead. */
   .seq-lengths .btn[aria-pressed="true"],
-  .seq-chips .btn[aria-pressed="true"] {
+  .seq-lengths .btn[aria-pressed="true"]:hover,
+  .seq-chips .btn[aria-pressed="true"],
+  .seq-chips .btn[aria-pressed="true"]:hover {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
