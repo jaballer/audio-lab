@@ -13,6 +13,13 @@ Numbers link to the pull request.
 - A footer on every page with links to the source code, the documentation, the design notes, the changelog, the issue
   tracker, the author's GitHub profile and the license. They open in a new tab, so the sampler keeps playing ([#169](https://github.com/jaballer/audio-lab/pull/169))
 
+### Maintenance
+
+- A beat can carry an arrangement, the order a song will play its sequences in, each with a number of repeats (saved
+  format 10). It changes nothing on the page yet: nothing reads or edits it, a beat saved by an older page loads as it
+  did, and a sequence added, copied or removed is followed in it
+  ([#170](https://github.com/jaballer/audio-lab/pull/170))
+
 ## 2026-11-11
 
 ### Added
