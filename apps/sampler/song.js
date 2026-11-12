@@ -20,7 +20,7 @@ export const SONG_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A song newer than
 // this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 10;
+export const SONG_VERSION = 11;
 
 // { [version]: (song) => the same song in the next version's shape }. The version
 // field itself is set by upgradeSong.
@@ -47,6 +47,9 @@ const MIGRATIONS = {
   // Version 10 adds the optional `arrangement` (the order a song plays its sequences in, arrangement.js). A version 9 song has
   // none, which reads as every sequence once, in order: what the All key and Export's All (now Song mode and Export's Song) already did.
   9: (song) => song,
+  // Version 11 adds the optional `loopSong` (the song goes round again at its end instead of stopping). A version 10 song has none, which
+  // reads as Loop off.
+  10: (song) => song,
 };
 
 const VOLUME_MAX = 100;
@@ -84,6 +87,9 @@ function trimBlankSequences(song) {
 //
 // `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a song that has none: a song
 // nobody edited is saved as it always was.
+//
+// `loopSong` is whether the song goes round again at its end instead of stopping (Song mode, with Loop on), and is left out while it is
+// off, which is how a song is until a person turns Loop on.
 export const serializeSong = ({
   bpm,
   swing = SWING_DEFAULT,
@@ -92,6 +98,7 @@ export const serializeSong = ({
   sequences,
   padSettings = {},
   arrangement = null,
+  loopSong = false,
 }) => ({
   version: SONG_VERSION,
   bpm,
@@ -101,6 +108,7 @@ export const serializeSong = ({
   sequences,
   padSettings,
   ...(arrangement ? { arrangement } : {}),
+  ...(loopSong ? { loopSong: true } : {}),
 });
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -200,6 +208,8 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
     sequences,
     padSettings: parsePadSettings(raw.padSettings, rows),
     ...(arrangement ? { arrangement } : {}),
+    // Only a stored true turns Loop on: anything else is what a song that never had it reads as.
+    ...(raw.loopSong === true ? { loopSong: true } : {}),
   };
 }
 

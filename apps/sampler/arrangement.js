@@ -15,6 +15,7 @@
 //   positionOf(arrangement, count, sequence)   // where a sequence first comes in the song, or null
 //   wherePassWas(arrangement, count, played, sequence)   // where the pass that has just ended was, or null
 //   nextPass(arrangement, count, played, sequence)   // the pass after the one that has just ended (what a chain walks)
+//   isLastPass(arrangement, count, at)   // is the pass at that place the last of the song? (where it ends, or goes round)
 //   insertEntry / removeEntry / moveEntry / setRepeats(arrangement, count, …)   // the edits the strip makes
 
 // At most this many entries, and each one repeats from MIN_REPEATS to MAX_REPEATS times: with the sequences' own
@@ -92,8 +93,9 @@ export function wherePassWas(arrangement, count, played, sequence) {
 }
 
 // The pass that follows the one that has just ended: the next time round its entry if it repeats, else the next entry, and the first
-// entry after the last (a song goes round and round for now: stopping at its end, with a Loop switch, is a later step). A sequence that
-// is not in the song hands over to the song's first entry.
+// entry after the last: this is the walk of a song that goes round, and whether it does is not decided here (isLastPass says where
+// the song is at its end, and the controller stops there unless Loop is on). A sequence that is not in the song hands over to the
+// song's first entry.
 export function nextPass(arrangement, count, played, sequence) {
   const entries = resolveArrangement(arrangement, count);
   const pass = (entry, rep) => ({ entry, rep, sequence: entries[entry].sequence });
@@ -101,6 +103,17 @@ export function nextPass(arrangement, count, played, sequence) {
   if (!here) return pass(0, 0);
   if (here.rep + 1 < entries[here.entry].repeats) return pass(here.entry, here.rep + 1);
   return pass((here.entry + 1) % entries.length, 0);
+}
+
+// Is the pass at `at` (a place, as above: where the controller or wherePassWas says a pass was) the last of the song: the last time
+// round the last entry? Not when the place is not known (null), which is a sequence that is in no entry: the song has not come to
+// its end, it has not begun. A time round past the last, which an edit that gave an entry fewer repeats can leave behind, counts as
+// the last.
+export function isLastPass(arrangement, count, at) {
+  if (!at) return false;
+  const entries = resolveArrangement(arrangement, count);
+  const last = entries.length - 1;
+  return at.entry === last && at.rep >= entries[last].repeats - 1;
 }
 
 // ---------- Editing ----------
