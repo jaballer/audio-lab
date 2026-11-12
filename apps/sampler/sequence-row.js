@@ -85,20 +85,24 @@ export function createSequenceRow(element, { onSelect, onLatch, onAdd, onCopy, o
 
   const actions = document.createElement("div");
   actions.className = "btn-group";
-  actions.setAttribute("role", "group");
-  actions.setAttribute("aria-label", "Sequence tools");
   // Whether a press on a sequence waits for the end of the pass (on, as it is until a person turns it off) or switches at once.
   const latch = button("Next", "seq-latch", { "aria-label": "Next: queue sequence presses" });
   const add = button("+", "", { "aria-label": "Add an empty sequence" });
   const copy = button("Copy", "", { "aria-label": "Copy this sequence to a new one" });
   const remove = button("−", "", { "aria-label": "Remove this sequence" });
-  actions.append(latch, add, copy, remove);
+  // Next is a switch, not a tool that acts on a sequence, so it stands on its own beside the joined + Copy − group.
+  const tools = document.createElement("div");
+  tools.className = "seq-tools";
+  tools.setAttribute("role", "group");
+  tools.setAttribute("aria-label", "Sequence tools");
+  actions.append(add, copy, remove);
+  tools.append(latch, actions);
   latch.addEventListener("click", () => onLatch(!latched));
   add.addEventListener("click", () => onAdd());
   copy.addEventListener("click", () => onCopy());
   remove.addEventListener("click", () => onRemove());
 
-  element.append(label, keys, actions);
+  element.append(label, keys, tools);
 
   const chips = []; // the key for each sequence, made when there are more and let go of when there are fewer
   let latched = true; // as of the last refresh: a press on a key is read by it

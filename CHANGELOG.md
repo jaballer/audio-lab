@@ -8,7 +8,11 @@ Numbers link to the pull request.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Sampler: Next stands on its own beside the joined +, Copy and − keys under the display, and the Song panel's Loop starts the row
+  under its heading, as Velocity does in the step editor. Velocity has no lamp now: it is pressed in while the bars show, as Loop
+  and Next are
 
 ## 2026-11-12
 

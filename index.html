@@ -262,9 +262,11 @@
           <div class="step-head">
             <!-- The heading is the button that hides the strip and its tools. chain-strip.js draws both. -->
             <button id="song-toggle" class="small-label section-toggle" type="button" aria-expanded="true">Song</button>
-            <!-- Loop is a setting of the song and not an edit of an entry, so it is beside the heading and not among the tools. -->
-            <button id="song-loop" class="btn btn-small song-loop" type="button" aria-pressed="false">Loop</button>
-            <div id="song-tools" class="step-tools" role="group" aria-label="Edit the song"></div>
+            <div id="song-tools" class="step-tools" role="group" aria-label="Edit the song">
+              <!-- Loop is a setting of the song and not an edit of an entry: it starts the row, under the heading, as Velocity
+                 does in the step editor, and chain-strip.js adds the edit tools after it. -->
+              <button id="song-loop" class="btn btn-small song-loop" type="button" aria-pressed="false">Loop</button>
+            </div>
           </div>
           <div id="song-body">
             <div id="song-strip"></div>
@@ -278,10 +280,11 @@
               Steps
             </button>
             <div id="step-tools" class="step-tools" role="group" aria-label="Edit the steps of the selected pad">
-              <!-- Shows and hides the velocity bars, which are off until asked for. A lamp says which, as MIDI and Lights do. -->
+              <!-- Shows and hides the velocity bars, which are off until asked for. Pressed in, with a dark face, while they show, as
+                 Loop and Next are. -->
               <button
                 id="velocity-toggle"
-                class="btn btn-small btn-midi step-velocity-toggle"
+                class="btn btn-small step-velocity-toggle"
                 type="button"
                 aria-pressed="false"
                 aria-controls="velocity-section"
