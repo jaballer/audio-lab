@@ -7,9 +7,9 @@
 //   entryCells(entries, 1, at)    // [{ index, label: "3", times: "×2", name: "Entry 2, sequence 3, 2 times", pressed, playing }, ...]
 //   neighbourEntry(2, "ArrowLeft", 5)   // 1: where a key moves the selection (-1 for a key that does not)
 //
-// Loop is a key of its own, beside the heading and not among the tools (it is a setting of the song, not an edit of an entry): the page
-// gives it as `loop`, and it is pressed in while the song goes round again at its end instead of stopping there (`loop` in refresh, and
-// `onLoop`).
+// Loop is a key of its own, at the start of the tools' row and apart from them (it is a setting of the song, not an edit of an entry,
+// as Velocity is in the step editor's row): the page gives it as `loop`, already in the row, and the edit tools are added after it. It is
+// pressed in while the song goes round again at its end instead of stopping there (`loop` in refresh, and `onLoop`).
 //
 // The cells are one joined group like the sequence keys, a button with aria-pressed for the entry that is selected. There can be 32, so
 // only the selected one is a stop for Tab (the arrow keys, Home and End move the selection along the row, as in a toolbar), and the rest
