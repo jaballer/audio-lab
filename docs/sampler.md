@@ -41,7 +41,7 @@ What `song.js` keeps, and `controller.js` plays:
   keys do. No undo, as for the sequences' own list.
 - **Song mode** (the Song key, `toggleSong`; #159 step 4b, replacing the All key that played every sequence in order) goes by the
   arrangement: the controller keeps where the song is (`songAt`) and `nextPass` says which pass follows the one that ended (the next
-  time round the entry if it repeats, else the next entry; round and round until Stop, a later step gives it an end). It is off on
+  time round the entry if it repeats, else the next entry), and the song ends after its last pass unless Loop is on (below). Song mode is off on
   every load and is not saved, and a song that plays saves nothing as it goes. The decisions, each asked of the person who wanted it:
   - **Play begins at the entry selected** in the Song panel, at its first time round (the first entry when none was picked),
     wherever the editor is.
@@ -53,12 +53,33 @@ What `song.js` keeps, and `controller.js` plays:
     (`followPlaying`); turning it on goes on playing what played, until the end of its pass, then the song's next pass.
   - **Stop** leaves the editor where it is, and what plays becomes the sequence showing again (`mirrorPlaying`). The next Play begins at
     the entry selected, as always, and the display says so (below).
+  - **The song ends after its last pass, unless Loop is on** (#159 step 4c). `isLastPass` says which pass is the last (the last time
+    round the last entry), and with Loop off, which is how a song is until a person turns it on, the pass end after it is the end: `onWrap`
+    tells the scheduler `endAt(time)`, which stops queuing steps but goes on playing until the clock reaches that time, so that the last
+    step (handed to the audio clock up to the lookahead early) is not cut off and what the display marks is what sounds until the end. Then
+    the scheduler stops itself and `onEnd` says `END OF SONG` and redraws, as a stop does: what rings goes on, and Stop pressed again cuts it.
+    Calling `stop()` from `onWrap` instead would have taken those last steps back. Play begins at the entry selected again, as after Stop; the
+    editor and the selection stay where they were. With Loop on the last pass is followed by the first entry, as the song always was before
+    it could end. A pass that is in no entry (its sequence was removed while it played) is not the last: the chain takes the first entry after
+    it, and the song ends at its own end. Only Song mode ends: a beat that is not in Song mode is a loop of the sequence showing, whatever Loop
+    says, and Export ignores Loop (the file is the song once through).
+  - **Loop is a key in the Song panel** (`toggleLoop`, `loopSong`). It is a setting of the song and not of the visit, so, where Song mode is
+    not kept, it is saved with the beat (saved format 11; left out while off, so a song that never had Loop on is saved as before). Off is
+    the default, as decided for the epic: a song that is played once through is what a person who has made one expects, and a loop is a choice.
+  - **The end can be changed in the moment before it sounds**, as a press on a sequence key can (the scheduler has reached the pass end
+    and its first step has not sounded, up to a quarter of a second at 100 BPM): Loop turned on or off, an entry added, removed, moved or
+    given more or fewer repeats, and Song mode turned on all count at that pass end (`reconsiderPassEnd`, `chainAtOpenPassEnd`). What was
+    built after the pass end is taken back (`takeBackBuilt`) and the run ends there (`endSongLate`), or the end is taken back
+    (`scheduler.endAt(null)`) and the song goes on, from the sequence that ended or by a takeover. Song mode turned off ends nothing: what was
+    playing goes on as a loop. The scheduler takes an end back by itself when it goes back over the pass end (`rewindTo`: a rebuild of the
+    steps is told of the pass end again and decides it once more, as for a repeat), when a pass begins (`startPass`) and when a loop made
+    longer carries on past it (`setSteps`).
   - **The LCD has a screen for each mode** (`SCREENS` in `lcd.js`, chosen by `screenFor`, each a pure function of the state that gives the
     five lines; the display is five lines tall and the level meter beside it is sized to them). The pattern screen is the sequence,
     the pad, the tempo, the bar and the step. The song screen keeps the first three lines' jobs (`SONG 02/05  PLAYING`, where the
     first number is the entry of the song, then the pad and the tempo) and puts in the places of the bar and the step, which the
     timeline along the bottom of the display already says, the sequence that plays with the time round its entry (`SEQ 03  REPEAT
-2/4`) and the sequence that comes next (`NEXT SEQ 01`). Stopped, it says where Play would begin, the entry selected. A stopgap
+2/4`) and the sequence that comes next (`NEXT SEQ 01`, or `NEXT END` in the last pass of a song that ends there). Stopped, it says where Play would begin, the entry selected. A stopgap
     towards a screen of its own for the song, as the display will have a screen for each function. The controller says where the song
     is in `getState().heard.song` (`heardSong`): what sounds, not the pass the scheduler has begun (the strip's `songPass` leads
     by the lookahead, the display does not, as for `heard.sequence`); a place not known (Song mode joined in mid-pass) is the first

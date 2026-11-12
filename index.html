@@ -387,12 +387,13 @@
         <li>
           Song, at the end of the row with Rec, Play and Stop, plays the song: lit, Play begins at the entry selected in
           the Song panel (the first, to begin with), each pass (the whole of a sequence, all its bars) is followed by
-          the next of the song, and the last by the first, until you press Stop. The display changes to say where the
-          song is (its entry, the sequence and the time round it, and the sequence that comes next), and the sequence
-          keys stay where they are: a press on one only shows that sequence, to edit it, and changes nothing about what
-          plays (the Next key is for when Song is off). Turn Song off while it plays and what plays goes on as a loop,
-          with the keys moving to it. Song is not kept: it is off each time the page opens, and a song that plays does
-          not save the beat as it goes
+          the next of the song, and the song stops after its last pass (the display says END OF SONG), or with Loop on
+          the last is followed by the first, until you press Stop. The display changes to say where the song is (its
+          entry, the sequence and the time round it, and the sequence that comes next, or END), and the sequence keys
+          stay where they are: a press on one only shows that sequence, to edit it, and changes nothing about what plays
+          (the Next key is for when Song is off). Turn Song off while it plays and what plays goes on as a loop, with
+          the keys moving to it. Song is not kept: it is off each time the page opens, and a song that plays does not
+          save the beat as it goes
         </li>
         <li>
           Song, under the pads, is the order the Song key plays: a cell for each entry, with its sequence and how many
@@ -400,10 +401,11 @@
           sequences you add or remove. Press a cell to select it (the arrow keys, Home and End move along the row): Play
           begins there when Song is on, and the tools below act on it. Add Entry puts the sequence showing in after it,
           Remove Entry takes it out (a song keeps one), Move Earlier and Move Later change the order, and Repeats − and
-          + set how many times it goes round, from 1 to 16, with up to 32 entries. While Song plays, the entry that
-          plays has a triangle and shows its time round (2/3), a moment ahead of the sound (about a quarter of a second
-          at 100 BPM). A change is heard from the end of the pass, and the song is kept with the beat. Export saves it:
-          its Song choice has every entry in order, as often as it repeats
+          + set how many times it goes round, from 1 to 16, with up to 32 entries. Loop, before them, makes the song go
+          round again at its end instead of stopping (it is kept with the beat, off to begin with). While Song plays,
+          the entry that plays has a triangle and shows its time round (2/3), a moment ahead of the sound (about a
+          quarter of a second at 100 BPM). A change is heard from the end of the pass, and the song is kept with the
+          beat. Export saves it: its Song choice has every entry in order, as often as it repeats
         </li>
         <li>
           The two bars at the right of the display show how loud the left and right of the output are, as it is heard

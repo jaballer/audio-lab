@@ -255,8 +255,8 @@ share).
   stems and the notes with a fake audio context. Not listened to: that a repeat is heard to come round on the beat, and the seam between
   entries, are for the ear. Firefox and Safari were not run.
 
-What is not built: an end of song with a Loop switch is for the player, not the export (the file is the song once through), and a render
-that is not one buffer.
+What is not built: a render that is not one buffer. The player's end of song and Loop switch are not the export's: the file is the song once through, whether Loop
+is on or not (the Loop switch is how the player ends, `docs/sampler.md`).
 
 - **Memory.** A bounce of eight 8-bar sequences at 40 BPM is 384 s (6.4 minutes) and 4 s: about as large as the biggest export today
   (8 loops of 8 bars, about 275 MB at the peak), so one buffer can still do it: measured, 388 s at 40 BPM finished in 4.1 s, and its peak was

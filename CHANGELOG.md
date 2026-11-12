@@ -10,6 +10,9 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: a Loop key, at the start of the Song panel's tools, makes the song go round again at its end instead of stopping. It
+  is off to begin with and is kept with the beat. Pressed in the last moment before the end (as the Song key is, and the
+  panel's tools), it still counts for that end ([#179](https://github.com/jaballer/audio-lab/pull/179))
 - Sampler: Export saves the song as it is arranged. The Export window's Sequences choice is now Showing or Song (it was
   Showing or All), and Song saves what the Song panel has: every entry in order, each as often as it repeats, and a sequence
   the song does not play is not in the file. It is one file, or a zip with a stem for each pad that plays in the song, with four
@@ -39,12 +42,18 @@ Numbers link to the pull request.
 
 ### Changed
 
+- Sampler: Song mode stops at the end of the song, where it used to go round and round until Stop. The last pass says
+  `NEXT END` on the display, and after it the display says `END OF SONG`; the last step is not cut off, and what rings on goes on
+  ringing, as after Stop. Turn Loop on for the song to go round again ([#179](https://github.com/jaballer/audio-lab/pull/179))
 - Sampler: the files Export makes of the whole beat are called `pad16-song-…` where they were `pad16-all-…` (for example
   `pad16-song-90bpm.wav`), and a choice of All that was kept from before reads as Song
   ([#178](https://github.com/jaballer/audio-lab/pull/178))
 
 ### Maintenance
 
+- The scheduler can end a run at a pass end (`endAt`, with `onEnd`): it stops queuing steps and goes on playing until the clock
+  gets there, so the last steps handed to the audio clock are not taken back. A beat can carry `loopSong` (saved format 11, an
+  upgrade that changes nothing: a beat saved before has Loop off) ([#179](https://github.com/jaballer/audio-lab/pull/179))
 - The export's `songPasses` reads the arrangement (`passOrder`), so the list of passes a song is rendered from is the order and
   repeats the player walks, and a plan shares a repeated sequence's hits between its passes; `docs/export.md` has the cap on a
   song's length and why ([#178](https://github.com/jaballer/audio-lab/pull/178))
