@@ -16,6 +16,15 @@ describe("the stylesheet", () => {
   });
 });
 
+// Pressing Song can turn Export off (a song longer than it makes) with the reason put in the hint's place, while the focus stays on the
+// button just pressed: only a live region says it to a screen reader, which hears the hint read out with the dialog's name when it opens.
+describe("the hint", () => {
+  it("is a polite live region, so that a reason that replaces it after a press is announced", () => {
+    const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+    expect(html).toMatch(/<p[^>]*id="export-dialog-hint"[^>]*aria-live="polite"/);
+  });
+});
+
 describe("dialogState", () => {
   it("is every control on, and the file box showing its hint, when it is idle", () => {
     expect(dialogState(idle)).toEqual({
@@ -281,7 +290,7 @@ describe("exportDialogModel", () => {
         /this sequence has no steps/i,
       );
       const none = model(song3([{}, {}]), all);
-      expect(none.blocked).toBe("No sequence has any steps yet, so there is nothing to export.");
+      expect(none.blocked).toBe("No sequence in the song has any steps yet, so there is nothing to export.");
       expect(none.note).toBe("");
     });
 
@@ -340,7 +349,13 @@ describe("exportDialogModel", () => {
         }),
         all,
       );
-      expect(m.blocked).toBe("No sequence has any steps yet, so there is nothing to export.");
+      expect(m.blocked).toBe("No sequence in the song has any steps yet, so there is nothing to export.");
+    });
+
+    it("says it is the song that has no steps when a sequence it leaves out has some, and not that no sequence has", () => {
+      const patterns = [{ 0: [0] }, { 1: [0] }, {}];
+      const m = model(song3(patterns, [1, 1, 1], { arrangement: [{ sequence: 2, repeats: 2 }] }), all);
+      expect(m.blocked).toBe("No sequence in the song has any steps yet, so there is nothing to export.");
     });
 
     it("blocks a song longer than Export can make, with its length, and has no note: the memory warning would be for a file that is not made", () => {

@@ -634,7 +634,7 @@ describe("exporting the song", () => {
 
   it("is blocked for no steps in any sequence with its own words, after the browser's", () => {
     expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "song" })).toMatch(
-      /no sequence has any steps/i,
+      /no sequence in the song has any steps/i,
     );
     expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "sequence" })).toMatch(
       /this sequence has no steps/i,
@@ -654,10 +654,22 @@ describe("exporting the song", () => {
     ).toBe(""); // as long as it may be is not too long
   });
 
+  it("never says a song is as long as the longest when it is a fraction of a second over: the length in the reason is rounded up", () => {
+    // 400.117 s is 6 min 40 s to the nearest second, which is what Export makes: "6 min 40 s long, and Export makes at most 6 min 40 s"
+    const reason = exportBlockedReason({ supported: true, hasSteps: true, scope: "song", seconds: 400.117 });
+    expect(reason).toMatch(/^This song is 6 min 41 s long/);
+    expect(reason).toMatch(/at most 6 min 40 s/);
+    expect(exportBlockedReason({ supported: true, hasSteps: true, scope: "song", seconds: 400.5 })).toMatch(
+      /6 min 41 s long/,
+    );
+  });
+
   it("puts the browser first and no steps second, before a song that is too long: the long one is not the first thing to fix", () => {
     const long = { hasSteps: true, scope: "song", seconds: 9999 };
     expect(exportBlockedReason({ ...long, supported: false })).toMatch(/cannot render audio/);
-    expect(exportBlockedReason({ ...long, supported: true, hasSteps: false })).toMatch(/no sequence has any steps/i);
+    expect(exportBlockedReason({ ...long, supported: true, hasSteps: false })).toMatch(
+      /no sequence in the song has any steps/i,
+    );
   });
 
   it("does not say it of the sequence showing, whose length the loops make and the page's size note warns of", () => {

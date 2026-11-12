@@ -37,6 +37,12 @@ Numbers link to the pull request.
   that plays has a triangle and shows its time round (2/3). A change is heard from the end of the pass, the song is saved with
   the beat, and the panel can be hidden. Export does not use it yet ([#174](https://github.com/jaballer/audio-lab/pull/174))
 
+### Changed
+
+- Sampler: the files Export makes of the whole beat are called `pad16-song-…` where they were `pad16-all-…` (for example
+  `pad16-song-90bpm.wav`), and a choice of All that was kept from before reads as Song
+  ([#178](https://github.com/jaballer/audio-lab/pull/178))
+
 ### Maintenance
 
 - The export's `songPasses` reads the arrangement (`passOrder`), so the list of passes a song is rendered from is the order and
@@ -73,9 +79,6 @@ Numbers link to the pull request.
 
 ### Changed
 
-- Sampler: the files Export makes of the whole beat are called `pad16-song-…` where they were `pad16-all-…` (for example
-  `pad16-song-90bpm.wav`), and a choice of All that was kept from before reads as Song
-  ([#178](https://github.com/jaballer/audio-lab/pull/178))
 - Sampler: the display shows what sounds. For the moment between one sequence taking over and its first step sounding
   (a quarter of a second at 100 BPM), the display stays on the sequence that gave way while the keys and the step
   editor are already on the new one, and a press on a sequence key, or on All, just ahead of the end of a pass acts at

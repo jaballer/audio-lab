@@ -56,8 +56,10 @@ second click of a double click would otherwise land on it).
 **It says what it will cost before it is made.** The length and size of the file; bars with no steps ("nothing plays in
 them but what is still ringing": a file is as long as all its bars, and a sequence of 8 bars with steps in the first is
 silent from 2 s in, which looks like an export that broke off); and, from about 200 MB, how much memory it takes. These are
-read out with the dialog's name when it opens. Export WAV is off, with the reason in place of the hint, for a sequence with
-no steps and for a browser that cannot render audio to a file. The guard only warns: it never blocks.
+read out with the dialog's name when it opens (the hint is a live region, so that a reason that replaces it after a press, such as Song
+turning Export off, is read out as well; not tried with a screen reader). Export WAV is off, with the reason in place of the hint, for a sequence with
+no steps, for a browser that cannot render audio to a file, and for a song longer than it makes (see The song). The memory guard only
+warns: it never blocks.
 
 **No "time left".** It was tried (from the rate so far) and said "a few seconds left" for 18 s: the windows of a render do
 not cost the same (a dense bar followed by sparse ones). A wrong estimate is worse than none, so there is a percentage.
@@ -227,7 +229,9 @@ share).
   again before they start (`SONG TOO LONG`), for a song that changed under an open dialog. Only the song has the cap: the sequence showing
   is made longer by its loops, a choice of four, which the memory note warns of as before. The cap is on time, so it is the same at any
   rate; the memory it means is not: 400 s is about 270 MB at 44.1 kHz, 290 at 48 and 590 at 96 (as the dialog counts, `exportMemoryBytes`), which the note
-  warns of from 200 MB and does not stop, as for any export. A chunked render would lift the cap, and is not built.
+  warns of from 200 MB and does not stop, as for any export. The cap bounds the mix and not the stems: each stem is as long as the song, and every one
+  is held until the zip is made (twice, as the note counts it), so 16 stems of a 400 s song are about 2.6 GB at 48 kHz. That is as it already was for
+  stems of eight loops of eight bars at 40 BPM (384 s), and only warned of. A chunked render would lift the cap, and is not built.
 - **Checked in a real browser (Chromium, 48 kHz), when the song was every sequence once.** Not run again for the arrangement: only which
   passes are listed changed (the hit feeder, the voices and the render are as they were), and what the tests with a fake audio context
   say about the order and the repeats is below.

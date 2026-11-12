@@ -267,11 +267,12 @@ export function exportBlockedReason({ supported, hasSteps, scope = "sequence", s
   if (!supported) return "This browser cannot render audio to a file, so Export is not available.";
   if (!hasSteps) {
     return scope === "song"
-      ? "No sequence has any steps yet, so there is nothing to export."
+      ? "No sequence in the song has any steps yet, so there is nothing to export."
       : "This sequence has no steps yet, so there is nothing to export.";
   }
   if (scope === "song" && seconds > MAX_SONG_EXPORT_SECONDS) {
-    return `This song is ${formatDuration(seconds)} long, and Export makes at most ${formatDuration(MAX_SONG_EXPORT_SECONDS)}. Fewer repeats or entries make it shorter, or export one sequence at a time.`;
+    // Rounded up: to the nearest second a song a fraction over the longest reads as the longest, and "6 min 40 s long, and Export makes at most 6 min 40 s" says nothing.
+    return `This song is ${formatDuration(Math.ceil(seconds))} long, and Export makes at most ${formatDuration(MAX_SONG_EXPORT_SECONDS)}. Fewer repeats or entries make it shorter, or export one sequence at a time.`;
   }
   return "";
 }

@@ -10,8 +10,8 @@
 //   });
 //   dialog.open(); dialog.close(); dialog.isOpen;
 //   dialog.setOptions({ loops: 2, channels: "mono", files: "mix", scope: "sequence" }); // which choices are lit, and what the button says
-//   dialog.refresh({ title, readout, format, note, hint, blocked }); // for the sequence showing: `note` is what to know before it
-//                                                             is made (bars with no steps, how much memory it takes);
+//   dialog.refresh({ title, readout, format, note, hint, blocked }); // for the sequence showing or the song: `note` is what to know before it
+//                                                             is made (bars or sequences with no steps, how much memory it takes);
 //                                                             `hint` is about the choice of files ("": the dialog's own);
 //                                                             `blocked` is why Export is off (a sentence), or "" when on
 //   dialog.setBusy(true); dialog.setProgress(0.4);            // while it renders (null: not known yet)

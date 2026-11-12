@@ -9,7 +9,7 @@ order; stop when you have what you need.
 | [CLAUDE.md](../CLAUDE.md)          | The rules: conventions, architecture rules, tests, and the branch and pull request workflow (`AGENTS.md` is the same file)                               |
 | [architecture.md](architecture.md) | How the code fits together: a page's modules, the sound, MIDI and storage paths, and every file and what it is for, the build and tooling files included |
 | [sampler.md](sampler.md)           | Why the sampler works as it does: the song and its sequences, step velocity, the pad editor and each pad setting                                         |
-| [export.md](export.md)             | Why Export works as it does: the dialog, the offline render, stems, all the sequences, and what was measured                                             |
+| [export.md](export.md)             | Why Export works as it does: the dialog, the offline render, stems, the song, and what was measured                                                      |
 | [mpc-sample.md](mpc-sample.md)     | The Akai MPC Sample's MIDI, as documented and as measured on the device, and the decisions it led to                                                     |
 | [CHANGELOG](../CHANGELOG.md)       | What changed on the live site, by day                                                                                                                    |
 
