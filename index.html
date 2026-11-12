@@ -402,8 +402,8 @@
           Remove Entry takes it out (a song keeps one), Move Earlier and Move Later change the order, and Repeats − and
           + set how many times it goes round, from 1 to 16, with up to 32 entries. While Song plays, the entry that
           plays has a triangle and shows its time round (2/3), a moment ahead of the sound (about a quarter of a second
-          at 100 BPM). A change is heard from the end of the pass, and the song is kept with the beat. Export does not
-          use it yet: it saves every sequence once, in order
+          at 100 BPM). A change is heard from the end of the pass, and the song is kept with the beat. Export saves it:
+          its Song choice has every entry in order, as often as it repeats
         </li>
         <li>
           The two bars at the right of the display show how loud the left and right of the output are, as it is heard
@@ -446,13 +446,14 @@
         </li>
         <li>
           Export, in the File group above the display, opens a window to save a 16-bit WAV file, at the tempo, volume
-          and pad settings on the page. Sequences chooses the one showing, or All of them: every sequence in order, once
-          each (an empty one as silence, as Song mode plays them), with a few seconds on the end for what rings on. For
-          the one showing you can choose 1, 2, 4 or 8 loops of it in one file: one loop is exactly the length of its
-          bars, so that it loops, and what rings on past the end is heard at the start. Stereo or mono, with its length
-          and size shown before you save it (and a warning when it needs a lot of memory). Stems makes a WAV for each
-          pad that has steps, in one zip: they are not clipped, and they add up to the mix, so the parts can be mixed
-          elsewhere. It shows how far it has got, and Cancel export or Escape stops it
+          and pad settings on the page. Sequences chooses the one showing, or the Song: the order and repeats of the
+          Song panel, as Song mode plays them (an empty sequence as silence), with a few seconds on the end for what
+          rings on (a song longer than 6 min 40 s is too long to save). For the one showing you can choose 1, 2, 4 or 8
+          loops of it in one file: one loop is exactly the length of its bars, so that it loops, and what rings on past
+          the end is heard at the start. Stereo or mono, with its length and size shown before you save it (and a
+          warning when it needs a lot of memory). Stems makes a WAV for each pad that has steps, in one zip: they are
+          not clipped, and they add up to the mix, so the parts can be mixed elsewhere. It shows how far it has got, and
+          Cancel export or Escape stops it
         </li>
         <li><a href="./keyboard.html">Keyboard test</a> is a page for trying a MIDI keyboard</li>
       </ul>

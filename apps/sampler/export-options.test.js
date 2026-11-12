@@ -24,8 +24,12 @@ import {
   largeExportNote,
   normalizeExportOptions,
   renderingLabel,
+  MAX_SONG_EXPORT_SECONDS,
+  songPassOrder,
+  songFileSeconds,
   songSteps,
   stemsInfo,
+  songTooLong,
 } from "./export-options.js";
 
 // 120 BPM: a sixteenth is 0.125 s, a bar of 16 steps is 2 s
@@ -45,19 +49,28 @@ describe("the choices", () => {
     expect(FILE_CHOICES).toEqual(["mix", "stems"]);
   });
 
-  it("offer the sequence showing or all of them in order, and the sequence showing is what the export has always been", () => {
-    expect(SCOPE_CHOICES).toEqual(["sequence", "all"]);
+  it("offer the sequence showing or the song, and the sequence showing is what the export has always been", () => {
+    expect(SCOPE_CHOICES).toEqual(["sequence", "song"]);
     expect(DEFAULT_EXPORT_OPTIONS.scope).toBe("sequence");
   });
 });
 
 describe("normalizeExportOptions", () => {
   it("keeps options that are choices", () => {
-    expect(normalizeExportOptions({ loops: 4, channels: "mono", files: "stems", scope: "all" })).toEqual({
+    expect(normalizeExportOptions({ loops: 4, channels: "mono", files: "stems", scope: "song" })).toEqual({
       loops: 4,
       channels: "mono",
       files: "stems",
-      scope: "all",
+      scope: "song",
+    });
+  });
+
+  it("reads the scope an earlier version called all as the song, which it became (a saved choice is kept, not dropped)", () => {
+    expect(normalizeExportOptions({ loops: 2, channels: "mono", files: "stems", scope: "all" })).toEqual({
+      loops: 2,
+      channels: "mono",
+      files: "stems",
+      scope: "song",
     });
   });
 
@@ -83,7 +96,7 @@ describe("normalizeExportOptions", () => {
       files: "stems",
       scope: "sequence",
     });
-    expect(normalizeExportOptions({ loops: 8, channels: "mono", files: "zip", scope: "song" })).toEqual({
+    expect(normalizeExportOptions({ loops: 8, channels: "mono", files: "zip", scope: "everything" })).toEqual({
       loops: 8,
       channels: "mono",
       files: "mix",
@@ -479,21 +492,67 @@ describe("exportNote", () => {
 });
 
 // 120 BPM: a bar is 2 s, so three sequences of 1, 2 and 1 bars are 8 s, and the tail is on the end of that.
-describe("exporting all the sequences", () => {
+describe("exporting the song", () => {
   const three = { bpm: 120, current: 1, sequences: [{ bars: 1 }, { bars: 2 }, { bars: 1 }] };
+  // The same three sequences, in the order of a song that was edited: sequence 3 three times, then sequence 2 (whose two bars are 4 s),
+  // and sequence 1 left out: 5 bars, 10 s, where the unedited song is 4 bars and 8 s.
+  const edited = {
+    ...three,
+    arrangement: [
+      { sequence: 2, repeats: 3 },
+      { sequence: 1, repeats: 1 },
+    ],
+  };
 
   it("is 4 s of tail, for what rings on after the last step", () => {
     expect(SONG_TAIL_SECONDS).toBe(4);
   });
 
-  it("counts the steps of every sequence, once each", () => {
+  it("counts the steps of every sequence, once each, when the song has not been edited", () => {
     expect(songSteps(three, 16)).toBe(64);
     expect(songSteps({ bpm: 120, current: 0, sequences: [{ bars: 8 }] }, 16)).toBe(128);
   });
 
+  it("counts the steps of the song as it is arranged: each entry as often as it repeats, and a sequence left out not at all", () => {
+    expect(songSteps(edited, 16)).toBe(3 * 16 + 32);
+    expect(songSteps({ ...three, arrangement: [{ sequence: 0, repeats: 16 }] }, 16)).toBe(16 * 16);
+  });
+
+  it("reads an arrangement that does not fit the sequences as the song would (an entry for a sequence there is not is dropped)", () => {
+    expect(
+      songSteps(
+        {
+          ...three,
+          arrangement: [
+            { sequence: 5, repeats: 2 },
+            { sequence: 0, repeats: 1 },
+          ],
+        },
+        16,
+      ),
+    ).toBe(16);
+    expect(songSteps({ ...three, arrangement: [{ sequence: 5, repeats: 2 }] }, 16)).toBe(64); // none left: every sequence once
+  });
+
+  it("lists the sequence of each pass, with the repeats counted out", () => {
+    expect(songPassOrder(three)).toEqual([0, 1, 2]);
+    expect(songPassOrder(edited)).toEqual([2, 2, 2, 1]);
+  });
+
+  it("is the length of the song as arranged, and the tail, in frames", () => {
+    expect(exportFrames(edited, 16, 1, 1000, "song")).toBe((10 + SONG_TAIL_SECONDS) * 1000);
+    expect(exportFrames({ ...three, arrangement: [{ sequence: 0, repeats: 4 }] }, 16, 1, 1000, "song")).toBe(
+      (8 + SONG_TAIL_SECONDS) * 1000,
+    );
+  });
+
+  it("does not change what the sequence showing is, whatever the song has", () => {
+    expect(exportFrames(edited, 16, 2, 1000, "sequence")).toBe(8 * 1000); // two loops of the second sequence, as before
+  });
+
   it("is the steps of all of them and then the tail, in frames of the rate, and loops add nothing", () => {
-    expect(exportFrames(three, 16, 1, 1000, "all")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
-    expect(exportFrames(three, 16, 8, 1000, "all")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
+    expect(exportFrames(three, 16, 1, 1000, "song")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
+    expect(exportFrames(three, 16, 8, 1000, "song")).toBe((8 + SONG_TAIL_SECONDS) * 1000);
     expect(exportFrames(three, 16, 1, 1000, "sequence")).toBe(4 * 1000); // the one showing, the second of the three, as before
     expect(exportFrames(three, 16, 1, 1000)).toBe(4 * 1000);
   });
@@ -501,11 +560,11 @@ describe("exporting all the sequences", () => {
   it("rounds the length once, to the nearest frame, not down", () => {
     // 130 BPM: a bar is 1.846153… s, and with the tail 5.846153… s, which at 1900 Hz is 11107.69 frames
     const song = { bpm: 130, current: 0, sequences: [{ bars: 1 }] };
-    expect(exportFrames(song, 16, 1, 1900, "all")).toBe(11108);
+    expect(exportFrames(song, 16, 1, 1900, "song")).toBe(11108);
   });
 
   it("says how long and how big the file will be by the scope in the options, as the loops are not counted", () => {
-    const info = exportInfo(three, { loops: 4, channels: "mono", scope: "all" }, 16, 1000);
+    const info = exportInfo(three, { loops: 4, channels: "mono", scope: "song" }, 16, 1000);
     expect(info).toMatchObject({ frames: 12000, seconds: 12, channels: "mono" });
     expect(info.bytes).toBe(44 + 12000 * 2);
     const sequence = exportInfo(three, { loops: 4, channels: "mono", scope: "sequence" }, 16, 1000);
@@ -513,25 +572,27 @@ describe("exporting all the sequences", () => {
   });
 
   it("says it for stems too: each is as long as the whole", () => {
-    const info = stemsInfo(three, { scope: "all", channels: "stereo" }, 16, 1000, 3);
+    const info = stemsInfo(three, { scope: "song", channels: "stereo" }, 16, 1000, 3);
     expect(info.frames).toBe(12000);
     expect(info.stems).toBe(3);
   });
 
-  it("is headed by how many sequences, how many there are and the tempo", () => {
-    expect(exportTitle(three, "all")).toBe("ALL · 3 SEQUENCES · 120 BPM");
-    expect(exportTitle({ ...three, sequences: [{ bars: 1 }] }, "all")).toBe("ALL · 1 SEQUENCE · 120 BPM");
+  it("is headed by how many entries the song has and the tempo: the sequences when it has not been edited", () => {
+    expect(exportTitle(three, "song")).toBe("SONG · 3 ENTRIES · 120 BPM");
+    expect(exportTitle({ ...three, sequences: [{ bars: 1 }] }, "song")).toBe("SONG · 1 ENTRY · 120 BPM");
+    expect(exportTitle(edited, "song")).toBe("SONG · 2 ENTRIES · 120 BPM"); // the entries, not the passes and not the sequences
     expect(exportTitle(three, "sequence")).toBe("SEQ 02 · 2 BARS · 120 BPM");
     expect(exportTitle(three)).toBe("SEQ 02 · 2 BARS · 120 BPM");
   });
 
   it("says what the file is, in the hint, with the stems' own words for stems, and that a sound longer than the tail is cut", () => {
-    expect(exportHint("mix", "all")).toMatch(/every sequence, in order, once each/i);
-    expect(exportHint("mix", "all")).toMatch(/4 s/);
-    expect(exportHint("mix", "all")).toMatch(/longer sound is cut/i);
+    expect(exportHint("mix", "song")).toMatch(/each entry of the song, in order/i);
+    expect(exportHint("mix", "song")).toMatch(/as many times as it repeats/i);
+    expect(exportHint("mix", "song")).toMatch(/4 s/);
+    expect(exportHint("mix", "song")).toMatch(/longer sound is cut/i);
     expect(exportHint("mix", "sequence")).toBe("");
-    expect(exportHint("stems", "all")).toMatch(/one file for each pad/i);
-    expect(exportHint("stems", "all")).toMatch(/every sequence, in order/i);
+    expect(exportHint("stems", "song")).toMatch(/one file for each pad/i);
+    expect(exportHint("stems", "song")).toMatch(/each entry of the song, in order/i);
     expect(exportHint("stems")).toBe(exportHint("stems", "sequence"));
   });
 
@@ -546,14 +607,16 @@ describe("exporting all the sequences", () => {
     );
   });
 
-  it("advises what makes a large export of all the sequences smaller: not loops, which it does not have", () => {
+  it("advises what makes a large export of the song smaller: a shorter song, not loops, which it does not have", () => {
     const big = 300 * 1024 * 1024;
-    expect(largeExportNote(big, { scope: "all" })).toMatch(/Exporting one sequence at a time makes it smaller\.$/);
-    expect(largeExportNote(big, { scope: "all" })).not.toMatch(/loops/);
-    expect(largeExportNote(big, { scope: "all", stems: 4 })).toMatch(
-      /Mono, or one sequence at a time, makes it smaller\.$/,
+    expect(largeExportNote(big, { scope: "song" })).toMatch(
+      /A shorter song, or one sequence at a time, makes it smaller\.$/,
     );
-    expect(largeExportNote(big, { scope: "all", stems: 4 })).not.toMatch(/loops/);
+    expect(largeExportNote(big, { scope: "song" })).not.toMatch(/loops/);
+    expect(largeExportNote(big, { scope: "song", stems: 4 })).toMatch(
+      /Mono, a shorter song, or one sequence at a time, makes it smaller\.$/,
+    );
+    expect(largeExportNote(big, { scope: "song", stems: 4 })).not.toMatch(/loops/);
     expect(largeExportNote(big, { scope: "sequence" })).toMatch(/Fewer loops make it smaller\./);
     expect(largeExportNote(big, { stems: 4 })).toMatch(/Fewer loops or mono make it smaller\./);
     expect(largeExportNote(big, {})).toMatch(/Fewer loops make it smaller\./);
@@ -570,14 +633,79 @@ describe("exporting all the sequences", () => {
   });
 
   it("is blocked for no steps in any sequence with its own words, after the browser's", () => {
-    expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "all" })).toMatch(
+    expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "song" })).toMatch(
       /no sequence has any steps/i,
     );
     expect(exportBlockedReason({ supported: true, hasSteps: false, scope: "sequence" })).toMatch(
       /this sequence has no steps/i,
     );
     expect(exportBlockedReason({ supported: true, hasSteps: false })).toMatch(/this sequence has no steps/i);
-    expect(exportBlockedReason({ supported: false, hasSteps: false, scope: "all" })).toMatch(/cannot render audio/);
-    expect(exportBlockedReason({ supported: true, hasSteps: true, scope: "all" })).toBe("");
+    expect(exportBlockedReason({ supported: false, hasSteps: false, scope: "song" })).toMatch(/cannot render audio/);
+    expect(exportBlockedReason({ supported: true, hasSteps: true, scope: "song" })).toBe("");
+  });
+
+  it("is blocked for a song longer than Export can make, with how long it is and how long Export goes to", () => {
+    const reason = exportBlockedReason({ supported: true, hasSteps: true, scope: "song", seconds: 432 });
+    expect(reason).toMatch(/7 min 12 s/);
+    expect(reason).toMatch(/6 min 40 s/);
+    expect(reason).toMatch(/fewer repeats or entries/i);
+    expect(
+      exportBlockedReason({ supported: true, hasSteps: true, scope: "song", seconds: MAX_SONG_EXPORT_SECONDS }),
+    ).toBe(""); // as long as it may be is not too long
+  });
+
+  it("puts the browser first and no steps second, before a song that is too long: the long one is not the first thing to fix", () => {
+    const long = { hasSteps: true, scope: "song", seconds: 9999 };
+    expect(exportBlockedReason({ ...long, supported: false })).toMatch(/cannot render audio/);
+    expect(exportBlockedReason({ ...long, supported: true, hasSteps: false })).toMatch(/no sequence has any steps/i);
+  });
+
+  it("does not say it of the sequence showing, whose length the loops make and the page's size note warns of", () => {
+    expect(exportBlockedReason({ supported: true, hasSteps: true, scope: "sequence", seconds: 9999 })).toBe("");
+    expect(exportBlockedReason({ supported: true, hasSteps: true, seconds: 9999 })).toBe("");
+  });
+});
+
+describe("how long a song may be", () => {
+  // 120 BPM: a bar of 16 steps is 2 s, so a sequence of 8 bars is 16 s.
+  const long = (arrangement, sequences = [{ bars: 8 }]) => ({ bpm: 120, current: 0, sequences, arrangement });
+
+  it("is 400 s, the file and its tail: as large as the biggest export that is made today (eight bars at 40 BPM, eight times over, is 388 s)", () => {
+    expect(MAX_SONG_EXPORT_SECONDS).toBe(400);
+    const biggest = { bpm: 40, current: 0, sequences: Array.from({ length: 8 }, () => ({ bars: 8 })) };
+    expect(songTooLong(biggest, 16)).toBe(false);
+    expect(songFileSeconds(biggest, 16)).toBe(384 + SONG_TAIL_SECONDS);
+  });
+
+  it("counts the tail with the song, and the repeats of every entry", () => {
+    expect(songFileSeconds(long([{ sequence: 0, repeats: 3 }]), 16)).toBe(3 * 16 + SONG_TAIL_SECONDS);
+  });
+
+  it("allows a file of exactly the longest length and not a step more", () => {
+    const sequences = [{ bars: 8 }, { bars: 6 }];
+    // 24 passes of 16 s and one of 12 s are 396 s, and the tail is the rest
+    const atTheCap = long(
+      [
+        { sequence: 0, repeats: 16 },
+        { sequence: 0, repeats: 8 },
+        { sequence: 1, repeats: 1 },
+      ],
+      sequences,
+    );
+    expect(songFileSeconds(atTheCap, 16)).toBe(MAX_SONG_EXPORT_SECONDS);
+    expect(songTooLong(atTheCap, 16)).toBe(false);
+    const over = long([...atTheCap.arrangement, { sequence: 1, repeats: 1 }], sequences);
+    expect(songTooLong(over, 16)).toBe(true);
+  });
+
+  it("is a matter of the song's time, and so of the tempo: a slow song of few bars is long", () => {
+    const slow = { bpm: 20, current: 0, sequences: [{ bars: 8 }], arrangement: [{ sequence: 0, repeats: 5 }] };
+    expect(songTooLong(slow, 16)).toBe(true); // 8 bars at 20 BPM is 96 s: five of them are 480 s
+    expect(songTooLong({ ...slow, bpm: 40 }, 16)).toBe(false);
+  });
+
+  it("is within what the arrangement can hold: the most a song can be (32 entries of 16 repeats) is far over it, so the cap is what limits it", () => {
+    const most = long(Array.from({ length: 32 }, () => ({ sequence: 0, repeats: 16 })));
+    expect(songTooLong(most, 16)).toBe(true);
   });
 });
