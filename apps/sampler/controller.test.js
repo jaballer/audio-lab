@@ -34,7 +34,9 @@ function busOf(node) {
 }
 
 const SEQUENCES = 4;
-// A saved song with one sequence of the given pattern and length, the rest empty.
+// A saved song with one sequence of the given pattern and length, the rest empty. It has Loop on unless the test says `loopSong: false`:
+// the tests of the chain, written when a song went round and round, are about the order and not the end, and the end of a song that
+// has Loop off (the way a song is until a person turns it on) has its own tests below.
 const savedSong = ({
   bpm = 100,
   swing = 50,
@@ -44,12 +46,14 @@ const savedSong = ({
   velocities = {},
   current = 0,
   padSettings = {},
+  loopSong = true,
 } = {}) => ({
   bpm,
   swing,
   volume,
   current,
   padSettings,
+  ...(loopSong ? { loopSong: true } : {}),
   sequences: Array.from({ length: SEQUENCES }, (_, i) =>
     i === 0 ? { bars, pattern, velocities } : { bars: 1, pattern: {}, velocities: {} },
   ),
@@ -4442,6 +4446,611 @@ describe("Song mode", () => {
       run(s, 4.0); // 4.5 s
       expect(timesOf(s, 1)).toEqual(closeTo(0.05)); // its pass, to the end
       expect(timesOf(s, 0)).toEqual(closeTo(2.05)); // then the first entry of what is left (the first sequence)
+    });
+  });
+});
+
+describe("the end of the song", () => {
+  // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
+  // step 0 on pad i, to tell which one is sounding. Loop is off unless the test turns it on: that is how a song is until a person does.
+  const entry = (sequence, repeats = 1) => ({ sequence, repeats });
+  const songWith = (count, arrangement, { bars = [], loopSong = false, patterns = [] } = {}) => {
+    const base = songOf(count, { bpm: 120 });
+    delete base.loopSong; // the fixtures loop unless told not to (savedSong): these are about the end
+    for (let i = 0; i < count; i++) {
+      base.sequences[i] = { bars: bars[i] ?? 1, pattern: patterns[i] ?? { [i]: [0] }, velocities: {} };
+    }
+    return { ...base, ...(arrangement ? { arrangement } : {}), ...(loopSong ? { loopSong: true } : {}) };
+  };
+  const tick = (s, count) => {
+    for (let i = 0; i < count; i++) {
+      s.advance(0.05);
+      s.sampler.poll();
+    }
+  };
+  const run = (s, seconds) => tick(s, Math.round(seconds / 0.05));
+  const timesOf = (s, pad) => s.sounds[pad].play.mock.calls.map((call) => call[2]);
+  const closeTo = (...times) => times.map((time) => expect.closeTo(time, 2));
+  const playingNow = (s) => s.sampler.getState().playing;
+  const songMode = (s) => {
+    s.sampler.toggleSong();
+    s.sampler.start();
+  };
+  // The hit that was last handed to the audio clock for the pad, as a node that is cut off when the step is taken back.
+  const lastBus = (s, pad) => busOf(s.sounds[pad].play.mock.calls.at(-1)[1]);
+  // Where the audio clock was when the song ended (to the tick), running on until it has.
+  const endedAt = (s) => {
+    for (let i = 0; i < 400 && playingNow(s); i++) tick(s, 1);
+    return s.audio.ctx.currentTime;
+  };
+
+  describe("with Loop off", () => {
+    it("plays each entry as often as it repeats, once through, and stops where the last one ends", () => {
+      const s = setup({ song: songWith(3, [entry(0, 2), entry(1), entry(2, 3)]) });
+      songMode(s);
+      run(s, 12.1); // six passes, the last of which ends at 12.05 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+      expect(timesOf(s, 2)).toEqual(closeTo(6.05, 8.05, 10.05)); // and nothing from the first entry again at 12.05 s
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("plays every sequence once, in order, and stops, when nobody has edited the song", () => {
+      const s = setup({ song: songWith(3, null) });
+      songMode(s);
+      run(s, 8);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+      expect(timesOf(s, 2)).toEqual(closeTo(4.05));
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("ends after the one sequence of a song that has only that", () => {
+      const s = setup({ song: songWith(1, null) });
+      songMode(s);
+      run(s, 3);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("keeps playing until the last pass has ended, so that its last step is not cut off", () => {
+      // The last step of the song is a hit on step 15 of the last bar, 1.875 s into the pass: the scheduler hands it to the audio clock
+      // about 120 ms ahead, a quarter second before the pass ends, and stopping at that moment would cancel it.
+      const s = setup({ song: songWith(2, null, { patterns: [{ 0: [0] }, { 1: [0, 15] }] }) });
+      songMode(s);
+      run(s, 3.9); // the last hit sounds at 3.925 s, and has been handed over
+      expect(playingNow(s)).toBe(true);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 3.925));
+      expect(lastBus(s, 1).disconnect).not.toHaveBeenCalled();
+      run(s, 0.3);
+      expect(playingNow(s)).toBe(false);
+      expect(lastBus(s, 1).disconnect).not.toHaveBeenCalled();
+    });
+
+    it("ends where the last pass does, whatever its length", () => {
+      const s = setup({ song: songWith(2, [entry(1, 2), entry(0)], { bars: [2, 1] }) });
+      songMode(s);
+      run(s, 3.9);
+      expect(playingNow(s)).toBe(true); // two passes of a bar, then two bars: 2 + 2 + 4 = 8 s, to 8.05 s
+      run(s, 4);
+      expect(playingNow(s)).toBe(true);
+      run(s, 0.3);
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("has the display say the sequence showing again, as after a stop, when the editor was on another", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      run(s, 4.3); // the song played sequence 2 last, and the editor is on sequence 1
+      expect(s.sampler.getState()).toMatchObject({ playing: false, sequence: 0, playingSequence: 0 });
+      expect(s.sampler.getState().heard).toMatchObject({ sequence: 0 });
+    });
+
+    it("says so, and redraws, and saves nothing", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      run(s, 3.9);
+      s.message.mockClear();
+      s.change.mockClear();
+      s.songChange.mockClear();
+      run(s, 0.3);
+      expect(s.message).toHaveBeenCalledWith("END OF SONG");
+      expect(s.change).toHaveBeenCalled();
+      expect(s.songChange).not.toHaveBeenCalled();
+    });
+
+    it("leaves the sampler as a stop would: nothing playing, no playhead, no entry marked, the one selected still selected", () => {
+      const s = setup({ song: songWith(3, null) });
+      s.sampler.selectEntry(1);
+      s.sampler.toggleSong();
+      s.sampler.start();
+      run(s, 4.3); // the song began at entry 2, which is the second of two passes
+      const state = s.sampler.getState();
+      expect(state).toMatchObject({
+        playing: false,
+        playheadStep: -1,
+        songPass: null,
+        selectedEntry: 1,
+        songMode: true,
+      });
+      expect(state.heard.song).toMatchObject({ entry: 1, rep: 0 }); // where Play would begin
+      expect(s.sampler.getState().queuedSequence).toBe(-1);
+    });
+
+    it("lets Play begin the song again, at the entry selected, and end again", () => {
+      const s = setup({ song: songWith(3, null) });
+      songMode(s);
+      run(s, 6.3);
+      expect(playingNow(s)).toBe(false);
+      s.sampler.selectEntry(1);
+      const from = s.audio.ctx.currentTime;
+      s.sampler.start();
+      run(s, 4.3);
+      expect(timesOf(s, 1).at(-1)).toBeCloseTo(from + 0.05, 1); // the second entry first
+      expect(timesOf(s, 2).at(-1)).toBeCloseTo(from + 2.05, 1);
+      expect(timesOf(s, 0)).toHaveLength(1); // not the first entry again
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("has Stop pressed again cut off what rings after the end, as after any stop", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      run(s, 4.3);
+      s.message.mockClear();
+      s.sampler.stop();
+      expect(s.message).toHaveBeenCalledWith("ALL SOUND OFF");
+    });
+
+    it("does not touch a beat that is not in Song mode: a loop of the sequence showing goes on for ever", () => {
+      const s = setup({ song: songWith(2, null) });
+      s.sampler.start();
+      run(s, 30);
+      expect(playingNow(s)).toBe(true);
+      expect(timesOf(s, 0).length).toBeGreaterThan(14); // every 2 s
+    });
+
+    it("is over at once for a stall that crosses the end, with nothing sounded after it", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      s.advance(0.02); // the first step is scheduled
+      s.advance(9); // the timer was held up: the passes ended at 2.05 s and 4.05 s while nothing was scheduled
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      expect(timesOf(s, 1)).toEqual([]); // the second pass was in the stall
+      expect(s.message).toHaveBeenCalledWith("END OF SONG");
+    });
+  });
+
+  describe("Loop", () => {
+    it("is off to begin with, and on when the saved song says so", () => {
+      expect(setup({ song: songWith(2, null) }).sampler.getState().loopSong).toBe(false);
+      expect(setup({ song: songWith(2, null, { loopSong: true }) }).sampler.getState().loopSong).toBe(true);
+      expect(setup().sampler.getState().loopSong).toBe(false);
+    });
+
+    it("is turned on and off by toggleLoop, which says so, redraws and asks for a save", () => {
+      const s = setup({ song: songWith(2, null) });
+      s.sampler.toggleLoop();
+      expect(s.sampler.getState().loopSong).toBe(true);
+      expect(s.message).toHaveBeenLastCalledWith("LOOP ON");
+      expect(s.change).toHaveBeenCalled();
+      expect(s.songChange).toHaveBeenCalledTimes(1);
+      s.sampler.toggleLoop();
+      expect(s.sampler.getState().loopSong).toBe(false);
+      expect(s.message).toHaveBeenLastCalledWith("LOOP OFF");
+      expect(s.songChange).toHaveBeenCalledTimes(2);
+    });
+
+    it("is part of the song that is saved, only while it is on", () => {
+      const s = setup({ song: songWith(2, null) });
+      expect(s.sampler.getSong()).not.toHaveProperty("loopSong");
+      s.sampler.toggleLoop();
+      expect(s.sampler.getSong().loopSong).toBe(true);
+      s.sampler.toggleLoop();
+      expect(s.sampler.getSong()).not.toHaveProperty("loopSong");
+    });
+
+    it("keeps the song going round when it is on, as it did before it could end", () => {
+      const s = setup({ song: songWith(2, [entry(0, 2), entry(1)], { loopSong: true }) });
+      songMode(s);
+      run(s, 12.2);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 6.05, 8.05, 12.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(4.05, 10.05));
+      expect(playingNow(s)).toBe(true);
+    });
+
+    it("turned on in the last pass, before its end is reached, takes the song round instead of ending it", () => {
+      const s = setup({ song: songWith(3, null) });
+      songMode(s);
+      run(s, 4.5); // in the last pass
+      s.sampler.toggleLoop();
+      run(s, 3); // 7.5 s
+      expect(playingNow(s)).toBe(true);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+    });
+
+    it("turned off in the last pass of a song that goes round ends it there", () => {
+      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      songMode(s);
+      run(s, 4.5);
+      s.sampler.toggleLoop();
+      run(s, 3);
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+    });
+
+    it("turned off in an earlier pass ends the song at the end of the next time round", () => {
+      const s = setup({ song: songWith(2, null, { loopSong: true }) });
+      songMode(s);
+      run(s, 5); // in the third pass, which is the first entry again
+      s.sampler.toggleLoop();
+      run(s, 1.2); // 6.2 s: in the fourth, the last entry
+      expect(playingNow(s)).toBe(true);
+      run(s, 2); // 8.2 s: it ended at 8.05 s
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 6.05));
+    });
+
+    it("turned on just ahead of the end of the song takes the song round: the first entry takes over there", () => {
+      const s = setup({ song: songWith(3, null) });
+      songMode(s);
+      tick(s, 117); // 5.85 s: the end at 6.05 s has been reached
+      expect(s.sampler.getState().playing).toBe(true);
+      s.sampler.toggleLoop();
+      run(s, 3); // 8.85 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 8.05));
+      expect(playingNow(s)).toBe(true);
+    });
+
+    it("turned on just ahead of the end of a song of one sequence goes round in that sequence, taking nothing over", () => {
+      const s = setup({ song: songWith(1, null) });
+      songMode(s);
+      tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
+      s.sampler.toggleLoop();
+      run(s, 3.9); // 5.85 s
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05));
+      expect(playingNow(s)).toBe(true);
+    });
+
+    it("turned off just ahead of the end of a song that would go round ends it there, taking back what was built after the pass end", () => {
+      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      songMode(s);
+      tick(s, 119); // 5.95 s: the end at 6.05 s has been reached and the first step after it (at 6.05 s) is built
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
+      const built = lastBus(s, 0);
+      s.sampler.toggleLoop();
+      expect(built.disconnect).toHaveBeenCalled();
+      run(s, 3);
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05)); // nothing was built again
+    });
+
+    it("turned off just ahead of a pass end that is not the last changes nothing", () => {
+      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      songMode(s);
+      tick(s, 77); // 3.85 s: the end of the second pass (4.05 s) has been reached
+      s.sampler.toggleLoop();
+      run(s, 3);
+      expect(timesOf(s, 2)).toEqual(closeTo(4.05));
+      expect(playingNow(s)).toBe(false); // it ended at 6.05 s, where it was always going to now
+    });
+  });
+
+  describe("an edit made just ahead of the end", () => {
+    it("that adds an entry takes the song on to it", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      songMode(s);
+      tick(s, 77); // 3.85 s: the end at 4.05 s has been reached
+      s.sampler.setSequence(2);
+      s.sampler.addEntry(); // the sequence showing, at the end
+      run(s, 3); // 6.85 s
+      expect(timesOf(s, 2)).toEqual(closeTo(4.05));
+      expect(playingNow(s)).toBe(false); // and the song ends at the end of that one
+    });
+
+    it("that gives the last entry another time round goes round it again, taking nothing over", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1)]) });
+      songMode(s);
+      tick(s, 77);
+      s.sampler.setEntryRepeats(1, 2);
+      run(s, 3);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05));
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("that takes the last entry away, a pass end before it, ends the song there: what was built after the pass end is taken back", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      songMode(s);
+      tick(s, 79); // 3.95 s: the end of the second pass (4.05 s) has been reached, and the first step of the third (at 4.05 s) is built
+      const built = lastBus(s, 2);
+      s.sampler.removeEntry(2);
+      expect(built.disconnect).toHaveBeenCalled();
+      run(s, 3);
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+    });
+
+    it("that moves another entry last ends the song after that one, not the one it was going to", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      songMode(s);
+      tick(s, 77); // the end of the second pass (4.05 s) is reached, the third entry is next
+      s.sampler.moveEntry(2, -1); // entries 0, 2, 1: the pass that ended (sequence 1) is now the last
+      run(s, 3);
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 2)).toEqual([]); // it is the second entry now, but what plays is already sequence 2's own: the first of the two
+    });
+
+    it("that takes the last entry away puts what plays back to the sequence that is ending, which the display says", () => {
+      // the sequence of the last entry is two bars long and the one before it one bar: the pass end was taken over by it
+      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)], { bars: [1, 1, 2] }) });
+      songMode(s);
+      tick(s, 79); // 3.95 s: the second pass ends at 4.05 s, and the third has taken over
+      expect(s.sampler.getState().playingSequence).toBe(2);
+      s.sampler.removeEntry(2);
+      expect(s.sampler.getState().playingSequence).toBe(1);
+      expect(s.sampler.getState().heard).toMatchObject({ sequence: 1, bars: 1 });
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, next: -1 });
+    });
+
+    it("that takes away the entry the song is in, which leaves the first entry (the same sequence) the last, ends it, as it does earlier in the pass", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(1, [entry(0), entry(0)]) });
+        s.sampler.selectEntry(1);
+        songMode(s);
+        tick(s, ticks); // 1 s into the pass, then the moment before its end at 2.05 s
+        s.sampler.removeEntry(1);
+        expect(endedAt(s)).toBeCloseTo(2.07, 1);
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      }
+    });
+
+    it("that adds a sequence takes the song on to it, in the moment before the end as it does earlier in the pass", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(2, null) });
+        s.sampler.selectEntry(1);
+        songMode(s); // begins at the last entry, which is sequence 2
+        tick(s, ticks);
+        s.sampler.addSequence(); // one more, at the end: the song has it after sequence 2
+        expect(endedAt(s)).toBeCloseTo(4.07, 1);
+      }
+    });
+
+    it("that copies a sequence takes the song on to the copy, and it sounds", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(2, null) });
+        s.sampler.selectEntry(1);
+        songMode(s);
+        tick(s, ticks);
+        s.sampler.copySequence(); // a copy of the sequence showing, the first, which has its hit on pad 1
+        endedAt(s);
+        expect(timesOf(s, 0)).toEqual(closeTo(2.05));
+      }
+    });
+
+    it("that removes the sequence the song was going on to makes the one that plays the last, and ends the song there", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(3, null) });
+        s.sampler.selectEntry(1);
+        songMode(s);
+        tick(s, ticks);
+        s.sampler.setSequence(2); // the last sequence shows, and goes
+        s.sampler.removeSequence();
+        expect(endedAt(s)).toBeCloseTo(2.07, 1);
+      }
+    });
+
+    it("that removes the sequence that plays lets its pass play out and goes on from the first entry, as it does earlier in the pass", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(3, null) });
+        s.sampler.selectEntry(2);
+        songMode(s);
+        s.sampler.setSequence(2);
+        tick(s, ticks);
+        s.sampler.removeSequence(); // sequence 3 goes while it plays: nothing says where the song was
+        expect(endedAt(s)).toBeCloseTo(6.07, 1);
+        expect(timesOf(s, 0)).toEqual(closeTo(2.05));
+        expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+      }
+    });
+
+    it("that removes the sequence that plays, and then Loop turned on, goes round: the end is not left standing with Loop on", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(3, null) });
+        s.sampler.selectEntry(2);
+        songMode(s);
+        s.sampler.setSequence(2);
+        tick(s, ticks);
+        s.sampler.removeSequence();
+        s.sampler.toggleLoop();
+        run(s, 8);
+        expect(playingNow(s)).toBe(true);
+      }
+    });
+
+    it("that ends the song after taking over, and then a longer sequence, carries on in the longer length", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      tick(s, 39); // the end of the first pass (2.05 s) has been reached, and the second sequence has taken over
+      s.sampler.removeEntry(1); // the first is the last: the pass end is the song's end, back to the first sequence
+      s.sampler.setBars(2); // the sequence showing, which plays: two bars, so the pass end it had reached is not one
+      expect(endedAt(s)).toBeCloseTo(4.07, 1);
+    });
+
+    it("that gives the last entry fewer times round, in its last-but-one, ends the song at the end of that pass", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      songMode(s);
+      run(s, 3); // in the second pass, the first time round the last entry
+      s.sampler.setEntryRepeats(1, 1);
+      run(s, 1.2); // 4.2 s: the pass ended at 4.05 s
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("that gives the last entry more times round, in its last, goes round it again", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1)]) });
+      songMode(s);
+      run(s, 3); // in the last pass
+      s.sampler.setEntryRepeats(1, 2);
+      run(s, 2.2); // 5.2 s
+      expect(playingNow(s)).toBe(true);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05));
+      run(s, 1);
+      expect(playingNow(s)).toBe(false); // at 6.05 s
+    });
+  });
+
+  describe("just ahead of the end of the song", () => {
+    it("the steps are built again from the same sequence and it ends once when the sounds change", () => {
+      const s = setup({ song: songWith(2, null, { patterns: [{ 0: [0] }, { 1: [0, 8, 15] }] }) });
+      songMode(s);
+      tick(s, 77); // 3.85 s: the end is reached
+      s.sampler.kitChanged("sound");
+      run(s, 3);
+      expect(playingNow(s)).toBe(false);
+      const heard = timesOf(s, 1);
+      // each step of the last pass built once for the sound (the three, then the three again for the ones not yet sounded)
+      expect(heard.filter((time) => time < 2.1)).toEqual(closeTo(2.05));
+      expect(s.message.mock.calls.filter(([text]) => text === "END OF SONG")).toHaveLength(1);
+    });
+
+    it("a sequence made longer carries on past it, and the end moves to the end of the longer pass", () => {
+      const s = setup({ song: songWith(1, null) });
+      s.sampler.setSequence(0);
+      songMode(s);
+      tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
+      s.sampler.setBars(2); // the sequence showing is the one that plays
+      run(s, 1.9); // 3.85 s
+      expect(playingNow(s)).toBe(true);
+      run(s, 0.4);
+      expect(playingNow(s)).toBe(false); // 4.05 s
+    });
+
+    it("a time round counted for Loop turned on there is taken back when the sequence is made longer past the pass end", () => {
+      const s = setup({ song: songWith(1, [entry(0, 2)]) });
+      songMode(s);
+      tick(s, 77); // 3.85 s: the end of the second time round (4.05 s) has been reached
+      s.sampler.toggleLoop(); // the entry goes round again, from its first time
+      expect(s.sampler.getState().songPass).toEqual({ entry: 0, rep: 0 });
+      s.sampler.setBars(2); // the loop carries on past the pass end: it was not one, and the time round it began has not
+      expect(s.sampler.getState().songPass).toEqual({ entry: 0, rep: 1 });
+    });
+
+    it("a sequence made shorter ends the song at the end of the shorter pass", () => {
+      const s = setup({ song: songWith(1, null, { bars: [2] }) });
+      songMode(s);
+      tick(s, 37); // 1.85 s: the first bar of the pass has been scheduled, and the second is to begin at 2.05 s
+      s.sampler.setBars(1); // the loop of one bar ends where the scheduler is: the end of the song
+      run(s, 0.5);
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("Song mode turned off takes the end back: the sequence that was playing goes round", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      tick(s, 77); // 3.85 s: the end of the last pass (4.05 s) has been reached
+      s.sampler.toggleSong();
+      run(s, 4); // 7.85 s
+      expect(playingNow(s)).toBe(true);
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05, 6.05));
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05)); // and the first sequence does not come back
+    });
+
+    it("Song mode turned on ends it there, when what plays is the last pass of the song: the loop built after it is taken back", () => {
+      const s = setup({ song: songWith(2, null) });
+      s.sampler.setSequence(1);
+      s.sampler.start();
+      tick(s, 39); // 1.95 s: the end of the pass (2.05 s) has been reached and the first step after it is built
+      const built = lastBus(s, 1);
+      s.sampler.toggleSong();
+      expect(built.disconnect).toHaveBeenCalled();
+      run(s, 1);
+      expect(playingNow(s)).toBe(false);
+      expect(timesOf(s, 1)).toEqual(closeTo(0.05, 2.05)); // the second was built and taken back
+    });
+
+    it("Song mode turned off once the clock has got to the end, before the scheduler has stopped, does not bring the song back", () => {
+      const s = setup({ song: songWith(1, null) });
+      songMode(s);
+      tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
+      s.audio.ctx.currentTime = 2.06; // the clock gets there between two ticks
+      s.sampler.toggleSong();
+      run(s, 2);
+      expect(playingNow(s)).toBe(false);
+    });
+
+    it("Stop pressed there stops it at once, like any stop, and the end does not come after", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      tick(s, 77);
+      s.message.mockClear();
+      s.sampler.stop();
+      expect(playingNow(s)).toBe(false);
+      run(s, 1);
+      expect(s.message).not.toHaveBeenCalledWith("END OF SONG");
+    });
+
+    it("Play pressed there begins the song again from the entry selected, and the end it was going to does not come", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      tick(s, 77);
+      s.sampler.start();
+      run(s, 3.5); // from 3.85 s: the song again, 2 s a pass, from 3.9 s
+      expect(playingNow(s)).toBe(true);
+      expect(timesOf(s, 0)).toEqual(closeTo(0.05, 3.9));
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05, 5.9)); // 5.9 s is the second pass, the last, which ends at 7.9 s
+    });
+  });
+
+  describe("what the display is told (heard.song)", () => {
+    it("says nothing comes next in the last pass, and what comes next before it", () => {
+      const s = setup({ song: songWith(3, null) });
+      songMode(s);
+      run(s, 0.5);
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 0, next: 1 });
+      run(s, 3.7); // 4.2 s: the last pass
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 2, next: -1 });
+    });
+
+    it("says the first sequence comes next in the last pass when Loop is on", () => {
+      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      songMode(s);
+      run(s, 4.5);
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 2, next: 0 });
+    });
+
+    it("says it for the last time round the last entry, and not before", () => {
+      const s = setup({ song: songWith(2, [entry(0), entry(1, 2)]) });
+      songMode(s);
+      run(s, 2.5);
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, rep: 0, next: 1 });
+      run(s, 2);
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, rep: 1, next: -1 });
+    });
+
+    it("is changed by Loop at once", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      run(s, 2.5);
+      expect(s.sampler.getState().heard.song.next).toBe(-1);
+      s.sampler.toggleLoop();
+      expect(s.sampler.getState().heard.song.next).toBe(0);
+    });
+
+    it("says it of a song that is stopped, where Play would begin: nothing comes next after a single pass", () => {
+      const s = setup({ song: songWith(2, null) });
+      s.sampler.toggleSong();
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 0, next: 1 });
+      s.sampler.selectEntry(1);
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, next: -1 });
+    });
+
+    it("keeps the entry the song ended in marked until it ends, and says nothing comes next while it sounds out", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      tick(s, 79); // 3.95 s: the end has been reached and the last pass still sounds
+      expect(s.sampler.getState()).toMatchObject({ playing: true, songPass: { entry: 1, rep: 0 } });
+      expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, next: -1 });
     });
   });
 });

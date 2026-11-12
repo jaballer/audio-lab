@@ -52,7 +52,8 @@ function patternLines(state) {
 // timeline along the bottom of the display says where the playhead is, and it is the same bar and step) the sequence that plays and the
 // time round its entry, and the sequence that comes next. A stopgap towards a screen of its own for the song.
 //   song = { entry, entries, sequence, rep, repeats, next }   // all 0-based, `entry` and `rep` -1 when the place is not known (the
-//     chain finds out at the next pass end); `repeats` is how many times the entry goes round
+//     chain finds out at the next pass end); `repeats` is how many times the entry goes round; `next` is -1 when the song ends after
+//     this pass (the last pass, with Loop off), which the line says as NEXT END
 function songLines(state) {
   const { entry, entries, sequence, rep, repeats, next } = state.song;
   return [
@@ -60,7 +61,7 @@ function songLines(state) {
     padLine(state),
     tempoLine(state),
     `SEQ ${pad2(sequence + 1)}  REPEAT ${rep < 0 ? "--" : `${rep + 1}/${repeats}`}`,
-    `NEXT SEQ ${pad2(next + 1)}`,
+    next < 0 ? "NEXT END" : `NEXT SEQ ${pad2(next + 1)}`,
   ];
 }
 

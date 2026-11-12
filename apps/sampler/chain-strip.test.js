@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryCells, neighbourEntry } from "./chain-strip.js";
+import { entryCells, loopTitle, neighbourEntry } from "./chain-strip.js";
 
 const entry = (sequence, repeats = 1) => ({ sequence, repeats });
 
@@ -84,5 +84,12 @@ describe("neighbourEntry", () => {
 
   it("stays on the one entry there is", () => {
     for (const key of ["ArrowLeft", "ArrowRight", "Home", "End"]) expect(neighbourEntry(0, key, 1)).toBe(0);
+  });
+});
+
+describe("loopTitle", () => {
+  it("says what Loop does as it is: the song goes round again at its end when on, and stops there when off", () => {
+    expect(loopTitle(true)).toMatch(/^On: .*goes round again/);
+    expect(loopTitle(false)).toMatch(/^Off: .*stops/);
   });
 });

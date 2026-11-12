@@ -2,10 +2,14 @@
 // times it goes round, and the tools to add, remove, move and repeat the entry that is selected. It shows and reports; the sampler
 // decides (addEntry, removeEntry, moveEntry, setEntryRepeats), and which entry is selected is the sampler's (selectEntry).
 //
-//   const strip = createChainStrip({ strip: element, tools: element }, { onSelect, onAdd, onRemove, onMove, onRepeats });
-//   strip.refresh({ entries, selected: 1, at: { entry: 1, rep: 0 }, canAdd: true, canRemove: true });   // `at`: where Song mode is, or null
+//   const strip = createChainStrip({ strip: element, tools: element, loop: element }, { onSelect, onAdd, onRemove, onMove, onRepeats, onLoop });
+//   strip.refresh({ entries, selected: 1, at: { entry: 1, rep: 0 }, canAdd: true, canRemove: true, loop: false });   // `at`: where Song mode is, or null
 //   entryCells(entries, 1, at)    // [{ index, label: "3", times: "×2", name: "Entry 2, sequence 3, 2 times", pressed, playing }, ...]
 //   neighbourEntry(2, "ArrowLeft", 5)   // 1: where a key moves the selection (-1 for a key that does not)
+//
+// Loop is a key of its own, beside the heading and not among the tools (it is a setting of the song, not an edit of an entry): the page
+// gives it as `loop`, and it is pressed in while the song goes round again at its end instead of stopping there (`loop` in refresh, and
+// `onLoop`).
 //
 // The cells are one joined group like the sequence keys, a button with aria-pressed for the entry that is selected. There can be 32, so
 // only the selected one is a stop for Tab (the arrow keys, Home and End move the selection along the row, as in a toolbar), and the rest
@@ -37,6 +41,9 @@ export function neighbourEntry(index, key, count) {
   return -1;
 }
 
+// What the Loop key's title says: the key is lit or not, and a title says what each state does.
+export const loopTitle = (on) => (on ? "On: the song goes round again at its end" : "Off: the song stops at its end");
+
 const button = (text, className, attributes = {}) => {
   const element = document.createElement("button");
   element.type = "button";
@@ -52,7 +59,7 @@ const span = (className) => {
   return element;
 };
 
-export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, onMove, onRepeats }) {
+export function createChainStrip({ strip, tools, loop }, { onSelect, onAdd, onRemove, onMove, onRepeats, onLoop }) {
   strip.setAttribute("role", "group");
   strip.setAttribute("aria-label", "Entries of the song, in the order they play");
   strip.classList.add("btn-group", "song-strip");
@@ -72,6 +79,7 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
     return group;
   };
   tools.append(pair(add, remove), pair(earlier, later), pair(fewer, more));
+  loop.addEventListener("click", () => onLoop()); // pressed in (aria-pressed) while Loop is on: a toggle, so its name stays "Loop"
   add.addEventListener("click", () => onAdd());
   remove.addEventListener("click", () => onRemove());
   earlier.addEventListener("click", () => onMove(-1));
@@ -106,7 +114,7 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
   }
 
   return {
-    refresh({ entries, selected, at = null, canAdd, canRemove }) {
+    refresh({ entries, selected, at = null, canAdd, canRemove, loop: loopOn = false }) {
       count = entries.length;
       // A cell that has focus and goes (the entry was removed) must not take it with it: it goes to the one selected.
       const hadFocus = cells.some(({ button }) => button === document.activeElement);
@@ -120,6 +128,8 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
         setAttr(cell.button, "data-playing", String(playing));
         setAttr(cell.button, "tabindex", pressed ? "0" : "-1");
       }
+      setAttr(loop, "aria-pressed", String(loopOn));
+      setAttr(loop, "title", loopTitle(loopOn));
       const chosen = cells[selected]?.button ?? cells[0].button;
       const repeats = entries[selected]?.repeats ?? 1;
       // A title says what Add puts in (the name does not), and for the other buttons only why one is off: when it is on, it would only

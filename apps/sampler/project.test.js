@@ -92,6 +92,18 @@ describe("parseProject", () => {
     expect([...new Uint8Array(result.samples[0].bytes)]).toEqual([...audio(40, 1)]);
   });
 
+  it("keeps the order of the song and Loop, which a song that stops at its end does not need but one that goes round does", () => {
+    const arranged = { ...song, arrangement: [{ sequence: 0, repeats: 3 }], loopSong: true };
+    const result = parseProject(archive(buildProject({ song: arranged, samples: [] })), LAYOUT);
+    expect(result.ok).toBe(true);
+    expect(parseSong(result.song, LAYOUT)).toMatchObject({
+      arrangement: [{ sequence: 0, repeats: 3 }],
+      loopSong: true,
+    });
+    const plain = parseProject(archive(buildProject({ song, samples: [] })), LAYOUT);
+    expect(parseSong(plain.song, LAYOUT)).not.toHaveProperty("loopSong");
+  });
+
   it("reads the Blob projectBlob makes, as bytes", async () => {
     const blob = projectBlob({ song, samples });
     expect(blob.type).toBe("application/octet-stream");

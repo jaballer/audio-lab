@@ -866,6 +866,301 @@ describe("passes", () => {
   });
 });
 
+describe("the end of a run", () => {
+  // 4 steps at 120 BPM: a step is 0.125 s, the steps fall at 0.05, 0.175, 0.3 and 0.425 s, and the pass ends at 0.55 s. The scheduler
+  // reaches that end (and calls onWrap) as soon as it has scheduled the last step, at the tick when the clock passes 0.305 s.
+  function withEnd({ steps = 4, bpm = 120, swing, onWrap = () => {} } = {}) {
+    const clock = fakeClock();
+    const log = [];
+    const ends = []; // the clock when the scheduler said the run was over, and whether it was playing then
+    const scheduler = createScheduler({
+      clock,
+      steps,
+      bpm,
+      ...(swing === undefined ? {} : { swing }),
+      onStep: (step, time) => log.push(`step ${step} @${time.toFixed(3)}`),
+      onWrap: (time) => {
+        log.push(`wrap @${time.toFixed(3)}`);
+        onWrap(time, scheduler);
+      },
+      onEnd: () => {
+        log.push("end");
+        ends.push({ at: clock.time, playing: scheduler.playing });
+      },
+    });
+    const advance = (seconds) => {
+      clock.time += seconds;
+      vi.advanceTimersByTime(SCHEDULER_TICK_MS);
+    };
+    const run = (seconds) => {
+      for (let t = 0; t < seconds - 1e-9; t += SCHEDULER_TICK_MS / 1000) advance(SCHEDULER_TICK_MS / 1000);
+    };
+    const stepsLogged = () => log.filter((entry) => entry.startsWith("step"));
+    return { clock, scheduler, log, ends, advance, run, stepsLogged };
+  }
+  const endsAtFirstWrap = (time, scheduler) => scheduler.endAt(time);
+  // Ends the first time it is told of a pass end, and goes on after that.
+  const endsOnce = () => {
+    let told = 0;
+    return (time, scheduler) => {
+      if (told++ === 0) scheduler.endAt(time);
+    };
+  };
+
+  it("schedules no step from the pass end on, and has not stopped until the clock gets there", () => {
+    const { scheduler, log, run, stepsLogged, ends, clock } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(0.5); // 0.5 s: the last step has been scheduled (it sounds at 0.425 s) and the pass end (0.55 s) is ahead
+    expect(stepsLogged()).toEqual(["step 0 @0.050", "step 1 @0.175", "step 2 @0.300", "step 3 @0.425"]);
+    expect(log).toContain("wrap @0.550");
+    expect(scheduler.playing).toBe(true);
+    expect(ends).toEqual([]);
+    expect(clock.time).toBeCloseTo(0.5);
+    run(0.025); // 0.525 s: still ahead of it
+    expect(scheduler.playing).toBe(true);
+    expect(ends).toEqual([]);
+  });
+
+  it("stops itself when the clock reaches the pass end, and says so, once, after it has stopped", () => {
+    const { scheduler, run, ends, stepsLogged } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(2);
+    expect(ends).toHaveLength(1);
+    expect(ends[0].playing).toBe(false); // the page reads "stopped" from inside onEnd
+    expect(ends[0].at).toBeGreaterThanOrEqual(0.55);
+    expect(ends[0].at).toBeLessThan(0.55 + SCHEDULER_TICK_MS / 1000 + 1e-9); // at the first tick after it
+    expect(scheduler.playing).toBe(false);
+    expect(stepsLogged()).toHaveLength(4); // nothing was scheduled after the end, and the timer is not left running
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("moves the playhead to the last step before it ends, and not after", () => {
+    const { scheduler, run } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(0.45);
+    expect(scheduler.poll()).toBe(true);
+    expect(scheduler.playheadStep).toBe(3);
+    run(2);
+    expect(scheduler.poll()).toBe(false);
+    expect(scheduler.playheadStep).toBe(-1);
+  });
+
+  it("still schedules the last step of a pass swung late: it sounds before the end", () => {
+    const { scheduler, run, stepsLogged, log } = withEnd({ swing: 75, onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(1);
+    expect(stepsLogged()).toHaveLength(4);
+    const last = Number(stepsLogged()[3].split("@")[1]);
+    expect(last).toBeGreaterThan(0.425); // swung late
+    expect(last).toBeLessThan(0.55);
+    expect(log).toContain("end");
+  });
+
+  it("says when it ends, as a time, and nothing once it has stopped or been taken back", () => {
+    const { scheduler, run } = withEnd({ onWrap: endsAtFirstWrap });
+    expect(scheduler.endsAt).toBeNull();
+    scheduler.start();
+    run(0.4);
+    expect(scheduler.endsAt).toBeCloseTo(0.55);
+    scheduler.endAt(null);
+    expect(scheduler.endsAt).toBeNull();
+    scheduler.endAt(0.55);
+    run(1);
+    expect(scheduler.endsAt).toBeNull(); // over
+  });
+
+  it("goes on, from where it is, when the end is taken back before the clock gets there", () => {
+    const { scheduler, run, log, ends } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(0.4);
+    scheduler.endAt(null);
+    run(0.5);
+    expect(ends).toEqual([]);
+    expect(scheduler.playing).toBe(true);
+    // the next pass begins on the pass end, as it does when nothing ended it
+    expect(log).toContain("step 0 @0.550");
+    expect(log).toContain("step 1 @0.675");
+  });
+
+  it("is taken back by a rewind: the scheduler goes back over the pass end and tells it again", () => {
+    const { scheduler, run, log, ends } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(0.35); // the end is set, and the last step is built
+    scheduler.rewindTo(3, 0.425); // the page builds the last step again
+    expect(scheduler.endsAt).toBeNull();
+    run(0.9);
+    expect(ends).toEqual([]); // told of the pass end a second time and not ended there: the run goes on
+    expect(log.filter((entry) => entry.startsWith("wrap @0.550"))).toHaveLength(2);
+    expect(log).toContain("step 0 @0.550");
+  });
+
+  it("is ended again when the page ends it again at the pass end told a second time", () => {
+    const { scheduler, run, ends, stepsLogged } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(0.35);
+    scheduler.rewindTo(3, 0.425);
+    run(1);
+    expect(ends).toHaveLength(1);
+    expect(stepsLogged().map((entry) => entry.split(" @")[0])).toEqual([
+      "step 0",
+      "step 1",
+      "step 2",
+      "step 3",
+      "step 3",
+    ]);
+  });
+
+  it("is taken back by a loop made longer, which carries on past the pass end it had reached", () => {
+    const { scheduler, run, log, ends } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(0.35);
+    scheduler.setSteps(8); // not a pass end after all: the loop goes on into the new length
+    run(0.8);
+    expect(ends).toEqual([]);
+    expect(log).toContain("step 4 @0.550");
+    expect(scheduler.playing).toBe(true);
+  });
+
+  it("is kept by a loop made shorter after the pass end, which has nothing more to say about it", () => {
+    const { scheduler, run, ends } = withEnd({ steps: 8, onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(1.1); // the pass of 8 steps has been scheduled in full (to 1.05 s)
+    scheduler.setSteps(4);
+    run(1);
+    expect(ends).toHaveLength(1);
+  });
+
+  it("is taken back by a new pass, which the run goes on into", () => {
+    const { scheduler, run, ends, log } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(0.35);
+    scheduler.startPass(2);
+    run(0.5);
+    expect(ends).toEqual([]);
+    expect(log).toContain("step 0 @0.550");
+    expect(log).toContain("step 1 @0.675");
+    expect(log).toContain("wrap @0.800");
+  });
+
+  it("is over at once for a stall that crosses it, with nothing scheduled after it", () => {
+    const { scheduler, advance, ends, stepsLogged, log } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    advance(0.01); // step 0 is scheduled
+    advance(5); // the timer was held up for five seconds: the first pass ended at 0.55 s while nothing was scheduled
+    expect(ends).toHaveLength(1);
+    expect(scheduler.playing).toBe(false);
+    expect(log.filter((entry) => entry.startsWith("wrap"))).toEqual(["wrap @0.550"]); // not told of passes beyond it
+    expect(stepsLogged()).toHaveLength(1);
+  });
+
+  it("is over at the next tick for a stall after it was set, and the pass ends beyond it are not told", () => {
+    const { scheduler, run, advance, ends, stepsLogged, log } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(0.35);
+    advance(5);
+    expect(ends).toHaveLength(1);
+    expect(stepsLogged()).toHaveLength(4);
+    expect(log.filter((entry) => entry.startsWith("wrap"))).toEqual(["wrap @0.550"]); // the stall's steps were not walked over
+  });
+
+  it("is not an end when the scheduler is stopped before the clock gets there", () => {
+    const { scheduler, run, ends } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    run(0.4);
+    scheduler.stop();
+    run(1);
+    expect(ends).toEqual([]);
+  });
+
+  it("is not carried into the next run: start and stop take it back", () => {
+    const { scheduler, run, ends, stepsLogged, clock } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(0.4);
+    scheduler.stop(); // the end was at 0.55 s, which the clock is still short of
+    expect(scheduler.endsAt).toBeNull();
+    clock.time = 10; // a later run, after the time the old end was at
+    scheduler.start();
+    run(1);
+    expect(ends).toEqual([]);
+    expect(stepsLogged().length).toBeGreaterThan(8);
+  });
+
+  it("can be started again once it has ended, and the end does not come back", () => {
+    const { scheduler, run, ends, clock } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(1);
+    expect(ends).toHaveLength(1);
+    clock.time = 5;
+    expect(scheduler.start()).toBe(true);
+    run(2);
+    expect(ends).toHaveLength(1);
+    expect(scheduler.playing).toBe(true);
+  });
+
+  it("ends a run that was told its end from outside a wrap, at that time, and works without an onEnd", () => {
+    const { clock, scheduler, played, run } = setup({ steps: 16, bpm: 120 });
+    scheduler.start();
+    run(0.1);
+    scheduler.endAt(0.3);
+    run(1);
+    expect(scheduler.playing).toBe(false);
+    expect(played.map(([step]) => step)).toEqual([0, 1]); // the steps at 0.05 s and 0.175 s; the one at 0.3 s is the end's
+    expect(clock.time).toBeGreaterThan(0.3);
+  });
+
+  it("ignores an end that is not a time", () => {
+    for (const notATime of [Number.NaN, Number.POSITIVE_INFINITY, "0.3", {}]) {
+      const { scheduler, run } = withEnd();
+      scheduler.start();
+      scheduler.endAt(notATime);
+      expect(scheduler.endsAt).toBeNull();
+      run(1);
+      expect(scheduler.playing).toBe(true);
+    }
+  });
+
+  it("is taken back by a loop made longer even when the pass it ends was begun just before: the end is the pass end, not a pass that begins there", () => {
+    // What a page does to end a pass end it had taken over: back to the pass end, a pass begun there (startPass), and the end.
+    const { scheduler, run, ends, log } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(0.35);
+    scheduler.rewindTo(0, 0.55);
+    scheduler.startPass(4);
+    scheduler.endAt(0.55);
+    scheduler.setSteps(8);
+    run(0.8);
+    expect(ends).toEqual([]);
+    expect(log).toContain("step 4 @0.550");
+  });
+
+  it("cannot be taken back once the clock has got there, in the moment before the scheduler stops itself at its next tick", () => {
+    const { scheduler, clock, ends, advance } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    clock.time = 0.35;
+    advance(0);
+    expect(scheduler.endsAt).toBeCloseTo(0.55);
+    clock.time = 0.56; // the clock is past it, and no tick has run
+    scheduler.endAt(null);
+    expect(scheduler.endsAt).toBeCloseTo(0.55);
+    advance(0);
+    expect(ends).toHaveLength(1);
+    expect(scheduler.playing).toBe(false);
+  });
+
+  it("ignores an end told while it is stopped: there is no run to end, and the next one is not ended by it", () => {
+    const { scheduler, run, ends, clock } = withEnd();
+    scheduler.endAt(0.3);
+    expect(scheduler.endsAt).toBeNull();
+    scheduler.start();
+    run(1);
+    expect(scheduler.playing).toBe(true);
+    expect(ends).toEqual([]);
+    scheduler.stop();
+    scheduler.endAt(clock.time + 0.2);
+    expect(scheduler.endsAt).toBeNull();
+  });
+});
+
 describe("playhead queue", () => {
   // requestAnimationFrame stops in a hidden tab while the scheduler keeps running,
   // so nothing calls poll() for as long as the tab stays in the background.

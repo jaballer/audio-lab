@@ -6,6 +6,7 @@ import {
   afterSequenceRemoved,
   cleanArrangement,
   insertEntry,
+  isLastPass,
   moveEntry,
   nextPass,
   passOrder,
@@ -319,6 +320,49 @@ describe("nextPass", () => {
         sequence = pass.sequence;
       }
     }
+  });
+});
+
+describe("isLastPass", () => {
+  it("is the last time round the last entry, and no other pass", () => {
+    const arrangement = [entry(2, 2), entry(0), entry(1, 3)];
+    // the passes in order: entry 0 twice, entry 1 once, entry 2 three times
+    expect(isLastPass(arrangement, 3, { entry: 0, rep: 0 })).toBe(false);
+    expect(isLastPass(arrangement, 3, { entry: 0, rep: 1 })).toBe(false);
+    expect(isLastPass(arrangement, 3, { entry: 1, rep: 0 })).toBe(false);
+    expect(isLastPass(arrangement, 3, { entry: 2, rep: 0 })).toBe(false);
+    expect(isLastPass(arrangement, 3, { entry: 2, rep: 1 })).toBe(false);
+    expect(isLastPass(arrangement, 3, { entry: 2, rep: 2 })).toBe(true);
+  });
+
+  it("is the last sequence once, with no arrangement", () => {
+    expect(isLastPass(null, 3, { entry: 1, rep: 0 })).toBe(false);
+    expect(isLastPass(null, 3, { entry: 2, rep: 0 })).toBe(true);
+    expect(isLastPass(null, 1, { entry: 0, rep: 0 })).toBe(true); // a song of one sequence ends after it
+  });
+
+  it("is false where the song is not known (a sequence that is in no entry): there is no end to be at", () => {
+    expect(isLastPass([entry(0), entry(1)], 3, null)).toBe(false);
+    expect(isLastPass(null, 3, null)).toBe(false);
+  });
+
+  it("agrees with passOrder: the last pass is the one after which a walk of nextPass goes back to the first", () => {
+    const arrangement = [entry(1, 2), entry(0, 3), entry(2)];
+    const order = passOrder(arrangement, 3);
+    let at = { entry: 0, rep: 0 };
+    let last = 0;
+    for (let i = 0; i < order.length; i++) {
+      const wraps = nextPass(arrangement, 3, at, order[i]);
+      const goesRound = wraps.entry === 0 && wraps.rep === 0;
+      expect(isLastPass(arrangement, 3, at)).toBe(goesRound);
+      if (goesRound) last++;
+      at = { entry: wraps.entry, rep: wraps.rep };
+    }
+    expect(last).toBe(1); // it goes round once in a walk of the whole song, at its end
+  });
+
+  it("is also true of a time round past the last (a position that an edit left behind)", () => {
+    expect(isLastPass([entry(0, 2)], 1, { entry: 0, rep: 5 })).toBe(true);
   });
 });
 

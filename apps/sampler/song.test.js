@@ -457,7 +457,7 @@ describe("songs saved by version 8", () => {
 
   it("are stamped as the current version", () => {
     expect(upgradeSong(stored(v8([used, blank]))).version).toBe(SONG_VERSION);
-    expect(SONG_VERSION).toBe(10);
+    expect(SONG_VERSION).toBe(11);
   });
 });
 
@@ -473,6 +473,48 @@ describe("songs saved by version 9", () => {
 
   it("are changed by the upgrade in nothing but the version", () => {
     expect(upgradeSong(stored(v9))).toEqual({ ...stored(v9), version: SONG_VERSION });
+  });
+});
+
+describe("songs saved by version 10", () => {
+  // What a page of version 10 kept: no Loop setting, which is Loop off (the song stops at its end).
+  const v10 = { ...serializeSong(song), version: 10, arrangement: [{ sequence: 0, repeats: 2 }] };
+
+  it("load as they were saved, with Loop off", () => {
+    const loaded = parseSong(stored(v10), SHAPE);
+    expect(loaded.arrangement).toEqual([{ sequence: 0, repeats: 2 }]);
+    expect(loaded).not.toHaveProperty("loopSong");
+  });
+
+  it("are changed by the upgrade in nothing but the version", () => {
+    expect(upgradeSong(stored(v10))).toEqual({ ...stored(v10), version: SONG_VERSION });
+  });
+});
+
+describe("Loop", () => {
+  it("is left out of a song that has it off, so that a song nobody turned it on for is saved as it was", () => {
+    expect(serializeSong(song)).not.toHaveProperty("loopSong");
+    expect(serializeSong({ ...song, loopSong: false })).not.toHaveProperty("loopSong");
+    expect(parse(serializeSong(song))).not.toHaveProperty("loopSong");
+  });
+
+  it("is saved when it is on, and comes back", () => {
+    expect(serializeSong({ ...song, loopSong: true })).toEqual({ ...serializeSong(song), loopSong: true });
+    expect(parse(serializeSong({ ...song, loopSong: true }))).toEqual({ ...song, loopSong: true });
+  });
+
+  it("is kept apart from the arrangement: on with none, and off with one", () => {
+    const arrangement = [{ sequence: 1, repeats: 3 }];
+    expect(parse(serializeSong({ ...song, loopSong: true }))).not.toHaveProperty("arrangement");
+    const loaded = parse(serializeSong({ ...song, arrangement }));
+    expect(loaded.arrangement).toEqual(arrangement);
+    expect(loaded).not.toHaveProperty("loopSong");
+  });
+
+  it("reads as off unless it is exactly true: a stored value that is something else is not trusted", () => {
+    for (const raw of [false, null, undefined, 1, "true", {}, []]) {
+      expect(parse({ ...serializeSong(song), loopSong: raw })).not.toHaveProperty("loopSong");
+    }
   });
 });
 
