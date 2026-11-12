@@ -1,4 +1,4 @@
-// The Export dialog: what the file will be (the sequence showing or all of them, the mix or a stem for each pad, loops, stereo
+// The Export dialog: what the file will be (the sequence showing or the song, the mix or a stem for each pad, loops, stereo
 // or mono, and how long and how big that makes it), a button to make it, and how far along the render is. This file is only the dialog: it shows what it is told and
 // reports what is pressed; the page decides what an export is (export-wav.js) and when it may run.
 //
@@ -10,8 +10,8 @@
 //   });
 //   dialog.open(); dialog.close(); dialog.isOpen;
 //   dialog.setOptions({ loops: 2, channels: "mono", files: "mix", scope: "sequence" }); // which choices are lit, and what the button says
-//   dialog.refresh({ title, readout, format, note, hint, blocked }); // for the sequence showing: `note` is what to know before it
-//                                                             is made (bars with no steps, how much memory it takes);
+//   dialog.refresh({ title, readout, format, note, hint, blocked }); // for the sequence showing or the song: `note` is what to know before it
+//                                                             is made (bars or sequences with no steps, how much memory it takes);
 //                                                             `hint` is about the choice of files ("": the dialog's own);
 //                                                             `blocked` is why Export is off (a sentence), or "" when on
 //   dialog.setBusy(true); dialog.setProgress(0.4);            // while it renders (null: not known yet)
@@ -29,8 +29,11 @@ import { dialogState, isEarlyPress } from "./export-dialog-state.js";
 import { CHANNEL_CHOICES, FILE_CHOICES, LOOP_CHOICES, SCOPE_CHOICES, renderingLabel } from "./export-options.js";
 
 const CHANNEL_NAMES = { stereo: "Stereo", mono: "Mono" };
-const SCOPE_NAMES = { sequence: "Showing", all: "All" };
-const SCOPE_DESCRIPTIONS = { sequence: "The sequence showing", all: "All the sequences, in order" };
+const SCOPE_NAMES = { sequence: "Showing", song: "Song" };
+const SCOPE_DESCRIPTIONS = {
+  sequence: "The sequence showing",
+  song: "The song, in the order of the Song panel, each entry as often as it repeats",
+};
 const FILE_NAMES = { mix: "Mix", stems: "Stems" };
 const FILE_DESCRIPTIONS = { mix: "One file: the mix", stems: "Stems: a file for each pad, in a zip" };
 const PERCENT = 100;
@@ -62,7 +65,7 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
     files: FILE_CHOICES[0],
     scope: SCOPE_CHOICES[0],
   };
-  const loopsRow = part("loops-row"); // all the sequences have no loops to repeat: the row goes
+  const loopsRow = part("loops-row"); // the song has no loops to repeat: the row goes
   let stem = null; // which stem a render is on, for the label: { number, count }
   let fraction = null; // how far along it is, kept so that a change of stem can say it again
 

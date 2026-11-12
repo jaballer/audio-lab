@@ -10,6 +10,12 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: Export saves the song as it is arranged. The Export window's Sequences choice is now Showing or Song (it was
+  Showing or All), and Song saves what the Song panel has: every entry in order, each as often as it repeats, and a sequence
+  the song does not play is not in the file. It is one file, or a zip with a stem for each pad that plays in the song, with four
+  seconds on the end for what rings on, and the window says how long the file is. A song longer than 6 min 40 s is too long to
+  save: the window says so, and fewer repeats or entries, or one sequence at a time, will do
+  ([#178](https://github.com/jaballer/audio-lab/pull/178))
 - Sampler: in Song mode the display has a screen for the song. The first line says the entry the song is on
   (`SONG 02/05  PLAYING`), the pad and the tempo stay, and the bar and the step lines, which the timeline along the bottom
   already says, give way to the sequence that plays with the time round its entry (`SEQ 03  REPEAT 2/4`) and the sequence
@@ -31,8 +37,17 @@ Numbers link to the pull request.
   that plays has a triangle and shows its time round (2/3). A change is heard from the end of the pass, the song is saved with
   the beat, and the panel can be hidden. Export does not use it yet ([#174](https://github.com/jaballer/audio-lab/pull/174))
 
+### Changed
+
+- Sampler: the files Export makes of the whole beat are called `pad16-song-…` where they were `pad16-all-…` (for example
+  `pad16-song-90bpm.wav`), and a choice of All that was kept from before reads as Song
+  ([#178](https://github.com/jaballer/audio-lab/pull/178))
+
 ### Maintenance
 
+- The export's `songPasses` reads the arrangement (`passOrder`), so the list of passes a song is rendered from is the order and
+  repeats the player walks, and a plan shares a repeated sequence's hits between its passes; `docs/export.md` has the cap on a
+  song's length and why ([#178](https://github.com/jaballer/audio-lab/pull/178))
 - A beat can carry an arrangement, the order a song will play its sequences in, each with a number of repeats (saved
   format 10). A beat saved by an older page loads as it did, and a sequence added, copied or removed is followed in it
   ([#170](https://github.com/jaballer/audio-lab/pull/170))

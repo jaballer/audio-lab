@@ -7,9 +7,9 @@
 //   exportName(song)                                                        // "pad16-seq-01-100bpm.wav"
 //
 // `song` is what the sampler saves (controller.getSong()): the sequence exported is the one showing (`current`), and
-// the file is exactly the length of its bars, so it loops. With `scope: "all"` it is every sequence in order (songPasses), once
-// each, with a tail after the last for what rings on (SONG_TAIL_SECONDS in export-options.js): nothing comes round, so there is
-// no warm-up and no loop seam, and loops are not offered. To make it loop cleanly the sequence is played more than
+// the file is exactly the length of its bars, so it loops. With `scope: "song"` it is the song as the Song panel has it (songPasses:
+// every entry in order, each as often as it repeats), with a tail after the last for what rings on (SONG_TAIL_SECONDS in
+// export-options.js): nothing comes round, so there is no warm-up and no loop seam, and loops are not offered. To make it loop cleanly the sequence is played more than
 // once and the last pass is kept: what rings on from the end of the earlier passes (a crash, a long sample, a long
 // Release) is in the start of it, as it is when the page loops, and a pad's last hit is cut by its first hit of the
 // next pass. Two passes (one to warm up) are enough unless a pad's Release is longer than the loop: then each tail
@@ -26,7 +26,14 @@ import { VOLUME_SCALE } from "./controller.js";
 import { FULL_VELOCITY } from "../../shared/pattern.js";
 import { withVelocity } from "../../shared/sounds.js";
 import { stepSeconds, swingDelay } from "../../shared/tempo.js";
-import { DEFAULT_EXPORT_OPTIONS, exportFrames, normalizeExportOptions, songSteps } from "./export-options.js";
+import {
+  DEFAULT_EXPORT_OPTIONS,
+  exportFrames,
+  normalizeExportOptions,
+  songPassOrder,
+  songSteps,
+  songTooLong,
+} from "./export-options.js";
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
 import { zipBlob } from "./zip.js";
@@ -179,7 +186,7 @@ export function planRender({
   pad,
   scope = DEFAULT_EXPORT_OPTIONS.scope,
 }) {
-  if (scope === "all") return planSong({ song, kit, stepsPerBar, sampleRate, pad });
+  if (scope === "song") return planSong({ song, kit, stepsPerBar, sampleRate, pad });
   const copies = Math.max(1, Math.floor(loops) || 1);
   const sequence = song.sequences[song.current];
   const hits = hitsOf(sequence, stepsPerBar);
@@ -230,23 +237,35 @@ export function planRender({
   };
 }
 
-// The order every sequence is played in, one pass each: what the render of all of them is made of, which is how Song mode plays a
-// song nobody has edited. (The order a person edits in the Song panel, with repeats, is a later step: this is the one place that will change.)
-export const songPasses = (song) => song.sequences.map(({ bars }, index) => ({ index, bars }));
+// The passes of the song, in the order they are played: the sequence of each (`index`) and the bars it has. This is the song as the Song
+// panel has it, which Song mode plays: every entry in order, each as often as it repeats, and with no arrangement every sequence once,
+// in order. A sequence the song leaves out is not in the list, and one that repeats is in it once for each time round.
+export const songPasses = (song) => songPassOrder(song).map((index) => ({ index, bars: song.sequences[index].bars }));
 
-// The plan for all the sequences: a pass for each, one after the other and never repeated, so no warm-up (nothing comes round
-// to ring into the start) and the file begins where the first step does; the tail after the last is in `frames`.
+// The plan for the song: a pass for each time round each entry, one after the other, so no warm-up (nothing comes round to ring into
+// the start) and the file begins where the first step does; the tail after the last is in `frames`. A sequence that comes round again
+// shares its hits (and its stem's) between its passes, which are the same each time: the render reads them and does not change them.
 function planSong({ song, kit, stepsPerBar, sampleRate, pad }) {
+  const made = new Map(); // the hits of each sequence the song plays, and how many of them are heard
+  const of = (index) => {
+    if (!made.has(index)) {
+      const hits = hitsOf(song.sequences[index], stepsPerBar);
+      const mine = pad === undefined ? hits : stemHits(hits, pad, kit);
+      made.set(index, { hits: mine, sounds: mine.filter((hit) => !hit.silent).length });
+    }
+    return made.get(index);
+  };
   let startStep = 0;
-  const passList = songPasses(song).map(({ index }) => {
-    const sequence = song.sequences[index];
-    const hits = hitsOf(sequence, stepsPerBar);
-    const length = sequence.bars * stepsPerBar;
-    const pass = { hits: pad === undefined ? hits : stemHits(hits, pad, kit), startStep, length };
+  let cost = 0;
+  const passList = songPasses(song).map(({ index, bars }) => {
+    const { hits, sounds } = of(index);
+    const length = bars * stepsPerBar;
+    const pass = { hits, startStep, length };
     startStep += length;
+    cost += 1 + sounds;
     return pass;
   });
-  const frames = exportFrames(song, stepsPerBar, 1, sampleRate, "all");
+  const frames = exportFrames(song, stepsPerBar, 1, sampleRate, "song");
   const first = Math.round(LEAD_SECONDS * sampleRate);
   return {
     hits: passList.flatMap((pass) => pass.hits),
@@ -258,7 +277,7 @@ function planSong({ song, kit, stepsPerBar, sampleRate, pad }) {
     skipped: 0,
     passes: passList.length,
     passList,
-    cost: passList.reduce((sum, { hits }) => sum + 1 + hits.filter((hit) => !hit.silent).length, 0),
+    cost,
     first,
     frames,
     total: first + frames,
@@ -422,8 +441,8 @@ export function encodeWav(channels, sampleRate) {
 function exportBaseName(song, options) {
   const { loops, channels, scope } = normalizeExportOptions(options);
   const channelPart = channels === "mono" ? "-mono" : "";
-  // All the sequences are played once each: there are no loops to name, and "all" where the sequence's number was.
-  if (scope === "all") return `pad16-all-${Math.round(song.bpm)}bpm${channelPart}`;
+  // The song is played through once: there are no loops to name, and "song" where the sequence's number was.
+  if (scope === "song") return `pad16-song-${Math.round(song.bpm)}bpm${channelPart}`;
   const loopPart = loops > 1 ? `-x${loops}` : "";
   return `pad16-seq-${pad2(song.current + 1)}-${Math.round(song.bpm)}bpm${loopPart}${channelPart}`;
 }
@@ -454,9 +473,16 @@ export function stemName(song, options, kit, pad) {
   return `${exportBaseName(song, options)}-pad${pad2(pad + 1)}${sound ? `-${sound}` : ""}.wav`;
 }
 
-// The pads that have a step in the sequence showing, in pad order: the pads that get a stem.
+// The sequences the export plays: the one showing, or for the song those it has a pass of, each once (in the order of the sequences).
+function sequencesExported(song, scope) {
+  if (scope !== "song") return [song.sequences[song.current]];
+  return [...new Set(songPassOrder(song))].sort((a, b) => a - b).map((index) => song.sequences[index]);
+}
+
+// The pads that have a step in what is exported (the sequence showing, or the sequences the song plays), in pad order: the pads that
+// get a stem.
 export function stemPads(song, stepsPerBar, scope = DEFAULT_EXPORT_OPTIONS.scope) {
-  const sequences = scope === "all" ? song.sequences : [song.sequences[song.current]];
+  const sequences = sequencesExported(song, scope);
   const rows = new Set(sequences.flatMap((sequence) => hitsOf(sequence, stepsPerBar).map(({ row }) => row)));
   return [...rows].sort((a, b) => a - b);
 }
@@ -533,23 +559,23 @@ export function emptyBars(song, stepsPerBar) {
     .map((bar) => bar + 1);
 }
 
-// The sequences with no steps (in the bars they have), counting from 1: a file of all of them has each as a pass of silence
-// (apart from what is still ringing from the one before), as Song mode plays it.
+// The sequences the song plays that have no steps (in the bars they have), counting from 1, each once however often it comes round
+// and in the order of the sequences: the file has each as a pass of silence (apart from what is still ringing from the one before),
+// as Song mode plays it. A sequence the song leaves out is not in the file, and is not named.
 export function emptySequences(song, stepsPerBar) {
-  return song.sequences
-    .map((sequence, index) => (hitsOf(sequence, stepsPerBar).length === 0 ? index + 1 : 0))
-    .filter(Boolean);
+  return [...new Set(songPassOrder(song))]
+    .sort((a, b) => a - b)
+    .filter((index) => hitsOf(song.sequences[index], stepsPerBar).length === 0)
+    .map((index) => index + 1);
 }
 
 // Can this browser render audio to a file at all? Firefox, Chrome and current Safari can; the dialog asks before it offers
 // an export, and exportSequence asks again before it starts one.
 export const canRenderOffline = () => typeof OfflineAudioContext === "function";
 
-// Is there anything in the sequence showing to export (in the bars it has), or for `scope` "all" in any sequence?
+// Is there anything in the sequence showing to export (in the bars it has), or for `scope` "song" in any sequence the song plays?
 export const hasSteps = (song, stepsPerBar, scope = DEFAULT_EXPORT_OPTIONS.scope) =>
-  (scope === "all" ? song.sequences : [song.sequences[song.current]]).some(
-    (sequence) => hitsOf(sequence, stepsPerBar).length > 0,
-  );
+  sequencesExported(song, scope).some((sequence) => hitsOf(sequence, stepsPerBar).length > 0);
 
 // What the Export button does: checks there is something to export, renders it, and hands the file to `save`
 // (shared/download.js). Says how it went on the LCD through `onMessage`. `onProgress(0..1)` is how far the render
@@ -575,6 +601,10 @@ export async function exportSequence({
   const { loops, channels, scope } = normalizeExportOptions(options);
   if (!hasSteps(song, stepsPerBar, scope)) {
     onMessage("NOTHING TO EXPORT");
+    return false;
+  }
+  if (scope === "song" && songTooLong(song, stepsPerBar)) {
+    onMessage("SONG TOO LONG"); // the dialog says by how much and does not offer it; this is for a song that changed under it
     return false;
   }
   onMessage("EXPORTING...");
@@ -630,6 +660,10 @@ export async function exportStems({
   const { loops, channels, scope } = normalizeExportOptions(options);
   if (!hasSteps(song, stepsPerBar, scope)) {
     onMessage("NOTHING TO EXPORT");
+    return false;
+  }
+  if (scope === "song" && songTooLong(song, stepsPerBar)) {
+    onMessage("SONG TOO LONG"); // the dialog says by how much and does not offer it; this is for a song that changed under it
     return false;
   }
   onMessage("EXPORTING...");

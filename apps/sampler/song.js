@@ -45,7 +45,7 @@ const MIGRATIONS = {
   // used were empty. Those empty ones at the end go (see trimBlankSequences).
   8: trimBlankSequences,
   // Version 10 adds the optional `arrangement` (the order a song plays its sequences in, arrangement.js). A version 9 song has
-  // none, which reads as every sequence once, in order: what Play All and Export all already did.
+  // none, which reads as every sequence once, in order: what the All key and Export's All (now Song mode and Export's Song) already did.
   9: (song) => song,
 };
 
