@@ -10,7 +10,7 @@ Numbers link to the pull request.
 
 ### Added
 
-- Sampler: a Loop key, at the start of the Song panel's tools, makes the song go round again at its end instead of stopping. It
+- Sampler: a Loop key, beside the Song panel's heading, makes the song go round again at its end instead of stopping. It
   is off to begin with and is kept with the beat. Pressed in the last moment before the end (as the Song key is, and the
   panel's tools), it still counts for that end ([#179](https://github.com/jaballer/audio-lab/pull/179))
 - Sampler: Export saves the song as it is arranged. The Export window's Sequences choice is now Showing or Song (it was

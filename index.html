@@ -262,6 +262,8 @@
           <div class="step-head">
             <!-- The heading is the button that hides the strip and its tools. chain-strip.js draws both. -->
             <button id="song-toggle" class="small-label section-toggle" type="button" aria-expanded="true">Song</button>
+            <!-- Loop is a setting of the song and not an edit of an entry, so it is beside the heading and not among the tools. -->
+            <button id="song-loop" class="btn btn-small song-loop" type="button" aria-pressed="false">Loop</button>
             <div id="song-tools" class="step-tools" role="group" aria-label="Edit the song"></div>
           </div>
           <div id="song-body">
@@ -401,10 +403,10 @@
           sequences you add or remove. Press a cell to select it (the arrow keys, Home and End move along the row): Play
           begins there when Song is on, and the tools below act on it. Add Entry puts the sequence showing in after it,
           Remove Entry takes it out (a song keeps one), Move Earlier and Move Later change the order, and Repeats − and
-          + set how many times it goes round, from 1 to 16, with up to 32 entries. Loop, before them, makes the song go
-          round again at its end instead of stopping (it is kept with the beat, off to begin with). While Song plays,
-          the entry that plays has a triangle and shows its time round (2/3), a moment ahead of the sound (about a
-          quarter of a second at 100 BPM). A change is heard from the end of the pass, and the song is kept with the
+          + set how many times it goes round, from 1 to 16, with up to 32 entries. Loop, beside the heading, makes the
+          song go round again at its end instead of stopping (it is kept with the beat, off to begin with). While Song
+          plays, the entry that plays has a triangle and shows its time round (2/3), a moment ahead of the sound (about
+          a quarter of a second at 100 BPM). A change is heard from the end of the pass, and the song is kept with the
           beat. Export saves it: its Song choice has every entry in order, as often as it repeats
         </li>
         <li>

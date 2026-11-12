@@ -714,7 +714,7 @@ const sequenceRow = createSequenceRow($("seq-row"), {
 // The song: the order Song mode plays the sequences in, with repeats. The entry selected is the sampler's (Play begins at it in Song mode),
 // and selecting one changes nothing about what plays; the tools act on it, and an edit takes the selection with it.
 const chainStrip = createChainStrip(
-  { strip: $("song-strip"), tools: $("song-tools") },
+  { strip: $("song-strip"), tools: $("song-tools"), loop: $("song-loop") },
   {
     onSelect: (index) => sampler.selectEntry(index),
     onLoop: () => sampler.toggleLoop(),
@@ -839,7 +839,7 @@ function render() {
     songBtn,
     "title",
     state.songMode
-      ? "On: Play begins at the entry selected in the song, each pass is followed by the next, and the editor stays where it is"
+      ? "On: Play begins at the entry selected in the song, each pass is followed by the next until the song ends (or goes round again, with Loop on), and the editor stays where it is"
       : "Off: the sequence showing plays round and round",
   );
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
@@ -1031,11 +1031,11 @@ createDisclosure({
   onToggle: (open) => saveJson(STEPS_KEY, open),
 });
 
-// The song panel can be hidden the same way: its heading stays, the strip and its tools go. Remembered, and shown by default.
+// The song panel can be hidden the same way: its heading stays, the Loop key, the strip and its tools go. Remembered, and shown by default.
 const SONG_PANEL_KEY = "pad-sampler:song-panel";
 createDisclosure({
   toggle: $("song-toggle"),
-  regions: [$("song-tools"), $("song-body")],
+  regions: [$("song-loop"), $("song-tools"), $("song-body")],
   open: loadJson(SONG_PANEL_KEY, true) !== false,
   onToggle: (open) => saveJson(SONG_PANEL_KEY, open),
 });

@@ -2,13 +2,14 @@
 // times it goes round, and the tools to add, remove, move and repeat the entry that is selected. It shows and reports; the sampler
 // decides (addEntry, removeEntry, moveEntry, setEntryRepeats), and which entry is selected is the sampler's (selectEntry).
 //
-//   const strip = createChainStrip({ strip: element, tools: element }, { onSelect, onAdd, onRemove, onMove, onRepeats, onLoop });
+//   const strip = createChainStrip({ strip: element, tools: element, loop: element }, { onSelect, onAdd, onRemove, onMove, onRepeats, onLoop });
 //   strip.refresh({ entries, selected: 1, at: { entry: 1, rep: 0 }, canAdd: true, canRemove: true, loop: false });   // `at`: where Song mode is, or null
 //   entryCells(entries, 1, at)    // [{ index, label: "3", times: "×2", name: "Entry 2, sequence 3, 2 times", pressed, playing }, ...]
 //   neighbourEntry(2, "ArrowLeft", 5)   // 1: where a key moves the selection (-1 for a key that does not)
 //
-// Loop is a key of its own at the start of the tools, pressed in while the song goes round again at its end instead of stopping there
-// (`loop` in refresh, and `onLoop`): it is a setting of the song and not an edit of an entry.
+// Loop is a key of its own, beside the heading and not among the tools (it is a setting of the song, not an edit of an entry): the page
+// gives it as `loop`, and it is pressed in while the song goes round again at its end instead of stopping there (`loop` in refresh, and
+// `onLoop`).
 //
 // The cells are one joined group like the sequence keys, a button with aria-pressed for the entry that is selected. There can be 32, so
 // only the selected one is a stop for Tab (the arrow keys, Home and End move the selection along the row, as in a toolbar), and the rest
@@ -58,13 +59,11 @@ const span = (className) => {
   return element;
 };
 
-export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, onMove, onRepeats, onLoop }) {
+export function createChainStrip({ strip, tools, loop }, { onSelect, onAdd, onRemove, onMove, onRepeats, onLoop }) {
   strip.setAttribute("role", "group");
   strip.setAttribute("aria-label", "Entries of the song, in the order they play");
   strip.classList.add("btn-group", "song-strip");
 
-  // Pressed in (aria-pressed) while Loop is on; a toggle, so its name stays "Loop".
-  const loop = button("Loop", "song-loop", { "aria-pressed": "false" });
   const add = button("Add Entry", "");
   const remove = button("Remove Entry", "");
   const earlier = button("Move Earlier", "");
@@ -79,8 +78,8 @@ export function createChainStrip({ strip, tools }, { onSelect, onAdd, onRemove, 
     group.append(...buttons);
     return group;
   };
-  tools.append(loop, pair(add, remove), pair(earlier, later), pair(fewer, more));
-  loop.addEventListener("click", () => onLoop());
+  tools.append(pair(add, remove), pair(earlier, later), pair(fewer, more));
+  loop.addEventListener("click", () => onLoop()); // pressed in (aria-pressed) while Loop is on: a toggle, so its name stays "Loop"
   add.addEventListener("click", () => onAdd());
   remove.addEventListener("click", () => onRemove());
   earlier.addEventListener("click", () => onMove(-1));
