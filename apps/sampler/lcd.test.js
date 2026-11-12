@@ -72,6 +72,13 @@ describe("formatLcd", () => {
       ]);
     });
 
+    it("says the song ends where nothing comes next: the last pass of a song with Loop off", () => {
+      const last = { entry: 4, entries: 5, sequence: 2, rep: 3, repeats: 4, next: -1 };
+      const lines = formatLcd({ ...inSong, playing: true, song: last }).lines;
+      expect(lines.slice(3)).toEqual(["SEQ 03  REPEAT 4/4", "NEXT END"]);
+      expect(lines.every((line) => line.length <= 20)).toBe(true);
+    });
+
     it("leaves the place and the time round blank while it is not known, and still says the sequence and what is next", () => {
       const unknown = { entry: -1, entries: 5, sequence: 2, rep: -1, repeats: 0, next: 0 };
       const lines = formatLcd({ ...inSong, playing: true, song: unknown }).lines;

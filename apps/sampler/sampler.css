@@ -759,6 +759,8 @@
 .seq-chips .btn[aria-pressed="true"]:hover,
 .song-strip .btn[aria-pressed="true"],
 .song-strip .btn[aria-pressed="true"]:hover,
+.song-loop[aria-pressed="true"],
+.song-loop[aria-pressed="true"]:hover,
 .seq-latch[aria-pressed="true"],
 .seq-latch[aria-pressed="true"]:hover {
   border-color: #1b1a18;
@@ -803,9 +805,14 @@
 .song-cell[data-playing="true"][aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px #ff7a45;
 }
-/* The tools are three joined pairs (add and remove, earlier and later, fewer and more repeats), so wrapping never leaves one button of a
-   pair alone on a row. On a phone, where .step-tools is a grid of three columns, each pair has a row of its own and shares it: the
-   labels are longer than the step tools', and three columns clipped them at the larger text sizes. */
+/* Loop is the one tool that is not an edit of an entry, a setting of the song: it sits at the start of the row, as the step tools'
+   Velocity switch does, and the pairs after it. The tools are three joined pairs (add and remove, earlier and later, fewer and more
+   repeats), so wrapping never leaves one button of a pair alone on a row. */
+.song-loop {
+  margin-right: auto;
+}
+/* On a phone, where .step-tools is a grid of three columns, each pair has a row of its own and shares it, and Loop has the first row to
+   itself: the labels are longer than the step tools', and three columns clipped them at the larger text sizes. */
 @media (max-width: 480px) {
   .song-panel .step-tools {
     display: flex;
@@ -1034,6 +1041,8 @@
   .seq-chips .btn[aria-pressed="true"]:hover,
   .song-strip .btn[aria-pressed="true"],
   .song-strip .btn[aria-pressed="true"]:hover,
+  .song-loop[aria-pressed="true"],
+  .song-loop[aria-pressed="true"]:hover,
   .seq-latch[aria-pressed="true"],
   .seq-latch[aria-pressed="true"]:hover {
     forced-color-adjust: none;

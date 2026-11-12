@@ -717,6 +717,7 @@ const chainStrip = createChainStrip(
   { strip: $("song-strip"), tools: $("song-tools") },
   {
     onSelect: (index) => sampler.selectEntry(index),
+    onLoop: () => sampler.toggleLoop(),
     onAdd: () => sampler.addEntry(sampler.getState().selectedEntry + 1),
     onRemove: () => sampler.removeEntry(sampler.getState().selectedEntry),
     onMove: (delta) => sampler.moveEntry(sampler.getState().selectedEntry, delta),
@@ -820,6 +821,7 @@ function render() {
     at: state.songPass,
     canAdd: state.canAddEntry,
     canRemove: state.canRemoveEntry,
+    loop: state.loopSong,
   });
   for (const { bars, button } of barButtons) setAttr(button, "aria-pressed", String(bars === state.bars));
   setText(stepsRange, `Bar ${state.page + 1} of ${state.bars}`);
