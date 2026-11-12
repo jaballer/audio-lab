@@ -16,21 +16,22 @@ What `song.js` keeps, and `controller.js` plays:
 - **Switching while playing.** A sequence key queues that sequence to take over at the end of the pass (`queueSequence`,
   through the scheduler's `onWrap`), so the beat never jumps mid-bar, and Shift switches at once. That is with the Next
   latch on, as it is until a person turns it off; with Next off the two swap, a press switches at once and Shift waits, so
-  turning Next off is how a touch screen, which has no Shift, switches at once (`pressIsNow` in `sequence-row.js`). All plays the sequences one after the other until Stop; it is off on every load, and a chain that plays does not
-  save the beat as it goes.
+  turning Next off is how a touch screen, which has no Shift, switches at once (`pressIsNow` in `sequence-row.js`). This is Pattern mode,
+  the one the page loads in. In Song mode (below) the keys do not switch the sound at all.
 - **What plays and what shows** are kept apart in the controller. `current` is the sequence the step keys, the step editor and the
   sequence keys are about (with its `pattern`, `history`, `bars` and `page`); `playing` is the slot of the one the scheduler builds steps
   from and the display says sounds (`playingIndex()` gives its number: the slot itself is kept because a number moves when a sequence is
-  removed). They are the same sequence for now: every pick, switch and takeover
-  goes through `adoptSequence`, which sets both, so a person sees and edits what plays. The split is there so that Song mode can play
-  one sequence while another is edited. A read about sound (the steps built, the length of a pass, the sequence the song or a queue
+  removed). In Pattern mode they are the same sequence: every pick, switch and takeover
+  goes through `adoptSequence`, which sets both, so a person sees and edits what plays. In Song mode they can differ (the song plays one
+  sequence while another is edited): a pick is `showOnly`, a takeover moves `playing` alone, and Stop, or turning Song mode off, brings
+  them together again (`mirrorPlaying`, `followPlaying`). A read about sound (the steps built, the length of a pass, the sequence the song or a queue
   goes on from, a live hit recorded, `heard`) uses `playing`; a read about the editor uses `current`.
 - **The arrangement** (`arrangement.js`) is the order a song plays its sequences in, each with repeats. `null`, the default,
   means every sequence once, in order, so it cannot fall out of step with the sequences until a person edits it; the first edit
   makes it explicit, and from then on a sequence added gets an entry at the end and one removed takes its entries with it.
 - **The Song panel** (`chain-strip.js`, #159 step 4b) edits it: a cell for each entry, with its sequence and its repeats, and
-  tools to add the sequence showing, remove, move and repeat the entry selected. Selecting an entry only selects it (it is the
-  page's, `selectedEntry`), so nothing about what plays changes. The controller does the editing (`addEntry`, `removeEntry`,
+  tools to add the sequence showing, remove, move and repeat the entry selected. Selecting an entry only selects it (`selectEntry`: the
+  controller's `selectedEntry`, since Song mode begins at it), so nothing about what plays changes. The controller does the editing (`addEntry`, `removeEntry`,
   `moveEntry`, `setEntryRepeats`) through the pure edits in `arrangement.js`, and keeps where the song is on its entry through
   them (a position that pointed at an entry follows it), so a song that is playing goes on from where it was and hears the edit at
   the end of the pass. An edit made in the moment before that downbeat (after the scheduler has reached the pass end and before its
@@ -38,10 +39,25 @@ What `song.js` keeps, and `controller.js` plays:
   (`reconsiderPassEnd`: what the song picked for that pass end is worked out again, and the steps built for it are taken back and
   built again if it is another). The entry playing is marked from `songPass`, which leads what is heard by the lookahead as the sequence
   keys do. No undo, as for the sequences' own list.
-- **Play All goes by the arrangement**: the controller keeps where the song is (`songAt`) and `nextPass` says which pass follows the
-  one that ended (the next time round the entry if it repeats, else the next entry), a queued sequence goes first and the song goes
-  on from the first entry that names it. Export's "All the sequences" does not read it yet and plays every sequence once, in order
-  (`songPasses` in `export-wav.js` is where the export will).
+- **Song mode** (the Song key, `toggleSong`; #159 step 4b, replacing the All key that played every sequence in order) goes by the
+  arrangement: the controller keeps where the song is (`songAt`) and `nextPass` says which pass follows the one that ended (the next
+  time round the entry if it repeats, else the next entry; round and round until Stop, a later step gives it an end). It is off on
+  every load and is not saved, and a song that plays saves nothing as it goes. The decisions, each asked of the person who wanted it:
+  - **Play begins at the entry selected** in the Song panel, at its first time round (the first entry when none was picked),
+    wherever the editor is.
+  - **The editor stays put while the song plays.** The sequence keys only show a sequence there, with no effect on the sound (a song
+    is jumped by selecting an entry and pressing Play), so the Next latch has nothing to do and is disabled. The panel marks what
+    plays, and the step keys have no cursor while what shows is not what plays. A hit played live, or recorded, goes into what plays
+    (`playing`), as it sounds. Edits to the step keys are to what shows, heard when that sequence comes round.
+  - **Turning Song mode off while it plays** goes on as a loop of the sequence that was playing, and the editor jumps to it
+    (`followPlaying`); turning it on goes on playing what played, until the end of its pass, then the song's next pass.
+  - **Stop** leaves the editor where it is, and what plays becomes the sequence showing again (`mirrorPlaying`), so the display says that
+    one while stopped. The next Play begins at the entry selected, as always.
+  - **The LCD** only changes the first word of its sequence line for now (SONG for SEQ, the number and count are those of what
+    plays, from `heard`). The song's own position and repeats come in a later step, as lines swapped in for the mode, a stopgap
+    towards a screen for each function, so `formatLcd` stays a pure function of what the mode needs.
+    Export's "All the sequences" does not read the arrangement yet and plays every sequence once, in order (`songPasses` in
+    `export-wav.js` is where the export will).
 - **Starters** (`starters.js`) are whole beats to begin from (tempo, swing, patterns, choke groups, colours). The pads'
   sounds are the same in every starter: a starter changes the beat, not the kit.
 - **Swing** is 50 (straight) to 75: how much of each pair of steps the first takes, so the second sounds later
