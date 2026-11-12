@@ -35,7 +35,7 @@ how many times it repeats. Until you change it, it is every sequence once, in or
 - Select a cell, then **Add Entry** (puts the sequence showing in after it), **Remove Entry**, **Move Earlier** or
   **Move Later**, and **Repeats −** / **+** (1 to 16). A song holds up to 32 entries.
 - Light the **Song** key, next to Play, and press Play: the song begins at the entry selected and stops after its last
-  pass. Turn on **Loop**, beside the panel's heading, to go round again instead.
+  pass. Turn on **Loop**, at the start of the row under the panel's heading, to go round again instead.
 - In Song mode the sequence keys only choose what you see and edit, so you can work on one sequence while the song
   plays another. The display shows the entry, its repeat and what comes next.
 

@@ -180,7 +180,8 @@ describe("createSequenceRow", () => {
 
   const keys = () => element.children[1].children;
   const [LATCH, ADD, COPY, REMOVE] = [0, 1, 2, 3];
-  const actions = () => element.children[2].children;
+  // Next on its own, then the joined +, Copy and − group: one list, in the order they sit.
+  const actions = () => [element.children[2].children[0], ...element.children[2].children[1].children];
   const pressed = () => keys().map((key) => key.getAttribute("aria-pressed") === "true");
   const refresh = (change = {}) => row.refresh({ count: 3, current: 1, canAdd: true, canRemove: true, ...change });
 

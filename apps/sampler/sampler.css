@@ -720,17 +720,33 @@
 }
 /* What goes with the keys sits at the right edge, level with the edge of the display: the label and the keys on the left, Next, Add,
    Copy and Remove (and the bar arrows) on the right. When it wraps under the keys on a narrow screen it goes to the right there too.
-   The two right-hand groups are one width, so the display has a column down its right side: the arrows go to the ends of
-   theirs (the number between them has no label of its own: the row's label is "Bars"), and the buttons of the other share
-   what is left over. The width is a little more than either needs, so a wider font does not make one wider than the other. */
+   The bar arrows are as wide as the joined +, Copy and − group above them, so the two line up in a column down the display's right
+   side, with Next standing out to the left of it: the arrows go to the ends of theirs (the number between them has no label of its
+   own: the row's label is "Bars"), and the buttons of the group share what is left over. The width is a little more than the group
+   needs at 100% text (6.4rem), so a wider font does not make one wider than the other. */
+.seq-bar {
+  --seq-group-width: 6.8rem;
+}
 .seq-bar > :last-child {
   margin-left: auto;
-  min-width: 9.6rem; /* Next, +, Copy and − at the size they have at 100% text, which is 9.3rem */
 }
 .seq-bar > .step-nav {
   justify-content: space-between;
+  min-width: var(--seq-group-width);
 }
 .seq-bar > .btn-group:last-child > .btn {
+  flex: 1 1 auto;
+}
+/* Next on its own, then the joined +, Copy and − group, which shares out what is left of the column. */
+.seq-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.seq-tools > .btn-group {
+  min-width: var(--seq-group-width);
+}
+.seq-tools > .btn-group > .btn {
   flex: 1 1 auto;
 }
 .step-head,
@@ -761,6 +777,8 @@
 .song-strip .btn[aria-pressed="true"]:hover,
 .song-loop[aria-pressed="true"],
 .song-loop[aria-pressed="true"]:hover,
+.step-velocity-toggle[aria-pressed="true"],
+.step-velocity-toggle[aria-pressed="true"]:hover,
 .seq-latch[aria-pressed="true"],
 .seq-latch[aria-pressed="true"]:hover {
   border-color: #1b1a18;
@@ -806,7 +824,7 @@
   box-shadow: inset 0 0 0 2px #ff7a45;
 }
 /* The tools are three joined pairs (add and remove, earlier and later, fewer and more repeats), so wrapping never leaves one button of a
-   pair alone on a row. (Loop, the song's own setting, is beside the heading, at the end of the header row, and not among them.) On a phone,
+   pair alone on a row. (Loop, the song's own setting, starts the row on its own, as Velocity does for the steps.) On a phone,
    where .step-tools is a grid of three columns, each pair has a row of its own and shares it: the labels are longer than the step tools',
    and three columns clipped them at the larger text sizes. */
 @media (max-width: 480px) {
@@ -836,8 +854,10 @@
 .step-tools .btn {
   padding: 5px 8px;
 }
-/* The velocity switch is the one tool that is not an edit: it sits at the start of the row, the rest at the end. */
-.step-velocity-toggle {
+/* The velocity switch, and the song's Loop, are the one tool in their row that is not an edit: each sits at the start of the row,
+   the rest at the end. */
+.step-velocity-toggle,
+.song-loop {
   margin-right: auto;
 }
 /* On a phone the Velocity switch has a row to itself and the six edit tools make two even rows of three, not a ragged wrap. */
@@ -1039,6 +1059,8 @@
   .song-strip .btn[aria-pressed="true"]:hover,
   .song-loop[aria-pressed="true"],
   .song-loop[aria-pressed="true"]:hover,
+  .step-velocity-toggle[aria-pressed="true"],
+  .step-velocity-toggle[aria-pressed="true"]:hover,
   .seq-latch[aria-pressed="true"],
   .seq-latch[aria-pressed="true"]:hover {
     forced-color-adjust: none;
