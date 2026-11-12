@@ -8,6 +8,10 @@ Numbers link to the pull request.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## 2026-11-12
+
 ### Added
 
 - Sampler: a Loop key, beside the Song panel's heading, makes the song go round again at its end instead of stopping. It
@@ -19,26 +23,6 @@ Numbers link to the pull request.
   seconds on the end for what rings on, and the window says how long the file is. A song longer than 6 min 40 s is too long to
   save: the window says so, and fewer repeats or entries, or one sequence at a time, will do
   ([#178](https://github.com/jaballer/audio-lab/pull/178))
-- Sampler: in Song mode the display has a screen for the song. The first line says the entry the song is on
-  (`SONG 02/05  PLAYING`), the pad and the tempo stay, and the bar and the step lines, which the timeline along the bottom
-  already says, give way to the sequence that plays with the time round its entry (`SEQ 03  REPEAT 2/4`) and the sequence
-  that comes next (`NEXT SEQ 01`). Stopped, it says where Play would begin. It follows what you hear, not the pass the
-  sequencer has already begun ([#177](https://github.com/jaballer/audio-lab/pull/177))
-- Sampler: a Song key, in the place of All, turns Song mode on and off. In Song mode Play begins at the entry selected in the Song panel
-  (the first one when none is) and goes by the panel's order and repeats, round and round until Stop; the sequence you are
-  editing stays where it is, so you can work on one sequence while the song plays another, and the panel marks the one that
-  plays. The sequence keys only show a sequence there (they do not change what sounds, so the Next button is disabled).
-  Turning Song mode off while it plays carries on as a
-  loop of the sequence that was playing and moves the editor to it. Export does not use the song yet
-  ([#176](https://github.com/jaballer/audio-lab/pull/176))
-- A footer on every page with links to the source code, the documentation, the design notes, the changelog, the issue
-  tracker, the author's GitHub profile and the license. They open in a new tab, so the sampler keeps playing ([#169](https://github.com/jaballer/audio-lab/pull/169))
-- Sampler: a Song panel, under the pads, edits the order the All key plays. It has a cell for each entry, with its sequence and
-  how many times it goes round, and Add Entry (the sequence showing, after the entry selected), Remove Entry, Move Earlier,
-  Move Later and Repeats − and + for the entry selected: up to 32 entries, going round 1 to 16 times. Until it is changed it is
-  every sequence once, in order, as All played it, and it follows the sequences you add or remove. While All plays, the entry
-  that plays has a triangle and shows its time round (2/3). A change is heard from the end of the pass, the song is saved with
-  the beat, and the panel can be hidden. Export does not use it yet ([#174](https://github.com/jaballer/audio-lab/pull/174))
 
 ### Changed
 
@@ -63,24 +47,31 @@ Numbers link to the pull request.
 - The export's `songPasses` reads the arrangement (`passOrder`), so the list of passes a song is rendered from is the order and
   repeats the player walks, and a plan shares a repeated sequence's hits between its passes; `docs/export.md` has the cap on a
   song's length and why ([#178](https://github.com/jaballer/audio-lab/pull/178))
-- A beat can carry an arrangement, the order a song will play its sequences in, each with a number of repeats (saved
-  format 10). A beat saved by an older page loads as it did, and a sequence added, copied or removed is followed in it
-  ([#170](https://github.com/jaballer/audio-lab/pull/170))
-- Play All goes by the arrangement when a beat has one: the next time round an entry that repeats, else the next entry,
-  round and round, and a queued sequence goes first with the song going on from its first entry. With no
-  arrangement it plays every sequence once in order, as it did ([#173](https://github.com/jaballer/audio-lab/pull/173))
-- The docs are a short set with an index, `docs/README.md`, for people and coding agents alike: `architecture.md` (how
-  the code fits together, and the file-by-file list that was in the README), `sampler.md`, `export.md` and
-  `mpc-sample.md`. The sequencer and step-editing notes are folded into them, `AGENTS.md` links to `CLAUDE.md`, and the
-  footer's Design notes link says what it now holds ([#172](https://github.com/jaballer/audio-lab/pull/172))
-- The sampler's controller keeps the sequence that plays apart from the sequence that shows (they are the same sequence for
-  now), so that a song can later play one while another is edited. No change to the page
-  ([#175](https://github.com/jaballer/audio-lab/pull/175))
 
 ## 2026-11-11
 
 ### Added
 
+- Sampler: in Song mode the display has a screen for the song. The first line says the entry the song is on
+  (`SONG 02/05  PLAYING`), the pad and the tempo stay, and the bar and the step lines, which the timeline along the bottom
+  already says, give way to the sequence that plays with the time round its entry (`SEQ 03  REPEAT 2/4`) and the sequence
+  that comes next (`NEXT SEQ 01`). Stopped, it says where Play would begin. It follows what you hear, not the pass the
+  sequencer has already begun ([#177](https://github.com/jaballer/audio-lab/pull/177))
+- Sampler: a Song key, in the place of All, turns Song mode on and off. In Song mode Play begins at the entry selected in the Song panel
+  (the first one when none is) and goes by the panel's order and repeats, round and round until Stop; the sequence you are
+  editing stays where it is, so you can work on one sequence while the song plays another, and the panel marks the one that
+  plays. The sequence keys only show a sequence there (they do not change what sounds, so the Next button is disabled).
+  Turning Song mode off while it plays carries on as a
+  loop of the sequence that was playing and moves the editor to it. Export does not use the song yet
+  ([#176](https://github.com/jaballer/audio-lab/pull/176))
+- A footer on every page with links to the source code, the documentation, the design notes, the changelog, the issue
+  tracker, the author's GitHub profile and the license. They open in a new tab, so the sampler keeps playing ([#169](https://github.com/jaballer/audio-lab/pull/169))
+- Sampler: a Song panel, under the pads, edits the order the All key plays. It has a cell for each entry, with its sequence and
+  how many times it goes round, and Add Entry (the sequence showing, after the entry selected), Remove Entry, Move Earlier,
+  Move Later and Repeats − and + for the entry selected: up to 32 entries, going round 1 to 16 times. Until it is changed it is
+  every sequence once, in order, as All played it, and it follows the sequences you add or remove. While All plays, the entry
+  that plays has a triangle and shows its time round (2/3). A change is heard from the end of the pass, the song is saved with
+  the beat, and the panel can be hidden. Export does not use it yet ([#174](https://github.com/jaballer/audio-lab/pull/174))
 - Sampler: Play All. The All key, at the end of the transport row, plays the sequences one after the other, round and
   round: lit, each pass is followed by the next sequence and the last by the first, until Stop. Play begins with the
   sequence showing, a sequence queued with the keys goes first and the order goes on from it, and the display says ALL
@@ -101,6 +92,19 @@ Numbers link to the pull request.
 
 ### Maintenance
 
+- A beat can carry an arrangement, the order a song will play its sequences in, each with a number of repeats (saved
+  format 10). A beat saved by an older page loads as it did, and a sequence added, copied or removed is followed in it
+  ([#170](https://github.com/jaballer/audio-lab/pull/170))
+- Play All goes by the arrangement when a beat has one: the next time round an entry that repeats, else the next entry,
+  round and round, and a queued sequence goes first with the song going on from its first entry. With no
+  arrangement it plays every sequence once in order, as it did ([#173](https://github.com/jaballer/audio-lab/pull/173))
+- The docs are a short set with an index, `docs/README.md`, for people and coding agents alike: `architecture.md` (how
+  the code fits together, and the file-by-file list that was in the README), `sampler.md`, `export.md` and
+  `mpc-sample.md`. The sequencer and step-editing notes are folded into them, `AGENTS.md` links to `CLAUDE.md`, and the
+  footer's Design notes link says what it now holds ([#172](https://github.com/jaballer/audio-lab/pull/172))
+- The sampler's controller keeps the sequence that plays apart from the sequence that shows (they are the same sequence for
+  now), so that a song can later play one while another is edited. No change to the page
+  ([#175](https://github.com/jaballer/audio-lab/pull/175))
 - The export's plan is a list of passes (the sequence showing looped, or every sequence once each), which an edited
   order of sequences can fill later; `docs/export.md` says how all the sequences are exported and what was
   measured ([#167](https://github.com/jaballer/audio-lab/pull/167))
@@ -429,4 +433,4 @@ First day, before pull requests were required.
 - The sampler and keyboard become separate apps with shared modules (`ffcbeec`); Prettier, ESLint and Vitest are added
   (`de70131`, `8da31fa`, `20421a1`); `CLAUDE.md` conventions are written (`7a60b93`).
 
-[Unreleased]: https://github.com/jaballer/audio-lab/compare/07b2f9a...main
+[Unreleased]: https://github.com/jaballer/audio-lab/compare/97279e2...main
