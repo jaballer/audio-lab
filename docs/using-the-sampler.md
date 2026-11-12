@@ -25,7 +25,7 @@ edit; **+** adds an empty one, **Copy** duplicates the one showing, and **−** 
 
 - While playing, pressing a sequence key queues it for the end of the pass. Hold **Shift** to switch at once, or turn the **Next** latch off (raised), which is the way to do it on a touch
   screen.
-- `Ctrl/⌘ Z` undoes a change to the steps (with `Shift`, redoes). **Copy Steps** and **Paste Steps** repeat a bar.
+- `Ctrl/⌘ Z` undoes a change to the steps (with `Shift`, redoes). **Copy Steps** and **Paste Steps** repeat a bar of the selected pad's steps (one pad at a time).
 
 ## Make a song
 
@@ -48,13 +48,15 @@ open one) and a colour. Delete or double-click a slider to reset it.
 ## Save and share
 
 - **Export** makes a 16-bit WAV: the sequence showing (1, 2, 4 or 8 loops, stereo or mono) or the song, in its order and repeats (up to 6 min 40 s). Choose
-  **Stems** for a zip with one WAV per pad, which add up to the mix.
+  **Stems** for a zip with one WAV for each pad that has steps, which add up to the mix.
 - **Save** writes everything (beat, pad settings, samples) to a `.audiolab` file and **Open** puts one back. Use it as
   a backup: clearing the browser's site data clears your work.
 
 ## With a MIDI controller
 
-Press **MIDI** and allow the permission prompt (Chrome, Edge or Firefox; not Safari). Notes 36-51 play pads 1-16. A
-Novation Launchpad also lights up to mirror the pads and steps, and an Akai MPC Sample plays the pads in any bank.
+Press **MIDI** and allow the permission prompt (Chrome, Edge or Firefox; not Safari). An original-layout Novation
+Launchpad (Launchpad, S, or Mini mk1/mk2) plays the pads from its bottom-left block and lights up to mirror the pads and
+steps, and an Akai MPC Sample plays the pads in any bank. On any other controller, including newer Launchpads, notes
+36-51 play pads 1-16 and nothing is lit.
 The [MIDI monitor](https://jaballer.github.io/audio-lab/monitor.html) shows what a controller really sends, and the
 [README](../README.md#midi) has the details.

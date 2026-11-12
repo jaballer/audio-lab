@@ -52,7 +52,7 @@ Numbers link to the pull request.
 ### Maintenance
 
 - Docs: a short tour of the sampler, `docs/using-the-sampler.md` (Song mode included), listed in the docs index and linked
-  from the README
+  from the README ([#180](https://github.com/jaballer/audio-lab/pull/180))
 - The scheduler can end a run at a pass end (`endAt`, with `onEnd`): it stops queuing steps and goes on playing until the clock
   gets there, so the last steps handed to the audio clock are not taken back. A beat can carry `loopSong` (saved format 11, an
   upgrade that changes nothing: a beat saved before has Loop off) ([#179](https://github.com/jaballer/audio-lab/pull/179))
