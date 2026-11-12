@@ -3,14 +3,14 @@
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, sequence, sequenceCount, songMode, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
+//   state = { playing, recording, sequence, sequenceCount, songMode, song, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
 //     steps:     how many steps one bar has (the STEP line counts all of them: steps times bars)
 //     bars:      how many bars the sequence has
 //     page:      the 0-based bar the step keys show (the progress bar marks it)
 //     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
 //     sequence:  the current sequence, 0-based
 //     sequenceCount:  how many sequences there are; when given the line reads "SEQ 02/04", and without it "SEQ 02"
-//     songMode:  Song mode is on, and the line reads "SONG 02/04" (or "SONG 02"): one letter wider
+//     songMode, song:  Song mode is on and `song` says where the song is (see songLines), and the display shows the song screen
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 
@@ -22,38 +22,57 @@ const MESSAGE_MS = 1600;
 // What the display says while the machine starts up; it is blank when off. The progress bar fills over the boot (CSS).
 export const BOOT_LINES = ["PAD 16", "DIGITAL SAMPLER", "SELF TEST  OK"];
 
-export function formatLcd({
-  playing,
-  recording,
-  sequence = 0,
-  sequenceCount,
-  songMode = false,
-  selected,
-  soundName,
-  bpm,
-  playheadStep,
-  playheadPosition = playheadStep,
-  steps,
-  bars = 1,
-  stepsOn,
-}) {
+const transport = ({ playing, recording }) => `${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`;
+const padLine = ({ selected, soundName }) => `PAD ${pad2(selected + 1)}  ${soundName}`;
+const tempoLine = ({ bpm }) => `BPM ${bpm.toFixed(1)}`;
+
+// The screens, one for each mode: a function of the state that gives the five lines (the display is five lines tall, and the level
+// meter beside it is sized to them). A mode that needs other lines is another entry, and the others are not touched. One value to a
+// line, so that a line has one job and one rate of change: the tempo changes when it is turned, the bar and the step with every beat.
+
+// The pattern screen: the sequence that plays, the pad, the tempo, and where the playhead is.
+function patternLines(state) {
+  const { playing, sequence = 0, sequenceCount, playheadPosition, steps, bars = 1 } = state;
   const located = playheadPosition >= 0 && playing;
   // The step in the whole sequence, as the step keys are numbered (the keys of the second bar are 17 to 32), out of all of
   // them: the bar line says which bar it is in.
   const stepLabel = located ? pad2(playheadPosition + 1) : "--";
   const barLabel = located ? pad2(Math.floor(playheadPosition / steps) + 1) : "--";
   const sequenceLabel = sequenceCount ? `${pad2(sequence + 1)}/${pad2(sequenceCount)}` : pad2(sequence + 1);
+  return [
+    `SEQ ${sequenceLabel}  ${transport(state)}`,
+    padLine(state),
+    tempoLine(state),
+    `BAR ${barLabel}/${pad2(bars)}`,
+    `STEP ${stepLabel}/${steps * bars}`,
+  ];
+}
+
+// The song screen: where the song is in its entries, the pad and the tempo as before, then in the places of the bar and the step (the
+// timeline along the bottom of the display says where the playhead is, and it is the same bar and step) the sequence that plays and the
+// time round its entry, and the sequence that comes next. A stopgap towards a screen of its own for the song.
+//   song = { entry, entries, sequence, rep, repeats, next }   // all 0-based, `entry` and `rep` -1 when the place is not known (the
+//     chain finds out at the next pass end); `repeats` is how many times the entry goes round
+function songLines(state) {
+  const { entry, entries, sequence, rep, repeats, next } = state.song;
+  return [
+    `SONG ${entry < 0 ? "--" : pad2(entry + 1)}/${pad2(entries)}  ${transport(state)}`,
+    padLine(state),
+    tempoLine(state),
+    `SEQ ${pad2(sequence + 1)}  REPEAT ${rep < 0 ? "--" : `${rep + 1}/${repeats}`}`,
+    `NEXT SEQ ${pad2(next + 1)}`,
+  ];
+}
+
+const SCREENS = { pattern: patternLines, song: songLines };
+
+// The song screen needs to be told where the song is; without that the pattern screen is what there is to show.
+export const screenFor = ({ songMode, song }) => (songMode && song ? "song" : "pattern");
+
+export function formatLcd({ playheadStep, playheadPosition = playheadStep, stepsOn, playing, ...rest }) {
+  const state = { playing, playheadStep, playheadPosition, stepsOn, ...rest };
   return {
-    // One value to a line, so that a line has one job and one rate of change: the tempo changes when it is turned, the
-    // bar and the step with every beat. A song's position and repeats can have lines of their own the same way.
-    lines: [
-      // SONG for SEQ while Song mode is on: the sequence that plays, out of the sequences there are (the song's own position is for the song screen)
-      `${songMode ? "SONG" : "SEQ"} ${sequenceLabel}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
-      `PAD ${pad2(selected + 1)}  ${soundName}`,
-      `BPM ${bpm.toFixed(1)}`,
-      `BAR ${barLabel}/${pad2(bars)}`,
-      `STEP ${stepLabel}/${steps * bars}`,
-    ],
+    lines: SCREENS[screenFor(state)](state),
     ruler: stepsOn.map((on, i) => ({ on, now: playing && i === playheadStep })),
   };
 }
