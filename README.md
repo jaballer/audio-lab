@@ -21,7 +21,7 @@ A small set of browser audio tools built with Vite, the Web Audio API and Web MI
 - A looping 16-step sequencer: up to 8 sequences of 1, 2, 4 or 8 bars (a beat starts with one, and you add, copy and remove them; while it plays, a press on a sequence's key makes it play next, at the end of the pass, and Shift switches at once; the Next key turns that round, which is how a touch screen switches at once; the Song key plays the sequences in the order of the Song panel, round and round, while the keys only show a sequence), a velocity for every step, Undo and Redo (Ctrl/Cmd + Z), and Copy and Paste for a bar. Space toggles play/stop
 - REC mode: press Rec while playing and hit pads to record them, quantized to 16th notes, with the velocity of the hit
 - Your own sounds: drop an audio file on a pad (up to 10 seconds and 5 MB) or load one in the pad editor, which also trims it and sets each pad's gain, pitch, choke group, amplitude envelope and colour
-- Export saves the sequence showing as a looping audio file (1, 2, 4 or 8 loops in one file, in stereo or mono), or all the sequences in order, once each, as one file or a stem for each pad
+- Export saves the sequence showing as a looping audio file (1, 2, 4 or 8 loops in one file, in stereo or mono), or the song (the order and repeats of the Song panel) as one file or a stem for each pad
 - Tempo knob (drag, scroll, or arrow keys), tap tempo, and a volume fader
 - Your sequences, tempo, volume, pad settings and samples are kept in your browser between visits (nothing is uploaded). Save writes all of it to a `.audiolab` project file, and Open puts one back, in case the browser's storage is cleared
 

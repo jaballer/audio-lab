@@ -63,8 +63,9 @@ What `song.js` keeps, and `controller.js` plays:
     is in `getState().heard.song` (`heardSong`): what sounds, not the pass the scheduler has begun (the strip's `songPass` leads
     by the lookahead, the display does not, as for `heard.sequence`); a place not known (Song mode joined in mid-pass) is the first
     entry that names the sequence, as the chain takes it, and is blank when no entry does.
-  - Export's "All the sequences" does not read the arrangement yet and plays every sequence once, in order (`songPasses` in
-    `export-wav.js` is where the export will).
+  - Export's Song choice reads the arrangement (`songPasses` in `export-wav.js`, from `passOrder`): every entry in order, each as often
+    as it repeats, and a sequence the song leaves out is not in the file. A song longer than 400 s (`MAX_SONG_EXPORT_SECONDS`) is
+    too long to export, and the dialog says so; `docs/export.md` has the reasons.
 - **Starters** (`starters.js`) are whole beats to begin from (tempo, swing, patterns, choke groups, colours). The pads'
   sounds are the same in every starter: a starter changes the beat, not the kit.
 - **Swing** is 50 (straight) to 75: how much of each pair of steps the first takes, so the second sounds later

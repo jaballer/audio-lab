@@ -1,8 +1,8 @@
 # Export: how it works, and why
 
-The sampler's Export saves the sequence showing (looped), or all the sequences in order, as a 16-bit WAV file, rendered as the
+The sampler's Export saves the sequence showing (looped), or the song, as a 16-bit WAV file, rendered as the
 page plays it. It was built over several pull requests and then audited as a whole (fidelity to live playback, robustness, UX,
-and what a whole-song bounce would need, which is now built as "All the sequences" below). This records the decisions and what
+and what a whole-song bounce would need, which is now built as "The song" below). This records the decisions and what
 was measured. What is still to do is tracked in the
 GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 [#117](https://github.com/jaballer/audio-lab/issues/117) whole song,
@@ -10,15 +10,15 @@ GitHub issues ([#116](https://github.com/jaballer/audio-lab/issues/116) stems,
 
 ## Where it is
 
-| File                                                  | What it does                                                                                                                                                 |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/sampler/export-wav.js`                          | The render (`planRender`, windows, `renderSequence`), the WAV encoder, `exportSequence`, `createExportAction`                                                |
-| `apps/sampler/export-options.js`                      | The choices (the sequence showing or all, loops, stereo or mono, mix or stems), what the file will be (length, size), the notes and reasons the dialog shows |
-| `apps/sampler/export-dialog-state.js`                 | What the dialog shows and allows, the double-click guard, and what the page tells the dialog (all pure)                                                      |
-| `apps/sampler/export-dialog.js`                       | The `<dialog>`: draws what it is told and reports what is pressed                                                                                            |
-| `apps/sampler/zip.js`                                 | A store-only zip writer (CRC32, no dependency) for the stems                                                                                                 |
-| `apps/sampler/voices.js`, `kit.js`, `sample-voice.js` | One voice per pad and choke groups; the kit snapshot; a sample's source can be stopped                                                                       |
-| `shared/app-header.js`                                | The Export button, next to POWER (the `actions` option)                                                                                                      |
+| File                                                  | What it does                                                                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/sampler/export-wav.js`                          | The render (`planRender`, windows, `renderSequence`), the WAV encoder, `exportSequence`, `createExportAction`                                                     |
+| `apps/sampler/export-options.js`                      | The choices (the sequence showing or the song, loops, stereo or mono, mix or stems), what the file will be (length, size), the notes and reasons the dialog shows |
+| `apps/sampler/export-dialog-state.js`                 | What the dialog shows and allows, the double-click guard, and what the page tells the dialog (all pure)                                                           |
+| `apps/sampler/export-dialog.js`                       | The `<dialog>`: draws what it is told and reports what is pressed                                                                                                 |
+| `apps/sampler/zip.js`                                 | A store-only zip writer (CRC32, no dependency) for the stems                                                                                                      |
+| `apps/sampler/voices.js`, `kit.js`, `sample-voice.js` | One voice per pad and choke groups; the kit snapshot; a sample's source can be stopped                                                                            |
+| `shared/app-header.js`                                | The Export button, next to POWER (the `actions` option)                                                                                                           |
 
 ## Decisions
 
@@ -183,33 +183,54 @@ Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) were bu
   for each file, then the directory. Checked with `unzip -t` and Python's `zipfile` as well as with a reader in the tests. Not
   zip64: a file or an archive of 4 GiB or more, or 65,536 files, is refused.
 
-## All the sequences
+## The song
 
-The Sequences choice in the dialog, Showing or All ([#117](https://github.com/jaballer/audio-lab/issues/117), step 3 of song
-mode in [#159](https://github.com/jaballer/audio-lab/issues/159)), exports every sequence in order, once each, as the Play All key
-played them before the beat could have an arrangement. It is the simple reading of a song: the sequences there are, in the order
-they are in. Song mode (the Song key, which took the All key's place) goes by the arrangement (its order and repeats,
-`arrangement.js`) and the export does not yet, so the two differ for a beat whose song has been edited in the Song panel;
-`songPasses(song)` in `export-wav.js` is where the export will read it.
+The Sequences choice in the dialog, Showing or Song, exports the song as the Song panel has it: every entry in order, each as often as
+it repeats, which is what Song mode plays ([#117](https://github.com/jaballer/audio-lab/issues/117) built it as every sequence once, as
+"All", in step 3 of song mode in [#159](https://github.com/jaballer/audio-lab/issues/159); step 4 made it read the arrangement, and
+renamed All to Song, the files too). A song nobody has edited has no arrangement, and is every sequence once, in order, as it was.
+`songPasses(song)` in `export-wav.js` is the list of its passes, from `passOrder` in `arrangement.js` (the walk playback and export
+share).
 
 - **What is exported is a list of passes.** `planRender` builds `passList`, a pass for each stretch of the render, with the step it
   begins at and its hits. For the sequence showing it is the same one sequence over and over (the warm-up and the loops, as
-  before: the numbers did not change); for all of them it is one pass for each sequence. The hit feeder walks the list, so the
-  two are one code path.
+  before: the numbers did not change); for the song it is a pass for each time round each entry. A sequence that comes round again
+  shares its hits between its passes (they are the same each time, and the render only reads them), so a long song costs a pass of
+  bookkeeping each and not a copy of the sequence. The hit feeder walks the list, so the two are one code path.
 - **No warm-up, no loop seam, a tail.** Nothing comes round to ring into the start, so the file begins at its first step (the render's
   lead is the only thing before it), and ends with `SONG_TAIL_SECONDS` (4 s) for what rings on, where the loop's own tail is folded into
   its start. A fixed time, so that the dialog can say how long and how big the file is without the kit's releases; a sample longer than
-  the tail is cut at its end. A pad's hit is cut by its next across the end of a sequence, as the page's chain does, and the last hit of
-  the whole is not cut.
+  the tail is cut at its end. A pad's hit is cut by its next across the end of a pass, as the page's chain does, and that includes the
+  next time round the same entry (a sequence that ends on a hit and begins on one cuts itself); the last hit of the whole is not cut.
+- **A sequence the song leaves out is not in the file, and one that repeats is in it each time.** The dialog's heading counts the
+  entries ("SONG · 3 ENTRIES · 100 BPM"), and what the song's length is, repeats and all, is the readout's to say. What the song plays
+  is also what is asked about everywhere else: whether there is anything to export (`hasSteps`: a song that plays only empty
+  sequences has nothing, though a sequence it leaves out has steps), which pads get a stem (`stemPads`), and which sequences the note
+  names.
 - **Empty sequences are kept**, as Song mode plays them: a pass of silence of their length (apart from what is still ringing from the one
-  before). The dialog's note names them ("Sequence 3 has no steps: nothing plays in it but what is still ringing."), and the dialog
-  blocks Export only when no sequence has a step. The sequence showing does not have to be one with steps.
-- **Loops do not apply**, so the Loops row goes and the file name leaves them out: `pad16-all-90bpm.wav`, `pad16-all-90bpm-mono.wav`,
-  `pad16-all-90bpm-stems.zip` and `pad16-all-90bpm-pad03-snare.wav`. The choice is kept with the other options (`scope`: "sequence" or
-  "all"; an older saved option means the sequence showing).
-- **Stems** are a stem of each pad that has a step in any sequence, each as long as the whole (the same timeline, so they add up to the
-  mix), weighed by `plan.cost` (the sounds in every pass).
-- **Checked in a real browser (Chromium, 48 kHz):**
+  before). The dialog's note names the ones the song plays (once each, however often they come round: "Sequence 3 has no steps: nothing
+  plays in it but what is still ringing."), and the dialog blocks Export only when no sequence the song plays has a step. The sequence
+  showing does not have to be one with steps.
+- **Loops do not apply**, so the Loops row goes and the file name leaves them out: `pad16-song-90bpm.wav`, `pad16-song-90bpm-mono.wav`,
+  `pad16-song-90bpm-stems.zip` and `pad16-song-90bpm-pad03-snare.wav`. The choice is kept with the other options (`scope`: "sequence" or
+  "song"; an older saved option means the sequence showing, and one saved as "all", which is what the song was called, is read as "song").
+  The files were `pad16-all-…` in the version before the song had an order of its own: a rename of what lands in a downloads folder,
+  made once, together with the choice's name.
+- **Stems** are a stem of each pad that has a step in any sequence the song plays, each as long as the whole (the same timeline, so they
+  add up to the mix), weighed by `plan.cost` (the sounds in every pass, repeats counted).
+- **A cap on the length: 400 s, tail and all (`MAX_SONG_EXPORT_SECONDS`).** The Song panel lets a song be 32 entries of 16 repeats of up to
+  eight bars, which is hours of audio, and the render and the file are each one buffer (see Memory below). 400 s is 6 min 40 s: as large as
+  the biggest export made before a song could repeat (eight 8-bar sequences at 40 BPM, 388 s with its tail). Past it the dialog turns
+  Export off, with the reason in place of the hint ("This song is 25 min 40 s long, and Export makes at most 6 min 40 s. Fewer repeats or
+  entries make it shorter, or export one sequence at a time."), still says how long and how big the file would be, and has no note (a
+  memory warning for a file that is not made is noise, and the plan of it is not worked out). `exportSequence` and `exportStems` ask
+  again before they start (`SONG TOO LONG`), for a song that changed under an open dialog. Only the song has the cap: the sequence showing
+  is made longer by its loops, a choice of four, which the memory note warns of as before. The cap is on time, so it is the same at any
+  rate; the memory it means is not: 400 s is about 270 MB at 44.1 kHz, 290 at 48 and 590 at 96 (as the dialog counts, `exportMemoryBytes`), which the note
+  warns of from 200 MB and does not stop, as for any export. A chunked render would lift the cap, and is not built.
+- **Checked in a real browser (Chromium, 48 kHz), when the song was every sequence once.** Not run again for the arrangement: only which
+  passes are listed changed (the hit feeder, the voices and the render are as they were), and what the tests with a fake audio context
+  say about the order and the repeats is below.
   - A hip hop starter with an empty third sequence made `pad16-all-90bpm.wav`, 14.67 s and 2,816,044 bytes (3 bars of sound, the empty
     sequence, and the tail), what the dialog said; the stems zip and the mono files were the sizes it said too.
   - Every hit was within a frame and a half of where the grid puts it, with swing across the end of a sequence, from 22.05 to 96 kHz and 57
@@ -218,15 +239,25 @@ they are in. Song mode (the Song key, which took the All key's place) goes by th
     within -108 to -118 dB.
   - A sound longer than the tail is cut at the end of the file with no fade (an 8 s sample hit in the last bar leaves the file at about
     -35 dBFS), which the dialog's hint says: a loop never does that, as its tail comes round to its start.
+- **Checked for the arrangement, in the running page (Chromium, 48 kHz) and in tests.** A song made in the Song panel (sequence 1 three
+  times, then an empty sequence 3, with sequence 2 taken out) made `pad16-song-100bpm.wav`, 13.6 s and 2,611,244 bytes, what the dialog
+  said; the three times round sequence 1 have the same loudness in every 50 ms and the empty one is silent, and the 4 s tail is silent
+  (the starter's sounds are short, so nothing rings into it). The stems zip of a song of sequence 1 twice and an empty sequence made three
+  stems named `pad16-song-100bpm-pad0N-…`, each 11.2 s, and a zip of 6,451,778 bytes against the dialog's 6.2 MB. A song of 7 min 9 s
+  (a sequence of 8 bars sixteen times, and six more) turned Export off and said why, with no note, still giving its length and size; and an
+  Export choice saved as "all" opened as Song. The tests cover the order, the repeats, a sequence left out, a pad cut across a repeat, the
+  stems and the notes with a fake audio context. Not listened to: that a repeat is heard to come round on the beat, and the seam between
+  entries, are for the ear. Firefox and Safari were not run.
 
-What is not built: an edited order and repeats (step 4 of #159), and a render that is not one buffer.
+What is not built: an end of song with a Loop switch is for the player, not the export (the file is the song once through), and a render
+that is not one buffer.
 
 - **Memory.** A bounce of eight 8-bar sequences at 40 BPM is 384 s (6.4 minutes) and 4 s: about as large as the biggest export today
   (8 loops of 8 bars, about 275 MB at the peak), so one buffer can still do it: measured, 388 s at 40 BPM finished in 4.1 s, and its peak was
   260 MB over the page across the browser's processes (the render, the WAV and the Blob) against the 261 MB the note works out, which
   is what the dialog's memory note says (and, since there are no loops, that exporting one sequence at a time makes it smaller). It grows with
   anything that repeats: the audit's synthetic case of eight 384 s sequences (3,072 s) held 1.08 GB of float for the render alone, and 517 MB each of
-  WAV and Blob, which would kill a phone's tab. Beyond today's size it needs chunked rendering and output (a file built from
-  encoded chunks and a Blob of them), not one buffer; with repeats (step 4) it can come to that.
+  WAV and Blob, which would kill a phone's tab. That is what the cap on a song's length is for: with repeats a song can come to that, and
+  it is stopped at 400 s. Beyond it needs chunked rendering and output (a file built from encoded chunks and a Blob of them), not one buffer.
 - **The dialog** has four choice groups wired by hand and a button that says WAV or ZIP; a second format touches the options, the
   name, the readout, the header title and the button.
