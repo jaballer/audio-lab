@@ -218,7 +218,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
 - `public/manifest.webmanifest` + `public/icons/` — the web app manifest and its icons, served as they are
 - `shared/base.css` — chassis, LCD, button and header styles used by every page
 - `public/favicon.svg` — the site icon, served as it is (every page's `<head>` also carries its description and share tags)
-- `docs/` — the documentation: [README.md](README.md) is its index
+- `docs/` — the documentation: [README.md](README.md) is its index, and [using-the-sampler.md](using-the-sampler.md) is a one-page tour of the sampler for someone using it
 - `AGENTS.md` — a link to `CLAUDE.md`, for coding agents that look for that name
 - `CHANGELOG.md` — what changed on the live site, by day, newest first
 - `LICENSE` — the PolyForm Noncommercial License 1.0.0 (see License below)
