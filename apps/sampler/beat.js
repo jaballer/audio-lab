@@ -2,61 +2,62 @@
 // and the volume. No DOM, and no storage of its own (the caller passes `save`),
 // so it can be tested. Storage itself is shared/storage.js.
 //
-//   const song = parseSong(loadJson(SONG_KEY), { rows: 16, steps: 16, maxBars: 8, maxSequences: 8 });   // null if unusable
-//   const saver = createSongSaver({ read, save });
+//   const beat = parseBeat(loadJson(BEAT_KEY), { rows: 16, steps: 16, maxBars: 8, maxSequences: 8 });   // null if unusable
+//   const saver = createBeatSaver({ read, save });
 //   saver.schedule();   // something changed: save once things settle
 //   saver.flush();      // about to leave the page: save now if a change is waiting
-//   saver.cancel();     // something else is about to replace the saved song: drop a change that is waiting
+//   saver.cancel();     // something else is about to replace the saved beat: drop a change that is waiting
 
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
 import { cleanArrangement } from "./arrangement.js";
 import { parsePadSettings } from "./pad-settings.js";
 import { SWING_DEFAULT, clampBpm, clampSwing } from "../../shared/tempo.js";
 
-// Still named after the project's old name: changing it would orphan every beat
-// already saved in visitors' browsers.
-export const SONG_KEY = "pad-sampler:song";
+// Still named after the project's old name, and after what a beat was called before "song" meant the chain of
+// sequences (#159): changing it would orphan every beat already saved in visitors' browsers. The saved fields
+// (`loopSong` among them) and a project file's `song` keep their names for the same reason.
+export const BEAT_KEY = "pad-sampler:song";
 
 // Bump this when the saved shape changes, and add a migration from the old
-// version (below) so beats saved by an older page still load. A song newer than
-// this page is ignored, so an old page never misreads a newer song.
-export const SONG_VERSION = 11;
+// version (below) so beats saved by an older page still load. A beat newer than
+// this page is ignored, so an old page never misreads a newer beat.
+export const BEAT_VERSION = 11;
 
-// { [version]: (song) => the same song in the next version's shape }. The version
-// field itself is set by upgradeSong.
+// { [version]: (beat) => the same beat in the next version's shape }. The version
+// field itself is set by upgradeBeat.
 const MIGRATIONS = {
   // Version 1 had one pattern; version 2 has a list of sequences, each with its own pattern and length.
   // (`bars` is read only so a pattern longer than one bar is not lost; the page did not save it at first.)
   1: ({ bars, pattern, ...rest }) => ({ ...rest, current: 0, sequences: [{ bars, pattern }] }),
-  // Version 3 adds `velocities` to each sequence. A version 2 song has none, which reads as every step at full velocity.
-  2: (song) => song,
-  // Version 4 adds `padSettings` (each pad's gain and pitch). A version 3 song has none: every pad at its defaults.
-  3: (song) => song,
+  // Version 3 adds `velocities` to each sequence. A version 2 beat has none, which reads as every step at full velocity.
+  2: (beat) => beat,
+  // Version 4 adds `padSettings` (each pad's gain and pitch). A version 3 beat has none: every pad at its defaults.
+  3: (beat) => beat,
   // Version 5 adds each pad's `choke` group to `padSettings`. A version 4 entry has none, which reads as no group.
-  4: (song) => song,
+  4: (beat) => beat,
   // Version 6 adds each pad's `color` to `padSettings`. A version 5 entry has none, which reads as no colour.
-  5: (song) => song,
+  5: (beat) => beat,
   // Version 7 adds each pad's envelope (`attack`, `decay`, `sustain`, `release`) to `padSettings`. A version 6 entry has
   // none, which reads as no envelope.
-  6: (song) => song,
-  // Version 8 adds `swing` (50 to 75, 50 straight). A version 7 song has none, which reads as straight.
-  7: (song) => song,
+  6: (beat) => beat,
+  // Version 8 adds `swing` (50 to 75, 50 straight). A version 7 beat has none, which reads as straight.
+  7: (beat) => beat,
   // Version 9 has as many sequences as the person made, from one up, where version 8 always had eight and the ones nobody
   // used were empty. Those empty ones at the end go (see trimBlankSequences).
   8: trimBlankSequences,
-  // Version 10 adds the optional `arrangement` (the order a song plays its sequences in, arrangement.js). A version 9 song has
+  // Version 10 adds the optional `arrangement` (the order a song plays its sequences in, arrangement.js). A version 9 beat has
   // none, which reads as every sequence once, in order: what the All key and Export's All (now Song mode and Export's Song) already did.
-  9: (song) => song,
-  // Version 11 adds the optional `loopSong` (the song goes round again at its end instead of stopping). A version 10 song has none, which
+  9: (beat) => beat,
+  // Version 11 adds the optional `loopSong` (the song goes round again at its end instead of stopping). A version 10 beat has none, which
   // reads as Loop off.
-  10: (song) => song,
+  10: (beat) => beat,
 };
 
 const VOLUME_MAX = 100;
 
 // A sequence with nothing in it: no steps on any pad, in any bar (a sequence made shorter keeps the steps of the bars it dropped,
 // so those count), and the default length (an empty sequence given 4 bars was set up on purpose). One that is not shaped like a
-// sequence is not blank: it is left for parseSong to refuse the song for.
+// sequence is not blank: it is left for parseBeat to refuse the beat for.
 function isBlankSequence(sequence) {
   if (!isObject(sequence) || !isObject(sequence.pattern)) return false;
   const hasSteps = Object.values(sequence.pattern).some((on) => Array.isArray(on) && on.length > 0);
@@ -66,15 +67,15 @@ function isBlankSequence(sequence) {
 // Version 8 to 9: the empty sequences at the end of the list go, keeping at least one. An empty one with a used one after it
 // stays, because the numbers after it would move. The sequence that was showing stays showing, or is the last one left when
 // it was one of those that went.
-function trimBlankSequences(song) {
-  if (!Array.isArray(song.sequences) || song.sequences.length === 0) return song;
-  let keep = song.sequences.length;
-  while (keep > 1 && isBlankSequence(song.sequences[keep - 1])) keep--;
+function trimBlankSequences(beat) {
+  if (!Array.isArray(beat.sequences) || beat.sequences.length === 0) return beat;
+  let keep = beat.sequences.length;
+  while (keep > 1 && isBlankSequence(beat.sequences[keep - 1])) keep--;
   // Only a `current` that pointed at one that went: one that was never in range reads as the first, as it always did.
   const pointedAtOneThatWent =
-    Number.isInteger(song.current) && song.current >= keep && song.current < song.sequences.length;
-  const current = pointedAtOneThatWent ? keep - 1 : song.current;
-  return { ...song, sequences: song.sequences.slice(0, keep), current };
+    Number.isInteger(beat.current) && beat.current >= keep && beat.current < beat.sequences.length;
+  const current = pointedAtOneThatWent ? keep - 1 : beat.current;
+  return { ...beat, sequences: beat.sequences.slice(0, keep), current };
 }
 
 // `sequences` is a list of { bars, pattern, velocities }, where `pattern` is pattern.snapshot():
@@ -85,12 +86,12 @@ function trimBlankSequences(song) {
 //
 // `padSettings` is { pad: { gain, pitch, choke, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
 //
-// `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a song that has none: a song
+// `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a beat that has none: a beat
 // nobody edited is saved as it always was.
 //
 // `loopSong` is whether the song goes round again at its end instead of stopping (Song mode, with Loop on), and is left out while it is
-// off, which is how a song is until a person turns Loop on.
-export const serializeSong = ({
+// off, which is how a beat is until a person turns Loop on.
+export const serializeBeat = ({
   bpm,
   swing = SWING_DEFAULT,
   volume,
@@ -100,7 +101,7 @@ export const serializeSong = ({
   arrangement = null,
   loopSong = false,
 }) => ({
-  version: SONG_VERSION,
+  version: BEAT_VERSION,
   bpm,
   swing,
   volume,
@@ -147,9 +148,9 @@ function cleanVelocities(velocities, pattern) {
   return clean;
 }
 
-// What is saved when the page finds something it cannot use (a song from a newer page, one that is corrupt), so
+// What is saved when the page finds something it cannot use (a beat from a newer page, one that is corrupt), so
 // the first edit does not write over it for good. `raw` is what was in storage, `usable` whether it could be used.
-export const SONG_BACKUP_KEY = `${SONG_KEY}:backup`;
+export const BEAT_BACKUP_KEY = `${BEAT_KEY}:backup`;
 export const needsBackup = (raw, usable) => raw !== null && raw !== undefined && !usable;
 
 // Keeps `raw` under `key` (with `save`) when it was in storage and could not be used; whether it did. Each page
@@ -160,30 +161,30 @@ export function backUpUnusable(raw, usable, key, save) {
   return true;
 }
 
-// Bring a stored song up to SONG_VERSION by applying one migration after another,
+// Bring a stored beat up to BEAT_VERSION by applying one migration after another,
 // or give back null when it cannot be brought there (a version from the future,
 // or an old one with no migration). `migrations` is a parameter for the tests.
-export function upgradeSong(raw, migrations = MIGRATIONS) {
-  if (!isObject(raw) || !Number.isInteger(raw.version) || raw.version > SONG_VERSION) return null;
-  let song = raw;
-  while (song.version < SONG_VERSION) {
-    const migrate = migrations[song.version];
+export function upgradeBeat(raw, migrations = MIGRATIONS) {
+  if (!isObject(raw) || !Number.isInteger(raw.version) || raw.version > BEAT_VERSION) return null;
+  let beat = raw;
+  while (beat.version < BEAT_VERSION) {
+    const migrate = migrations[beat.version];
     if (!migrate) return null;
-    song = { ...migrate(song), version: song.version + 1 };
+    beat = { ...migrate(beat), version: beat.version + 1 };
   }
-  return song;
+  return beat;
 }
 
-// Turn whatever was in storage into a song, or null when it is not one we can
+// Turn whatever was in storage into a beat, or null when it is not one we can
 // trust (missing, corrupt, from a version it cannot upgrade). Values that are the right
 // kind but out of range are brought back into range rather than rejected.
-export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }) {
-  const raw = upgradeSong(stored);
+export function parseBeat(stored, { rows, steps, maxBars = 1, maxSequences = 1 }) {
+  const raw = upgradeBeat(stored);
   if (!raw) return null;
   if (!Number.isFinite(raw.bpm) || !Number.isFinite(raw.volume) || !Array.isArray(raw.sequences)) return null;
   if (!raw.sequences.every((sequence) => isObject(sequence) && isObject(sequence.pattern))) return null;
 
-  // As many as the song has, from one (a song with none gets an empty one) up to `maxSequences`: extra ones are dropped.
+  // As many as the beat has, from one (a beat with none gets an empty one) up to `maxSequences`: extra ones are dropped.
   const most = Number.isInteger(maxSequences) && maxSequences > 0 ? maxSequences : 1; // there is always at least one
   const count = Math.min(most, Math.max(1, raw.sequences.length));
   const sequences = Array.from({ length: count }, (_, i) => {
@@ -191,7 +192,7 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
     if (!saved) return { bars: 1, pattern: {}, velocities: {} };
     const pattern = cleanPattern(saved.pattern, { rows, steps: steps * maxBars });
     return {
-      // Not every saved sequence says how long it is (a version 1 song did not): one bar, as it was.
+      // Not every saved sequence says how long it is (a version 1 beat did not): one bar, as it was.
       bars: Number.isInteger(saved.bars) ? Math.min(maxBars, Math.max(1, saved.bars)) : 1,
       pattern,
       velocities: cleanVelocities(saved.velocities, pattern),
@@ -208,7 +209,7 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
     sequences,
     padSettings: parsePadSettings(raw.padSettings, rows),
     ...(arrangement ? { arrangement } : {}),
-    // Only a stored true turns Loop on: anything else is what a song that never had it reads as.
+    // Only a stored true turns Loop on: anything else is what a beat that never had it reads as.
     ...(raw.loopSong === true ? { loopSong: true } : {}),
   };
 }
@@ -217,14 +218,14 @@ export function parseSong(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
 // until the changes stop. This is a timer for a write, not for a sound, which
 // is the kind of thing a timer is fine for.
 //
-// `read()` returns the current song (what serializeSong takes); `save(song)`
+// `read()` returns the current beat (what serializeBeat takes); `save(beat)`
 // stores it.
-export function createSongSaver({ read, save, delayMs = 300 }) {
+export function createBeatSaver({ read, save, delayMs = 300 }) {
   let timer = null;
 
   function write() {
     timer = null;
-    save(serializeSong(read()));
+    save(serializeBeat(read()));
   }
 
   return {
@@ -237,7 +238,7 @@ export function createSongSaver({ read, save, delayMs = 300 }) {
       clearTimeout(timer);
       write();
     },
-    // For a project being opened: it has written the song, and the page it replaces must not save over it on its way out.
+    // For a project being opened: it has written the beat, and the page it replaces must not save over it on its way out.
     cancel() {
       clearTimeout(timer);
       timer = null;

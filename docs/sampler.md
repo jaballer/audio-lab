@@ -1,18 +1,21 @@
 # The sampler: design decisions
 
-Why the sampler (`index.html`, `apps/sampler/`) works the way it does: the song and its sequences, step velocity, the pad
+Why the sampler (`index.html`, `apps/sampler/`) works the way it does: the beat and its sequences, the song, step velocity, the pad
 editor and each pad setting. What it can do is in the [README](../README.md); where each file is, in
 [architecture.md](architecture.md); the export, in [export.md](export.md). Work still to do is tracked in the GitHub
 issues (song mode [#159](https://github.com/jaballer/audio-lab/issues/159), step editing
 [#87](https://github.com/jaballer/audio-lab/issues/87), sound editing [#21](https://github.com/jaballer/audio-lab/issues/21)),
 not here.
 
-## The song
+## The beat
 
-What `song.js` keeps, and `controller.js` plays:
+What `beat.js` keeps, and `controller.js` plays. In the code, as on the page, the **beat** is everything that is saved (the
+sequences, the arrangement, tempo, swing, volume and pad settings), and the **song** is the chain of sequences that Song
+mode plays (#159 step 5 renamed the first from `song` to `beat`, so the two no longer share a name). Only what is already
+stored keeps the old name: the storage key, the saved field `loopSong` and a project file's `song`.
 
 - **Sequences.** A beat starts with one sequence and has up to eight (`MAX_SEQUENCES` in `layout.js`), each 1, 2, 4 or 8
-  bars of 16 steps, with its own pattern and velocities. Tempo, swing and volume belong to the song, not to a sequence.
+  bars of 16 steps, with its own pattern and velocities. Tempo, swing and volume belong to the beat, not to a sequence.
 - **Switching while playing.** A sequence key queues that sequence to take over at the end of the pass (`queueSequence`,
   through the scheduler's `onWrap`), so the beat never jumps mid-bar, and Shift switches at once. That is with the Next
   latch on, as it is until a person turns it off; with Next off the two swap, a press switches at once and Shift waits, so
@@ -93,8 +96,8 @@ What `song.js` keeps, and `controller.js` plays:
   sounds are the same in every starter: a starter changes the beat, not the kit.
 - **Swing** is 50 (straight) to 75: how much of each pair of steps the first takes, so the second sounds later
   (`shared/tempo.js`). The live scheduler and the export both apply it.
-- **Saved as a versioned shape.** Every change to what is saved bumps `SONG_VERSION` and adds a migration, so a beat saved
-  by an older page still loads, and a song from a newer page is left alone rather than misread. The storage key is still
+- **Saved as a versioned shape.** Every change to what is saved bumps `BEAT_VERSION` and adds a migration, so a beat saved
+  by an older page still loads, and a beat from a newer page is left alone rather than misread. The storage key is still
   `pad-sampler:song`, the project's old name: renaming it would orphan every saved beat.
 
 ## Step velocity
@@ -157,7 +160,7 @@ of it. Delete or a double-click puts a handle back.
 
 A pad has a choke group, 0 (none) or 1 to 8, set with a Choke slider in the pad editor (#112). Pads in the same group cut each other off, as a closed hat cuts an open hat; a pad always cuts its own earlier hit, in a group or not (`apps/sampler/voices.js`).
 
-- **A setting like Gain and Pitch:** it is in `pad-settings.js`, kept in the kit, saved in the song's `padSettings` (song version 5; a version 4 song has no groups), shown on the LCD (`PAD 03 CHOKE GROUP 1`), and not part of the step undo history.
+- **A setting like Gain and Pitch:** it is in `pad-settings.js`, kept in the kit, saved in the beat's `padSettings` (beat version 5; a version 4 beat has no groups), shown on the LCD (`PAD 03 CHOKE GROUP 1`), and not part of the step undo history.
 - **Symmetric:** any pad in the group cuts the others; there is no "this pad cuts that one but not the reverse".
 - **Two pads of a group on the same step:** each cuts the other from that moment, silenced outright (not faded: a fade would let the first milliseconds through), so the pad handled last, the higher pad number, is the one heard.
 - **Read when the hit starts:** the group a pad is in when a hit begins decides what it cuts, so moving a pad into a group takes effect from the next hit (for a step already handed to the audio clock, up to about 120 ms ahead, from the one after it). A step queued ahead does not cut a live tap made after it was queued, within that window; the pad's own retrigger cut has the same limit.

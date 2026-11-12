@@ -228,8 +228,8 @@ export function createExportDialog(root, { onChange, onExport, onCancel, opener 
       for (const { value, button } of loopButtons) setAttr(button, "aria-pressed", String(value === next.loops));
       for (const { value, button } of channelButtons) setAttr(button, "aria-pressed", String(value === next.channels));
     },
-    // What it says is what was pressed: not while it renders, when the song may move under it (a tempo knob on a
-    // controller) and the file is already being made from the song as it was.
+    // What it says is what was pressed: not while it renders, when the beat may move under it (a tempo knob on a
+    // controller) and the file is already being made from the beat as it was.
     refresh(next) {
       if (busy) return;
       setText(title, next.title);

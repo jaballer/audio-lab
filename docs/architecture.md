@@ -24,7 +24,7 @@ tone-demo.html ─> apps/tone-demo/... ─┘
 
 | Kind   | What it does                                                                                 | Examples                                   | Tested?                                 |
 | ------ | -------------------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------- |
-| Logic  | State and rules. No DOM, nothing at import time: exports functions, factories and plain data | `controller.js`, `song.js`, `scheduler.js` | Yes, in Node (`*.test.js` beside it)    |
+| Logic  | State and rules. No DOM, nothing at import time: exports functions, factories and plain data | `controller.js`, `beat.js`, `scheduler.js` | Yes, in Node (`*.test.js` beside it)    |
 | View   | `create…(element, options)`: draws into the element it is handed, reports what was pressed   | `pads.js`, `lcd.js`, `step-keys.js`        | Its pure helpers are (`formatLcd`, ...) |
 | Wiring | `main.js`: finds the elements, builds the rest, connects MIDI and the computer keyboard      | `apps/*/main.js`                           | No: checked in the running page         |
 
@@ -75,13 +75,13 @@ empty (a private window), and the page must work without it.
 
 | What                                                                           | Where                                                   | Code                                           |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------- | ---------------------------------------------- |
-| The sampler's song: sequences, arrangement, tempo, swing, volume, pad settings | `localStorage` `pad-sampler:song` (versioned, migrated) | `apps/sampler/song.js` via `shared/storage.js` |
+| The sampler's beat: sequences, arrangement, tempo, swing, volume, pad settings | `localStorage` `pad-sampler:song` (versioned, migrated) | `apps/sampler/beat.js` via `shared/storage.js` |
 | Which pad has which sample, and its trim                                       | `localStorage` `pad-sampler:samples`                    | `apps/sampler/samples.js`                      |
 | The samples' bytes                                                             | IndexedDB                                               | `shared/blob-store.js`                         |
 | Small preferences (export options, drawer, lights...)                          | `localStorage` `pad-sampler:*`                          | `apps/sampler/main.js`                         |
 | A whole beat, as a file the person keeps                                       | `.audiolab` (a zip: `project.json` and the samples)     | `apps/sampler/project.js`, `zip.js`            |
 
-A song saved by an older page is upgraded (`MIGRATIONS` in `song.js`); one from a newer page is ignored rather than
+A beat saved by an older page is upgraded (`MIGRATIONS` in `beat.js`); one from a newer page is ignored rather than
 misread. A tab that sees another tab save stops saving its older copy (`tab-sync.js`).
 
 ## Offline and updates
@@ -110,7 +110,7 @@ Not one global sequencer, because the pages differ where it matters:
 3. **What else a controller holds.** The sampler's `controller.js` also has pad selection, LCD messages, recording and
    Launchpad lights. A shared module that owned all of that would be the sampler's controller under another name.
 
-`apps/sampler/song.js` (saving) stays with the sampler until a second page needs it; a module is shared when a second
+`apps/sampler/beat.js` (saving) stays with the sampler until a second page needs it; a module is shared when a second
 page uses it, so its API comes from two real users.
 
 ## Files
@@ -124,8 +124,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `format.js` — small text helpers for the display, messages and the pad editor (a sample's name, size and length); no DOM
   - `knob-moves.js` — how far a drag, wheel turn or key press moves the tempo knob (whole BPM, Shift for tenths or tens), which the volume knob uses too, and the angle a knob's pointer turns to; no DOM
   - `starter-beat.js` — the beat a first visit starts with, so Play makes noise right away; no DOM
-  - `starters.js` — a few complete beats to start from, one per style (hip hop, techno, house, trap): tempo, patterns written as step grids, swing, and the pad settings that go with them (choke group, colours), built into the song `song.js` keeps; the pads' sounds are the same in every starter; no DOM
-  - `song.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
+  - `starters.js` — a few complete beats to start from, one per style (hip hop, techno, house, trap): tempo, patterns written as step grids, swing, and the pad settings that go with them (choke group, colours), built into the beat `beat.js` keeps; the pads' sounds are the same in every starter; no DOM
+  - `beat.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `arrangement.js` — the order a song plays its sequences in (each with a number of repeats; none until a person edits it, which means every sequence once, in order): cleaning what was saved, following a sequence added or removed, the order of the passes, and which pass follows the one that ended (what Song mode walks) and whether a pass is the last of the song; no DOM
   - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
   - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing, and so do the other pads in its choke group (a fade on the audio clock), live, in the sequence or in the export; no DOM
@@ -136,11 +136,11 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `export-options.js` — what an export can be told (the sequence showing or the song, loops, stereo or mono, the mix or a stem for each pad; kept between visits), and what the Export dialog says about the file before it is made: its length, size and format, and for a song the passes it is made of (`songPassOrder`, from the arrangement) and the longest it may be (`MAX_SONG_EXPORT_SECONDS`); no DOM
   - `export-dialog-state.js` — what the Export dialog shows and allows (which controls are on, what the button and the Cancel button say while it renders), its double-click guard, and what the page tells it about the sequence showing or the song; no DOM
   - `zip.js` — a zip archive of files stored as they are (a store-only writer with a CRC32, no dependency), for the export of stems and the project file; a file's bytes are not copied; `readZip` reads such an archive back (it refuses a compressed, encrypted, zip64 or damaged one, and checks each CRC); no DOM
-  - `tab-sync.js` — knowing when another tab of the sampler has saved the song or the samples (the browser's `storage` event), so a tab that was left open stops saving its old beat over the new one and shows a "changed in another tab" strip (`shared/update-notice.js`, the same strip as the update one); no DOM
-  - `project.js` — the project file (`.audiolab`, a zip): the whole beat (song, tempo, volume, pad settings) and the samples' original bytes, for when the browser's storage is cleared; built from what the page keeps (`collectSamples`), checked as strictly as stored data on the way in (`parseProject`: the song through `parseSong`, the samples through `parseSamples`, a damaged or too-large file refused whole), and written where the page keeps its own (`installProject`), after which the page starts again; no DOM
+  - `tab-sync.js` — knowing when another tab of the sampler has saved the beat or the samples (the browser's `storage` event), so a tab that was left open stops saving its old beat over the new one and shows a "changed in another tab" strip (`shared/update-notice.js`, the same strip as the update one); no DOM
+  - `project.js` — the project file (`.audiolab`, a zip): the whole beat (sequences, tempo, volume, pad settings) and the samples' original bytes, for when the browser's storage is cleared; built from what the page keeps (`collectSamples`), checked as strictly as stored data on the way in (`parseProject`: the beat through `parseBeat`, the samples through `parseSamples`, a damaged or too-large file refused whole), and written where the page keeps its own (`installProject`), after which the page starts again; no DOM
   - `trim.js` — which part of a sample plays: a start and an end as fractions of its length, kept possible (inside the sample, never shorter than 5 ms), and which handle a press would move; no DOM
   - `waveform.js` — a sample's outline for drawing, the lowest and highest value of each slice; no DOM
-  - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the choke group, the text, and reading them back from a saved song; no DOM
+  - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the choke group, the text, and reading them back from a saved beat; no DOM
   - `sample-voice.js` — a loaded sample as a pad sound, and decoding a file (with the length and size caps and the reason a file was refused); no DOM
   - `samples.js` — loading a file onto a pad, resetting it, and keeping the samples between visits (the files' bytes in IndexedDB, which pad has which in localStorage), restored at the start of a visit; no DOM
   - `pads.js`, `tempo-knob.js`, `volume-knob.js` (also the Swing knob), `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `export-dialog.js`, `trim-view.js`, `lcd.js`, `level-meter-view.js`, `sequence-row.js`, `chain-strip.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `settings-sliders.js` is the Gain, Pitch, Choke and envelope sliders, `color-swatches.js` is the row of colours for the pad, `pad-drawer.js` is the pad editor drawer (open, close, heading), `export-dialog.js` is the Export window (loops, stereo or mono, size, progress and cancel), `trim-view.js` is the waveform with its Start and End and the pad's envelope drawn on it, `lcd.js` has the pure text formatter and the progress bar along the bottom of the display, `level-meter-view.js` is the two bars at the right of the display, `sequence-row.js` is the row of sequence keys with Add, Copy and Remove, and has the pure `sequenceKeys`, `chain-strip.js` is the Song panel: a cell for each entry, its tools and the Loop key)

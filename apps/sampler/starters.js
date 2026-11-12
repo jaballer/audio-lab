@@ -6,8 +6,8 @@
 // visit starts with.
 //
 //   STARTERS                            // [{ id, name, description, bpm, swing?, sequences: [{ pads }], padSettings }]
-//   starterSong(STARTERS[0], { rows: 16, steps: 16, maxBars: 8, maxSequences: 8, volume: 80, keep: { 0: { gain: -6 } } })
-//                                       // the song as song.js saves it, or null if it does not fit those limits
+//   starterBeat(STARTERS[0], { rows: 16, steps: 16, maxBars: 8, maxSequences: 8, volume: 80, keep: { 0: { gain: -6 } } })
+//                                       // the beat as beat.js saves it, or null if it does not fit those limits
 //
 // `swing` (tempo.js: 50 straight to 75) is how much of each pair of steps the first takes; a starter that does not say is
 // straight, and loading one sets the swing as it sets the tempo.
@@ -18,7 +18,7 @@
 // hat, 3 open hat, 4 clap, 5 rim, 6 low tom, 7 high tom, 8 cowbell, 9 conga, 10 shaker, 11 bass, 12 crash, 13 ride,
 // 14 zap, 15 blip (shared/sounds.js).
 
-import { parseSong, serializeSong } from "./song.js";
+import { parseBeat, serializeBeat } from "./beat.js";
 
 const BAR = 16;
 // A soft hit: audibly there, well under the accents.
@@ -179,7 +179,7 @@ export function sequenceBars(pads) {
   return length % BAR === 0 ? length / BAR : 0;
 }
 
-// One sequence, in the shape song.js keeps: { bars, pattern: { row: [steps] }, velocities: { row: { step: velocity } } }.
+// One sequence, in the shape beat.js keeps: { bars, pattern: { row: [steps] }, velocities: { row: { step: velocity } } }.
 function buildSequence({ pads }) {
   const pattern = {};
   const velocities = {};
@@ -196,18 +196,18 @@ function buildSequence({ pads }) {
   return { bars: sequenceBars(pads), pattern, velocities };
 }
 
-// The starter as the song the page saves, read back through `parseSong` so it is what a saved beat would be (the
+// The starter as the beat the page saves, read back through `parseBeat` so it is what a saved beat would be (the
 // sequences the starter does not have are empty, and anything outside the limits is brought inside them). `volume` is the
 // master volume the person has now: a starter is a beat, and does not move the level. `keep` is { pad: settings } for
 // pads that are not on their built-in sound (a loaded sample): the settings the person gave it (gain, pitch, envelope...)
 // stay, with only what the starter itself sets for that pad (a choke group, a colour) put over them. Null when a
 // sequence's grid is not a whole number of bars, or does not fit.
-export function starterSong(starter, { rows, steps, maxBars, maxSequences, volume, keep = {} }) {
+export function starterBeat(starter, { rows, steps, maxBars, maxSequences, volume, keep = {} }) {
   const sequences = starter.sequences.map(buildSequence);
   if (sequences.some(({ bars }) => bars < 1 || bars > maxBars)) return null;
   const padSettings = { ...starter.padSettings };
   for (const [pad, settings] of Object.entries(keep)) padSettings[pad] = { ...settings, ...starter.padSettings[pad] };
-  const raw = serializeSong({ bpm: starter.bpm, swing: starter.swing, volume, current: 0, sequences, padSettings });
-  const song = parseSong(raw, { rows, steps, maxBars, maxSequences });
-  return song && serializeSong(song);
+  const raw = serializeBeat({ bpm: starter.bpm, swing: starter.swing, volume, current: 0, sequences, padSettings });
+  const beat = parseBeat(raw, { rows, steps, maxBars, maxSequences });
+  return beat && serializeBeat(beat);
 }

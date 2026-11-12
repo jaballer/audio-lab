@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS } from "./layout.js";
-import { SONG_VERSION, parseSong, serializeSong } from "./song.js";
-import { SOFT_VELOCITY, STARTERS, sequenceBars, starterSong } from "./starters.js";
+import { BEAT_VERSION, parseBeat, serializeBeat } from "./beat.js";
+import { SOFT_VELOCITY, STARTERS, sequenceBars, starterBeat } from "./starters.js";
 import { SWING_DEFAULT, SWING_MAX, SWING_MIN, clampBpm } from "../../shared/tempo.js";
 
 const limits = { rows: PAD_COUNT, steps: STEPS, maxBars: MAX_BARS, maxSequences: MAX_SEQUENCES };
-const song = (starter, volume = 80) => starterSong(starter, { ...limits, volume });
+const beat = (starter, volume = 80) => starterBeat(starter, { ...limits, volume });
 
 describe("sequenceBars", () => {
   it("counts bars of 16 steps, ignoring the spaces that group them", () => {
@@ -28,20 +28,20 @@ describe("STARTERS", () => {
   });
 
   it.each(STARTERS.map((s) => [s.name, s]))("%s fits the sampler and reads back as written", (_name, starter) => {
-    const result = song(starter);
+    const result = beat(starter);
     expect(result).not.toBeNull();
-    expect(result.version).toBe(SONG_VERSION);
+    expect(result.version).toBe(BEAT_VERSION);
     expect(result.bpm).toBe(starter.bpm);
     // Already inside the tempo range: nothing was clamped.
     expect(clampBpm(starter.bpm)).toBe(starter.bpm);
     expect(result.sequences).toHaveLength(starter.sequences.length); // a starter has the sequences it wrote, no more
     expect(result.current).toBe(0);
     // Saving it and reading it again changes nothing, so the page that loads it sees exactly this.
-    expect(serializeSong(parseSong(result, limits))).toEqual(result);
+    expect(serializeBeat(parseBeat(result, limits))).toEqual(result);
   });
 
   it.each(STARTERS.map((s) => [s.name, s]))("%s keeps every step it wrote", (_name, starter) => {
-    const result = song(starter);
+    const result = beat(starter);
     starter.sequences.forEach(({ pads }, index) => {
       const written = Object.entries(pads).flatMap(([row, grid]) =>
         [...grid.replaceAll(" ", "")].flatMap((cell, step) => (cell === "." ? [] : [`${row}:${step}`])),
@@ -86,14 +86,14 @@ describe("STARTERS", () => {
   );
 
   it("keep the pad settings they name", () => {
-    const hipHop = song(STARTERS.find((s) => s.id === "hip-hop"));
+    const hipHop = beat(STARTERS.find((s) => s.id === "hip-hop"));
     // Open and closed hat are in one choke group, so the next closed hat cuts an open one.
     expect(hipHop.padSettings[2].choke).toBe(1);
     expect(hipHop.padSettings[3].choke).toBe(1);
   });
 
   it("writes a soft hit as a velocity, and a full hit as none", () => {
-    const hipHop = song(STARTERS.find((s) => s.id === "hip-hop"));
+    const hipHop = beat(STARTERS.find((s) => s.id === "hip-hop"));
     // Closed hat, second step: the "o" after the first "X".
     expect(hipHop.sequences[0].velocities[2][1]).toBe(SOFT_VELOCITY);
     expect(hipHop.sequences[0].velocities[2][0]).toBeUndefined();
@@ -102,24 +102,24 @@ describe("STARTERS", () => {
   it("keeps the settings of a pad that holds a sample, with the starter's choke and colour over them", () => {
     const hipHop = STARTERS.find((s) => s.id === "hip-hop");
     const keep = { 0: { gain: -12, pitch: 3, color: 5 }, 9: { gain: 4, pitch: -2 } };
-    const kept = starterSong(hipHop, { ...limits, volume: 80, keep });
+    const kept = starterBeat(hipHop, { ...limits, volume: 80, keep });
     // Pad 0 (kick): the person's gain and pitch stay; the starter's colour is put over theirs.
     expect(kept.padSettings[0]).toMatchObject({ gain: -12, pitch: 3, color: 1 });
     // Pad 9: the starter has nothing for it, so it is exactly what the person had.
     expect(kept.padSettings[9]).toMatchObject({ gain: 4, pitch: -2 });
     // And without `keep` a pad is as the starter says, or at its defaults.
-    expect(song(hipHop).padSettings[9]).toBeUndefined();
+    expect(beat(hipHop).padSettings[9]).toBeUndefined();
   });
 
   it("carry a swing inside the range, and a starter without one is straight", () => {
     for (const starter of STARTERS) {
-      const swing = song(starter).swing;
+      const swing = beat(starter).swing;
       expect(swing).toBeGreaterThanOrEqual(SWING_MIN);
       expect(swing).toBeLessThanOrEqual(SWING_MAX);
       expect(swing).toBe(starter.swing ?? SWING_DEFAULT);
     }
     // Each style's own: hip hop lazy, house light, techno and trap on the straight grid.
-    const swingOf = (id) => song(STARTERS.find((s) => s.id === id)).swing;
+    const swingOf = (id) => beat(STARTERS.find((s) => s.id === id)).swing;
     expect(swingOf("hip-hop")).toBe(58);
     expect(swingOf("house")).toBe(54);
     expect(swingOf("techno")).toBe(SWING_DEFAULT);
@@ -128,30 +128,30 @@ describe("STARTERS", () => {
 
   it("brings an out-of-range swing inside it, and ignores one that is not a number", () => {
     const base = { id: "x", name: "X", description: "a test starter", bpm: 100, padSettings: {}, sequences: [] };
-    expect(song({ ...base, swing: 99 }).swing).toBe(SWING_MAX);
-    expect(song({ ...base, swing: "58" }).swing).toBe(SWING_DEFAULT);
+    expect(beat({ ...base, swing: 99 }).swing).toBe(SWING_MAX);
+    expect(beat({ ...base, swing: "58" }).swing).toBe(SWING_DEFAULT);
   });
 
   it("leaves the master volume as the person has it", () => {
-    expect(song(STARTERS[0], 35).volume).toBe(35);
-    expect(song(STARTERS[0], 90).volume).toBe(90);
+    expect(beat(STARTERS[0], 35).volume).toBe(35);
+    expect(beat(STARTERS[0], 90).volume).toBe(90);
   });
 });
 
-describe("starterSong", () => {
+describe("starterBeat", () => {
   const starter = { id: "x", name: "X", description: "a test starter", bpm: 100, sequences: [], padSettings: {} };
 
   it("is null when a sequence is longer than the sampler allows", () => {
     const long = { pads: { 0: "X...X...X...X...".repeat(MAX_BARS + 1) } };
-    expect(song({ ...starter, sequences: [long] })).toBeNull();
+    expect(beat({ ...starter, sequences: [long] })).toBeNull();
   });
 
   it("is null when a sequence is not a whole number of bars", () => {
-    expect(song({ ...starter, sequences: [{ pads: { 0: "X...X..." } }] })).toBeNull();
+    expect(beat({ ...starter, sequences: [{ pads: { 0: "X...X..." } }] })).toBeNull();
   });
 
   it("has just the sequences it wrote: a starter of one sequence is a beat of one", () => {
-    const result = song({ ...starter, sequences: [{ pads: { 0: "X...X...X...X..." } }] });
+    const result = beat({ ...starter, sequences: [{ pads: { 0: "X...X...X...X..." } }] });
     expect(result.sequences).toHaveLength(1);
     expect(result.current).toBe(0);
   });

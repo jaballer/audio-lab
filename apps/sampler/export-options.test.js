@@ -33,7 +33,7 @@ import {
 } from "./export-options.js";
 
 // 120 BPM: a sixteenth is 0.125 s, a bar of 16 steps is 2 s
-const songOf = (bars, extra = {}) => ({ bpm: 120, current: 0, sequences: [{ bars }], ...extra });
+const beatOf = (bars, extra = {}) => ({ bpm: 120, current: 0, sequences: [{ bars }], ...extra });
 
 describe("the choices", () => {
   it("are the sequence as it is by default: one loop, in stereo, as the export has always been", () => {
@@ -127,47 +127,47 @@ describe("channelCount", () => {
 
 describe("exportFrames", () => {
   it("is the length of the bars times the loops, in frames", () => {
-    expect(exportFrames(songOf(1), 16, 1, 1000)).toBe(2000);
-    expect(exportFrames(songOf(1), 16, 4, 1000)).toBe(8000);
-    expect(exportFrames(songOf(2), 16, 2, 1000)).toBe(8000);
+    expect(exportFrames(beatOf(1), 16, 1, 1000)).toBe(2000);
+    expect(exportFrames(beatOf(1), 16, 4, 1000)).toBe(8000);
+    expect(exportFrames(beatOf(2), 16, 2, 1000)).toBe(8000);
   });
 
   it("follows the tempo, and the sequence showing", () => {
-    expect(exportFrames(songOf(1, { bpm: 60 }), 16, 1, 1000)).toBe(4000);
+    expect(exportFrames(beatOf(1, { bpm: 60 }), 16, 1, 1000)).toBe(4000);
     const second = { bpm: 120, current: 1, sequences: [{ bars: 1 }, { bars: 4 }] };
     expect(exportFrames(second, 16, 1, 1000)).toBe(8000);
   });
 
   it("rounds once, so eight loops are eight times the length and not eight roundings of it", () => {
     // 123 BPM: a bar is 1.95122 s, which is 86048.78 frames at 44100
-    const song = songOf(1, { bpm: 123 });
-    expect(exportFrames(song, 16, 1, 44100)).toBe(86049);
-    expect(exportFrames(song, 16, 8, 44100)).toBe(688390); // not 8 * 86049 = 688392
+    const beat = beatOf(1, { bpm: 123 });
+    expect(exportFrames(beat, 16, 1, 44100)).toBe(86049);
+    expect(exportFrames(beat, 16, 8, 44100)).toBe(688390); // not 8 * 86049 = 688392
   });
 });
 
 describe("exportInfo", () => {
   it("says how long and how big the file will be: two bytes a sample, a channel each, and the header", () => {
-    const info = exportInfo(songOf(1), { loops: 1, channels: "stereo" }, 16, 1000);
+    const info = exportInfo(beatOf(1), { loops: 1, channels: "stereo" }, 16, 1000);
     expect(info).toEqual({ frames: 2000, seconds: 2, bytes: 44 + 2000 * 2 * 2, channels: "stereo" });
   });
 
   it("is half the size in mono", () => {
-    const stereo = exportInfo(songOf(1), { loops: 1, channels: "stereo" }, 16, 1000);
-    const mono = exportInfo(songOf(1), { loops: 1, channels: "mono" }, 16, 1000);
+    const stereo = exportInfo(beatOf(1), { loops: 1, channels: "stereo" }, 16, 1000);
+    const mono = exportInfo(beatOf(1), { loops: 1, channels: "mono" }, 16, 1000);
     expect(mono.bytes - 44).toBe((stereo.bytes - 44) / 2);
     expect(mono.seconds).toBe(stereo.seconds);
   });
 
   it("grows with the loops", () => {
-    const eight = exportInfo(songOf(2), { loops: 8, channels: "mono" }, 16, 1000);
+    const eight = exportInfo(beatOf(2), { loops: 8, channels: "mono" }, 16, 1000);
     expect(eight.seconds).toBe(32);
     expect(eight.bytes).toBe(44 + 32000 * 2);
   });
 
   it("treats options that are not choices as the defaults, as the export does", () => {
-    expect(exportInfo(songOf(1), { loops: 3, channels: "quad" }, 16, 1000)).toEqual(
-      exportInfo(songOf(1), DEFAULT_EXPORT_OPTIONS, 16, 1000),
+    expect(exportInfo(beatOf(1), { loops: 3, channels: "quad" }, 16, 1000)).toEqual(
+      exportInfo(beatOf(1), DEFAULT_EXPORT_OPTIONS, 16, 1000),
     );
   });
 });
@@ -176,7 +176,7 @@ describe("stemsInfo", () => {
   const options = { loops: 1, channels: "stereo", files: "stems" };
 
   it("says how many stems, how long each is, and how big the zip is: every file a whole export of its own, and the zip's headers", () => {
-    const info = stemsInfo(songOf(1), options, 16, 1000, 5);
+    const info = stemsInfo(beatOf(1), options, 16, 1000, 5);
     const wav = 44 + 2000 * 2 * 2;
     expect(info).toEqual({
       frames: 2000,
@@ -188,8 +188,8 @@ describe("stemsInfo", () => {
   });
 
   it("is as long as the mix, and follows the loops and the channels as it does", () => {
-    const mix = exportInfo(songOf(2), { loops: 4, channels: "mono" }, 16, 1000);
-    const stems = stemsInfo(songOf(2), { loops: 4, channels: "mono", files: "stems" }, 16, 1000, 3);
+    const mix = exportInfo(beatOf(2), { loops: 4, channels: "mono" }, 16, 1000);
+    const stems = stemsInfo(beatOf(2), { loops: 4, channels: "mono", files: "stems" }, 16, 1000, 3);
     expect(stems.frames).toBe(mix.frames);
     expect(stems.seconds).toBe(mix.seconds);
     expect(stems.channels).toBe("mono");
@@ -197,7 +197,7 @@ describe("stemsInfo", () => {
   });
 
   it("is about the headers' size when there are no stems", () => {
-    expect(stemsInfo(songOf(1), options, 16, 1000, 0).bytes).toBe(22);
+    expect(stemsInfo(beatOf(1), options, 16, 1000, 0).bytes).toBe(22);
   });
 });
 
@@ -278,8 +278,8 @@ describe("exportFormat", () => {
 
 describe("exportTitle", () => {
   it("names the sequence, its length and the tempo", () => {
-    expect(exportTitle(songOf(1))).toBe("SEQ 01 · 1 BAR · 120 BPM");
-    expect(exportTitle(songOf(4, { bpm: 96.5 }))).toBe("SEQ 01 · 4 BARS · 97 BPM");
+    expect(exportTitle(beatOf(1))).toBe("SEQ 01 · 1 BAR · 120 BPM");
+    expect(exportTitle(beatOf(4, { bpm: 96.5 }))).toBe("SEQ 01 · 4 BARS · 97 BPM");
     expect(exportTitle({ bpm: 100, current: 7, sequences: Array.from({ length: 8 }, () => ({ bars: 2 })) })).toBe(
       "SEQ 08 · 2 BARS · 100 BPM",
     );
@@ -559,8 +559,8 @@ describe("exporting the song", () => {
 
   it("rounds the length once, to the nearest frame, not down", () => {
     // 130 BPM: a bar is 1.846153… s, and with the tail 5.846153… s, which at 1900 Hz is 11107.69 frames
-    const song = { bpm: 130, current: 0, sequences: [{ bars: 1 }] };
-    expect(exportFrames(song, 16, 1, 1900, "song")).toBe(11108);
+    const beat = { bpm: 130, current: 0, sequences: [{ bars: 1 }] };
+    expect(exportFrames(beat, 16, 1, 1900, "song")).toBe(11108);
   });
 
   it("says how long and how big the file will be by the scope in the options, as the loops are not counted", () => {

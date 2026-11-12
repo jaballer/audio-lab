@@ -34,10 +34,10 @@ function busOf(node) {
 }
 
 const SEQUENCES = 4;
-// A saved song with one sequence of the given pattern and length, the rest empty. It has Loop on unless the test says `loopSong: false`:
+// A saved beat with one sequence of the given pattern and length, the rest empty. It has Loop on unless the test says `loopSong: false`:
 // the tests of the chain, written when a song went round and round, are about the order and not the end, and the end of a song that
 // has Loop off (the way a song is until a person turns it on) has its own tests below.
-const savedSong = ({
+const savedBeat = ({
   bpm = 100,
   swing = 50,
   volume = 50,
@@ -59,10 +59,10 @@ const savedSong = ({
   ),
 });
 
-function setup({ song = null, bpm, ownCount = false, maxSequences } = {}) {
+function setup({ beat = null, bpm, ownCount = false, maxSequences } = {}) {
   const audio = fakeAudio();
   const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
-  const calls = { change: vi.fn(), message: vi.fn(), padHit: vi.fn(), padPlayed: vi.fn(), songChange: vi.fn() };
+  const calls = { change: vi.fn(), message: vi.fn(), padHit: vi.fn(), padPlayed: vi.fn(), beatChange: vi.fn() };
   let clock = 0;
   const sampler = createSampler({
     audio,
@@ -70,14 +70,14 @@ function setup({ song = null, bpm, ownCount = false, maxSequences } = {}) {
     steps: STEPS,
     maxBars: 4,
     ...(maxSequences === undefined ? {} : { maxSequences }),
-    ...(ownCount ? {} : { sequenceCount: SEQUENCES }), // `ownCount`: say nothing, as the page does with no saved song
-    song: song ?? (bpm ? savedSong({ bpm }) : null),
+    ...(ownCount ? {} : { sequenceCount: SEQUENCES }), // `ownCount`: say nothing, as the page does with no saved beat
+    beat: beat ?? (bpm ? savedBeat({ bpm }) : null),
     now: () => clock,
     onChange: calls.change,
     onMessage: calls.message,
     onPadHit: calls.padHit,
     onPadPlayed: calls.padPlayed,
-    onSongChange: calls.songChange,
+    onBeatChange: calls.beatChange,
   });
   // Move the audio clock forward and let the scheduler wake up.
   const advance = (seconds) => {
@@ -98,16 +98,16 @@ afterEach(() => vi.useRealTimers());
 describe("starting state", () => {
   it("starts from the starter beat, the default volume and nothing selected but pad 1", () => {
     const { sampler } = setup();
-    expect(sampler.getSong()).toMatchObject({ bpm: 100, volume: DEFAULT_VOLUME, current: 0 });
-    expect(sampler.getSong().sequences[0].pattern).toEqual(STARTER_BEAT);
-    expect(sampler.getSong().sequences[1].pattern).toEqual({}); // only the first has the starter beat
+    expect(sampler.getBeat()).toMatchObject({ bpm: 100, volume: DEFAULT_VOLUME, current: 0 });
+    expect(sampler.getBeat().sequences[0].pattern).toEqual(STARTER_BEAT);
+    expect(sampler.getBeat().sequences[1].pattern).toEqual({}); // only the first has the starter beat
     expect(sampler.getState()).toMatchObject({ selected: 0, recording: false, playing: false, playheadStep: -1 });
   });
 
   it("starts from saved velocities, and plays them", () => {
-    const song = savedSong({ bpm: 120, pattern: { 0: [0] }, velocities: { 0: { 0: 50 } } });
-    const { sampler, sounds, advance } = setup({ song });
-    expect(sampler.getSong()).toEqual(song);
+    const beat = savedBeat({ bpm: 120, pattern: { 0: [0] }, velocities: { 0: { 0: 50 } } });
+    const { sampler, sounds, advance } = setup({ beat });
+    expect(sampler.getBeat()).toEqual(beat);
     expect(sampler.getState().stepVelocities[0]).toBe(50);
     sampler.start();
     advance(0);
@@ -115,27 +115,27 @@ describe("starting state", () => {
   });
 
   it("keeps each sequence's velocities apart", () => {
-    const song = {
-      ...savedSong({ pattern: { 0: [0] }, velocities: { 0: { 0: 50 } } }),
+    const beat = {
+      ...savedBeat({ pattern: { 0: [0] }, velocities: { 0: { 0: 50 } } }),
     };
-    song.sequences[1] = { bars: 1, pattern: { 0: [0] }, velocities: {} };
-    const { sampler } = setup({ song });
+    beat.sequences[1] = { bars: 1, pattern: { 0: [0] }, velocities: {} };
+    const { sampler } = setup({ beat });
     sampler.setSequence(1);
     expect(sampler.getState().stepVelocities[0]).toBe(127);
     sampler.setSequence(0);
     expect(sampler.getState().stepVelocities[0]).toBe(50);
   });
 
-  it("starts from a saved song", () => {
-    const song = savedSong({ bpm: 133.5, volume: 35, bars: 2, pattern: { 1: [2, 6, 20] }, current: 2 });
-    const { sampler } = setup({ song });
-    expect(sampler.getSong()).toEqual(song);
+  it("starts from a saved beat", () => {
+    const beat = savedBeat({ bpm: 133.5, volume: 35, bars: 2, pattern: { 1: [2, 6, 20] }, current: 2 });
+    const { sampler } = setup({ beat });
+    expect(sampler.getBeat()).toEqual(beat);
   });
 
   it("does not report a change while it is being built", () => {
-    const { change, songChange, message } = setup();
+    const { change, beatChange, message } = setup();
     expect(change).not.toHaveBeenCalled();
-    expect(songChange).not.toHaveBeenCalled();
+    expect(beatChange).not.toHaveBeenCalled();
     expect(message).not.toHaveBeenCalled();
   });
 });
@@ -173,13 +173,13 @@ describe("triggerPad", () => {
 
 describe("pad settings", () => {
   it("sets gain or pitch on the selected pad, says so, saves, and redraws", () => {
-    const { sampler, message, songChange, change } = setup();
+    const { sampler, message, beatChange, change } = setup();
     sampler.selectPad(2);
-    songChange.mockClear();
+    beatChange.mockClear();
     change.mockClear();
     sampler.setPadSetting("gain", -6);
     expect(message).toHaveBeenLastCalledWith("PAD 03 GAIN -6 dB");
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
     sampler.setPadSetting("pitch", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 PITCH +3 st");
@@ -212,12 +212,12 @@ describe("pad settings", () => {
     expect(message).toHaveBeenLastCalledWith("PAD 01 GAIN +6 dB");
   });
 
-  it("is saved with the song, only for the pads that are not at the defaults", () => {
+  it("is saved with the beat, only for the pads that are not at the defaults", () => {
     const { sampler } = setup();
-    expect(sampler.getSong().padSettings).toEqual({});
+    expect(sampler.getBeat().padSettings).toEqual({});
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", -5);
-    expect(sampler.getSong().padSettings).toEqual({
+    expect(sampler.getBeat().padSettings).toEqual({
       1: { gain: 0, pitch: -5, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
@@ -230,7 +230,7 @@ describe("pad settings", () => {
       audio,
       kit,
       steps: STEPS,
-      song: savedSong({ bpm: 120, pattern: { 1: [0, 1, 2, 3] } }),
+      beat: savedBeat({ bpm: 120, pattern: { 1: [0, 1, 2, 3] } }),
     });
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", 12);
@@ -250,7 +250,7 @@ describe("pad settings", () => {
       audio,
       kit: createKit(sounds),
       steps: STEPS,
-      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+      beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
     });
     sampler.start();
     audio.ctx.currentTime += 0.2;
@@ -274,7 +274,7 @@ describe("pad settings", () => {
       audio,
       kit: createKit(sounds),
       steps: STEPS,
-      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+      beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
     });
     sampler.setPadSetting("gain", -6);
     sampler.start();
@@ -292,27 +292,27 @@ describe("pad settings", () => {
     function queuedSteps() {
       const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
       const audio = fakeAudio();
-      const songChange = vi.fn();
+      const beatChange = vi.fn();
       const kit = createKit(sounds);
       const sampler = createSampler({
         audio,
         kit,
         steps: STEPS,
-        song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
-        onSongChange: songChange,
+        beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+        onBeatChange: beatChange,
       });
       sampler.start();
       audio.ctx.currentTime += 0.2;
       vi.advanceTimersByTime(SCHEDULER_TICK_MS);
       const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
       expect(buses.length).toBeGreaterThan(1);
-      return { sounds, sampler, audio, kit, buses, songChange };
+      return { sounds, sampler, audio, kit, buses, beatChange };
     }
 
     it("does not rebuild the steps already queued for a setting, so dragging a slider cannot make them late", () => {
-      const { sounds, sampler, audio, buses, songChange } = queuedSteps();
+      const { sounds, sampler, audio, buses, beatChange } = queuedSteps();
       const built = sounds[0].play.mock.calls.length;
-      songChange.mockClear();
+      beatChange.mockClear();
       for (let tick = 0; tick < 5; tick++) sampler.kitChanged("setting"); // a slider drag: many changes
       expect(buses.some((bus) => bus.disconnect.mock.calls.length > 0)).toBe(false); // nothing silenced
       expect(sounds[0].play.mock.calls.length).toBe(built); // nothing built again
@@ -322,18 +322,18 @@ describe("pad settings", () => {
     });
 
     it("saves for a setting, which can change without the sampler being asked (a cleared pitch)", () => {
-      const { sampler, songChange } = queuedSteps();
-      songChange.mockClear();
+      const { sampler, beatChange } = queuedSteps();
+      beatChange.mockClear();
       sampler.kitChanged("setting");
-      expect(songChange).toHaveBeenCalledTimes(1);
+      expect(beatChange).toHaveBeenCalledTimes(1);
     });
 
     it("rebuilds the steps already queued for a new sound, and does not save for it", () => {
-      const { sounds, sampler, buses, songChange } = queuedSteps();
-      songChange.mockClear();
+      const { sounds, sampler, buses, beatChange } = queuedSteps();
+      beatChange.mockClear();
       sampler.kitChanged("sound");
       expect(buses.at(-1).disconnect).toHaveBeenCalled(); // the last step queued has not started: silenced
-      expect(songChange).not.toHaveBeenCalled(); // a sound is kept by samples.js, not the song
+      expect(beatChange).not.toHaveBeenCalled(); // a sound is kept by samples.js, not the song
       expect(sounds[0].play).toHaveBeenCalled();
     });
   });
@@ -372,7 +372,7 @@ describe("the kit", () => {
       audio,
       kit,
       steps: STEPS,
-      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3] } }),
+      beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2, 3] } }),
     });
     sampler.start();
     audio.ctx.currentTime += 0.2;
@@ -396,7 +396,7 @@ describe("the kit", () => {
       audio,
       kit,
       steps: STEPS,
-      song: savedSong({ bpm: 120, pattern: { 1: [0, 1] } }),
+      beat: savedBeat({ bpm: 120, pattern: { 1: [0, 1] } }),
     });
     const swapped = { id: "loaded", name: "Loaded", play: vi.fn() };
     kit.set(1, swapped);
@@ -415,7 +415,7 @@ describe("the kit", () => {
 });
 
 describe("undo and redo show where they acted", () => {
-  const twoBars = (extra = {}) => setup({ song: savedSong({ bars: 2, pattern: { 0: [1], 2: [20] }, ...extra }) });
+  const twoBars = (extra = {}) => setup({ beat: savedBeat({ bars: 2, pattern: { 0: [1], 2: [20] }, ...extra }) });
 
   it("selects the pad and bar of the step it changed, so the change is never out of sight", () => {
     const { sampler } = twoBars();
@@ -491,7 +491,7 @@ describe("with the power off", () => {
       audio,
       kit: createKit(sounds),
       steps: STEPS,
-      song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
+      beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2, 3, 4, 5, 6, 7] } }),
     });
     return { sounds, audio, sampler };
   }
@@ -534,7 +534,7 @@ describe("with the power off", () => {
     run(audio, 0.2);
     sampler.toggleRec();
     sampler.triggerPad(3);
-    expect(sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+    expect(sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
   });
 
   it("writes a hit that was heard, as it always did", () => {
@@ -544,12 +544,12 @@ describe("with the power off", () => {
     sampler.poll();
     sampler.toggleRec();
     sampler.triggerPad(3);
-    expect(sampler.getSong().sequences[0].pattern[3]).toBeDefined();
+    expect(sampler.getBeat().sequences[0].pattern[3]).toBeDefined();
   });
 });
 
 describe("undo and redo", () => {
-  const withBeat = (extra = {}) => setup({ song: savedSong({ pattern: { 0: [0, 4] }, ...extra }) });
+  const withBeat = (extra = {}) => setup({ beat: savedBeat({ pattern: { 0: [0, 4] }, ...extra }) });
 
   it("starts with nothing to undo or redo", () => {
     const { sampler, message } = setup();
@@ -561,14 +561,14 @@ describe("undo and redo", () => {
   });
 
   it("undoes a toggled step and redoes it, and saves each time", () => {
-    const { sampler, songChange, message } = withBeat();
+    const { sampler, beatChange, message } = withBeat();
     sampler.toggleStep(1);
     expect(sampler.getState()).toMatchObject({ canUndo: true, canRedo: false });
-    songChange.mockClear();
+    beatChange.mockClear();
     sampler.undo();
     expect(sampler.getState().stepsOn[1]).toBe(false);
     expect(sampler.getState()).toMatchObject({ canUndo: false, canRedo: true });
-    expect(songChange).toHaveBeenCalled();
+    expect(beatChange).toHaveBeenCalled();
     expect(message).toHaveBeenLastCalledWith("UNDO");
     sampler.redo();
     expect(sampler.getState().stepsOn[1]).toBe(true);
@@ -583,7 +583,7 @@ describe("undo and redo", () => {
     expect(sampler.getState().stepVelocities[4]).toBe(50);
     sampler.clearAll();
     sampler.undo();
-    expect(sampler.getSong().sequences[0].pattern).toEqual({ 0: [0, 4] });
+    expect(sampler.getBeat().sequences[0].pattern).toEqual({ 0: [0, 4] });
     setClock(10_000);
     sampler.setStepVelocity(4, 90);
     sampler.undo();
@@ -615,7 +615,7 @@ describe("undo and redo", () => {
   });
 
   it("keeps a toggle made right after a velocity change as an undo of its own, and does not merge a later change into the earlier one", () => {
-    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0, 1] } }) });
+    const { sampler, setClock } = setup({ beat: savedBeat({ pattern: { 0: [0, 1] } }) });
     setClock(1000);
     sampler.setStepVelocity(0, 40);
     setClock(1100);
@@ -633,7 +633,7 @@ describe("undo and redo", () => {
   });
 
   it("makes a velocity change right after a toggle its own undo", () => {
-    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    const { sampler, setClock } = setup({ beat: savedBeat({ pattern: { 0: [0] } }) });
     setClock(1000);
     sampler.toggleStep(1);
     setClock(1100);
@@ -646,7 +646,7 @@ describe("undo and redo", () => {
   });
 
   it("does not let an undone velocity change swallow the next one into its undo", () => {
-    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    const { sampler, setClock } = setup({ beat: savedBeat({ pattern: { 0: [0] } }) });
     setClock(1000);
     sampler.setStepVelocity(0, 40);
     sampler.undo();
@@ -658,7 +658,7 @@ describe("undo and redo", () => {
   });
 
   it("does the same after a redo", () => {
-    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    const { sampler, setClock } = setup({ beat: savedBeat({ pattern: { 0: [0] } }) });
     setClock(1000);
     sampler.setStepVelocity(0, 40);
     sampler.undo();
@@ -670,7 +670,7 @@ describe("undo and redo", () => {
   });
 
   it("does not merge velocity changes made on different pads, however close together", () => {
-    const { sampler, setClock } = setup({ song: savedSong({ pattern: { 0: [0], 1: [0] } }) });
+    const { sampler, setClock } = setup({ beat: savedBeat({ pattern: { 0: [0], 1: [0] } }) });
     setClock(1000);
     sampler.selectPad(0);
     sampler.setStepVelocity(0, 40);
@@ -686,7 +686,7 @@ describe("undo and redo", () => {
   });
 
   it("does not merge velocity changes made on different bars, however close together", () => {
-    const { sampler, setClock } = setup({ song: savedSong({ bars: 2, pattern: { 0: [0, 16] } }) });
+    const { sampler, setClock } = setup({ beat: savedBeat({ bars: 2, pattern: { 0: [0, 16] } }) });
     setClock(1000);
     sampler.setStepVelocity(0, 40);
     setClock(1100);
@@ -724,7 +724,7 @@ describe("undo and redo", () => {
     sampler.triggerPad(3);
     expect(sampler.getState().canUndo).toBe(true);
     sampler.undo();
-    expect(sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+    expect(sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
   });
 });
 
@@ -738,7 +738,7 @@ describe("copy and paste", () => {
 
   it("copies the bar showing for a pad and its velocities over another pad, and it can be undone", () => {
     const { sampler, message } = setup({
-      song: savedSong({ pattern: { 0: [0, 4], 2: [9] }, velocities: { 0: { 4: 50 } } }),
+      beat: savedBeat({ pattern: { 0: [0, 4], 2: [9] }, velocities: { 0: { 4: 50 } } }),
     });
     sampler.selectPad(0);
     sampler.copySteps();
@@ -746,58 +746,58 @@ describe("copy and paste", () => {
     sampler.selectPad(2);
     sampler.pasteSteps();
     expect(message).toHaveBeenLastCalledWith("PASTED TO PAD 03 BAR 1");
-    expect(sampler.getSong().sequences[0]).toMatchObject({
+    expect(sampler.getBeat().sequences[0]).toMatchObject({
       pattern: { 0: [0, 4], 2: [0, 4] },
       velocities: { 0: { 4: 50 }, 2: { 4: 50 } },
     });
     sampler.undo();
-    expect(sampler.getSong().sequences[0].pattern[2]).toEqual([9]);
+    expect(sampler.getBeat().sequences[0].pattern[2]).toEqual([9]);
   });
 
   it("repeats a bar on the same pad: copy it, go to the next bar, paste", () => {
     const { sampler, message } = setup({
-      song: savedSong({ bars: 2, pattern: { 1: [3, 5] }, velocities: { 1: { 5: 40 } } }),
+      beat: savedBeat({ bars: 2, pattern: { 1: [3, 5] }, velocities: { 1: { 5: 40 } } }),
     });
     sampler.selectPad(1);
     sampler.copySteps();
     sampler.setPage(1);
     sampler.pasteSteps();
     expect(message).toHaveBeenLastCalledWith("PASTED TO PAD 02 BAR 2");
-    expect(sampler.getSong().sequences[0]).toMatchObject({
+    expect(sampler.getBeat().sequences[0]).toMatchObject({
       pattern: { 1: [3, 5, 19, 21] },
       velocities: { 1: { 5: 40, 21: 40 } },
     });
     sampler.undo();
-    expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [3, 5] });
+    expect(sampler.getBeat().sequences[0].pattern).toEqual({ 1: [3, 5] });
   });
 
   it("copies only the bar showing, and replaces only the bar it is pasted on", () => {
-    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [3, 20], 2: [1, 17] } }) });
+    const { sampler } = setup({ beat: savedBeat({ bars: 2, pattern: { 1: [3, 20], 2: [1, 17] } }) });
     sampler.selectPad(1);
     sampler.setPage(1);
     sampler.copySteps(); // bar 2 of pad 1: step 20, which is step 4 of the bar
     sampler.selectPad(2);
     sampler.setPage(0);
     sampler.pasteSteps(); // over bar 1 of pad 2
-    expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [3, 20], 2: [4, 17] });
+    expect(sampler.getBeat().sequences[0].pattern).toEqual({ 1: [3, 20], 2: [4, 17] });
   });
 
   it("copies into another sequence", () => {
-    const { sampler } = setup({ song: savedSong({ pattern: { 1: [3, 7] } }) });
+    const { sampler } = setup({ beat: savedBeat({ pattern: { 1: [3, 7] } }) });
     sampler.selectPad(1);
     sampler.copySteps();
     sampler.setSequence(1);
     sampler.pasteSteps();
-    expect(sampler.getSong().sequences[1].pattern).toEqual({ 1: [3, 7] });
+    expect(sampler.getBeat().sequences[1].pattern).toEqual({ 1: [3, 7] });
   });
 
   it("pastes a copy that is not changed by what happens to the pad afterwards", () => {
-    const { sampler } = setup({ song: savedSong({ pattern: { 0: [1] } }) });
+    const { sampler } = setup({ beat: savedBeat({ pattern: { 0: [1] } }) });
     sampler.copySteps();
     sampler.clearPad();
     sampler.selectPad(1);
     sampler.pasteSteps();
-    expect(sampler.getSong().sequences[0].pattern).toEqual({ 1: [1] });
+    expect(sampler.getBeat().sequences[0].pattern).toEqual({ 1: [1] });
   });
 });
 
@@ -814,7 +814,7 @@ describe("recording", () => {
   }
 
   it("lights the pads that are on when the playhead reaches a step, without selecting them", () => {
-    const { sampler, padHit, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 2: [1] } }) });
+    const { sampler, padHit, padPlayed, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 2: [1] } }) });
     sampler.start();
     advance(0.2); // as below, the playhead is then on step 1
     expect(padPlayed).not.toHaveBeenCalled(); // scheduled, but the playhead has not been polled yet
@@ -825,7 +825,7 @@ describe("recording", () => {
   });
 
   it("cuts off the hits queued but not yet started when Play restarts, and leaves the sounding ones", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
     sampler.start();
     for (let i = 0; i < 5; i++) advance(0.05); // steps at 0.05 and 0.175 have started; the one at 0.3 is queued (one big jump would look like a stall and skip steps)
     const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
@@ -837,7 +837,7 @@ describe("recording", () => {
   });
 
   it("cuts off the hits queued but not yet started when Stop is pressed", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2] } }) });
     sampler.start();
     for (let i = 0; i < 5; i++) advance(0.05);
     const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
@@ -848,7 +848,7 @@ describe("recording", () => {
 
   it("flashes nothing for a step the scheduler skipped after a stall", () => {
     const { sampler, padPlayed, advance } = setup({
-      song: savedSong({ bpm: 120, pattern: { 0: Array.from({ length: 16 }, (_, i) => i) } }),
+      beat: savedBeat({ bpm: 120, pattern: { 0: Array.from({ length: 16 }, (_, i) => i) } }),
     });
     sampler.start();
     advance(0.05); // step 0 is scheduled
@@ -858,7 +858,7 @@ describe("recording", () => {
   });
 
   it("lights only the newest step reached, not every step that went by since the last frame", () => {
-    const { sampler, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 1: [0], 2: [1] } }) });
+    const { sampler, padPlayed, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 1: [0], 2: [1] } }) });
     sampler.start();
     for (let i = 0; i < 4; i++) advance(0.05); // steps 0 (0.05) and 1 (0.175) are both reached before one poll
     sampler.poll();
@@ -866,7 +866,7 @@ describe("recording", () => {
   });
 
   it("lights the pads that were scheduled, even if the pattern changed before the playhead got there", () => {
-    const { sampler, sounds, padPlayed, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 2: [1] } }) });
+    const { sampler, sounds, padPlayed, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 2: [1] } }) });
     sampler.start();
     advance(0.2); // step 1 is scheduled, and its sound is on its way
     expect(sounds[2].play).toHaveBeenCalledTimes(1);
@@ -877,12 +877,12 @@ describe("recording", () => {
   });
 
   it("writes a live hit into the step the playhead is on", () => {
-    const { sampler, songChange } = playing();
+    const { sampler, beatChange } = playing();
     sampler.toggleRec();
     sampler.triggerPad(3);
     sampler.selectPad(3);
     expect(sampler.getState().stepsOn[1]).toBe(true);
-    expect(songChange).toHaveBeenCalled();
+    expect(beatChange).toHaveBeenCalled();
   });
 
   it("writes a hit in the second half of a step into the next one", () => {
@@ -899,19 +899,19 @@ describe("recording", () => {
     sampler.toggleRec();
     sampler.triggerPad(3, 0.5);
     expect(sampler.getState().stepVelocities[1]).toBe(64); // 0.5 of 127, rounded
-    expect(sampler.getSong().sequences[0].velocities).toEqual({ 3: { 1: 64 } });
+    expect(sampler.getBeat().sequences[0].velocities).toEqual({ 3: { 1: 64 } });
     sampler.triggerPad(3, 1);
     expect(sampler.getState().stepVelocities[1]).toBe(127);
-    expect(sampler.getSong().sequences[0].velocities).toEqual({});
+    expect(sampler.getBeat().sequences[0].velocities).toEqual({});
     expect(sounds[3].play).toHaveBeenCalledTimes(2); // each hit sounded once, live
     advance(0);
   });
 
   it("records nothing unless it is armed", () => {
-    const { sampler, songChange } = playing();
+    const { sampler, beatChange } = playing();
     sampler.triggerPad(3);
     expect(sampler.getState().stepsOn.some(Boolean)).toBe(false);
-    expect(songChange).not.toHaveBeenCalled();
+    expect(beatChange).not.toHaveBeenCalled();
   });
 
   it("records nothing while stopped, even when armed", () => {
@@ -946,36 +946,36 @@ describe("recording", () => {
 
 describe("sequences", () => {
   it("starts on the saved one, and says how many there are", () => {
-    const { sampler } = setup({ song: savedSong({ current: 2 }) });
+    const { sampler } = setup({ beat: savedBeat({ current: 2 }) });
     expect(sampler.getState()).toMatchObject({ sequence: 2, sequenceCount: SEQUENCES });
   });
 
-  it("starts with one sequence when there is no saved song, and cannot go to another", () => {
+  it("starts with one sequence when there is no saved beat, and cannot go to another", () => {
     const { sampler } = setup({ ownCount: true });
     expect(sampler.getState()).toMatchObject({ sequence: 0, sequenceCount: 1 });
-    expect(sampler.getSong().sequences).toEqual([{ bars: 1, pattern: STARTER_BEAT, velocities: {} }]);
+    expect(sampler.getBeat().sequences).toEqual([{ bars: 1, pattern: STARTER_BEAT, velocities: {} }]);
     sampler.setSequence(1);
     expect(sampler.getState().sequence).toBe(0);
   });
 
-  it("has as many sequences as the saved song has, not the number the page was told to start with", () => {
-    const song = savedSong({ pattern: { 0: [0] } });
-    song.sequences = song.sequences.slice(0, 2);
-    const { sampler } = setup({ song });
+  it("has as many sequences as the saved beat has, not the number the page was told to start with", () => {
+    const beat = savedBeat({ pattern: { 0: [0] } });
+    beat.sequences = beat.sequences.slice(0, 2);
+    const { sampler } = setup({ beat });
     expect(sampler.getState().sequenceCount).toBe(2);
-    expect(sampler.getSong().sequences).toHaveLength(2);
+    expect(sampler.getBeat().sequences).toHaveLength(2);
     sampler.setSequence(99);
     expect(sampler.getState().sequence).toBe(1);
   });
 
   it("switches to another, names it and asks for a save", () => {
-    const { sampler, message, songChange } = setup();
+    const { sampler, message, beatChange } = setup();
     sampler.setSequence(1);
     expect(sampler.getState().sequence).toBe(1);
     expect(message).toHaveBeenLastCalledWith("SEQ 02");
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
     sampler.setSequence(1);
-    expect(songChange).toHaveBeenCalledTimes(1); // no change, no save
+    expect(beatChange).toHaveBeenCalledTimes(1); // no change, no save
   });
 
   it("stays within the sequences there are", () => {
@@ -1008,17 +1008,17 @@ describe("sequences", () => {
     sampler.toggleStep(3);
     sampler.setSequence(0);
     sampler.clearAll();
-    expect(sampler.getSong().sequences[0].pattern).toEqual({});
-    expect(sampler.getSong().sequences[1].pattern).toEqual({ 2: [3] });
+    expect(sampler.getBeat().sequences[0].pattern).toEqual({});
+    expect(sampler.getBeat().sequences[1].pattern).toEqual({ 2: [3] });
   });
 
   it("replaces the steps already queued with the new sequence's when it is switched while playing", () => {
-    const base = savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } });
-    const song = {
+    const base = savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2] } });
+    const beat = {
       ...base,
       sequences: [base.sequences[0], { bars: 1, pattern: { 1: [2] } }, ...base.sequences.slice(2)],
     };
-    const { sounds, sampler, padPlayed, advance } = setup({ song });
+    const { sounds, sampler, padPlayed, advance } = setup({ beat });
     sampler.start();
     for (let i = 0; i < 5; i++) advance(0.05); // steps 0 and 1 have started; step 2 (0.3 s) is queued from sequence 1
     const queued = busOf(sounds[0].play.mock.calls[2][1]);
@@ -1036,7 +1036,7 @@ describe("sequences", () => {
   });
 
   it("goes back to the first bar of the new sequence", () => {
-    const { sampler } = setup({ song: savedSong({ bars: 3 }) });
+    const { sampler } = setup({ beat: savedBeat({ bars: 3 }) });
     sampler.setPage(2);
     sampler.setSequence(1);
     expect(sampler.getState().page).toBe(0);
@@ -1044,9 +1044,9 @@ describe("sequences", () => {
 
   it("plays the steps of the sequence it switched to", () => {
     const { sounds, sampler, advance } = setup({
-      song: {
-        ...savedSong({ bpm: 120 }),
-        sequences: [savedSong().sequences[0], { bars: 1, pattern: { 3: [0] } }].concat(savedSong().sequences.slice(2)),
+      beat: {
+        ...savedBeat({ bpm: 120 }),
+        sequences: [savedBeat().sequences[0], { bars: 1, pattern: { 3: [0] } }].concat(savedBeat().sequences.slice(2)),
       },
     });
     sampler.setSequence(1);
@@ -1057,31 +1057,31 @@ describe("sequences", () => {
   });
 });
 
-// A saved song of `count` sequences, the first of them with the given steps.
-const songOf = (count, { first = {}, bpm = 120, ...rest } = {}) => {
-  const base = savedSong({ bpm, pattern: first, ...rest });
+// A saved beat of `count` sequences, the first of them with the given steps.
+const beatOf = (count, { first = {}, bpm = 120, ...rest } = {}) => {
+  const base = savedBeat({ bpm, pattern: first, ...rest });
   return { ...base, sequences: Array.from({ length: count }, (_, i) => base.sequences[i] ?? base.sequences[1]) };
 };
 
 describe("adding, copying and removing sequences", () => {
   describe("addSequence", () => {
     it("adds an empty sequence at the end and shows it, naming it and asking for a save", () => {
-      const { sampler, message, songChange, change } = setup({
-        song: songOf(3, { first: { 0: [0] } }),
+      const { sampler, message, beatChange, change } = setup({
+        beat: beatOf(3, { first: { 0: [0] } }),
         maxSequences: 6,
       });
       sampler.addSequence();
       expect(sampler.getState()).toMatchObject({ sequence: 3, sequenceCount: 4, bars: 1 });
-      expect(sampler.getSong().sequences).toHaveLength(4);
-      expect(sampler.getSong().sequences[3]).toEqual({ bars: 1, pattern: {}, velocities: {} });
-      expect(sampler.getSong().sequences[0].pattern).toEqual({ 0: [0] }); // the others are as they were
+      expect(sampler.getBeat().sequences).toHaveLength(4);
+      expect(sampler.getBeat().sequences[3]).toEqual({ bars: 1, pattern: {}, velocities: {} });
+      expect(sampler.getBeat().sequences[0].pattern).toEqual({ 0: [0] }); // the others are as they were
       expect(message).toHaveBeenLastCalledWith("SEQ 04 ADDED");
-      expect(songChange).toHaveBeenCalled();
+      expect(beatChange).toHaveBeenCalled();
       expect(change).toHaveBeenCalled();
     });
 
     it("starts a new sequence on its first bar with nothing to undo, whatever was showing", () => {
-      const { sampler } = setup({ song: songOf(2, { first: { 0: [0] }, bars: 3 }), maxSequences: 6 });
+      const { sampler } = setup({ beat: beatOf(2, { first: { 0: [0] }, bars: 3 }), maxSequences: 6 });
       sampler.toggleStep(5);
       sampler.setPage(2);
       sampler.addSequence();
@@ -1091,19 +1091,19 @@ describe("adding, copying and removing sequences", () => {
     });
 
     it("asks for a save when a step is turned on in the new sequence, as it does for any other", () => {
-      const { sampler, songChange } = setup({ song: songOf(2), maxSequences: 6 });
+      const { sampler, beatChange } = setup({ beat: beatOf(2), maxSequences: 6 });
       sampler.addSequence();
-      songChange.mockClear();
+      beatChange.mockClear();
       sampler.toggleStep(2);
-      expect(songChange).toHaveBeenCalled();
+      expect(beatChange).toHaveBeenCalled();
     });
 
     it("says so, and changes nothing, when there are as many as there can be", () => {
-      const { sampler, message, songChange } = setup({ song: songOf(3), maxSequences: 3 });
+      const { sampler, message, beatChange } = setup({ beat: beatOf(3), maxSequences: 3 });
       sampler.addSequence();
       expect(message).toHaveBeenLastCalledWith("3 SEQUENCES MAX");
       expect(sampler.getState()).toMatchObject({ sequence: 0, sequenceCount: 3 });
-      expect(songChange).not.toHaveBeenCalled();
+      expect(beatChange).not.toHaveBeenCalled();
     });
   });
 
@@ -1111,88 +1111,88 @@ describe("adding, copying and removing sequences", () => {
     const original = { 0: [0, 4], 2: [9] };
 
     it("adds a copy of the one showing (steps, velocities and length) at the end and shows it", () => {
-      const song = songOf(2, { first: original, velocities: { 0: { 4: 50 } }, bars: 2 });
-      const { sampler, message, songChange } = setup({ song, maxSequences: 6 });
+      const beat = beatOf(2, { first: original, velocities: { 0: { 4: 50 } }, bars: 2 });
+      const { sampler, message, beatChange } = setup({ beat, maxSequences: 6 });
       sampler.copySequence();
       expect(sampler.getState()).toMatchObject({ sequence: 2, sequenceCount: 3, bars: 2 });
-      expect(sampler.getSong().sequences[2]).toEqual({ bars: 2, pattern: original, velocities: { 0: { 4: 50 } } });
+      expect(sampler.getBeat().sequences[2]).toEqual({ bars: 2, pattern: original, velocities: { 0: { 4: 50 } } });
       expect(message).toHaveBeenLastCalledWith("SEQ 01 COPIED TO 03");
-      expect(songChange).toHaveBeenCalled();
+      expect(beatChange).toHaveBeenCalled();
     });
 
     it("copies the sequence that is showing, not the first", () => {
-      const song = songOf(3, { first: original });
-      song.sequences[1] = { bars: 1, pattern: { 3: [3] }, velocities: {} };
-      const { sampler } = setup({ song, maxSequences: 6 });
+      const beat = beatOf(3, { first: original });
+      beat.sequences[1] = { bars: 1, pattern: { 3: [3] }, velocities: {} };
+      const { sampler } = setup({ beat, maxSequences: 6 });
       sampler.setSequence(1);
       sampler.copySequence();
-      expect(sampler.getSong().sequences[3].pattern).toEqual({ 3: [3] });
+      expect(sampler.getBeat().sequences[3].pattern).toEqual({ 3: [3] });
     });
 
     it("makes a copy that is its own: editing one leaves the other alone", () => {
-      const { sampler } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      const { sampler } = setup({ beat: beatOf(1, { first: original }), maxSequences: 6 });
       sampler.copySequence();
       sampler.selectPad(0);
       sampler.toggleStep(0); // turns step 0 of pad 1 off in the copy
-      expect(sampler.getSong().sequences[1].pattern[0]).toEqual([4]);
-      expect(sampler.getSong().sequences[0].pattern[0]).toEqual([0, 4]);
+      expect(sampler.getBeat().sequences[1].pattern[0]).toEqual([4]);
+      expect(sampler.getBeat().sequences[0].pattern[0]).toEqual([0, 4]);
     });
 
     it("tells the page to redraw", () => {
-      const { sampler, change } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      const { sampler, change } = setup({ beat: beatOf(1, { first: original }), maxSequences: 6 });
       change.mockClear();
       sampler.copySequence();
       expect(change).toHaveBeenCalled();
     });
 
     it("asks for a save when a step is turned on in the copy", () => {
-      const { sampler, songChange } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      const { sampler, beatChange } = setup({ beat: beatOf(1, { first: original }), maxSequences: 6 });
       sampler.copySequence();
-      songChange.mockClear();
+      beatChange.mockClear();
       sampler.toggleStep(2);
-      expect(songChange).toHaveBeenCalled();
+      expect(beatChange).toHaveBeenCalled();
     });
 
     it("starts the copy with nothing to undo", () => {
-      const { sampler } = setup({ song: songOf(1, { first: original }), maxSequences: 6 });
+      const { sampler } = setup({ beat: beatOf(1, { first: original }), maxSequences: 6 });
       sampler.toggleStep(3);
       sampler.copySequence();
       expect(sampler.getState().canUndo).toBe(false);
     });
 
     it("says so, and changes nothing, when there are as many as there can be", () => {
-      const { sampler, message, songChange } = setup({ song: songOf(2, { first: original }), maxSequences: 2 });
+      const { sampler, message, beatChange } = setup({ beat: beatOf(2, { first: original }), maxSequences: 2 });
       sampler.copySequence();
       expect(message).toHaveBeenLastCalledWith("2 SEQUENCES MAX");
-      expect(sampler.getSong().sequences).toHaveLength(2);
-      expect(songChange).not.toHaveBeenCalled();
+      expect(sampler.getBeat().sequences).toHaveLength(2);
+      expect(beatChange).not.toHaveBeenCalled();
     });
   });
 
   describe("removeSequence", () => {
     const four = () => {
-      const song = songOf(4, { first: { 0: [0] } });
-      song.sequences[1] = { bars: 1, pattern: { 1: [1] }, velocities: {} };
-      song.sequences[2] = { bars: 1, pattern: { 2: [2] }, velocities: {} };
-      song.sequences[3] = { bars: 1, pattern: { 3: [3] }, velocities: {} };
-      return song;
+      const beat = beatOf(4, { first: { 0: [0] } });
+      beat.sequences[1] = { bars: 1, pattern: { 1: [1] }, velocities: {} };
+      beat.sequences[2] = { bars: 1, pattern: { 2: [2] }, velocities: {} };
+      beat.sequences[3] = { bars: 1, pattern: { 3: [3] }, velocities: {} };
+      return beat;
     };
-    const rows = (sampler) => sampler.getSong().sequences.map((sequence) => Number(Object.keys(sequence.pattern)[0]));
+    const rows = (sampler) => sampler.getBeat().sequences.map((sequence) => Number(Object.keys(sequence.pattern)[0]));
 
     it("removes the one showing, and the next one takes its place on the screen", () => {
-      const { sampler, message, songChange } = setup({ song: four() });
+      const { sampler, message, beatChange } = setup({ beat: four() });
       sampler.setSequence(1);
-      songChange.mockClear();
+      beatChange.mockClear();
       sampler.removeSequence();
       expect(rows(sampler)).toEqual([0, 2, 3]);
       expect(sampler.getState()).toMatchObject({ sequence: 1, sequenceCount: 3 });
       expect(sampler.getState().stepsOn[2]).toBe(false); // pad 1 is selected: what shows is the sequence that moved up
       expect(message).toHaveBeenLastCalledWith("SEQ 02 REMOVED");
-      expect(songChange).toHaveBeenCalled();
+      expect(beatChange).toHaveBeenCalled();
     });
 
     it("shows the new last one when the last was removed", () => {
-      const { sampler } = setup({ song: four() });
+      const { sampler } = setup({ beat: four() });
       sampler.setSequence(3);
       sampler.removeSequence();
       expect(rows(sampler)).toEqual([0, 1, 2]);
@@ -1200,33 +1200,33 @@ describe("adding, copying and removing sequences", () => {
     });
 
     it("shows the new first one when the first was removed", () => {
-      const { sampler } = setup({ song: four() });
+      const { sampler } = setup({ beat: four() });
       sampler.removeSequence();
       expect(rows(sampler)).toEqual([1, 2, 3]);
       expect(sampler.getState().sequence).toBe(0);
     });
 
     it("keeps the last sequence, and says so", () => {
-      const { sampler, message, songChange } = setup({ song: songOf(1, { first: { 0: [0] } }) });
+      const { sampler, message, beatChange } = setup({ beat: beatOf(1, { first: { 0: [0] } }) });
       sampler.removeSequence();
       expect(message).toHaveBeenLastCalledWith("CANNOT REMOVE LAST SEQUENCE");
-      expect(sampler.getSong().sequences).toHaveLength(1);
-      expect(sampler.getSong().sequences[0].pattern).toEqual({ 0: [0] });
-      expect(songChange).not.toHaveBeenCalled();
+      expect(sampler.getBeat().sequences).toHaveLength(1);
+      expect(sampler.getBeat().sequences[0].pattern).toEqual({ 0: [0] });
+      expect(beatChange).not.toHaveBeenCalled();
     });
 
     it("leaves the other sequences their own undo", () => {
-      const { sampler } = setup({ song: songOf(2, { first: { 0: [0] } }) });
+      const { sampler } = setup({ beat: beatOf(2, { first: { 0: [0] } }) });
       sampler.toggleStep(5); // an edit to the first
       sampler.setSequence(1);
       sampler.removeSequence();
       expect(sampler.getState()).toMatchObject({ sequence: 0, canUndo: true });
       sampler.undo();
-      expect(sampler.getSong().sequences[0].pattern[0]).toEqual([0]);
+      expect(sampler.getBeat().sequences[0].pattern[0]).toEqual([0]);
     });
 
     it("can be undone for nothing: the removed sequence's own history goes with it", () => {
-      const { sampler } = setup({ song: songOf(3, { first: { 0: [0] } }) });
+      const { sampler } = setup({ beat: beatOf(3, { first: { 0: [0] } }) });
       sampler.setSequence(1);
       sampler.toggleStep(2); // makes an undo for sequence 2, which is about to go
       sampler.removeSequence();
@@ -1234,9 +1234,9 @@ describe("adding, copying and removing sequences", () => {
     });
 
     it("goes back to the first bar of the sequence that is shown after it", () => {
-      const song = songOf(3, { bars: 3 });
-      song.sequences[1] = { bars: 3, pattern: {}, velocities: {} }; // the one that moves up is as long, so a bar can be left behind
-      const { sampler } = setup({ song });
+      const beat = beatOf(3, { bars: 3 });
+      beat.sequences[1] = { bars: 3, pattern: {}, velocities: {} }; // the one that moves up is as long, so a bar can be left behind
+      const { sampler } = setup({ beat });
       sampler.setPage(2);
       expect(sampler.getState().page).toBe(2);
       sampler.removeSequence();
@@ -1244,24 +1244,24 @@ describe("adding, copying and removing sequences", () => {
     });
 
     it("names the sequence that went, also when it was the last one", () => {
-      const { sampler, message } = setup({ song: four() });
+      const { sampler, message } = setup({ beat: four() });
       sampler.setSequence(3);
       sampler.removeSequence();
       expect(message).toHaveBeenLastCalledWith("SEQ 04 REMOVED"); // not 03, which is what is showing now
     });
 
     it("tells the page to redraw", () => {
-      const { sampler, change } = setup({ song: four() });
+      const { sampler, change } = setup({ beat: four() });
       change.mockClear();
       sampler.removeSequence();
       expect(change).toHaveBeenCalled();
     });
 
     it("carries on playing into the sequence that is shown after it, and not the removed one's steps", () => {
-      const song = songOf(3, { first: { 0: [0, 1, 2, 3] } });
-      song.sequences[1] = { bars: 1, pattern: { 1: [0, 1, 2, 3] }, velocities: {} };
-      song.sequences[2] = { bars: 1, pattern: { 2: [0, 1, 2, 3] }, velocities: {} };
-      const { sounds, sampler, advance } = setup({ song });
+      const beat = beatOf(3, { first: { 0: [0, 1, 2, 3] } });
+      beat.sequences[1] = { bars: 1, pattern: { 1: [0, 1, 2, 3] }, velocities: {} };
+      beat.sequences[2] = { bars: 1, pattern: { 2: [0, 1, 2, 3] }, velocities: {} };
+      const { sounds, sampler, advance } = setup({ beat });
       sampler.setSequence(1);
       sampler.start();
       for (let i = 0; i < 5; i++) advance(0.05);
@@ -1277,10 +1277,10 @@ describe("adding, copying and removing sequences", () => {
   describe("while playing", () => {
     // A long sequence beside a short one, 120 BPM (a step is 0.125 s): the loop has to be as long as what is showing.
     const longBesideShort = () => {
-      const song = songOf(3, { first: { 0: [0] }, bars: 4 });
-      song.sequences[1] = { bars: 1, pattern: { 1: [0] }, velocities: {} }; // a step at the start of each pass of its 16 steps
-      song.sequences[2] = { bars: 1, pattern: {}, velocities: {} };
-      return song;
+      const beat = beatOf(3, { first: { 0: [0] }, bars: 4 });
+      beat.sequences[1] = { bars: 1, pattern: { 1: [0] }, velocities: {} }; // a step at the start of each pass of its 16 steps
+      beat.sequences[2] = { bars: 1, pattern: {}, velocities: {} };
+      return beat;
     };
     const playPast = (s, steps) => {
       for (let i = 0; i < steps * 2.5; i++) {
@@ -1294,7 +1294,7 @@ describe("adding, copying and removing sequences", () => {
       ["switching to the short one", (sampler) => sampler.setSequence(1)],
       ["adding an empty one", (sampler) => sampler.addSequence()],
     ])("wraps the loop at the new sequence's length after %s", (_name, act) => {
-      const s = setup({ song: longBesideShort(), maxSequences: 6 });
+      const s = setup({ beat: longBesideShort(), maxSequences: 6 });
       s.sampler.start();
       playPast(s, 20); // past step 16 of the 4 bars
       expect(s.sampler.getState().playheadPosition).toBeGreaterThan(16);
@@ -1305,7 +1305,7 @@ describe("adding, copying and removing sequences", () => {
     });
 
     it("keeps playing the short sequence's steps on every pass after the long one is removed", () => {
-      const s = setup({ song: longBesideShort() });
+      const s = setup({ beat: longBesideShort() });
       s.sampler.start();
       playPast(s, 20);
       s.sampler.removeSequence(); // shows the short one, with a step at the start of each pass
@@ -1315,9 +1315,9 @@ describe("adding, copying and removing sequences", () => {
     });
 
     it("cuts off the steps already queued from the sequence that was removed, and leaves the sounding ones", () => {
-      const base = savedSong({ bpm: 120, pattern: { 0: [0, 1, 2] } });
-      const song = { ...base, sequences: [base.sequences[0], { bars: 1, pattern: { 1: [2] }, velocities: {} }] };
-      const { sounds, sampler, advance } = setup({ song });
+      const base = savedBeat({ bpm: 120, pattern: { 0: [0, 1, 2] } });
+      const beat = { ...base, sequences: [base.sequences[0], { bars: 1, pattern: { 1: [2] }, velocities: {} }] };
+      const { sounds, sampler, advance } = setup({ beat });
       sampler.start();
       for (let i = 0; i < 5; i++) advance(0.05); // steps 0 and 1 have started; step 2 (0.3 s) is queued
       const buses = sounds[0].play.mock.calls.map((call) => busOf(call[1]));
@@ -1335,10 +1335,10 @@ describe("adding, copying and removing sequences", () => {
       // 40 BPM: a step is 0.375 s, and step 1 is not queued until 0.305 s. A hit at 0.28 s is written into step 1 of the
       // sequence showing and marked as heard, so that the scheduler does not sound it a second time. That sequence is then
       // gone, and the one that took its place has its own hit on pad 3, step 1, which must sound.
-      const song = songOf(2);
-      song.sequences[0] = { bars: 1, pattern: {}, velocities: {} };
-      song.sequences[1] = { bars: 1, pattern: { 2: [1] }, velocities: {} };
-      const { audio, sampler, sounds, advance } = setup({ song: { ...song, bpm: 40 } });
+      const beat = beatOf(2);
+      beat.sequences[0] = { bars: 1, pattern: {}, velocities: {} };
+      beat.sequences[1] = { bars: 1, pattern: { 2: [1] }, velocities: {} };
+      const { audio, sampler, sounds, advance } = setup({ beat: { ...beat, bpm: 40 } });
       sampler.start();
       advance(0.2);
       sampler.poll();
@@ -1354,19 +1354,19 @@ describe("adding, copying and removing sequences", () => {
 
   describe("sequenceHasSteps", () => {
     it("is false for an empty sequence and true once a step is on", () => {
-      const { sampler } = setup({ song: songOf(2), maxSequences: 6 });
+      const { sampler } = setup({ beat: beatOf(2), maxSequences: 6 });
       expect(sampler.sequenceHasSteps()).toBe(false);
       sampler.toggleStep(3);
       expect(sampler.sequenceHasSteps()).toBe(true);
     });
 
     it("counts steps in a bar the sequence no longer shows", () => {
-      const { sampler } = setup({ song: songOf(1, { first: { 0: [20] }, bars: 1 }) }); // step 20 is in bar 2 of a one-bar sequence
+      const { sampler } = setup({ beat: beatOf(1, { first: { 0: [20] }, bars: 1 }) }); // step 20 is in bar 2 of a one-bar sequence
       expect(sampler.sequenceHasSteps()).toBe(true);
     });
 
     it("is about the sequence showing", () => {
-      const { sampler } = setup({ song: songOf(2, { first: { 0: [0] } }) });
+      const { sampler } = setup({ beat: beatOf(2, { first: { 0: [0] } }) });
       expect(sampler.sequenceHasSteps()).toBe(true);
       sampler.setSequence(1);
       expect(sampler.sequenceHasSteps()).toBe(false);
@@ -1375,20 +1375,20 @@ describe("adding, copying and removing sequences", () => {
 
   describe("getState", () => {
     it("says whether a sequence can be added and whether one can be removed", () => {
-      const { sampler } = setup({ song: songOf(1), maxSequences: 2 });
+      const { sampler } = setup({ beat: beatOf(1), maxSequences: 2 });
       expect(sampler.getState()).toMatchObject({ canAddSequence: true, canRemoveSequence: false });
       sampler.addSequence();
       expect(sampler.getState()).toMatchObject({ canAddSequence: false, canRemoveSequence: true });
     });
 
-    it("starts with one sequence when it is given none: a saved song with an empty list, or a count of 0", () => {
-      const noneSaved = { ...savedSong(), sequences: [] };
-      expect(setup({ song: noneSaved }).sampler.getState()).toMatchObject({ sequence: 0, sequenceCount: 1 });
+    it("starts with one sequence when it is given none: a saved beat with an empty list, or a count of 0", () => {
+      const noneSaved = { ...savedBeat(), sequences: [] };
+      expect(setup({ beat: noneSaved }).sampler.getState()).toMatchObject({ sequence: 0, sequenceCount: 1 });
       expect(setup({ ownCount: true, bpm: undefined }).sampler.getState().sequenceCount).toBe(1);
     });
 
     it("has no limit on adding when it is told none", () => {
-      const { sampler } = setup({ song: songOf(2) });
+      const { sampler } = setup({ beat: beatOf(2) });
       for (let i = 0; i < 20; i++) sampler.addSequence();
       expect(sampler.getState()).toMatchObject({ sequenceCount: 22, canAddSequence: true });
     });
@@ -1399,11 +1399,11 @@ describe("the next sequence", () => {
   // 120 BPM: a step is 0.125 s and the first falls at 0.05 s, so a pass of 16 steps ends at 2.05 s, and one of 4 bars (64 steps) at 8.05 s.
   // Each sequence has a step 0 on a pad of its own (sequence 1 on pad 2, sequence 2 on pad 3), to tell which one is sounding.
   const twoSequences = ({ bars = 1, bpm = 120, nextBars = 1, nextSteps = [0] } = {}) => {
-    const song = songOf(3, { bpm });
-    song.sequences[0] = { bars, pattern: { 0: [0] }, velocities: {} };
-    song.sequences[1] = { bars: nextBars, pattern: { 1: nextSteps }, velocities: {} };
-    song.sequences[2] = { bars: 1, pattern: { 2: [0] }, velocities: {} };
-    return song;
+    const beat = beatOf(3, { bpm });
+    beat.sequences[0] = { bars, pattern: { 0: [0] }, velocities: {} };
+    beat.sequences[1] = { bars: nextBars, pattern: { 1: nextSteps }, velocities: {} };
+    beat.sequences[2] = { bars: 1, pattern: { 2: [0] }, velocities: {} };
+    return beat;
   };
   const run = (s, seconds) => {
     for (let t = 0; t < seconds; t += 0.05) {
@@ -1413,14 +1413,14 @@ describe("the next sequence", () => {
   };
 
   it("switches at once when nothing is playing: there is no pass to wait for", () => {
-    const { sampler, message } = setup({ song: twoSequences() });
+    const { sampler, message } = setup({ beat: twoSequences() });
     sampler.queueSequence(1);
     expect(sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1 });
     expect(message).toHaveBeenLastCalledWith("SEQ 02");
   });
 
   it("waits while playing, says which is next, and keeps the one showing", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.5);
     s.sampler.queueSequence(1);
@@ -1429,7 +1429,7 @@ describe("the next sequence", () => {
   });
 
   it("switches where the pass ends, and the new one sounds from its first step at that moment", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.5);
     s.sampler.queueSequence(1);
@@ -1444,18 +1444,18 @@ describe("the next sequence", () => {
   });
 
   it("asks for a save when it switches", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
-    s.songChange.mockClear();
+    s.beatChange.mockClear();
     run(s, 2);
-    expect(s.songChange).toHaveBeenCalled();
-    expect(s.sampler.getSong().current).toBe(1);
+    expect(s.beatChange).toHaveBeenCalled();
+    expect(s.sampler.getBeat().current).toBe(1);
   });
 
   it("goes round again in the sequence that took over, pass after pass, from where it began", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1468,7 +1468,7 @@ describe("the next sequence", () => {
   });
 
   it("waits for the end of a pass of the length the sequence showing has", () => {
-    const s = setup({ song: twoSequences({ bars: 4 }) });
+    const s = setup({ beat: twoSequences({ bars: 4 }) });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1480,7 +1480,7 @@ describe("the next sequence", () => {
   });
 
   it("goes round in the length of the sequence that took over, when it is shorter", () => {
-    const s = setup({ song: twoSequences({ bars: 4 }) });
+    const s = setup({ beat: twoSequences({ bars: 4 }) });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1493,7 +1493,7 @@ describe("the next sequence", () => {
 
   it("goes round in the length of the sequence that took over, when it is longer", () => {
     // Its only step is in the second bar, which a loop of the old length would never reach.
-    const s = setup({ song: twoSequences({ nextBars: 2, nextSteps: [16] }) });
+    const s = setup({ beat: twoSequences({ nextBars: 2, nextSteps: [16] }) });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1505,7 +1505,7 @@ describe("the next sequence", () => {
   });
 
   it("redraws when the switch is made, and not before", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1517,7 +1517,7 @@ describe("the next sequence", () => {
   });
 
   it("takes the queue back when the sequence showing is picked to switch to now", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1538,7 +1538,7 @@ describe("the next sequence", () => {
     };
 
     it("takes over at that end when the first step of the next pass has not been handed to the audio clock yet", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       toWindow(s); // 1.85 s: the pass has ended in the scheduler; its first step, at 2.05 s, is not scheduled before 1.93 s
       expect(s.sampler.getState()).toMatchObject({ sequence: 0, queuedSequence: -1 });
       s.sampler.queueSequence(1);
@@ -1560,7 +1560,7 @@ describe("the next sequence", () => {
     });
 
     it("takes back the first step already handed over, which was built from the sequence giving way, and builds it again", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       toWindow(s, 1.95); // its first step, at 2.05 s, has been scheduled from the sequence that is giving way
       expect(s.sounds[0].play).toHaveBeenCalledTimes(2);
       const given = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
@@ -1572,9 +1572,9 @@ describe("the next sequence", () => {
     });
 
     it("leaves the last steps of the pass that is ending to sound", () => {
-      const song = twoSequences();
-      song.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
-      const s = setup({ song });
+      const beat = twoSequences();
+      beat.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
+      const s = setup({ beat });
       toWindow(s, 1.95); // step 15 sounds at 1.925 s: it is behind the clock now, and what was queued with it stays
       const last = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
       s.sampler.queueSequence(1);
@@ -1582,7 +1582,7 @@ describe("the next sequence", () => {
     });
 
     it("takes over at the end of a pass of several bars, with the length it has", () => {
-      const s = setup({ song: twoSequences({ bars: 4 }) });
+      const s = setup({ beat: twoSequences({ bars: 4 }) });
       s.sampler.start();
       run(s, 7.9); // the pass of 64 steps ends at 8.05 s
       s.sampler.queueSequence(1);
@@ -1595,7 +1595,7 @@ describe("the next sequence", () => {
     });
 
     it("waits for the pass after once the first step of the one that has begun has sounded", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       s.sampler.start();
       run(s, 2.2); // the first step of the second pass sounded at 2.05 s
       s.sampler.queueSequence(1);
@@ -1605,7 +1605,7 @@ describe("the next sequence", () => {
     });
 
     it("waits for the end of the pass the queued sequence has just taken over when another is queued in that moment", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       s.sampler.start();
       run(s, 0.3);
       s.sampler.queueSequence(1);
@@ -1618,7 +1618,7 @@ describe("the next sequence", () => {
     });
 
     it("makes a second press in that moment the one that follows, as it does once the first has taken over", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       toWindow(s);
       s.sampler.queueSequence(1);
       s.sampler.queueSequence(2);
@@ -1629,7 +1629,7 @@ describe("the next sequence", () => {
     });
 
     it("waits for the end of the longer pass when the loop is made longer after the pass has ended in the scheduler", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       toWindow(s); // 1.85 s: the pass of one bar has ended in the scheduler, and its first step has not sounded
       s.sampler.setBars(2); // the loop carries on into a second bar: 2.05 s is not where it ends any more
       s.sampler.queueSequence(1);
@@ -1639,7 +1639,7 @@ describe("the next sequence", () => {
     });
 
     it("waits for the end of the longer pass when a longer sequence is picked to switch to now in that moment", () => {
-      const s = setup({ song: twoSequences({ nextBars: 2 }), maxSequences: 6 });
+      const s = setup({ beat: twoSequences({ nextBars: 2 }), maxSequences: 6 });
       toWindow(s);
       s.sampler.setSequence(1); // two bars, carried on into
       s.sampler.queueSequence(2);
@@ -1649,7 +1649,7 @@ describe("the next sequence", () => {
     });
 
     it("still takes over at that end when a shorter sequence is picked to switch to now in that moment", () => {
-      const s = setup({ song: twoSequences({ bars: 2 }), maxSequences: 6 });
+      const s = setup({ beat: twoSequences({ bars: 2 }), maxSequences: 6 });
       s.sampler.start();
       run(s, 3.8);
       s.advance(0.05); // 3.85 s: the pass of two bars has ended in the scheduler, and its first step sounds at 4.05 s
@@ -1662,7 +1662,7 @@ describe("the next sequence", () => {
     });
 
     it("still takes over at that end when the loop is made shorter in that moment", () => {
-      const s = setup({ song: twoSequences({ bars: 2 }) });
+      const s = setup({ beat: twoSequences({ bars: 2 }) });
       s.sampler.start();
       run(s, 3.8); // the pass of two bars ends at 4.05 s
       s.sampler.setBars(1); // a pass that ends where it did
@@ -1676,7 +1676,7 @@ describe("the next sequence", () => {
     // A sequence of two bars, made one bar at the moment the scheduler is at the end of the first: the loop has come round there.
     describe("when the loop is made shorter so that it ends where the scheduler is", () => {
       const atEndOfFirstBar = () => {
-        const s = setup({ song: twoSequences({ bars: 2 }) });
+        const s = setup({ beat: twoSequences({ bars: 2 }) });
         s.sampler.start();
         const tick = (count) => {
           for (let i = 0; i < count; i++) {
@@ -1694,7 +1694,7 @@ describe("the next sequence", () => {
         const s = atEndOfFirstBar();
         s.sampler.setBars(1);
         expect(s.sampler.getState()).toMatchObject({ sequence: 1, queuedSequence: -1, bars: 1 });
-        expect(s.sampler.getSong().sequences[0].bars).toBe(1);
+        expect(s.sampler.getBeat().sequences[0].bars).toBe(1);
         for (let i = 0; i < 12; i++) {
           s.advance(0.05);
           s.sampler.poll();
@@ -1712,14 +1712,14 @@ describe("the next sequence", () => {
       it("redraws and asks for a save", () => {
         const s = atEndOfFirstBar();
         s.change.mockClear();
-        s.songChange.mockClear();
+        s.beatChange.mockClear();
         s.sampler.setBars(1);
         expect(s.change).toHaveBeenCalled();
-        expect(s.songChange).toHaveBeenCalled();
+        expect(s.beatChange).toHaveBeenCalled();
       });
 
       it("is a pass end for a sequence queued afterwards too, when none was before", () => {
-        const s = setup({ song: twoSequences({ bars: 2 }) });
+        const s = setup({ beat: twoSequences({ bars: 2 }) });
         s.sampler.start();
         for (let i = 0; i < 37; i++) {
           s.advance(0.05);
@@ -1739,9 +1739,9 @@ describe("the next sequence", () => {
     it("waits for the wrap that is about to come again, when the steps before it have just been taken back in the same moment", () => {
       // A change of sounds takes the last step of the pass back to build it again, and a press just after it finds the scheduler
       // behind the pass end: there is no first step to take back, and rewinding to the pass end would skip the one that was.
-      const song = twoSequences();
-      song.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
-      const s = setup({ song });
+      const beat = twoSequences();
+      beat.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
+      const s = setup({ beat });
       s.sampler.start();
       for (let i = 0; i < 76; i++) {
         s.advance(0.025);
@@ -1761,7 +1761,7 @@ describe("the next sequence", () => {
     });
 
     it("is for the end of the pass before a restart, and not for the one after", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       toWindow(s);
       s.sampler.start();
       run(s, 0.1);
@@ -1771,7 +1771,7 @@ describe("the next sequence", () => {
   });
 
   it("takes the queue back when the queued sequence is pressed again, or the one showing is", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1786,7 +1786,7 @@ describe("the next sequence", () => {
   });
 
   it("changes which one is next when another is pressed", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1803,7 +1803,7 @@ describe("the next sequence", () => {
     ["adding one", (sampler) => sampler.addSequence()],
     ["removing the one showing", (sampler) => sampler.removeSequence()],
   ])("drops the queue on %s", (_name, act) => {
-    const s = setup({ song: twoSequences(), maxSequences: 6 });
+    const s = setup({ beat: twoSequences(), maxSequences: 6 });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1815,7 +1815,7 @@ describe("the next sequence", () => {
     ["Stop", (sampler) => sampler.stop()],
     ["Play pressed again", (sampler) => sampler.start()],
   ])("says the queue is taken back when %s drops it, since the display still says what plays next", (_name, act) => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1824,7 +1824,7 @@ describe("the next sequence", () => {
   });
 
   it("says nothing of a queue when Stop or Play is pressed and there was none", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.message.mockClear();
@@ -1834,7 +1834,7 @@ describe("the next sequence", () => {
   });
 
   it("begins to show the playhead of a beat that is restarted in the moment after a switch, not after the pass it left", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1846,7 +1846,7 @@ describe("the next sequence", () => {
   });
 
   it("writes a live hit into the new sequence once its pass has begun", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.toggleRec();
@@ -1854,12 +1854,12 @@ describe("the next sequence", () => {
     run(s, 2.1); // 2.4 s: the new pass began at 2.05 s
     expect(s.sampler.getState().playheadStep).toBeGreaterThanOrEqual(0);
     s.sampler.triggerPad(3);
-    expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
-    expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+    expect(s.sampler.getBeat().sequences[1].pattern[3]).toBeDefined();
+    expect(s.sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
   });
 
   it("does not switch after Stop and Play when the queue was dropped", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1870,7 +1870,7 @@ describe("the next sequence", () => {
   });
 
   it("shows no playhead for the last steps of the old pass once the switch has been made, a moment before they sound", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     run(s, 0.3);
     s.sampler.queueSequence(1);
@@ -1895,7 +1895,7 @@ describe("the next sequence", () => {
   // way, so a hit is a step of that one, or the downbeat of the one that takes over if it is nearest that.
   describe("a live hit in the moment between a switch and the new pass", () => {
     const recordingThroughSwitch = () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       s.sampler.start();
       run(s, 0.3);
       s.sampler.toggleRec();
@@ -1909,9 +1909,9 @@ describe("the next sequence", () => {
       run(s, 0.04); // 1.95 s: the playhead is on step 15
       expect(s.sampler.getState()).toMatchObject({ sequence: 1, heard: { sequence: 0 } });
       s.sampler.triggerPad(3);
-      const song = s.sampler.getSong();
-      expect(song.sequences[0].pattern[3]).toEqual([15]);
-      expect(song.sequences[1].pattern[3]).toBeUndefined();
+      const beat = s.sampler.getBeat();
+      expect(beat.sequences[0].pattern[3]).toEqual([15]);
+      expect(beat.sequences[1].pattern[3]).toBeUndefined();
       expect(s.sounds[3].play).toHaveBeenCalledTimes(1);
     });
 
@@ -1920,16 +1920,16 @@ describe("the next sequence", () => {
       run(s, 0.1); // 2.0 s, 50 ms before the downbeat: the playhead is still on step 15 of the sequence that gave way
       expect(s.sampler.getState().playheadStep).toBe(15);
       s.sampler.triggerPad(3);
-      const song = s.sampler.getSong();
-      expect(song.sequences[1].pattern[3]).toEqual([0]);
-      expect(song.sequences[0].pattern[3]).toBeUndefined();
+      const beat = s.sampler.getBeat();
+      expect(beat.sequences[1].pattern[3]).toEqual([0]);
+      expect(beat.sequences[0].pattern[3]).toBeUndefined();
       expect(s.sounds[3].play).toHaveBeenCalledTimes(1); // and it does not sound again on the downbeat
       run(s, 0.3);
       expect(s.sounds[3].play).toHaveBeenCalledTimes(1);
     });
 
     it("counts its step in the length of the sequence that gave way, which may not be the length of the one that took over", () => {
-      const s = setup({ song: twoSequences({ bars: 2 }) }); // 32 steps, then a sequence of 16
+      const s = setup({ beat: twoSequences({ bars: 2 }) }); // 32 steps, then a sequence of 16
       s.sampler.start();
       const tick = (count) => {
         for (let i = 0; i < count; i++) {
@@ -1949,8 +1949,8 @@ describe("the next sequence", () => {
         playheadPosition: 30,
       });
       s.sampler.triggerPad(3); // past halfway to step 31
-      expect(s.sampler.getSong().sequences[0].pattern[3]).toEqual([31]);
-      expect(s.sampler.getSong().sequences[1].pattern[3]).toBeUndefined();
+      expect(s.sampler.getBeat().sequences[0].pattern[3]).toEqual([31]);
+      expect(s.sampler.getBeat().sequences[1].pattern[3]).toBeUndefined();
     });
 
     it("can be undone in the sequence it was written into, and not in the one showing", () => {
@@ -1961,27 +1961,27 @@ describe("the next sequence", () => {
       s.sampler.setSequence(0);
       expect(s.sampler.getState().canUndo).toBe(true);
       s.sampler.undo();
-      expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+      expect(s.sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
     });
 
     it("asks for a save", () => {
       const s = recordingThroughSwitch();
       run(s, 0.04);
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.sampler.triggerPad(3);
-      expect(s.songChange).toHaveBeenCalled();
+      expect(s.beatChange).toHaveBeenCalled();
     });
 
     it("is written into the one showing once the new pass has begun, as before", () => {
       const s = recordingThroughSwitch();
       run(s, 0.3); // 2.2 s
       s.sampler.triggerPad(3);
-      expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
-      expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+      expect(s.sampler.getBeat().sequences[1].pattern[3]).toBeDefined();
+      expect(s.sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
     });
 
     it("goes into the sequence that gave way when a sequence taking over late took it over", () => {
-      const s = setup({ song: twoSequences() });
+      const s = setup({ beat: twoSequences() });
       s.sampler.start();
       run(s, 1.8);
       s.sampler.toggleRec();
@@ -1989,7 +1989,7 @@ describe("the next sequence", () => {
       s.sampler.queueSequence(1);
       s.advance(0.05);
       s.sampler.triggerPad(3);
-      expect(s.sampler.getSong().sequences[0].pattern[3]).toEqual([15]);
+      expect(s.sampler.getBeat().sequences[0].pattern[3]).toEqual([15]);
     });
   });
 
@@ -2001,9 +2001,9 @@ describe("the next sequence", () => {
     (_name, act, pad) => {
       // 240 BPM: a step is 0.0625 s and the pass ends at 1.05 s. At 0.95 s the switch has been made, the old step 15 (at 0.9875 s)
       // and the new step 0 (at 1.05 s) are both queued.
-      const song = twoSequences({ bpm: 240 });
-      song.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
-      const s = setup({ song });
+      const beat = twoSequences({ bpm: 240 });
+      beat.sequences[0] = { bars: 1, pattern: { 0: [15] }, velocities: {} };
+      const s = setup({ beat });
       s.sampler.start();
       for (let t = 0; t < 0.6; t += 0.05) s.advance(0.05);
       s.sampler.queueSequence(1);
@@ -2020,7 +2020,7 @@ describe("the next sequence", () => {
   );
 
   it("makes the switch once, in the pass where it lands, when a stall skips past the end of the pass", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     s.sampler.start();
     s.advance(0.1);
     s.sampler.queueSequence(1);
@@ -2031,7 +2031,7 @@ describe("the next sequence", () => {
   });
 
   it("says which sequence is queued in the state", () => {
-    const s = setup({ song: twoSequences() });
+    const s = setup({ beat: twoSequences() });
     expect(s.sampler.getState().queuedSequence).toBe(-1);
     s.sampler.start();
     run(s, 0.2);
@@ -2044,9 +2044,9 @@ describe("Song mode: the chain", () => {
   // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
   // step 0 on pad i, to tell which one is sounding.
   const chain = (count = 3, { bars = [], bpm = 120 } = {}) => {
-    const song = songOf(count, { bpm });
-    for (let i = 0; i < count; i++) song.sequences[i] = { bars: bars[i] ?? 1, pattern: { [i]: [0] }, velocities: {} };
-    return song;
+    const beat = beatOf(count, { bpm });
+    for (let i = 0; i < count; i++) beat.sequences[i] = { bars: bars[i] ?? 1, pattern: { [i]: [0] }, velocities: {} };
+    return beat;
   };
   const tick = (s, count) => {
     for (let i = 0; i < count; i++) {
@@ -2059,7 +2059,7 @@ describe("Song mode: the chain", () => {
   const closeTo = (...times) => times.map((time) => expect.closeTo(time, 2));
 
   it("is off to begin with, and a beat stays on the sequence it is on", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     expect(s.sampler.getState().songMode).toBe(false);
     s.sampler.start();
     run(s, 6.2);
@@ -2068,7 +2068,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("is turned on and off by toggleSong, which says so and redraws", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     expect(s.sampler.getState().songMode).toBe(true);
     expect(s.message).toHaveBeenLastCalledWith("SONG ON");
@@ -2079,7 +2079,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("plays the sequences in order, one pass each, and starts again from the first after the last", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 7.2); // 7.2 s: the fourth pass began at 6.05 s, and the fifth begins at 8.05 s
@@ -2090,13 +2090,13 @@ describe("Song mode: the chain", () => {
   });
 
   it("goes on from pass to pass without a message or a save of its own, and leaves the editor where it is", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 1.5);
     expect(s.sampler.getState().playingSequence).toBe(0);
     s.message.mockClear();
-    s.songChange.mockClear();
+    s.beatChange.mockClear();
     s.change.mockClear();
     run(s, 0.6); // 2.1 s: the second pass has begun
     expect(s.sampler.getState().playingSequence).toBe(1);
@@ -2104,15 +2104,15 @@ describe("Song mode: the chain", () => {
     // Said and saved once a pass, it would be an announcement a pass for a screen reader and a write a pass that tells another
     // tab it is out of date: where a chain has got to is not what the beat is.
     expect(s.message).not.toHaveBeenCalled();
-    expect(s.songChange).not.toHaveBeenCalled();
-    expect(s.sampler.getSong().current).toBe(0); // and what is saved next, by an edit, is the sequence showing, which the song leaves alone
+    expect(s.beatChange).not.toHaveBeenCalled();
+    expect(s.sampler.getBeat().current).toBe(0); // and what is saved next, by an edit, is the sequence showing, which the song leaves alone
     run(s, 2);
     expect(s.sampler.getState().playingSequence).toBe(2);
     expect(s.message).not.toHaveBeenCalled();
   });
 
   it("goes round in the length of each sequence", () => {
-    const s = setup({ song: chain(3, { bars: [2, 1, 1] }) });
+    const s = setup({ beat: chain(3, { bars: [2, 1, 1] }) });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 8.2); // the first is two bars (4 s), then 2 s each: 4.05, 6.05, 8.05
@@ -2123,21 +2123,21 @@ describe("Song mode: the chain", () => {
 
   describe("turned on or off just ahead of the end of the pass", () => {
     it("takes effect at that end when turned on before the next pass's first step is handed to the audio clock", () => {
-      const s = setup({ song: chain(3) });
+      const s = setup({ beat: chain(3) });
       s.sampler.start();
       tick(s, 38); // 1.9 s: the pass has ended in the scheduler, which has built nothing of the next
       s.message.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.sampler.toggleSong();
       expect(s.sampler.getState()).toMatchObject({ songMode: true, playingSequence: 1 });
       expect(s.message.mock.calls.map(([text]) => text)).toEqual(["SONG ON"]); // and the switch is the chain's: quiet
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
       run(s, 0.5);
       expect(timesOf(s, 1)).toEqual(closeTo(2.05));
     });
 
     it("takes back the first step already built, and builds it again, when turned on after it was handed over", () => {
-      const s = setup({ song: chain(3) });
+      const s = setup({ beat: chain(3) });
       s.sampler.start();
       tick(s, 40); // 2.0 s: the first step of the next pass, at 2.05 s, was built from the sequence that gives way
       const built = busOf(s.sounds[0].play.mock.calls.at(-1)[1]);
@@ -2149,7 +2149,7 @@ describe("Song mode: the chain", () => {
     });
 
     it("waits for the end of the next pass when turned on after the first step of the pass that began has sounded", () => {
-      const s = setup({ song: chain(3) });
+      const s = setup({ beat: chain(3) });
       s.sampler.start();
       run(s, 2.2);
       s.sampler.toggleSong();
@@ -2159,13 +2159,13 @@ describe("Song mode: the chain", () => {
     });
 
     it("does nothing at that end with one sequence, or when a queued sequence has taken over there", () => {
-      const one = setup({ song: chain(1) });
+      const one = setup({ beat: chain(1) });
       one.sampler.start();
       tick(one, 40); // 2.0 s: the first step of the next pass is built
       const built = busOf(one.sounds[0].play.mock.calls.at(-1)[1]);
       one.sampler.toggleSong();
       expect(built.disconnect).not.toHaveBeenCalled(); // it is not taken back and built again for nothing
-      const queued = setup({ song: chain(3) });
+      const queued = setup({ beat: chain(3) });
       queued.sampler.start();
       run(queued, 0.3);
       queued.sampler.queueSequence(2);
@@ -2175,24 +2175,24 @@ describe("Song mode: the chain", () => {
     });
 
     it("takes back the chain's pick, so the sequence goes round again, when turned off after the pass end took it", () => {
-      const s = setup({ song: chain(3) });
+      const s = setup({ beat: chain(3) });
       s.sampler.toggleSong();
       s.sampler.start();
       tick(s, 38); // 1.9 s: the chain has picked the second sequence, and the display is still on the first
       expect(s.sampler.getState()).toMatchObject({ playingSequence: 1, heard: { sequence: 0 } });
       s.message.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.sampler.toggleSong();
       expect(s.sampler.getState()).toMatchObject({ songMode: false, playingSequence: 0 });
       expect(s.message.mock.calls.map(([text]) => text)).toEqual(["SONG OFF"]);
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
       run(s, 3.2); // 5.1 s: the first sequence went round again at 2.05 s and 4.05 s
       expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05));
       expect(timesOf(s, 1)).toEqual([]);
     });
 
     it("takes back the pick's first step, if it was built, when turned off", () => {
-      const s = setup({ song: chain(3) });
+      const s = setup({ beat: chain(3) });
       s.sampler.toggleSong();
       s.sampler.start();
       tick(s, 40); // 2.0 s
@@ -2204,7 +2204,7 @@ describe("Song mode: the chain", () => {
     });
 
     it("is left to the end of the next pass when turned off after the pass that began has sounded", () => {
-      const s = setup({ song: chain(3) });
+      const s = setup({ beat: chain(3) });
       s.sampler.toggleSong();
       s.sampler.start();
       run(s, 2.2);
@@ -2216,7 +2216,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("takes effect at the end of the pass when turned on while it plays, and stops there when turned off", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.start();
     run(s, 0.5);
     s.sampler.toggleSong();
@@ -2230,20 +2230,20 @@ describe("Song mode: the chain", () => {
   });
 
   it("makes no switch with one sequence, says nothing and saves nothing, and goes on playing it", () => {
-    const s = setup({ song: chain(1) });
+    const s = setup({ beat: chain(1) });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 0.3);
     s.message.mockClear();
-    s.songChange.mockClear();
+    s.beatChange.mockClear();
     run(s, 4.2);
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 4.05));
     expect(s.message).not.toHaveBeenCalled();
-    expect(s.songChange).not.toHaveBeenCalled();
+    expect(s.beatChange).not.toHaveBeenCalled();
   });
 
   it("goes on through the sequences there are when one is removed while it plays", () => {
-    const s = setup({ song: chain(3), maxSequences: 6 });
+    const s = setup({ beat: chain(3), maxSequences: 6 });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 2.5);
@@ -2258,7 +2258,7 @@ describe("Song mode: the chain", () => {
     ["added", (sampler) => sampler.addSequence()],
     ["copied", (sampler) => sampler.copySequence()],
   ])("stays on, and goes round the sequences there are, when one is %s while it plays", (_name, act) => {
-    const s = setup({ song: chain(3), maxSequences: 6 });
+    const s = setup({ beat: chain(3), maxSequences: 6 });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 0.5);
@@ -2272,7 +2272,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("stays on through Stop, and Play begins again at the entry selected", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.start();
     run(s, 2.5);
@@ -2287,7 +2287,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("stays in step through a stall that skips several pass ends", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.start();
     s.advance(0.1);
@@ -2298,32 +2298,32 @@ describe("Song mode: the chain", () => {
   });
 
   it("writes a live hit into the sequence that plays", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.toggleRec();
     s.sampler.start();
     run(s, 2.7); // the second pass began at 2.05 s
     s.sampler.triggerPad(3);
-    expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
-    expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+    expect(s.sampler.getBeat().sequences[1].pattern[3]).toBeDefined();
+    expect(s.sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
   });
 
   // The chain's pick for the next pass is the scheduler's, up to a lookahead and a step before it sounds, and the display is still on the
   // pass that is ending: a press in that moment is for what comes after it, and replaces the pick, as it does where nothing was picked.
   it("hands a hit recorded in the moment after a chain switch to the sequence that is still sounding", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.toggleRec();
     s.sampler.start();
     tick(s, 39); // 1.95 s: switched at 1.85 s, and the playhead is on step 15
     expect(s.sampler.getState()).toMatchObject({ playingSequence: 1, heard: { sequence: 0 } });
     s.sampler.triggerPad(3);
-    expect(s.sampler.getSong().sequences[0].pattern[3]).toEqual([15]);
-    expect(s.sampler.getSong().sequences[1].pattern[3]).toBeUndefined();
+    expect(s.sampler.getBeat().sequences[0].pattern[3]).toEqual([15]);
+    expect(s.sampler.getBeat().sequences[1].pattern[3]).toBeUndefined();
   });
 
   it("keeps the place of what sounds on the display inside the sequences there are, when one is removed in the moment after a switch", () => {
-    const s = setup({ song: chain(3), maxSequences: 6 });
+    const s = setup({ beat: chain(3), maxSequences: 6 });
     s.sampler.toggleSong();
     s.sampler.start();
     tick(s, 118); // 5.9 s: the third sequence sounds until 6.05 s, and the chain has picked the first
@@ -2338,15 +2338,15 @@ describe("Song mode: the chain", () => {
     // The first sequence has steps 0 and 5 of pad 0, the second step 2 (and the pad selected is pad 0): the display's ruler is of the
     // one that sounds until the new pass does, as are its label and its playhead; the step keys are of the one showing.
     const steppy = (bars = [1, 1]) => {
-      const song = songOf(2);
-      song.sequences[0] = { bars: bars[0], pattern: { 0: [0, 5] }, velocities: {} };
-      song.sequences[1] = { bars: bars[1], pattern: { 0: [2] }, velocities: {} };
-      return song;
+      const beat = beatOf(2);
+      beat.sequences[0] = { bars: bars[0], pattern: { 0: [0, 5] }, velocities: {} };
+      beat.sequences[1] = { bars: bars[1], pattern: { 0: [2] }, velocities: {} };
+      return beat;
     };
     const lit = (row) => row.map((value, i) => (value ? i : -1)).filter((i) => i >= 0);
 
     it("gives the display's ruler the steps of the sequence that sounds, and the keys those of the one showing", () => {
-      const s = setup({ song: steppy() });
+      const s = setup({ beat: steppy() });
       s.sampler.start();
       run(s, 0.3);
       s.sampler.queueSequence(1);
@@ -2360,10 +2360,10 @@ describe("Song mode: the chain", () => {
     });
 
     it("gives the bar of the sequence that sounds that the person was looking at, and the playhead in it", () => {
-      const song = songOf(2);
-      song.sequences[0] = { bars: 2, pattern: { 0: [16, 20] }, velocities: {} }; // the second bar's steps 0 and 4
-      song.sequences[1] = { bars: 1, pattern: { 0: [2] }, velocities: {} };
-      const s = setup({ song });
+      const beat = beatOf(2);
+      beat.sequences[0] = { bars: 2, pattern: { 0: [16, 20] }, velocities: {} }; // the second bar's steps 0 and 4
+      beat.sequences[1] = { bars: 1, pattern: { 0: [2] }, velocities: {} };
+      const s = setup({ beat });
       s.sampler.start();
       s.sampler.setPage(1);
       run(s, 0.3);
@@ -2376,7 +2376,7 @@ describe("Song mode: the chain", () => {
     });
 
     it("is the sequence showing, its bar and its playhead when nothing is taking over", () => {
-      const stopped = setup({ song: steppy() });
+      const stopped = setup({ beat: steppy() });
       stopped.sampler.start();
       run(stopped, 0.3);
       stopped.sampler.queueSequence(1);
@@ -2384,7 +2384,7 @@ describe("Song mode: the chain", () => {
       stopped.sampler.stop(); // and stopped there: the display is of the sequence showing, from then on
       expect(stopped.sampler.getState().heard).toMatchObject({ sequence: 1, playheadStep: -1 });
 
-      const s = setup({ song: steppy() });
+      const s = setup({ beat: steppy() });
       s.sampler.start();
       run(s, 0.5);
       const state = s.sampler.getState();
@@ -2400,7 +2400,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("has nothing left sounding on the display when it is stopped in the moment after a chain switch", () => {
-    const s = setup({ song: chain(3) });
+    const s = setup({ beat: chain(3) });
     s.sampler.toggleSong();
     s.sampler.start();
     tick(s, 39); // 1.95 s: the chain has picked the second sequence, and the display is still on the first
@@ -2417,7 +2417,7 @@ describe("Song mode: the chain", () => {
   });
 
   it("shows what sounds on the display for the last steps of every pass, in that sequence's numbering", () => {
-    const s = setup({ song: chain(3, { bars: [4, 1, 1] }) });
+    const s = setup({ beat: chain(3, { bars: [4, 1, 1] }) });
     s.sampler.toggleSong();
     s.sampler.start();
     tick(s, 78); // 3.9 s: the pass of 64 steps ends at 8.05 s
@@ -2439,32 +2439,32 @@ describe("Song mode: the chain", () => {
 
 describe("steps and clearing", () => {
   it("toggles a step of the selected pad and asks for a save", () => {
-    const { sampler, songChange, change } = setup();
+    const { sampler, beatChange, change } = setup();
     sampler.selectPad(3);
     change.mockClear();
     sampler.toggleStep(5);
     expect(sampler.getState().stepsOn[5]).toBe(true);
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
   });
 
   it("starts at one bar and keeps a saved length", () => {
     expect(setup().sampler.getState()).toMatchObject({ bars: 1, page: 0 });
-    expect(setup({ song: savedSong({ bars: 3 }) }).sampler.getState().bars).toBe(3);
+    expect(setup({ beat: savedBeat({ bars: 3 }) }).sampler.getState().bars).toBe(3);
   });
 
   it("lengthens the sequence, names it and asks for a save", () => {
-    const { sampler, message, songChange } = setup();
+    const { sampler, message, beatChange } = setup();
     sampler.setBars(2);
     expect(sampler.getState().bars).toBe(2);
     expect(message).toHaveBeenLastCalledWith("2 BARS");
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
     sampler.setBars(2);
-    expect(songChange).toHaveBeenCalledTimes(1); // no change, no save
+    expect(beatChange).toHaveBeenCalledTimes(1); // no change, no save
   });
 
   it("drops a queued step from a bar that was removed when the sequence is shortened while playing", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, bars: 2, pattern: { 0: [18] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, bars: 2, pattern: { 0: [18] } }) });
     sampler.start();
     let guard = 0;
     while (!sounds[0].play.mock.calls.length && guard++ < 200) advance(0.05); // step 18 is queued, not started
@@ -2490,7 +2490,7 @@ describe("steps and clearing", () => {
     sampler.setPage(1);
     sampler.selectPad(3);
     sampler.toggleStep(5);
-    expect(sampler.getSong().sequences[0].pattern[3]).toEqual([21]);
+    expect(sampler.getBeat().sequences[0].pattern[3]).toEqual([21]);
     expect(sampler.getState().stepsOn[5]).toBe(true);
     sampler.setPage(0);
     expect(sampler.getState().stepsOn[5]).toBe(false);
@@ -2509,9 +2509,9 @@ describe("steps and clearing", () => {
   });
 
   it("keeps the steps of a bar that was dropped, for when it comes back", () => {
-    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 0: [20] } }) });
+    const { sampler } = setup({ beat: savedBeat({ bars: 2, pattern: { 0: [20] } }) });
     sampler.setBars(1);
-    expect(sampler.getSong().sequences[0].pattern[0]).toEqual([20]);
+    expect(sampler.getBeat().sequences[0].pattern[0]).toEqual([20]);
   });
 
   it("clears the selected pad and names it", () => {
@@ -2525,7 +2525,7 @@ describe("steps and clearing", () => {
   it("clears every pad", () => {
     const { sampler, message } = setup();
     sampler.clearAll();
-    expect(sampler.getSong().sequences[0].pattern).toEqual({});
+    expect(sampler.getBeat().sequences[0].pattern).toEqual({});
     expect(message).toHaveBeenLastCalledWith("ALL STEPS CLEARED");
   });
 });
@@ -2551,7 +2551,7 @@ describe("a pad plays one voice at a time", () => {
   });
 
   it("cuts off the pad's last hit in the sequence when the next step on that pad starts", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 1] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0, 1] } }) });
     sampler.start();
     for (let i = 0; i < 4; i++) advance(0.05);
     expect(sounds[0].play).toHaveBeenCalledTimes(2);
@@ -2560,7 +2560,7 @@ describe("a pad plays one voice at a time", () => {
   });
 
   it("cuts off a sequenced hit that is still sounding when the pad is tapped", () => {
-    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0] } }) });
+    const { audio, sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0] } }) });
     sampler.start();
     for (let i = 0; i < 4; i++) advance(0.05);
     const stepVoice = voiceOf(sounds[0], 0);
@@ -2569,7 +2569,7 @@ describe("a pad plays one voice at a time", () => {
   });
 
   it("lets the earlier hit carry on when the step that was going to cut it off is cancelled by Stop", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 3] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0, 3] } }) });
     sampler.start();
     for (let i = 0; i < 7; i++) advance(0.05); // step 0 has started; step 3 (at 0.425 s) is queued
     expect(sounds[0].play).toHaveBeenCalledTimes(2);
@@ -2581,7 +2581,7 @@ describe("a pad plays one voice at a time", () => {
   });
 
   it("keeps a pad cut off by a live tap when the queued step that also cut it is cancelled", () => {
-    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0, 3] } }) });
+    const { audio, sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0, 3] } }) });
     sampler.start();
     for (let i = 0; i < 7; i++) advance(0.05); // step 0 sounds; step 3 (at 0.425 s) is queued and will cut it
     const first = voiceOf(sounds[0], 0);
@@ -2593,9 +2593,9 @@ describe("a pad plays one voice at a time", () => {
   });
 
   it("does the same when the queued step is rebuilt because the sequence was switched", () => {
-    const base = savedSong({ bpm: 120, pattern: { 0: [0, 3] } });
-    const song = { ...base, sequences: [base.sequences[0], { bars: 1, pattern: {} }, ...base.sequences.slice(2)] };
-    const { sounds, sampler, advance } = setup({ song });
+    const base = savedBeat({ bpm: 120, pattern: { 0: [0, 3] } });
+    const beat = { ...base, sequences: [base.sequences[0], { bars: 1, pattern: {} }, ...base.sequences.slice(2)] };
+    const { sounds, sampler, advance } = setup({ beat });
     sampler.start();
     for (let i = 0; i < 7; i++) advance(0.05);
     const first = voiceOf(sounds[0], 0);
@@ -2648,21 +2648,21 @@ describe("a pad's release", () => {
 
 describe("pad colours", () => {
   it("sets a pad's colour like the other settings: says so, saves it, and tells the views", () => {
-    const { sampler, message, songChange, change } = setup();
+    const { sampler, message, beatChange, change } = setup();
     sampler.selectPad(1);
-    songChange.mockClear();
+    beatChange.mockClear();
     change.mockClear();
     sampler.setPadSetting("color", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
     expect(sampler.getState().padSettings.color).toBe(3);
-    expect(sampler.getSong().padSettings).toEqual({
+    expect(sampler.getBeat().padSettings).toEqual({
       1: { gain: 0, pitch: 0, choke: 0, color: 3, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
-    expect(songChange).toHaveBeenCalled();
+    expect(beatChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
     sampler.setPadSetting("color", 0);
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR NONE");
-    expect(sampler.getSong().padSettings).toEqual({});
+    expect(sampler.getBeat().padSettings).toEqual({});
   });
 
   it("has no effect on how a pad plays: the same call, to the same kind of node, at the same time", () => {
@@ -2686,17 +2686,17 @@ describe("choke groups", () => {
   const voiceOf = (sound, call) => sound.play.mock.calls[call][1];
 
   it("sets a pad's group like gain and pitch: says so, saves it, and tells the views", () => {
-    const { sampler, message, songChange, change } = setup();
+    const { sampler, message, beatChange, change } = setup();
     sampler.selectPad(2);
-    songChange.mockClear();
+    beatChange.mockClear();
     change.mockClear();
     sampler.setPadSetting("choke", 3);
     expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE GROUP 3");
     expect(sampler.getState().padSettings.choke).toBe(3);
-    expect(sampler.getSong().padSettings).toEqual({
+    expect(sampler.getBeat().padSettings).toEqual({
       2: { gain: 0, pitch: 0, choke: 3, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
-    expect(songChange).toHaveBeenCalled();
+    expect(beatChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
     sampler.setPadSetting("choke", 0);
     expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE OFF");
@@ -2722,7 +2722,7 @@ describe("choke groups", () => {
   });
 
   it("cuts a sequenced hit of another pad in the group when this pad's step starts", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [4] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0], 1: [4] } }) });
     for (const pad of [0, 1]) {
       sampler.selectPad(pad);
       sampler.setPadSetting("choke", 1);
@@ -2734,7 +2734,7 @@ describe("choke groups", () => {
   });
 
   it("lets another pad's voice carry on when the step that was going to cut it is cancelled by Stop", () => {
-    const { sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [3] } }) });
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0], 1: [3] } }) });
     for (const pad of [0, 1]) {
       sampler.selectPad(pad);
       sampler.setPadSetting("choke", 1);
@@ -2820,7 +2820,7 @@ describe("transport", () => {
   });
 
   it("plays the pads that are on at each step, at the time the scheduler gives", () => {
-    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: STARTER_BEAT }) });
+    const { audio, sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: STARTER_BEAT }) });
     sampler.start();
     advance(0);
     // The starter beat: kick on step 0, closed hat (pad 2) on step 0, snare not yet.
@@ -2832,7 +2832,7 @@ describe("transport", () => {
   });
 
   it("plays a step with a lower velocity through a gain stage of its own, in front of the step's gain", () => {
-    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0], 1: [0] } }) });
+    const { audio, sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0], 1: [0] } }) });
     sampler.selectPad(0);
     sampler.setStepVelocity(0, 64);
     sampler.start();
@@ -2845,22 +2845,22 @@ describe("transport", () => {
   });
 
   it("changes a step's velocity only for a step that is on, and tells the views and the LCD", () => {
-    const { sampler, change, songChange, message } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
+    const { sampler, change, beatChange, message } = setup({ beat: savedBeat({ pattern: { 0: [2] } }) });
     sampler.selectPad(0);
     change.mockClear();
-    songChange.mockClear();
+    beatChange.mockClear();
     sampler.setStepVelocity(2, 50);
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
     expect(message).toHaveBeenLastCalledWith("VEL 50");
     expect(sampler.getState().stepVelocities[2]).toBe(50);
     sampler.setStepVelocity(3, 50); // off: nothing to change
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
     expect(change).toHaveBeenCalledTimes(1);
   });
 
   it("turns a step on as it gives it a velocity when asked to, as one undo", () => {
-    const { sampler } = setup({ song: savedSong({ pattern: { 0: [2] } }) });
+    const { sampler } = setup({ beat: savedBeat({ pattern: { 0: [2] } }) });
     sampler.selectPad(0);
     sampler.setStepVelocity(3, 40, { activate: true });
     expect(sampler.getState().stepsOn[3]).toBe(true);
@@ -2873,7 +2873,7 @@ describe("transport", () => {
   });
 
   it("keeps each press that turns a step on as an undo of its own, and merges the drag after it", () => {
-    const { sampler } = setup({ song: savedSong({ pattern: { 0: [0] } }) });
+    const { sampler } = setup({ beat: savedBeat({ pattern: { 0: [0] } }) });
     sampler.selectPad(0);
     sampler.setStepVelocity(3, 40, { activate: true });
     sampler.setStepVelocity(3, 60); // the drag carries on over the same step: the same undo
@@ -2887,18 +2887,18 @@ describe("transport", () => {
   });
 
   it("sets the velocity of a step on the bar being shown, for the selected pad", () => {
-    const { sampler } = setup({ song: savedSong({ bars: 2, pattern: { 1: [5, 21] } }) });
+    const { sampler } = setup({ beat: savedBeat({ bars: 2, pattern: { 1: [5, 21] } }) });
     sampler.selectPad(1);
     sampler.setPage(1);
     sampler.setStepVelocity(5, 30); // step 21 of the sequence
-    expect(sampler.getSong().sequences[0].velocities).toEqual({ 1: { 21: 30 } });
+    expect(sampler.getBeat().sequences[0].velocities).toEqual({ 1: { 21: 30 } });
     expect(sampler.getState().stepVelocities[5]).toBe(30);
     sampler.setPage(0);
     expect(sampler.getState().stepVelocities[5]).toBe(127);
   });
 
   it("starts again from the first step when Play is pressed while playing", () => {
-    const { audio, sounds, sampler, advance } = setup({ song: savedSong({ bpm: 120, pattern: { 0: [0] } }) });
+    const { audio, sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0] } }) });
     sampler.start();
     advance(0.5); // a few steps in: the playhead has moved on from step 0
     sampler.poll();
@@ -2931,11 +2931,11 @@ describe("transport", () => {
 
 describe("tempo", () => {
   it("clamps the tempo and reports a change and a save", () => {
-    const { sampler, change, songChange } = setup();
+    const { sampler, change, beatChange } = setup();
     sampler.setBpm(1000);
     expect(sampler.getState().bpm).toBe(240);
     expect(change).toHaveBeenCalledTimes(1);
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
   });
 
   it("nudges the tempo from where it is", () => {
@@ -2956,19 +2956,19 @@ describe("tempo", () => {
 });
 
 describe("swing", () => {
-  it("starts straight, or where the saved song had it", () => {
+  it("starts straight, or where the saved beat had it", () => {
     expect(setup().sampler.getState().swing).toBe(50);
-    expect(setup({ song: savedSong({ swing: 60 }) }).sampler.getState().swing).toBe(60);
+    expect(setup({ beat: savedBeat({ swing: 60 }) }).sampler.getState().swing).toBe(60);
   });
 
   it("is kept inside its range, says so, and asks for a save", () => {
-    const { sampler, message, change, songChange } = setup();
+    const { sampler, message, change, beatChange } = setup();
     sampler.setSwing(200);
     expect(sampler.getState().swing).toBe(75);
     expect(message).toHaveBeenLastCalledWith("SWING 75%");
     expect(change).toHaveBeenCalledTimes(1);
-    expect(songChange).toHaveBeenCalledTimes(1);
-    expect(sampler.getSong().swing).toBe(75);
+    expect(beatChange).toHaveBeenCalledTimes(1);
+    expect(sampler.getBeat().swing).toBe(75);
   });
 
   it("says it is off when it is straight again", () => {
@@ -2981,7 +2981,7 @@ describe("swing", () => {
   it("plays the second step of each pair later", () => {
     const { sampler, sounds, advance } = setup({
       bpm: 120,
-      song: savedSong({ bpm: 120, swing: 66, pattern: { 0: [0, 1] } }),
+      beat: savedBeat({ bpm: 120, swing: 66, pattern: { 0: [0, 1] } }),
     });
     sampler.start();
     for (let i = 0; i < 20; i++) advance(0.025); // as the clock moves when nothing stalls
@@ -2993,40 +2993,40 @@ describe("swing", () => {
 
 describe("volume", () => {
   it("sets the master level on the 0-1 scale, says so and asks for a save", () => {
-    const { audio, sampler, message, songChange } = setup();
+    const { audio, sampler, message, beatChange } = setup();
     sampler.setVolume(40);
     expect(audio.setVolume).toHaveBeenCalledWith(0.4);
     expect(message).toHaveBeenLastCalledWith("VOLUME 40");
     expect(sampler.getState().volume).toBe(40);
-    expect(songChange).toHaveBeenCalledTimes(1);
+    expect(beatChange).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("the arrangement", () => {
   const entry = (sequence, repeats = 1) => ({ sequence, repeats });
-  const withArrangement = (count, arrangement) => ({ ...songOf(count), arrangement });
-  const arrangementOf = (sampler) => sampler.getSong().arrangement;
+  const withArrangement = (count, arrangement) => ({ ...beatOf(count), arrangement });
+  const arrangementOf = (sampler) => sampler.getBeat().arrangement;
 
   it("is not in the song while there is none, and adding, copying and removing sequences do not make one", () => {
-    const { sampler } = setup({ song: songOf(3), maxSequences: 6 });
-    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    const { sampler } = setup({ beat: beatOf(3), maxSequences: 6 });
+    expect(sampler.getBeat()).not.toHaveProperty("arrangement");
     sampler.addSequence();
     sampler.copySequence();
-    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    expect(sampler.getBeat()).not.toHaveProperty("arrangement");
     sampler.removeSequence();
     sampler.removeSequence();
-    expect(sampler.getSong().sequences).toHaveLength(3);
-    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    expect(sampler.getBeat().sequences).toHaveLength(3);
+    expect(sampler.getBeat()).not.toHaveProperty("arrangement");
   });
 
   it("is kept as the song had it, in its order and with its repeats", () => {
     const arrangement = [entry(2, 3), entry(0), entry(2, 16)];
-    const { sampler } = setup({ song: withArrangement(3, arrangement) });
+    const { sampler } = setup({ beat: withArrangement(3, arrangement) });
     expect(arrangementOf(sampler)).toEqual(arrangement);
   });
 
   it("is handed back as a copy, so what the page does with it cannot change the sampler's", () => {
-    const { sampler } = setup({ song: withArrangement(3, [entry(1, 2)]) });
+    const { sampler } = setup({ beat: withArrangement(3, [entry(1, 2)]) });
     arrangementOf(sampler)[0].repeats = 9;
     arrangementOf(sampler).push(entry(0));
     expect(arrangementOf(sampler)).toEqual([entry(1, 2)]);
@@ -3034,30 +3034,30 @@ describe("the arrangement", () => {
 
   it("is not changed by what was in the song it was given: it is the sampler's own", () => {
     const given = withArrangement(3, [entry(1, 2)]);
-    const { sampler } = setup({ song: given });
+    const { sampler } = setup({ beat: given });
     given.arrangement[0].repeats = 9;
     expect(arrangementOf(sampler)).toEqual([entry(1, 2)]);
   });
 
   it("is cleaned on the way in: an entry for a sequence the song does not have is dropped", () => {
-    const { sampler } = setup({ song: withArrangement(3, [entry(0), entry(3, 2), entry(2)]) });
+    const { sampler } = setup({ beat: withArrangement(3, [entry(0), entry(3, 2), entry(2)]) });
     expect(arrangementOf(sampler)).toEqual([entry(0), entry(2)]);
   });
 
   it("is no arrangement when nothing in it names a sequence the song has", () => {
-    const { sampler } = setup({ song: withArrangement(3, [entry(5), entry(7, 2)]) });
-    expect(sampler.getSong()).not.toHaveProperty("arrangement");
+    const { sampler } = setup({ beat: withArrangement(3, [entry(5), entry(7, 2)]) });
+    expect(sampler.getBeat()).not.toHaveProperty("arrangement");
   });
 
   describe("when a sequence is added or copied", () => {
     it("gets an entry for it at the end, with one repeat", () => {
-      const { sampler } = setup({ song: withArrangement(3, [entry(2, 4), entry(0)]), maxSequences: 6 });
+      const { sampler } = setup({ beat: withArrangement(3, [entry(2, 4), entry(0)]), maxSequences: 6 });
       sampler.addSequence();
       expect(arrangementOf(sampler)).toEqual([entry(2, 4), entry(0), entry(3)]);
     });
 
     it("gets an entry for the copy, and none for the sequence that was copied", () => {
-      const { sampler } = setup({ song: withArrangement(3, [entry(2, 4), entry(0)]), maxSequences: 6 });
+      const { sampler } = setup({ beat: withArrangement(3, [entry(2, 4), entry(0)]), maxSequences: 6 });
       sampler.setSequence(1);
       sampler.copySequence();
       expect(arrangementOf(sampler)).toEqual([entry(2, 4), entry(0), entry(3)]);
@@ -3065,69 +3065,69 @@ describe("the arrangement", () => {
 
     it("gets none when there are as many entries as there can be: the sequence is made, and is not in the song", () => {
       const full = Array.from({ length: 32 }, (_, i) => entry(i % 3));
-      const { sampler } = setup({ song: withArrangement(3, full), maxSequences: 6 });
+      const { sampler } = setup({ beat: withArrangement(3, full), maxSequences: 6 });
       sampler.addSequence();
-      expect(sampler.getSong().sequences).toHaveLength(4);
+      expect(sampler.getBeat().sequences).toHaveLength(4);
       expect(arrangementOf(sampler)).toEqual(full);
     });
 
     it("gets none when the sequence is not made because there are as many as there can be", () => {
-      const { sampler } = setup({ song: withArrangement(3, [entry(1)]), maxSequences: 3 });
+      const { sampler } = setup({ beat: withArrangement(3, [entry(1)]), maxSequences: 3 });
       sampler.addSequence();
       sampler.copySequence();
       expect(arrangementOf(sampler)).toEqual([entry(1)]);
     });
 
     it("asks for a save, as adding or copying a sequence always does, for the entry as much as for the sequence", () => {
-      const { sampler, songChange } = setup({ song: withArrangement(3, [entry(1)]), maxSequences: 6 });
+      const { sampler, beatChange } = setup({ beat: withArrangement(3, [entry(1)]), maxSequences: 6 });
       sampler.addSequence();
-      expect(songChange).toHaveBeenCalledTimes(1);
+      expect(beatChange).toHaveBeenCalledTimes(1);
       sampler.copySequence();
-      expect(songChange).toHaveBeenCalledTimes(2);
+      expect(beatChange).toHaveBeenCalledTimes(2);
     });
   });
 
   describe("when a sequence is removed", () => {
     it("loses the entries that named it, and the ones for the sequences after it move down", () => {
       const { sampler } = setup({
-        song: withArrangement(4, [entry(0, 2), entry(1, 3), entry(0), entry(3, 4), entry(2)]),
+        beat: withArrangement(4, [entry(0, 2), entry(1, 3), entry(0), entry(3, 4), entry(2)]),
         maxSequences: 6,
       });
       sampler.setSequence(1);
       sampler.removeSequence();
-      expect(sampler.getSong().sequences).toHaveLength(3);
+      expect(sampler.getBeat().sequences).toHaveLength(3);
       expect(arrangementOf(sampler)).toEqual([entry(0, 2), entry(0), entry(2, 4), entry(1)]);
     });
 
     it("removes the sequence that is showing: the last one too, with nothing after it to move", () => {
-      const { sampler } = setup({ song: withArrangement(3, [entry(2, 5), entry(0), entry(1)]), maxSequences: 6 });
+      const { sampler } = setup({ beat: withArrangement(3, [entry(2, 5), entry(0), entry(1)]), maxSequences: 6 });
       sampler.setSequence(2);
       sampler.removeSequence();
       expect(arrangementOf(sampler)).toEqual([entry(0), entry(1)]);
     });
 
     it("asks for a save, as removing a sequence always does", () => {
-      const { sampler, songChange } = setup({ song: withArrangement(3, [entry(1), entry(2)]), maxSequences: 6 });
+      const { sampler, beatChange } = setup({ beat: withArrangement(3, [entry(1), entry(2)]), maxSequences: 6 });
       sampler.removeSequence();
-      expect(songChange).toHaveBeenCalledTimes(1);
+      expect(beatChange).toHaveBeenCalledTimes(1);
     });
 
     it("is no arrangement when the sequence removed was all there was in it", () => {
-      const { sampler } = setup({ song: withArrangement(3, [entry(1, 4), entry(1)]), maxSequences: 6 });
+      const { sampler } = setup({ beat: withArrangement(3, [entry(1, 4), entry(1)]), maxSequences: 6 });
       sampler.setSequence(1);
       sampler.removeSequence();
-      expect(sampler.getSong().sequences).toHaveLength(2);
-      expect(sampler.getSong()).not.toHaveProperty("arrangement");
+      expect(sampler.getBeat().sequences).toHaveLength(2);
+      expect(sampler.getBeat()).not.toHaveProperty("arrangement");
     });
 
     it("is left as it was when the last sequence cannot be removed", () => {
-      const { sampler } = setup({ song: withArrangement(1, [entry(0, 3)]) });
+      const { sampler } = setup({ beat: withArrangement(1, [entry(0, 3)]) });
       sampler.removeSequence();
       expect(arrangementOf(sampler)).toEqual([entry(0, 3)]);
     });
 
     it("follows a sequence added after one was removed: the new one has the number the removed one left free", () => {
-      const { sampler } = setup({ song: withArrangement(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
+      const { sampler } = setup({ beat: withArrangement(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
       sampler.setSequence(0);
       sampler.removeSequence(); // sequences 0 and 1 are what were 1 and 2
       sampler.addSequence();
@@ -3140,8 +3140,8 @@ describe("Song mode with an arrangement", () => {
   // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
   // step 0 on pad i, to tell which one is sounding, and `arrangement` is the order and the repeats the chain goes in.
   const entry = (sequence, repeats = 1) => ({ sequence, repeats });
-  const songWith = (count, arrangement, { bars = [] } = {}) => {
-    const base = songOf(count, { bpm: 120 });
+  const beatWith = (count, arrangement, { bars = [] } = {}) => {
+    const base = beatOf(count, { bpm: 120 });
     for (let i = 0; i < count; i++) base.sequences[i] = { bars: bars[i] ?? 1, pattern: { [i]: [0] }, velocities: {} };
     return arrangement ? { ...base, arrangement } : base;
   };
@@ -3160,7 +3160,7 @@ describe("Song mode with an arrangement", () => {
   };
 
   it("plays each entry as many times as it repeats before it goes on, round and round", () => {
-    const s = setup({ song: songWith(3, [entry(0, 2), entry(1), entry(2, 3)]) });
+    const s = setup({ beat: beatWith(3, [entry(0, 2), entry(1), entry(2, 3)]) });
     songMode(s);
     run(s, 15.2); // the passes begin every 2 s from 0.05 s: two of the first, one of the second, three of the third, then again
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 12.05, 14.05));
@@ -3169,7 +3169,7 @@ describe("Song mode with an arrangement", () => {
   });
 
   it("goes in the order of the entries, not the order of the sequences", () => {
-    const s = setup({ song: songWith(3, [entry(0), entry(2), entry(1)]) });
+    const s = setup({ beat: beatWith(3, [entry(0), entry(2), entry(1)]) });
     songMode(s);
     run(s, 6.2);
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
@@ -3178,7 +3178,7 @@ describe("Song mode with an arrangement", () => {
   });
 
   it("tells two entries for one sequence apart: it is the entry it has gone on to, not the first that names it", () => {
-    const s = setup({ song: songWith(2, [entry(0), entry(1), entry(0, 2)]) });
+    const s = setup({ beat: beatWith(2, [entry(0), entry(1), entry(0, 2)]) });
     songMode(s);
     run(s, 11.2); // the passes: 0, 1, 0, 0 (the third entry twice), 0 (the first entry again), 1
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05, 6.05, 8.05));
@@ -3186,7 +3186,7 @@ describe("Song mode with an arrangement", () => {
   });
 
   it("goes round in the length of each sequence, repeats included", () => {
-    const s = setup({ song: songWith(2, [entry(0, 2), entry(1)], { bars: [2, 1] }) });
+    const s = setup({ beat: beatWith(2, [entry(0, 2), entry(1)], { bars: [2, 1] }) });
     songMode(s);
     run(s, 15.2); // two passes of 4 s, one of 2 s, and round
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 4.05, 10.05, 14.05));
@@ -3194,8 +3194,8 @@ describe("Song mode with an arrangement", () => {
   });
 
   it("is the same as it was when there is no arrangement: every sequence once, in order", () => {
-    const plain = setup({ song: songWith(3, null) });
-    const explicit = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+    const plain = setup({ beat: beatWith(3, null) });
+    const explicit = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
     for (const s of [plain, explicit]) {
       songMode(s);
       run(s, 8.2);
@@ -3204,21 +3204,21 @@ describe("Song mode with an arrangement", () => {
   });
 
   it("says nothing and saves nothing for a repeat, and the sequence showing stays", () => {
-    const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+    const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)]) });
     songMode(s);
     run(s, 0.5);
     s.message.mockClear();
-    s.songChange.mockClear();
+    s.beatChange.mockClear();
     s.change.mockClear();
     run(s, 3.6); // 4.1 s: the second pass has begun, and the third at 4.05 s
     expect(s.sampler.getState().playingSequence).toBe(0);
     expect(s.message).not.toHaveBeenCalled();
-    expect(s.songChange).not.toHaveBeenCalled();
+    expect(s.beatChange).not.toHaveBeenCalled();
     expect(s.change).not.toHaveBeenCalled(); // nothing took over, so nothing on the page is out of date
   });
 
   it("goes on by one entry or repeat for each pass end a stall crosses, in order", () => {
-    const s = setup({ song: songWith(2, [entry(0, 2), entry(1)]) });
+    const s = setup({ beat: beatWith(2, [entry(0, 2), entry(1)]) });
     songMode(s);
     s.advance(0.1);
     s.advance(5); // the timer was held up: the passes ended at 2.05 s and 4.05 s while nothing was scheduled
@@ -3229,7 +3229,7 @@ describe("Song mode with an arrangement", () => {
 
   describe("turned on or off just ahead of the end of a pass that repeats", () => {
     it("does nothing when turned on at an end where the entry repeats: it is not taken back and built again", () => {
-      const s = setup({ song: songWith(2, [entry(0, 2), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0, 2), entry(1)]) });
       s.sampler.start();
       tick(s, 39); // 1.95 s: the pass has ended in the scheduler, and the first step of the next (at 2.05 s) is built from this sequence
       expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05));
@@ -3243,7 +3243,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("does not take back the pick of the pass end before when turned off at an end where the entry repeats", () => {
-      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      const s = setup({ beat: beatWith(2, [entry(0), entry(1, 3)]) });
       songMode(s);
       tick(s, 78); // 3.9 s: the chain picked the second sequence at 2.05 s, and this end is a repeat of it
       expect(s.sampler.getState().playingSequence).toBe(1);
@@ -3259,7 +3259,7 @@ describe("Song mode with an arrangement", () => {
     // The pass that follows has no sequence of its own to mark it, so the scheduler, which goes back over the pass end to build them
     // again, tells it a second time: the song must go on once for a pass end, not once for each time it is told.
     it("goes on once for that pass end when the sounds change", () => {
-      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)]) });
       songMode(s);
       tick(s, 37); // 1.85 s: the pass end at 2.05 s has been reached, and the first step after it is built
       s.sampler.kitChanged("sound");
@@ -3269,7 +3269,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("goes on once for that pass end when the sequence is made shorter", () => {
-      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)], { bars: [2, 1] }) });
+      const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)], { bars: [2, 1] }) });
       songMode(s);
       tick(s, 77); // 3.85 s: the end of the first pass (4.05 s) has been reached
       s.sampler.setBars(1);
@@ -3280,7 +3280,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("goes on once for that pass end when the sequence is made shorter and the loop ends where the scheduler is", () => {
-      const s = setup({ song: songWith(2, [entry(0, 2), entry(1)], { bars: [2, 1] }) });
+      const s = setup({ beat: beatWith(2, [entry(0, 2), entry(1)], { bars: [2, 1] }) });
       songMode(s);
       tick(s, 37); // 1.85 s, in the first pass of two bars
       s.sampler.setBars(1); // the loop of one bar ends here: that is the pass end
@@ -3290,7 +3290,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("takes back the decision at a pass end that is not one after all, when the sequence is made longer past it", () => {
-      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)]) });
       songMode(s);
       tick(s, 37); // 1.85 s: the pass end at 2.05 s has been reached, and the entry goes round again
       s.sampler.setBars(2); // the loop carries on past it: it was not a pass end, so that was not a time round
@@ -3300,7 +3300,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("keeps a time round that has begun when the sequence is made longer later in it: that pass end is behind", () => {
-      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)]) });
       songMode(s);
       run(s, 3.0); // the second time round began at 2.05 s, and its first step has sounded
       s.sampler.setBars(2);
@@ -3310,7 +3310,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("goes on once for a pass end that Song mode was turned on at, when the sounds change after it", () => {
-      const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)]) });
       s.sampler.start();
       tick(s, 38); // 1.9 s: the pass end at 2.05 s has been reached, and the last step before it (at 1.9375 s) is still to sound
       s.sampler.toggleSong(); // the entry goes round again there
@@ -3321,7 +3321,7 @@ describe("Song mode with an arrangement", () => {
     });
 
     it("goes on once for each pass end when the sounds change at each of them", () => {
-      const s = setup({ song: songWith(2, [entry(0, 3), entry(1, 2)]) });
+      const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1, 2)]) });
       songMode(s);
       for (let pass = 0; pass < 6; pass++) {
         tick(s, pass === 0 ? 37 : 40);
@@ -3336,9 +3336,9 @@ describe("Song mode with an arrangement", () => {
   });
 
   it("tells one pass end from the next at the fastest tempo, where they are a second apart", () => {
-    const base = songOf(2, { bpm: 240 });
+    const base = beatOf(2, { bpm: 240 });
     for (let i = 0; i < 2; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
-    const s = setup({ song: { ...base, arrangement: [entry(0, 2), entry(1)] } });
+    const s = setup({ beat: { ...base, arrangement: [entry(0, 2), entry(1)] } });
     songMode(s);
     run(s, 5.2);
     expect(timesOf(s, 0)).toEqual(closeTo(0.05, 1.05, 3.05, 4.05)); // two times round the first entry, then the second, and round
@@ -3349,9 +3349,9 @@ describe("Song mode with an arrangement", () => {
     // 200 BPM: a step is 0.075 s, so a rewind of the steps built in the lookahead goes back two or more, and a stall after it counts the
     // grid again with a multiplication instead of a step at a time: the same pass end (3.65 s) comes back one rounding away. The scheduler
     // is woken every 5 ms here, as a page does, so that the grid it has counted a step at a time carries the roundings of that.
-    const base = songOf(3, { bpm: 200 });
+    const base = beatOf(3, { bpm: 200 });
     for (let i = 0; i < 3; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
-    const s = setup({ song: { ...base, arrangement: [entry(0, 4), entry(1)] } });
+    const s = setup({ beat: { ...base, arrangement: [entry(0, 4), entry(1)] } });
     songMode(s);
     while (s.audio.ctx.currentTime < 3.455) {
       s.advance(0.005);
@@ -3372,8 +3372,8 @@ describe("editing the song's entries", () => {
   // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
   // step 0 on pad i, to tell which one is sounding.
   const entry = (sequence, repeats = 1) => ({ sequence, repeats });
-  const songWith = (count, arrangement) => {
-    const base = songOf(count, { bpm: 120 });
+  const beatWith = (count, arrangement) => {
+    const base = beatOf(count, { bpm: 120 });
     for (let i = 0; i < count; i++) base.sequences[i] = { bars: 1, pattern: { [i]: [0] }, velocities: {} };
     return arrangement ? { ...base, arrangement } : base;
   };
@@ -3394,19 +3394,19 @@ describe("editing the song's entries", () => {
 
   describe("what the state says", () => {
     it("lists the entries as they play: every sequence once, in order, while nobody has edited the song", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       expect(entriesOf(s)).toEqual([entry(0), entry(1), entry(2)]);
       expect(s.sampler.getState()).toMatchObject({ arrangementEdited: false, canAddEntry: true, canRemoveEntry: true });
     });
 
     it("lists the arrangement once there is one, and says it has been edited", () => {
-      const s = setup({ song: songWith(3, [entry(2, 4), entry(0)]) });
+      const s = setup({ beat: beatWith(3, [entry(2, 4), entry(0)]) });
       expect(entriesOf(s)).toEqual([entry(2, 4), entry(0)]);
       expect(s.sampler.getState().arrangementEdited).toBe(true);
     });
 
     it("hands the entries over as a copy", () => {
-      const s = setup({ song: songWith(3, [entry(2, 4)]) });
+      const s = setup({ beat: beatWith(3, [entry(2, 4)]) });
       entriesOf(s)[0].repeats = 9;
       entriesOf(s).push(entry(0));
       expect(entriesOf(s)).toEqual([entry(2, 4)]);
@@ -3414,18 +3414,18 @@ describe("editing the song's entries", () => {
 
     it("says an entry cannot be added when there are as many as there can be, and one cannot be removed when there is one", () => {
       const full = setup({
-        song: songWith(
+        beat: beatWith(
           3,
           Array.from({ length: 32 }, (_, i) => entry(i % 3)),
         ),
       });
       expect(full.sampler.getState()).toMatchObject({ canAddEntry: false, canRemoveEntry: true });
-      const one = setup({ song: songWith(3, [entry(1)]) });
+      const one = setup({ beat: beatWith(3, [entry(1)]) });
       expect(one.sampler.getState()).toMatchObject({ canAddEntry: true, canRemoveEntry: false });
     });
 
     it("says where the song is while Song mode plays it, and nothing otherwise", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 2), entry(2)]) });
       expect(s.sampler.getState().songPass).toBeNull(); // stopped
       s.sampler.start();
       run(s, 0.5);
@@ -3441,7 +3441,7 @@ describe("editing the song's entries", () => {
     });
 
     it("hands over where the song is as a copy", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 3), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 3), entry(2)]) });
       songMode(s);
       run(s, 2.5); // the second entry's first time round
       s.sampler.getState().songPass.rep = 9;
@@ -3450,7 +3450,7 @@ describe("editing the song's entries", () => {
     });
 
     it("says nothing about where the song is when the sequence playing is in no entry", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
       s.sampler.setSequence(2);
       s.sampler.start();
       s.sampler.toggleSong(); // Song mode joins in, with the third sequence playing, which no entry names
@@ -3460,7 +3460,7 @@ describe("editing the song's entries", () => {
 
   describe("addEntry", () => {
     it("puts the sequence showing at the end of the song, once, and gives back where it is", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       s.sampler.setSequence(1);
       expect(s.sampler.addEntry()).toBe(3);
       expect(entriesOf(s)).toEqual([entry(0), entry(1), entry(2), entry(1)]);
@@ -3468,14 +3468,14 @@ describe("editing the song's entries", () => {
     });
 
     it("gives back where it went when the place is outside the song: the start, or the end", () => {
-      const s = setup({ song: songWith(3, [entry(2, 4), entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(3, [entry(2, 4), entry(0), entry(1)]) });
       expect(s.sampler.addEntry(-3)).toBe(0);
       expect(s.sampler.addEntry(99)).toBe(4);
       expect(entriesOf(s)).toEqual([entry(0), entry(2, 4), entry(0), entry(1), entry(0)]);
     });
 
     it("puts it at the place it is given", () => {
-      const s = setup({ song: songWith(3, [entry(2, 4), entry(0)]) });
+      const s = setup({ beat: beatWith(3, [entry(2, 4), entry(0)]) });
       s.sampler.setSequence(1);
       expect(s.sampler.addEntry(1)).toBe(1);
       expect(entriesOf(s)).toEqual([entry(2, 4), entry(1), entry(0)]);
@@ -3484,38 +3484,38 @@ describe("editing the song's entries", () => {
     });
 
     it("says so, saves and redraws", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       s.message.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.change.mockClear();
       s.sampler.addEntry();
       expect(s.message).toHaveBeenLastCalledWith("ENTRY 04 ADDED");
-      expect(s.songChange).toHaveBeenCalled();
+      expect(s.beatChange).toHaveBeenCalled();
       expect(s.change).toHaveBeenCalled();
-      expect(s.sampler.getSong().arrangement).toEqual([entry(0), entry(1), entry(2), entry(0)]);
+      expect(s.sampler.getBeat().arrangement).toEqual([entry(0), entry(1), entry(2), entry(0)]);
     });
 
     it("says so and changes nothing when there are as many entries as there can be", () => {
       const full = Array.from({ length: 32 }, (_, i) => entry(i % 3));
-      const s = setup({ song: songWith(3, full) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, full) });
+      s.beatChange.mockClear();
       expect(s.sampler.addEntry()).toBe(-1);
       expect(s.message).toHaveBeenLastCalledWith("32 ENTRIES MAX");
       expect(entriesOf(s)).toEqual(full);
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
 
     it("does not touch the sequences", () => {
-      const s = setup({ song: songWith(3, null) });
-      const before = s.sampler.getSong().sequences;
+      const s = setup({ beat: beatWith(3, null) });
+      const before = s.sampler.getBeat().sequences;
       s.sampler.addEntry();
-      expect(s.sampler.getSong().sequences).toEqual(before);
+      expect(s.sampler.getBeat().sequences).toEqual(before);
     });
   });
 
   describe("removeEntry", () => {
     it("takes the entry out, and gives back the one to be on after it: the next, or the last", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 2), entry(2)]) });
       expect(s.sampler.removeEntry(1)).toBe(1);
       expect(entriesOf(s)).toEqual([entry(0), entry(2)]);
       expect(s.sampler.removeEntry(1)).toBe(0);
@@ -3523,36 +3523,36 @@ describe("editing the song's entries", () => {
     });
 
     it("says so, saves and redraws", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
+      s.beatChange.mockClear();
       s.change.mockClear();
       s.sampler.removeEntry(0);
       expect(s.message).toHaveBeenLastCalledWith("ENTRY 01 REMOVED");
-      expect(s.songChange).toHaveBeenCalled();
+      expect(s.beatChange).toHaveBeenCalled();
       expect(s.change).toHaveBeenCalled();
     });
 
     it("cannot take the last entry, and says so", () => {
-      const s = setup({ song: songWith(3, [entry(1, 3)]) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, [entry(1, 3)]) });
+      s.beatChange.mockClear();
       expect(s.sampler.removeEntry(0)).toBe(-1);
       expect(s.message).toHaveBeenLastCalledWith("CANNOT REMOVE LAST ENTRY");
       expect(entriesOf(s)).toEqual([entry(1, 3)]);
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
 
     it("says nothing, and changes nothing, for an entry that is not there", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
       s.message.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       expect(s.sampler.removeEntry(7)).toBe(-1);
       expect(s.message).not.toHaveBeenCalled();
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
       expect(entriesOf(s)).toEqual([entry(0), entry(1), entry(2)]);
     });
 
     it("works on the entries a song nobody edited has", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       s.sampler.removeEntry(1);
       expect(entriesOf(s)).toEqual([entry(0), entry(2)]);
     });
@@ -3560,7 +3560,7 @@ describe("editing the song's entries", () => {
 
   describe("moveEntry", () => {
     it("moves an entry one place earlier or later, and gives back where it is", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 2), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 2), entry(2)]) });
       expect(s.sampler.moveEntry(1, 1)).toBe(2);
       expect(entriesOf(s)).toEqual([entry(0), entry(2), entry(1, 2)]);
       expect(s.sampler.moveEntry(2, -2)).toBe(0);
@@ -3568,7 +3568,7 @@ describe("editing the song's entries", () => {
     });
 
     it("moves it as far as there is room when it is asked for more than that", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
       expect(s.sampler.moveEntry(0, 9)).toBe(2);
       expect(entriesOf(s)).toEqual([entry(1), entry(2), entry(0)]);
       expect(s.sampler.moveEntry(1, -9)).toBe(0);
@@ -3576,30 +3576,30 @@ describe("editing the song's entries", () => {
     });
 
     it("says so, saves and redraws", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
+      s.beatChange.mockClear();
       s.change.mockClear();
       s.sampler.moveEntry(0, 1);
       expect(s.message).toHaveBeenLastCalledWith("ENTRY 01 MOVED TO 02");
-      expect(s.songChange).toHaveBeenCalled();
+      expect(s.beatChange).toHaveBeenCalled();
       expect(s.change).toHaveBeenCalled();
     });
 
     it("keeps the entry where it is, saying nothing and saving nothing, at either end of the song", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
+      s.beatChange.mockClear();
       s.message.mockClear();
       expect(s.sampler.moveEntry(0, -1)).toBe(0);
       expect(s.sampler.moveEntry(1, 1)).toBe(1);
       expect(entriesOf(s)).toEqual([entry(0), entry(1)]);
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
       expect(s.message).not.toHaveBeenCalled();
     });
   });
 
   describe("setEntryRepeats", () => {
     it("sets how many times an entry goes round, from 1 to 16, and gives back what it is now", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       expect(s.sampler.setEntryRepeats(1, 3)).toBe(3);
       expect(entriesOf(s)).toEqual([entry(0), entry(1, 3), entry(2)]);
       expect(s.sampler.setEntryRepeats(1, 99)).toBe(16);
@@ -3607,24 +3607,24 @@ describe("editing the song's entries", () => {
     });
 
     it("says so, saves and redraws", () => {
-      const s = setup({ song: songWith(3, null) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, null) });
+      s.beatChange.mockClear();
       s.change.mockClear();
       s.sampler.setEntryRepeats(2, 4);
       expect(s.message).toHaveBeenLastCalledWith("ENTRY 03 REPEATS 4");
-      expect(s.songChange).toHaveBeenCalled();
+      expect(s.beatChange).toHaveBeenCalled();
       expect(s.change).toHaveBeenCalled();
     });
 
     it("says nothing and saves nothing when it is what the entry has", () => {
-      const s = setup({ song: songWith(3, [entry(0, 3)]) });
-      s.songChange.mockClear();
+      const s = setup({ beat: beatWith(3, [entry(0, 3)]) });
+      s.beatChange.mockClear();
       s.message.mockClear();
       expect(s.sampler.setEntryRepeats(0, 3)).toBe(3);
       expect(s.sampler.setEntryRepeats(0, 99)).toBe(16);
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       expect(s.sampler.setEntryRepeats(0, 99)).toBe(16);
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
   });
 
@@ -3632,7 +3632,7 @@ describe("editing the song's entries", () => {
     // The passes: seq 0 at 0.05 s (entry 0), seq 1 at 2.05, 4.05, 6.05 (the three times round entry 1), seq 2 at 8.05 (entry 2), then
     // the song goes round to seq 0 at 10.05. Each edit is made in the middle of the second time round, at 4.3 s.
     const midway = (arrangement = [entry(0), entry(1, 3), entry(2)]) => {
-      const s = setup({ song: songWith(3, arrangement) });
+      const s = setup({ beat: beatWith(3, arrangement) });
       songMode(s);
       run(s, 4.3);
       return s;
@@ -3648,7 +3648,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on from the entry it is at when an entry is taken out before it", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(2), entry(1), entry(2, 2), entry(0)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(2), entry(1), entry(2, 2), entry(0)]) });
       songMode(s);
       run(s, 6.3); // the fourth entry's first time round began at 6.05 s
       s.sampler.removeEntry(0);
@@ -3668,7 +3668,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on at the last time round when the entry playing is made to repeat less than it has gone round", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 4)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 4)]) });
       songMode(s);
       run(s, 6.3); // the third time round of the entry began at 6.05 s
       s.sampler.setEntryRepeats(1, 2); // it has been round more than that: this is its last
@@ -3678,7 +3678,7 @@ describe("editing the song's entries", () => {
     });
 
     it("keeps the time round the song is at when another entry is made to repeat less than that", () => {
-      const s = setup({ song: songWith(3, [entry(0, 3), entry(1, 4)]) });
+      const s = setup({ beat: beatWith(3, [entry(0, 3), entry(1, 4)]) });
       songMode(s);
       run(s, 10.3); // the first entry's three passes, and the third time round of the second (it began at 10.05 s)
       s.sampler.setEntryRepeats(0, 1); // the entry before it: the position of this one is not changed by it
@@ -3688,7 +3688,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes round the entry again when it is made to repeat more, in the pass that was to be its last", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 2)]) });
       songMode(s);
       run(s, 4.3); // the second and last time round of the entry began at 4.05 s
       s.sampler.setEntryRepeats(1, 3);
@@ -3698,7 +3698,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on once for the pass end it was at, from its new entry, when the steps are built again after an edit", () => {
-      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      const s = setup({ beat: beatWith(2, [entry(0), entry(1, 3)]) });
       songMode(s);
       tick(s, 77); // 3.85 s: the pass end at 4.05 s has been reached, and the entry goes round again at it
       s.sampler.addEntry(0); // before it: the entry is now the third, and what is remembered of that pass end moves with it
@@ -3709,7 +3709,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on from the last time round when the entry is made to repeat less just before its pass end is told again", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(0, 4)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(0, 4)]) });
       songMode(s);
       tick(s, 198); // 9.9 s: the third time round of the last entry began at 8.05 s, and its pass end at 10.05 s has been told
       s.sampler.setEntryRepeats(2, 2); // it has been round more than that
@@ -3720,7 +3720,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on from the entry it was on when an entry is put in before it during the first pass, before any pass end has told where it is", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       s.sampler.setSequence(1);
       s.sampler.start();
       run(s, 0.5);
@@ -3734,7 +3734,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on from the entry it was on when another that names the same sequence is moved, before any pass end has told where it is", () => {
-      const s = setup({ song: songWith(2, [entry(1), entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(1), entry(0), entry(1)]) });
       s.sampler.setSequence(1);
       s.sampler.start();
       run(s, 0.5);
@@ -3747,7 +3747,7 @@ describe("editing the song's entries", () => {
     });
 
     it("goes on from the entry a pass end that was told when the position was not known has gone on from, when an entry is put in before it and the pass end is told again", () => {
-      const s = setup({ song: songWith(3, [entry(1, 3), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(1, 3), entry(2)]) });
       s.sampler.setSequence(1);
       songMode(s);
       tick(s, 38); // 1.9 s: the first pass end has been told, with no position known, and the entry goes round again at it
@@ -3759,7 +3759,7 @@ describe("editing the song's entries", () => {
     });
 
     it("does the same when Song mode was turned on at that pass end", () => {
-      const s = setup({ song: songWith(3, [entry(1, 3), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(1, 3), entry(2)]) });
       s.sampler.setSequence(1);
       s.sampler.start();
       tick(s, 38); // 1.9 s: the pass end has been told, and Song mode is turned on at it
@@ -3775,7 +3775,7 @@ describe("editing the song's entries", () => {
       // The pass end at 2.05 s has been told by 1.9 s, and the song has picked what plays there; the first step after it is built a
       // moment later (1.93 s). An edit in that moment is heard at that pass end, as a press on a sequence key is, and not a pass late.
       it("takes the entry that was picked out of the song, when it is removed", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the song has picked the second entry
         expect(s.sampler.getState().playingSequence).toBe(1);
@@ -3788,7 +3788,7 @@ describe("editing the song's entries", () => {
       });
 
       it("takes back the first step already built for the entry that goes, and builds it again", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         tick(s, 39); // 1.95 s: the first step of the next pass, at 2.05 s, is built from the second sequence
         const built = busOf(s.sounds[1].play.mock.calls.at(-1)[1]);
@@ -3799,7 +3799,7 @@ describe("editing the song's entries", () => {
       });
 
       it("goes round the entry again when it is made to repeat more and the pass end had gone on to the next", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the song has picked the second entry
         s.sampler.setEntryRepeats(0, 2); // the first entry goes round twice: that pass end is its second time round
@@ -3810,7 +3810,7 @@ describe("editing the song's entries", () => {
       });
 
       it("goes on to the next entry when an entry that was to go round again is made to repeat less", () => {
-        const s = setup({ song: songWith(3, [entry(0, 3), entry(1)]) });
+        const s = setup({ beat: beatWith(3, [entry(0, 3), entry(1)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the entry goes round again at the pass end
         s.sampler.setEntryRepeats(0, 1);
@@ -3821,7 +3821,7 @@ describe("editing the song's entries", () => {
       });
 
       it("picks another entry when the one that was picked is moved away from where the song goes next", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the song has picked the second entry
         s.sampler.moveEntry(1, 1); // the song is now 1, 3, 2: the second entry names the third sequence
@@ -3832,7 +3832,7 @@ describe("editing the song's entries", () => {
       });
 
       it("leaves what was built alone when the edit does not change what plays there", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         tick(s, 39); // 1.95 s
         const built = busOf(s.sounds[1].play.mock.calls.at(-1)[1]);
@@ -3844,7 +3844,7 @@ describe("editing the song's entries", () => {
       });
 
       it("keeps what the song went on to when an edit made the entry that was to go round again go on, and the loop is then made longer", () => {
-        const s = setup({ song: songWith(2, [entry(0, 3), entry(1)]) });
+        const s = setup({ beat: beatWith(2, [entry(0, 3), entry(1)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the entry goes round again at the pass end
         s.sampler.setEntryRepeats(0, 1); // it does not: the song goes on to the second entry, which takes over there
@@ -3854,7 +3854,7 @@ describe("editing the song's entries", () => {
       });
 
       it("leaves a sequence that was queued alone: that was asked for, and an edit does not take it back", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         tick(s, 38);
         s.sampler.queueSequence(2); // takes over at once, in place of the one the song picked
@@ -3865,7 +3865,7 @@ describe("editing the song's entries", () => {
       });
 
       it("leaves the sequence showing alone when the beat was stopped in that moment", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the song has picked the second entry
         s.sampler.stop();
@@ -3874,7 +3874,7 @@ describe("editing the song's entries", () => {
       });
 
       it("goes on from where the pass that ended was when that sequence has two entries, not from the first that names it", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(0), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(0), entry(2)]) });
         songMode(s);
         tick(s, 118); // 5.9 s: the third entry (the sequence 1 again) has ended at 6.05 s, and the song has picked the fourth
         expect(s.sampler.getState().playingSequence).toBe(2);
@@ -3886,7 +3886,7 @@ describe("editing the song's entries", () => {
       });
 
       it("keeps the time round when the pass end became the entry going round again by an edit, and the loop is then made longer: the pass was restarted", () => {
-        const s = setup({ song: songWith(2, [entry(0), entry(1)]) });
+        const s = setup({ beat: beatWith(2, [entry(0), entry(1)]) });
         songMode(s);
         tick(s, 38); // 1.9 s: the song has picked the second entry
         s.sampler.setEntryRepeats(0, 3); // the first goes round: this pass end is its second time round, made a new pass
@@ -3899,7 +3899,7 @@ describe("editing the song's entries", () => {
       });
 
       it("does not touch a pass end whose first step has sounded: the edit is heard from the next", () => {
-        const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+        const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
         songMode(s);
         run(s, 2.3); // the second entry is playing
         s.sampler.removeEntry(1);
@@ -3933,8 +3933,8 @@ describe("Song mode", () => {
   // step 0 on pad i, to tell which one is sounding. The song is `arrangement` (or every sequence once), and the editor starts on the
   // first sequence.
   const entry = (sequence, repeats = 1) => ({ sequence, repeats });
-  const songWith = (count, arrangement, { bars = [] } = {}) => {
-    const base = songOf(count, { bpm: 120 });
+  const beatWith = (count, arrangement, { bars = [] } = {}) => {
+    const base = beatOf(count, { bpm: 120 });
     for (let i = 0; i < count; i++) base.sequences[i] = { bars: bars[i] ?? 1, pattern: { [i]: [0] }, velocities: {} };
     return arrangement ? { ...base, arrangement } : base;
   };
@@ -3947,7 +3947,7 @@ describe("Song mode", () => {
   const run = (s, seconds) => tick(s, Math.round(seconds / 0.05));
   const timesOf = (s, pad) => s.sounds[pad].play.mock.calls.map((call) => call[2]);
   const closeTo = (...times) => times.map((time) => expect.closeTo(time, 2));
-  const song3 = () => songWith(3, [entry(0), entry(1, 2), entry(2)]);
+  const beat3 = () => beatWith(3, [entry(0), entry(1, 2), entry(2)]);
   const play = (s) => {
     s.sampler.toggleSong();
     s.sampler.start();
@@ -3956,7 +3956,7 @@ describe("Song mode", () => {
 
   describe("the key", () => {
     it("is off to begin with, and is turned on and off by toggleSong, which says so and redraws", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       expect(s.sampler.getState().songMode).toBe(false);
       s.sampler.toggleSong();
       expect(s.sampler.getState().songMode).toBe(true);
@@ -3970,7 +3970,7 @@ describe("Song mode", () => {
 
   describe("where Play begins", () => {
     it("is the entry that is selected, at its first time round, and the editor stays where it is", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.selectEntry(1);
       play(s);
       run(s, 6.2);
@@ -3981,7 +3981,7 @@ describe("Song mode", () => {
     });
 
     it("is the first entry when none has been selected", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.5);
       expect(timesOf(s, 0)).toEqual(closeTo(0.05));
@@ -3989,7 +3989,7 @@ describe("Song mode", () => {
     });
 
     it("is the selected entry again when Play is pressed again, with the time round counted from the first", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.selectEntry(1);
       play(s);
       run(s, 3.0); // the second time round of that entry has begun
@@ -4001,7 +4001,7 @@ describe("Song mode", () => {
     });
 
     it("is the sequence showing when Song mode is off, as it always was", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.setSequence(2);
       s.sampler.selectEntry(0);
       s.sampler.start();
@@ -4013,7 +4013,7 @@ describe("Song mode", () => {
 
   describe("the editor", () => {
     it("stays on the sequence it shows while the song goes from one sequence to the next", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 6.2);
       expect(s.sampler.getState().sequence).toBe(0);
@@ -4022,7 +4022,7 @@ describe("Song mode", () => {
     });
 
     it("hears what plays in the display, and redraws when the song goes on", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.4);
       expect(heardSequence(s)).toBe(1);
@@ -4034,18 +4034,18 @@ describe("Song mode", () => {
     });
 
     it("says nothing and saves nothing when the song goes on", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 1.5);
       s.message.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       run(s, 3.0);
       expect(s.message).not.toHaveBeenCalled();
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
 
     it("has its step cursor only when it shows the sequence that plays", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.5); // the first sequence plays, and it is the one showing
       expect(s.sampler.getState().playheadStep).toBeGreaterThanOrEqual(0);
@@ -4057,7 +4057,7 @@ describe("Song mode", () => {
     });
 
     it("shows a sequence when a key is pressed, with no effect on what plays or where the song is", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.3); // the second sequence plays
       s.message.mockClear();
@@ -4072,7 +4072,7 @@ describe("Song mode", () => {
     });
 
     it("takes a press with the Next key on as a press that shows: there is nothing to wait for", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.3);
       s.message.mockClear();
@@ -4085,7 +4085,7 @@ describe("Song mode", () => {
     });
 
     it("edits the sequence it shows, and hears the edit when that sequence plays", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.3);
       s.sampler.setSequence(2);
@@ -4098,7 +4098,7 @@ describe("Song mode", () => {
     });
 
     it("hears an edit of the sequence that plays, and shows its steps when it is the one showing", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.3);
       s.sampler.selectPad(2);
@@ -4109,7 +4109,7 @@ describe("Song mode", () => {
     });
 
     it("leaves the length of what plays alone when the sequence showing is made longer", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.3); // the second plays
       s.sampler.setBars(2); // the first, which shows
@@ -4120,8 +4120,8 @@ describe("Song mode", () => {
     });
 
     it("says the bar of the playhead for what plays, and not the bar the editor is on, when they are different sequences", () => {
-      const song = songWith(3, [entry(0), entry(1), entry(2)], { bars: [3, 1, 1] });
-      const s = setup({ song });
+      const beat = beatWith(3, [entry(0), entry(1), entry(2)], { bars: [3, 1, 1] });
+      const s = setup({ beat });
       s.sampler.setPage(2); // the third bar of the first sequence
       s.sampler.selectEntry(1);
       play(s);
@@ -4135,19 +4135,19 @@ describe("Song mode", () => {
 
   describe("recording", () => {
     it("goes into the sequence that plays, and not the one the editor shows", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.3); // the second sequence plays, the first shows
       s.sampler.toggleRec();
       s.sampler.triggerPad(3);
-      expect(s.sampler.getSong().sequences[1].pattern[3]).toBeDefined();
-      expect(s.sampler.getSong().sequences[0].pattern[3]).toBeUndefined();
+      expect(s.sampler.getBeat().sequences[1].pattern[3]).toBeDefined();
+      expect(s.sampler.getBeat().sequences[0].pattern[3]).toBeUndefined();
     });
   });
 
   describe("turned on and off while the beat plays", () => {
     it("goes on from the sequence that plays at its pass end when turned on, and the editor stays", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.start();
       run(s, 0.5);
       s.sampler.toggleSong();
@@ -4159,7 +4159,7 @@ describe("Song mode", () => {
     });
 
     it("takes a sequence that was waiting to play next back when turned on: the keys only show now", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.start();
       run(s, 0.3);
       s.sampler.queueSequence(2);
@@ -4172,7 +4172,7 @@ describe("Song mode", () => {
     });
 
     it("keeps the sound going as a loop when turned off, and the editor moves to what plays", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.3); // the second plays, the first shows
       s.sampler.toggleSong();
@@ -4184,27 +4184,27 @@ describe("Song mode", () => {
     });
 
     it("leaves the editor where it is when turned off while it shows what plays", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.5);
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.sampler.toggleSong();
       expect(s.sampler.getState().sequence).toBe(0);
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
 
     it("saves the beat when turning it off moves the editor, since the sequence showing is part of what is saved", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 2.3); // the second plays, the first shows
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.sampler.toggleSong();
       expect(s.sampler.getState().sequence).toBe(1);
-      expect(s.songChange).toHaveBeenCalledTimes(1);
+      expect(s.beatChange).toHaveBeenCalledTimes(1);
     });
 
     it("goes on as a loop of the sequence showing, when what played was removed before it was turned off", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.5);
       s.sampler.removeSequence(); // the first plays and shows: it goes, and what was the second shows now
@@ -4221,7 +4221,7 @@ describe("Song mode", () => {
     const heardSong = (s) => s.sampler.getState().heard.song;
 
     it("is none in Pattern mode, and while Song mode is on it says where the song is", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       expect(heardSong(s)).toBeNull();
       s.sampler.toggleSong();
       expect(heardSong(s)).not.toBeNull();
@@ -4230,7 +4230,7 @@ describe("Song mode", () => {
     });
 
     it("is, while stopped, where Play would begin: the entry selected, its sequence, and what comes after it", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.toggleSong();
       expect(heardSong(s)).toEqual({ entry: 0, entries: 3, sequence: 0, rep: 0, repeats: 1, next: 1 });
       s.sampler.selectEntry(1);
@@ -4241,7 +4241,7 @@ describe("Song mode", () => {
     });
 
     it("follows the song while it plays: the entry, the time round it, and the sequence after it", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       run(s, 0.5);
       expect(heardSong(s)).toEqual({ entry: 0, entries: 3, sequence: 0, rep: 0, repeats: 1, next: 1 });
@@ -4254,7 +4254,7 @@ describe("Song mode", () => {
     });
 
     it("says what sounds and not the pass the scheduler has already begun: it changes when the pass begins to sound", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       play(s);
       let led = 0; // ticks where the strip (songPass) was already on the next pass while the display was still on this one
       for (let tick = 1; tick <= 180; tick++) {
@@ -4271,7 +4271,7 @@ describe("Song mode", () => {
     });
 
     it("keeps the time round of an entry that goes round again until the next time round sounds", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.selectEntry(1);
       play(s);
       run(s, 1.9); // the second pass of the entry (at 2.05 s) is built and waiting; the first still sounds
@@ -4282,7 +4282,7 @@ describe("Song mode", () => {
     });
 
     it("says the first entry that names the sequence, as the chain will, when Song mode joins in mid-pass", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(2), entry(1)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(2), entry(1)]) });
       s.sampler.setSequence(2);
       s.sampler.start();
       run(s, 0.5);
@@ -4291,7 +4291,7 @@ describe("Song mode", () => {
     });
 
     it("leaves the place blank when the sequence that sounds is in no entry, and the song goes on from its first", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
       s.sampler.setSequence(2);
       s.sampler.start();
       run(s, 0.5);
@@ -4300,7 +4300,7 @@ describe("Song mode", () => {
     });
 
     it("follows the sequence that sounds by its number now when a lower one is removed just before the pass end sounds", () => {
-      const s = setup({ song: songWith(3) });
+      const s = setup({ beat: beatWith(3) });
       s.sampler.selectEntry(1); // the song begins on the second sequence, and the editor shows the first
       play(s);
       run(s, 1.95); // the pass end at 2.05 s has been reached: the third is built, and the second still sounds
@@ -4312,7 +4312,7 @@ describe("Song mode", () => {
     });
 
     it("says no place, and the first entry for what comes next, when the sequence that sounds was removed, as the chain goes on from it", () => {
-      const s = setup({ song: songWith(3) });
+      const s = setup({ beat: beatWith(3) });
       play(s);
       run(s, 0.3);
       s.sampler.removeSequence(); // the one that plays and shows: it sounds out its pass, and its slot is gone
@@ -4323,7 +4323,7 @@ describe("Song mode", () => {
     });
 
     it("says no place either when the sequence that gave way is the one removed, in the moment before the next pass sounds", () => {
-      const s = setup({ song: songWith(3) });
+      const s = setup({ beat: beatWith(3) });
       play(s);
       run(s, 1.95); // the pass end at 2.05 s has been reached: the second is built, and the first still sounds
       expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 0 });
@@ -4334,7 +4334,7 @@ describe("Song mode", () => {
     });
 
     it("says the sequence the scheduler has built to sound next, whatever took it over, when Song mode is turned on in the moment before it does", () => {
-      const s = setup({ song: songWith(3) });
+      const s = setup({ beat: beatWith(3) });
       s.sampler.start();
       run(s, 0.3);
       s.sampler.queueSequence(2); // not the one the song would go to next
@@ -4346,7 +4346,7 @@ describe("Song mode", () => {
     });
 
     it("counts the entries as the song has them, with none made up for a song nobody edited", () => {
-      const s = setup({ song: songWith(4) });
+      const s = setup({ beat: beatWith(4) });
       s.sampler.toggleSong();
       expect(heardSong(s)).toMatchObject({ entries: 4, entry: 0, repeats: 1 });
       s.sampler.addEntry(1);
@@ -4356,7 +4356,7 @@ describe("Song mode", () => {
 
   describe("stopped", () => {
     it("says the sequence showing again in the display, and begins at the selected entry on the next Play", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.selectEntry(2);
       play(s);
       run(s, 0.5);
@@ -4371,7 +4371,7 @@ describe("Song mode", () => {
     });
 
     it("shows a sequence picked while stopped in the display too", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.sampler.toggleSong();
       s.sampler.setSequence(2);
       expect(heardSequence(s)).toBe(2);
@@ -4380,7 +4380,7 @@ describe("Song mode", () => {
 
   describe("the entry selected", () => {
     it("is the first to begin with, and is kept in range when it is asked for", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       expect(s.sampler.getState().selectedEntry).toBe(0);
       s.sampler.selectEntry(2);
       expect(s.sampler.getState().selectedEntry).toBe(2);
@@ -4391,18 +4391,18 @@ describe("Song mode", () => {
     });
 
     it("redraws, and says nothing and saves nothing, when it is selected", () => {
-      const s = setup({ song: song3() });
+      const s = setup({ beat: beat3() });
       s.change.mockClear();
       s.message.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       s.sampler.selectEntry(1);
       expect(s.change).toHaveBeenCalled();
       expect(s.message).not.toHaveBeenCalled();
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
 
     it("goes with an entry that is added, moved or removed", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
       s.sampler.selectEntry(1);
       s.sampler.addEntry(2); // after the selected one
       expect(s.sampler.getState().selectedEntry).toBe(2);
@@ -4415,7 +4415,7 @@ describe("Song mode", () => {
     });
 
     it("is kept in range when sequences are removed and the song has fewer entries", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
       s.sampler.selectEntry(2);
       s.sampler.removeSequence(); // the first
       expect(s.sampler.getState().arrangement).toHaveLength(2);
@@ -4425,7 +4425,7 @@ describe("Song mode", () => {
 
   describe("removing a sequence while the song plays", () => {
     it("goes on from the entry the song was on, with its time round, when another sequence is removed", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1, 3), entry(2)]), maxSequences: 6 });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1, 3), entry(2)]), maxSequences: 6 });
       s.sampler.selectEntry(1);
       play(s);
       run(s, 2.3); // the second time round of the second entry: the first sequence shows
@@ -4437,7 +4437,7 @@ describe("Song mode", () => {
     });
 
     it("plays the pass out when the sequence that plays is removed, and the song begins again at its first entry", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]), maxSequences: 6 });
       s.sampler.selectEntry(1);
       play(s);
       run(s, 0.5);
@@ -4454,9 +4454,9 @@ describe("the end of the song", () => {
   // 120 BPM: a pass of one bar is 2 s, its first step at 0.05 s, so the passes begin at 0.05, 2.05, 4.05 s and so on. Sequence i has a
   // step 0 on pad i, to tell which one is sounding. Loop is off unless the test turns it on: that is how a song is until a person does.
   const entry = (sequence, repeats = 1) => ({ sequence, repeats });
-  const songWith = (count, arrangement, { bars = [], loopSong = false, patterns = [] } = {}) => {
-    const base = songOf(count, { bpm: 120 });
-    delete base.loopSong; // the fixtures loop unless told not to (savedSong): these are about the end
+  const beatWith = (count, arrangement, { bars = [], loopSong = false, patterns = [] } = {}) => {
+    const base = beatOf(count, { bpm: 120 });
+    delete base.loopSong; // the fixtures loop unless told not to (savedBeat): these are about the end
     for (let i = 0; i < count; i++) {
       base.sequences[i] = { bars: bars[i] ?? 1, pattern: patterns[i] ?? { [i]: [0] }, velocities: {} };
     }
@@ -4486,7 +4486,7 @@ describe("the end of the song", () => {
 
   describe("with Loop off", () => {
     it("plays each entry as often as it repeats, once through, and stops where the last one ends", () => {
-      const s = setup({ song: songWith(3, [entry(0, 2), entry(1), entry(2, 3)]) });
+      const s = setup({ beat: beatWith(3, [entry(0, 2), entry(1), entry(2, 3)]) });
       songMode(s);
       run(s, 12.1); // six passes, the last of which ends at 12.05 s
       expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05));
@@ -4496,7 +4496,7 @@ describe("the end of the song", () => {
     });
 
     it("plays every sequence once, in order, and stops, when nobody has edited the song", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       songMode(s);
       run(s, 8);
       expect(timesOf(s, 0)).toEqual(closeTo(0.05));
@@ -4506,7 +4506,7 @@ describe("the end of the song", () => {
     });
 
     it("ends after the one sequence of a song that has only that", () => {
-      const s = setup({ song: songWith(1, null) });
+      const s = setup({ beat: beatWith(1, null) });
       songMode(s);
       run(s, 3);
       expect(timesOf(s, 0)).toEqual(closeTo(0.05));
@@ -4516,7 +4516,7 @@ describe("the end of the song", () => {
     it("keeps playing until the last pass has ended, so that its last step is not cut off", () => {
       // The last step of the song is a hit on step 15 of the last bar, 1.875 s into the pass: the scheduler hands it to the audio clock
       // about 120 ms ahead, a quarter second before the pass ends, and stopping at that moment would cancel it.
-      const s = setup({ song: songWith(2, null, { patterns: [{ 0: [0] }, { 1: [0, 15] }] }) });
+      const s = setup({ beat: beatWith(2, null, { patterns: [{ 0: [0] }, { 1: [0, 15] }] }) });
       songMode(s);
       run(s, 3.9); // the last hit sounds at 3.925 s, and has been handed over
       expect(playingNow(s)).toBe(true);
@@ -4528,7 +4528,7 @@ describe("the end of the song", () => {
     });
 
     it("ends where the last pass does, whatever its length", () => {
-      const s = setup({ song: songWith(2, [entry(1, 2), entry(0)], { bars: [2, 1] }) });
+      const s = setup({ beat: beatWith(2, [entry(1, 2), entry(0)], { bars: [2, 1] }) });
       songMode(s);
       run(s, 3.9);
       expect(playingNow(s)).toBe(true); // two passes of a bar, then two bars: 2 + 2 + 4 = 8 s, to 8.05 s
@@ -4539,7 +4539,7 @@ describe("the end of the song", () => {
     });
 
     it("has the display say the sequence showing again, as after a stop, when the editor was on another", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       run(s, 4.3); // the song played sequence 2 last, and the editor is on sequence 1
       expect(s.sampler.getState()).toMatchObject({ playing: false, sequence: 0, playingSequence: 0 });
@@ -4547,20 +4547,20 @@ describe("the end of the song", () => {
     });
 
     it("says so, and redraws, and saves nothing", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       run(s, 3.9);
       s.message.mockClear();
       s.change.mockClear();
-      s.songChange.mockClear();
+      s.beatChange.mockClear();
       run(s, 0.3);
       expect(s.message).toHaveBeenCalledWith("END OF SONG");
       expect(s.change).toHaveBeenCalled();
-      expect(s.songChange).not.toHaveBeenCalled();
+      expect(s.beatChange).not.toHaveBeenCalled();
     });
 
     it("leaves the sampler as a stop would: nothing playing, no playhead, no entry marked, the one selected still selected", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       s.sampler.selectEntry(1);
       s.sampler.toggleSong();
       s.sampler.start();
@@ -4578,7 +4578,7 @@ describe("the end of the song", () => {
     });
 
     it("lets Play begin the song again, at the entry selected, and end again", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       songMode(s);
       run(s, 6.3);
       expect(playingNow(s)).toBe(false);
@@ -4593,7 +4593,7 @@ describe("the end of the song", () => {
     });
 
     it("has Stop pressed again cut off what rings after the end, as after any stop", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       run(s, 4.3);
       s.message.mockClear();
@@ -4602,7 +4602,7 @@ describe("the end of the song", () => {
     });
 
     it("does not touch a beat that is not in Song mode: a loop of the sequence showing goes on for ever", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       s.sampler.start();
       run(s, 30);
       expect(playingNow(s)).toBe(true);
@@ -4610,7 +4610,7 @@ describe("the end of the song", () => {
     });
 
     it("is over at once for a stall that crosses the end, with nothing sounded after it", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       s.advance(0.02); // the first step is scheduled
       s.advance(9); // the timer was held up: the passes ended at 2.05 s and 4.05 s while nothing was scheduled
@@ -4622,36 +4622,36 @@ describe("the end of the song", () => {
   });
 
   describe("Loop", () => {
-    it("is off to begin with, and on when the saved song says so", () => {
-      expect(setup({ song: songWith(2, null) }).sampler.getState().loopSong).toBe(false);
-      expect(setup({ song: songWith(2, null, { loopSong: true }) }).sampler.getState().loopSong).toBe(true);
+    it("is off to begin with, and on when the saved beat says so", () => {
+      expect(setup({ beat: beatWith(2, null) }).sampler.getState().loopSong).toBe(false);
+      expect(setup({ beat: beatWith(2, null, { loopSong: true }) }).sampler.getState().loopSong).toBe(true);
       expect(setup().sampler.getState().loopSong).toBe(false);
     });
 
     it("is turned on and off by toggleLoop, which says so, redraws and asks for a save", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       s.sampler.toggleLoop();
       expect(s.sampler.getState().loopSong).toBe(true);
       expect(s.message).toHaveBeenLastCalledWith("LOOP ON");
       expect(s.change).toHaveBeenCalled();
-      expect(s.songChange).toHaveBeenCalledTimes(1);
+      expect(s.beatChange).toHaveBeenCalledTimes(1);
       s.sampler.toggleLoop();
       expect(s.sampler.getState().loopSong).toBe(false);
       expect(s.message).toHaveBeenLastCalledWith("LOOP OFF");
-      expect(s.songChange).toHaveBeenCalledTimes(2);
+      expect(s.beatChange).toHaveBeenCalledTimes(2);
     });
 
     it("is part of the song that is saved, only while it is on", () => {
-      const s = setup({ song: songWith(2, null) });
-      expect(s.sampler.getSong()).not.toHaveProperty("loopSong");
+      const s = setup({ beat: beatWith(2, null) });
+      expect(s.sampler.getBeat()).not.toHaveProperty("loopSong");
       s.sampler.toggleLoop();
-      expect(s.sampler.getSong().loopSong).toBe(true);
+      expect(s.sampler.getBeat().loopSong).toBe(true);
       s.sampler.toggleLoop();
-      expect(s.sampler.getSong()).not.toHaveProperty("loopSong");
+      expect(s.sampler.getBeat()).not.toHaveProperty("loopSong");
     });
 
     it("keeps the song going round when it is on, as it did before it could end", () => {
-      const s = setup({ song: songWith(2, [entry(0, 2), entry(1)], { loopSong: true }) });
+      const s = setup({ beat: beatWith(2, [entry(0, 2), entry(1)], { loopSong: true }) });
       songMode(s);
       run(s, 12.2);
       expect(timesOf(s, 0)).toEqual(closeTo(0.05, 2.05, 6.05, 8.05, 12.05));
@@ -4660,7 +4660,7 @@ describe("the end of the song", () => {
     });
 
     it("turned on in the last pass, before its end is reached, takes the song round instead of ending it", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       songMode(s);
       run(s, 4.5); // in the last pass
       s.sampler.toggleLoop();
@@ -4670,7 +4670,7 @@ describe("the end of the song", () => {
     });
 
     it("turned off in the last pass of a song that goes round ends it there", () => {
-      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      const s = setup({ beat: beatWith(3, null, { loopSong: true }) });
       songMode(s);
       run(s, 4.5);
       s.sampler.toggleLoop();
@@ -4680,7 +4680,7 @@ describe("the end of the song", () => {
     });
 
     it("turned off in an earlier pass ends the song at the end of the next time round", () => {
-      const s = setup({ song: songWith(2, null, { loopSong: true }) });
+      const s = setup({ beat: beatWith(2, null, { loopSong: true }) });
       songMode(s);
       run(s, 5); // in the third pass, which is the first entry again
       s.sampler.toggleLoop();
@@ -4693,7 +4693,7 @@ describe("the end of the song", () => {
     });
 
     it("turned on just ahead of the end of the song takes the song round: the first entry takes over there", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       songMode(s);
       tick(s, 117); // 5.85 s: the end at 6.05 s has been reached
       expect(s.sampler.getState().playing).toBe(true);
@@ -4705,7 +4705,7 @@ describe("the end of the song", () => {
     });
 
     it("turned on just ahead of the end of a song of one sequence goes round in that sequence, taking nothing over", () => {
-      const s = setup({ song: songWith(1, null) });
+      const s = setup({ beat: beatWith(1, null) });
       songMode(s);
       tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
       s.sampler.toggleLoop();
@@ -4715,7 +4715,7 @@ describe("the end of the song", () => {
     });
 
     it("turned off just ahead of the end of a song that would go round ends it there, taking back what was built after the pass end", () => {
-      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      const s = setup({ beat: beatWith(3, null, { loopSong: true }) });
       songMode(s);
       tick(s, 119); // 5.95 s: the end at 6.05 s has been reached and the first step after it (at 6.05 s) is built
       expect(timesOf(s, 0)).toEqual(closeTo(0.05, 6.05));
@@ -4728,7 +4728,7 @@ describe("the end of the song", () => {
     });
 
     it("turned off just ahead of a pass end that is not the last changes nothing", () => {
-      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      const s = setup({ beat: beatWith(3, null, { loopSong: true }) });
       songMode(s);
       tick(s, 77); // 3.85 s: the end of the second pass (4.05 s) has been reached
       s.sampler.toggleLoop();
@@ -4740,7 +4740,7 @@ describe("the end of the song", () => {
 
   describe("an edit made just ahead of the end", () => {
     it("that adds an entry takes the song on to it", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1)]) });
       songMode(s);
       tick(s, 77); // 3.85 s: the end at 4.05 s has been reached
       s.sampler.setSequence(2);
@@ -4751,7 +4751,7 @@ describe("the end of the song", () => {
     });
 
     it("that gives the last entry another time round goes round it again, taking nothing over", () => {
-      const s = setup({ song: songWith(2, [entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0), entry(1)]) });
       songMode(s);
       tick(s, 77);
       s.sampler.setEntryRepeats(1, 2);
@@ -4761,7 +4761,7 @@ describe("the end of the song", () => {
     });
 
     it("that takes the last entry away, a pass end before it, ends the song there: what was built after the pass end is taken back", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
       songMode(s);
       tick(s, 79); // 3.95 s: the end of the second pass (4.05 s) has been reached, and the first step of the third (at 4.05 s) is built
       const built = lastBus(s, 2);
@@ -4773,7 +4773,7 @@ describe("the end of the song", () => {
     });
 
     it("that moves another entry last ends the song after that one, not the one it was going to", () => {
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)]) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)]) });
       songMode(s);
       tick(s, 77); // the end of the second pass (4.05 s) is reached, the third entry is next
       s.sampler.moveEntry(2, -1); // entries 0, 2, 1: the pass that ended (sequence 1) is now the last
@@ -4784,7 +4784,7 @@ describe("the end of the song", () => {
 
     it("that takes the last entry away puts what plays back to the sequence that is ending, which the display says", () => {
       // the sequence of the last entry is two bars long and the one before it one bar: the pass end was taken over by it
-      const s = setup({ song: songWith(3, [entry(0), entry(1), entry(2)], { bars: [1, 1, 2] }) });
+      const s = setup({ beat: beatWith(3, [entry(0), entry(1), entry(2)], { bars: [1, 1, 2] }) });
       songMode(s);
       tick(s, 79); // 3.95 s: the second pass ends at 4.05 s, and the third has taken over
       expect(s.sampler.getState().playingSequence).toBe(2);
@@ -4796,7 +4796,7 @@ describe("the end of the song", () => {
 
     it("that takes away the entry the song is in, which leaves the first entry (the same sequence) the last, ends it, as it does earlier in the pass", () => {
       for (const ticks of [20, 39]) {
-        const s = setup({ song: songWith(1, [entry(0), entry(0)]) });
+        const s = setup({ beat: beatWith(1, [entry(0), entry(0)]) });
         s.sampler.selectEntry(1);
         songMode(s);
         tick(s, ticks); // 1 s into the pass, then the moment before its end at 2.05 s
@@ -4808,7 +4808,7 @@ describe("the end of the song", () => {
 
     it("that adds a sequence takes the song on to it, in the moment before the end as it does earlier in the pass", () => {
       for (const ticks of [20, 39]) {
-        const s = setup({ song: songWith(2, null) });
+        const s = setup({ beat: beatWith(2, null) });
         s.sampler.selectEntry(1);
         songMode(s); // begins at the last entry, which is sequence 2
         tick(s, ticks);
@@ -4819,7 +4819,7 @@ describe("the end of the song", () => {
 
     it("that copies a sequence takes the song on to the copy, and it sounds", () => {
       for (const ticks of [20, 39]) {
-        const s = setup({ song: songWith(2, null) });
+        const s = setup({ beat: beatWith(2, null) });
         s.sampler.selectEntry(1);
         songMode(s);
         tick(s, ticks);
@@ -4831,7 +4831,7 @@ describe("the end of the song", () => {
 
     it("that removes the sequence the song was going on to makes the one that plays the last, and ends the song there", () => {
       for (const ticks of [20, 39]) {
-        const s = setup({ song: songWith(3, null) });
+        const s = setup({ beat: beatWith(3, null) });
         s.sampler.selectEntry(1);
         songMode(s);
         tick(s, ticks);
@@ -4843,7 +4843,7 @@ describe("the end of the song", () => {
 
     it("that removes the sequence that plays lets its pass play out and goes on from the first entry, as it does earlier in the pass", () => {
       for (const ticks of [20, 39]) {
-        const s = setup({ song: songWith(3, null) });
+        const s = setup({ beat: beatWith(3, null) });
         s.sampler.selectEntry(2);
         songMode(s);
         s.sampler.setSequence(2);
@@ -4857,7 +4857,7 @@ describe("the end of the song", () => {
 
     it("that removes the sequence that plays, and then Loop turned on, goes round: the end is not left standing with Loop on", () => {
       for (const ticks of [20, 39]) {
-        const s = setup({ song: songWith(3, null) });
+        const s = setup({ beat: beatWith(3, null) });
         s.sampler.selectEntry(2);
         songMode(s);
         s.sampler.setSequence(2);
@@ -4870,7 +4870,7 @@ describe("the end of the song", () => {
     });
 
     it("that ends the song after taking over, and then a longer sequence, carries on in the longer length", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       tick(s, 39); // the end of the first pass (2.05 s) has been reached, and the second sequence has taken over
       s.sampler.removeEntry(1); // the first is the last: the pass end is the song's end, back to the first sequence
@@ -4879,7 +4879,7 @@ describe("the end of the song", () => {
     });
 
     it("that gives the last entry fewer times round, in its last-but-one, ends the song at the end of that pass", () => {
-      const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
+      const s = setup({ beat: beatWith(2, [entry(0), entry(1, 3)]) });
       songMode(s);
       run(s, 3); // in the second pass, the first time round the last entry
       s.sampler.setEntryRepeats(1, 1);
@@ -4888,7 +4888,7 @@ describe("the end of the song", () => {
     });
 
     it("that gives the last entry more times round, in its last, goes round it again", () => {
-      const s = setup({ song: songWith(2, [entry(0), entry(1)]) });
+      const s = setup({ beat: beatWith(2, [entry(0), entry(1)]) });
       songMode(s);
       run(s, 3); // in the last pass
       s.sampler.setEntryRepeats(1, 2);
@@ -4902,7 +4902,7 @@ describe("the end of the song", () => {
 
   describe("just ahead of the end of the song", () => {
     it("the steps are built again from the same sequence and it ends once when the sounds change", () => {
-      const s = setup({ song: songWith(2, null, { patterns: [{ 0: [0] }, { 1: [0, 8, 15] }] }) });
+      const s = setup({ beat: beatWith(2, null, { patterns: [{ 0: [0] }, { 1: [0, 8, 15] }] }) });
       songMode(s);
       tick(s, 77); // 3.85 s: the end is reached
       s.sampler.kitChanged("sound");
@@ -4915,7 +4915,7 @@ describe("the end of the song", () => {
     });
 
     it("a sequence made longer carries on past it, and the end moves to the end of the longer pass", () => {
-      const s = setup({ song: songWith(1, null) });
+      const s = setup({ beat: beatWith(1, null) });
       s.sampler.setSequence(0);
       songMode(s);
       tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
@@ -4927,7 +4927,7 @@ describe("the end of the song", () => {
     });
 
     it("a time round counted for Loop turned on there is taken back when the sequence is made longer past the pass end", () => {
-      const s = setup({ song: songWith(1, [entry(0, 2)]) });
+      const s = setup({ beat: beatWith(1, [entry(0, 2)]) });
       songMode(s);
       tick(s, 77); // 3.85 s: the end of the second time round (4.05 s) has been reached
       s.sampler.toggleLoop(); // the entry goes round again, from its first time
@@ -4937,7 +4937,7 @@ describe("the end of the song", () => {
     });
 
     it("a sequence made shorter ends the song at the end of the shorter pass", () => {
-      const s = setup({ song: songWith(1, null, { bars: [2] }) });
+      const s = setup({ beat: beatWith(1, null, { bars: [2] }) });
       songMode(s);
       tick(s, 37); // 1.85 s: the first bar of the pass has been scheduled, and the second is to begin at 2.05 s
       s.sampler.setBars(1); // the loop of one bar ends where the scheduler is: the end of the song
@@ -4946,7 +4946,7 @@ describe("the end of the song", () => {
     });
 
     it("Song mode turned off takes the end back: the sequence that was playing goes round", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       tick(s, 77); // 3.85 s: the end of the last pass (4.05 s) has been reached
       s.sampler.toggleSong();
@@ -4957,7 +4957,7 @@ describe("the end of the song", () => {
     });
 
     it("Song mode turned on ends it there, when what plays is the last pass of the song: the loop built after it is taken back", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       s.sampler.setSequence(1);
       s.sampler.start();
       tick(s, 39); // 1.95 s: the end of the pass (2.05 s) has been reached and the first step after it is built
@@ -4970,7 +4970,7 @@ describe("the end of the song", () => {
     });
 
     it("Song mode turned off once the clock has got to the end, before the scheduler has stopped, does not bring the song back", () => {
-      const s = setup({ song: songWith(1, null) });
+      const s = setup({ beat: beatWith(1, null) });
       songMode(s);
       tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
       s.audio.ctx.currentTime = 2.06; // the clock gets there between two ticks
@@ -4980,7 +4980,7 @@ describe("the end of the song", () => {
     });
 
     it("Stop pressed there stops it at once, like any stop, and the end does not come after", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       tick(s, 77);
       s.message.mockClear();
@@ -4991,7 +4991,7 @@ describe("the end of the song", () => {
     });
 
     it("Play pressed there begins the song again from the entry selected, and the end it was going to does not come", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       tick(s, 77);
       s.sampler.start();
@@ -5004,7 +5004,7 @@ describe("the end of the song", () => {
 
   describe("what the display is told (heard.song)", () => {
     it("says nothing comes next in the last pass, and what comes next before it", () => {
-      const s = setup({ song: songWith(3, null) });
+      const s = setup({ beat: beatWith(3, null) });
       songMode(s);
       run(s, 0.5);
       expect(s.sampler.getState().heard.song).toMatchObject({ entry: 0, next: 1 });
@@ -5013,14 +5013,14 @@ describe("the end of the song", () => {
     });
 
     it("says the first sequence comes next in the last pass when Loop is on", () => {
-      const s = setup({ song: songWith(3, null, { loopSong: true }) });
+      const s = setup({ beat: beatWith(3, null, { loopSong: true }) });
       songMode(s);
       run(s, 4.5);
       expect(s.sampler.getState().heard.song).toMatchObject({ entry: 2, next: 0 });
     });
 
     it("says it for the last time round the last entry, and not before", () => {
-      const s = setup({ song: songWith(2, [entry(0), entry(1, 2)]) });
+      const s = setup({ beat: beatWith(2, [entry(0), entry(1, 2)]) });
       songMode(s);
       run(s, 2.5);
       expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, rep: 0, next: 1 });
@@ -5029,7 +5029,7 @@ describe("the end of the song", () => {
     });
 
     it("is changed by Loop at once", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       run(s, 2.5);
       expect(s.sampler.getState().heard.song.next).toBe(-1);
@@ -5038,7 +5038,7 @@ describe("the end of the song", () => {
     });
 
     it("says it of a song that is stopped, where Play would begin: nothing comes next after a single pass", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       s.sampler.toggleSong();
       expect(s.sampler.getState().heard.song).toMatchObject({ entry: 0, next: 1 });
       s.sampler.selectEntry(1);
@@ -5046,7 +5046,7 @@ describe("the end of the song", () => {
     });
 
     it("keeps the entry the song ended in marked until it ends, and says nothing comes next while it sounds out", () => {
-      const s = setup({ song: songWith(2, null) });
+      const s = setup({ beat: beatWith(2, null) });
       songMode(s);
       tick(s, 79); // 3.95 s: the end has been reached and the last pass still sounds
       expect(s.sampler.getState()).toMatchObject({ playing: true, songPass: { entry: 1, rep: 0 } });

@@ -8,7 +8,7 @@
 //   padColorCss(2)           // "#52d65b", or null for none
 //
 // What is kept for a pad is the number: 0 for no colour, or 1 to the number of colours (the `color` setting in
-// pad-settings.js). Adding to the end of the list is safe for saved songs; changing or reordering it is not.
+// pad-settings.js). Adding to the end of the list is safe for saved beats; changing or reordering it is not.
 
 export const PAD_COLORS = [
   { id: "none", name: "None", css: null },

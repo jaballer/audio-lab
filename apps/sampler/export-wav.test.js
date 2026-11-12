@@ -46,7 +46,7 @@ const sample = (duration, trim = { start: 0, end: 1 }) => ({
 });
 
 const sequence = (pattern, velocities = {}, bars = 1) => ({ bars, pattern, velocities });
-const songOf = (seq, extra = {}) => ({ bpm: 120, volume: 80, current: 0, sequences: [seq], padSettings: {}, ...extra });
+const beatOf = (seq, extra = {}) => ({ bpm: 120, volume: 80, current: 0, sequences: [seq], padSettings: {}, ...extra });
 
 describe("hitsOf", () => {
   it("lists the steps that are on, in the order they sound, pads in order within a step, with their velocity", () => {
@@ -82,41 +82,41 @@ describe("canRenderOffline", () => {
 describe("emptyBars", () => {
   it("lists the bars of the sequence showing that have no steps, counting from 1", () => {
     // 4 bars of 16 steps: steps in bars 1 and 3
-    const song = songOf(sequence({ 0: [0, 5], 1: [33] }, {}, 4));
-    expect(emptyBars(song, 16)).toEqual([2, 4]);
+    const beat = beatOf(sequence({ 0: [0, 5], 1: [33] }, {}, 4));
+    expect(emptyBars(beat, 16)).toEqual([2, 4]);
   });
 
   it("is nothing when every bar has a step, and every bar when none has", () => {
-    expect(emptyBars(songOf(sequence({ 0: [0], 1: [16] }, {}, 2)), 16)).toEqual([]);
-    expect(emptyBars(songOf(sequence({}, {}, 3)), 16)).toEqual([1, 2, 3]);
+    expect(emptyBars(beatOf(sequence({ 0: [0], 1: [16] }, {}, 2)), 16)).toEqual([]);
+    expect(emptyBars(beatOf(sequence({}, {}, 3)), 16)).toEqual([1, 2, 3]);
   });
 
   it("does not count steps in bars the sequence no longer has, which it keeps for when they come back", () => {
-    expect(emptyBars(songOf(sequence({ 0: [0, 40] }, {}, 2)), 16)).toEqual([2]);
+    expect(emptyBars(beatOf(sequence({ 0: [0, 40] }, {}, 2)), 16)).toEqual([2]);
   });
 
   it("looks at the sequence showing, not another", () => {
-    const song = {
-      ...songOf(sequence({ 0: [0] }, {}, 2)),
+    const beat = {
+      ...beatOf(sequence({ 0: [0] }, {}, 2)),
       sequences: [sequence({ 0: [0] }, {}, 2), sequence({ 0: [16] }, {}, 2)],
       current: 1,
     };
-    expect(emptyBars(song, 16)).toEqual([1]);
+    expect(emptyBars(beat, 16)).toEqual([1]);
   });
 });
 
 describe("hasSteps", () => {
   it("is whether the sequence showing has anything on", () => {
-    expect(hasSteps(songOf(sequence({})), 16)).toBe(false);
-    expect(hasSteps(songOf(sequence({ 0: [] })), 16)).toBe(false);
-    expect(hasSteps(songOf(sequence({ 0: [3] })), 16)).toBe(true);
-    const second = { ...songOf(sequence({})), sequences: [sequence({}), sequence({ 1: [0] })], current: 1 };
+    expect(hasSteps(beatOf(sequence({})), 16)).toBe(false);
+    expect(hasSteps(beatOf(sequence({ 0: [] })), 16)).toBe(false);
+    expect(hasSteps(beatOf(sequence({ 0: [3] })), 16)).toBe(true);
+    const second = { ...beatOf(sequence({})), sequences: [sequence({}), sequence({ 1: [0] })], current: 1 };
     expect(hasSteps(second, 16)).toBe(true);
   });
 
   it("does not count steps in bars the sequence does not have", () => {
-    expect(hasSteps(songOf(sequence({ 0: [20] }, {}, 1)), 16)).toBe(false);
-    expect(hasSteps(songOf(sequence({ 0: [20] }, {}, 2)), 16)).toBe(true);
+    expect(hasSteps(beatOf(sequence({ 0: [20] }, {}, 1)), 16)).toBe(false);
+    expect(hasSteps(beatOf(sequence({ 0: [20] }, {}, 2)), 16)).toBe(true);
   });
 });
 
@@ -179,7 +179,7 @@ describe("renderSequence", () => {
     const offline = fakeOffline();
     const render = () =>
       renderSequence({
-        song: songOf(seq, extra),
+        beat: beatOf(seq, extra),
         kit,
         stepsPerBar: 16,
         sampleRate: 1000,
@@ -209,7 +209,7 @@ describe("renderSequence", () => {
     expect(first[3]).toBeCloseTo(0.375 + 0.04);
   });
 
-  it("plays at the song's tempo, not another", async () => {
+  it("plays at the beat's tempo, not another", async () => {
     const { render, sounds } = setup(sequence({ 0: [4] }), { bpm: 60 });
     await render();
     expect(sounds[0].play.mock.calls[0][2]).toBeCloseTo(LEAD_SECONDS + 4 * 0.25);
@@ -249,7 +249,7 @@ describe("renderSequence", () => {
     const base = offline.createContext;
     const shaper = { curve: null, oversample: "2x", connect: vi.fn() };
     await renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit,
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -266,7 +266,7 @@ describe("renderSequence", () => {
     const kit = createKit([sound("a")]);
     const offline = fakeOffline();
     const audio = await renderSequence({
-      song: songOf(sequence({ 0: [0] }), { bpm: 123 }),
+      beat: beatOf(sequence({ 0: [0] }), { bpm: 123 }),
       kit,
       stepsPerBar: 16,
       sampleRate: 44100,
@@ -388,7 +388,7 @@ describe("renderSequence", () => {
 describe("planRender", () => {
   // 120 BPM, 16 steps a bar: 2 s a bar; at 1000 Hz, 2000 frames
   const plan = (seq, extra = {}, options = {}, sounds = [sound("a"), sound("b"), sound("c")]) =>
-    planRender({ song: songOf(seq, extra), kit: createKit(sounds), stepsPerBar: 16, sampleRate: 1000, ...options });
+    planRender({ beat: beatOf(seq, extra), kit: createKit(sounds), stepsPerBar: 16, sampleRate: 1000, ...options });
 
   it("is in frames of the rate it is given: the lead, the warm-up and the file all scale with it", () => {
     const p = plan(sequence({ 0: [0] }), {}, { sampleRate: 48000 }); // a bar at 120 BPM is 2 s
@@ -432,13 +432,13 @@ describe("planRender", () => {
     kit.setSetting(0, "release", 100); // 5 s in a 2 s loop
     kit.setSetting(1, "release", 100);
     const planned = (pattern, bpm = 120) =>
-      planRender({ song: songOf(sequence(pattern), { bpm }), kit, stepsPerBar: 16, sampleRate: 1000 });
+      planRender({ beat: beatOf(sequence(pattern), { bpm }), kit, stepsPerBar: 16, sampleRate: 1000 });
     expect(planned({ 0: [0] }).warmUp).toBe(1 + Math.ceil(5 / 2));
     expect(planned({ 0: [0] }, 1000).warmUp).toBe(MAX_WARM_UP_PASSES); // a loop of a quarter of a second
     const silent = createKit([sound("a"), sample()]);
     silent.setSetting(1, "release", 100); // a long release on a pad with no steps
     expect(
-      planRender({ song: songOf(sequence({ 0: [0] })), kit: silent, stepsPerBar: 16, sampleRate: 1000 }).warmUp,
+      planRender({ beat: beatOf(sequence({ 0: [0] })), kit: silent, stepsPerBar: 16, sampleRate: 1000 }).warmUp,
     ).toBe(1);
   });
 
@@ -455,7 +455,7 @@ describe("renderSequence, loops and channels", () => {
     const offline = fakeOffline();
     const kit = createKit(kitSounds);
     const done = renderSequence({
-      song: songOf(seq),
+      beat: beatOf(seq),
       kit,
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -494,7 +494,7 @@ describe("renderSequence, loops and channels", () => {
     kit.setSetting(0, "release", 100); // 5 s
     const offline = fakeOffline();
     await renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit,
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -525,7 +525,7 @@ describe("renderSequence, loops and channels", () => {
     const offline = fakeOffline();
     let data;
     const audio = await renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit: createKit([sound("a")]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -544,7 +544,7 @@ describe("renderSequence, loops and channels", () => {
   });
 
   it("is as long and as big as the dialog said it would be", async () => {
-    const song = songOf(sequence({ 0: [0] }, {}, 2));
+    const beat = beatOf(sequence({ 0: [0] }, {}, 2));
     for (const options of [
       { loops: 1, channels: "stereo" },
       { loops: 4, channels: "mono" },
@@ -552,14 +552,14 @@ describe("renderSequence, loops and channels", () => {
     ]) {
       const offline = fakeOffline();
       const audio = await renderSequence({
-        song,
+        beat,
         kit: createKit([sound("a")]),
         stepsPerBar: 16,
         sampleRate: 1000,
         createContext: offline.createContext,
         ...options,
       });
-      const info = exportInfo(song, options, 16, 1000);
+      const info = exportInfo(beat, options, 16, 1000);
       expect(audio.channels[0]).toHaveLength(info.frames);
       expect(audio.channels).toHaveLength(info.channels === "mono" ? 1 : 2);
       expect(encodeWav(audio.channels, audio.sampleRate).byteLength).toBe(info.bytes);
@@ -590,7 +590,7 @@ describe("renderSequence, loops cut into each other", () => {
     const sounds = [sound("a")];
     const offline = fakeOffline();
     await renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit: createKit(sounds),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -657,11 +657,11 @@ describe("exportName", () => {
   });
 
   it("says how many loops and that it is mono, when they are not the plain export, so files do not overwrite each other", () => {
-    const song = { current: 0, bpm: 100 };
-    expect(exportName(song, { loops: 1, channels: "stereo" })).toBe("pad16-seq-01-100bpm.wav");
-    expect(exportName(song, { loops: 4, channels: "stereo" })).toBe("pad16-seq-01-100bpm-x4.wav");
-    expect(exportName(song, { loops: 1, channels: "mono" })).toBe("pad16-seq-01-100bpm-mono.wav");
-    expect(exportName(song, { loops: 8, channels: "mono" })).toBe("pad16-seq-01-100bpm-x8-mono.wav");
+    const beat = { current: 0, bpm: 100 };
+    expect(exportName(beat, { loops: 1, channels: "stereo" })).toBe("pad16-seq-01-100bpm.wav");
+    expect(exportName(beat, { loops: 4, channels: "stereo" })).toBe("pad16-seq-01-100bpm-x4.wav");
+    expect(exportName(beat, { loops: 1, channels: "mono" })).toBe("pad16-seq-01-100bpm-mono.wav");
+    expect(exportName(beat, { loops: 8, channels: "mono" })).toBe("pad16-seq-01-100bpm-x8-mono.wav");
   });
 });
 
@@ -693,17 +693,17 @@ describe("exportSampleRate", () => {
 describe("exportSequence", () => {
   const kit = createKit([sound("a")]);
   const render = vi.fn(async () => ({ sampleRate: 8000, channels: [Float32Array.of(0.5), Float32Array.of(0.5)] }));
-  const run = (song, extra = {}) => {
+  const run = (beat, extra = {}) => {
     const onMessage = vi.fn();
     const save = vi.fn();
-    const done = exportSequence({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true, ...extra });
+    const done = exportSequence({ beat, kit, stepsPerBar: 16, onMessage, save, render, supported: true, ...extra });
     return { done, onMessage, save };
   };
 
   it("renders the song, saves it as a wav under its name, and says so", async () => {
-    const { done, onMessage, save } = run(songOf(sequence({ 0: [0] })));
+    const { done, onMessage, save } = run(beatOf(sequence({ 0: [0] })));
     expect(await done).toBe(true);
-    expect(render).toHaveBeenCalledWith(expect.objectContaining({ song: expect.anything(), kit, stepsPerBar: 16 }));
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ beat: expect.anything(), kit, stepsPerBar: 16 }));
     const [blob, name] = save.mock.calls[0];
     expect(name).toBe("pad16-seq-01-120bpm.wav");
     expect(blob.type).toBe("audio/wav");
@@ -713,7 +713,7 @@ describe("exportSequence", () => {
 
   it("renders what it is told to, and names the file for it", async () => {
     render.mockClear();
-    const { done, save } = run(songOf(sequence({ 0: [0] })), { options: { loops: 4, channels: "mono" } });
+    const { done, save } = run(beatOf(sequence({ 0: [0] })), { options: { loops: 4, channels: "mono" } });
     expect(await done).toBe(true);
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 4, channels: "mono" }));
     expect(save.mock.calls[0][1]).toBe("pad16-seq-01-120bpm-x4-mono.wav");
@@ -721,7 +721,7 @@ describe("exportSequence", () => {
 
   it("renders at the rate it is given, and the file says so in its header", async () => {
     const echo = vi.fn(async ({ sampleRate }) => ({ sampleRate, channels: [Float32Array.of(0.5)] }));
-    const { done, save } = run(songOf(sequence({ 0: [0] })), { sampleRate: 48000, render: echo });
+    const { done, save } = run(beatOf(sequence({ 0: [0] })), { sampleRate: 48000, render: echo });
     await done;
     expect(echo).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 48000 }));
     const header = new DataView(await save.mock.calls[0][0].arrayBuffer());
@@ -730,14 +730,14 @@ describe("exportSequence", () => {
 
   it("renders at 44.1 kHz when it is given no rate", async () => {
     render.mockClear();
-    const { done } = run(songOf(sequence({ 0: [0] })));
+    const { done } = run(beatOf(sequence({ 0: [0] })));
     await done;
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ sampleRate: 44100 }));
   });
 
   it("is the plain export, one loop in stereo, when it is told nothing", async () => {
     render.mockClear();
-    const { done, save } = run(songOf(sequence({ 0: [0] })));
+    const { done, save } = run(beatOf(sequence({ 0: [0] })));
     await done;
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 1, channels: "stereo" }));
     expect(save.mock.calls[0][1]).toBe("pad16-seq-01-120bpm.wav");
@@ -745,14 +745,14 @@ describe("exportSequence", () => {
 
   it("treats options that are not choices as the plain export", async () => {
     render.mockClear();
-    const { done } = run(songOf(sequence({ 0: [0] })), { options: { loops: 99, channels: "5.1" } });
+    const { done } = run(beatOf(sequence({ 0: [0] })), { options: { loops: 99, channels: "5.1" } });
     await done;
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 1, channels: "stereo" }));
   });
 
   it("says so, and renders nothing, when there is nothing in the sequence", async () => {
     render.mockClear();
-    const { done, onMessage, save } = run(songOf(sequence({})));
+    const { done, onMessage, save } = run(beatOf(sequence({})));
     expect(await done).toBe(false);
     expect(onMessage).toHaveBeenCalledWith("NOTHING TO EXPORT");
     expect(render).not.toHaveBeenCalled();
@@ -760,14 +760,14 @@ describe("exportSequence", () => {
   });
 
   it("says so when the browser cannot render offline", async () => {
-    const { done, onMessage, save } = run(songOf(sequence({ 0: [0] })), { supported: false });
+    const { done, onMessage, save } = run(beatOf(sequence({ 0: [0] })), { supported: false });
     expect(await done).toBe(false);
     expect(onMessage).toHaveBeenCalledWith("EXPORT NOT SUPPORTED");
     expect(save).not.toHaveBeenCalled();
   });
 
   it("says so, and does not throw, when the render fails", async () => {
-    const { done, onMessage, save } = run(songOf(sequence({ 0: [0] })), {
+    const { done, onMessage, save } = run(beatOf(sequence({ 0: [0] })), {
       render: async () => {
         throw new Error("out of memory");
       },
@@ -780,7 +780,7 @@ describe("exportSequence", () => {
 
 describe("exportSequence, cancelled and with progress", () => {
   const kit = createKit([sound("a")]);
-  const song = songOf(sequence({ 0: [0] }));
+  const beat = beatOf(sequence({ 0: [0] }));
   const cancelledError = () => new DOMException("stop", "AbortError");
 
   it("says it was cancelled, and saves nothing, when the render is cancelled; that is not a failure", async () => {
@@ -790,7 +790,7 @@ describe("exportSequence, cancelled and with progress", () => {
     const render = async () => {
       throw cancelledError();
     };
-    const done = await exportSequence({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true });
+    const done = await exportSequence({ beat, kit, stepsPerBar: 16, onMessage, save, render, supported: true });
     expect(done).toBe(false);
     expect(onMessage).toHaveBeenLastCalledWith("EXPORT CANCELLED");
     expect(save).not.toHaveBeenCalled();
@@ -803,7 +803,7 @@ describe("exportSequence, cancelled and with progress", () => {
     const signal = new AbortController().signal;
     const onProgress = vi.fn();
     await exportSequence({
-      song,
+      beat,
       kit,
       stepsPerBar: 16,
       onMessage() {},
@@ -829,7 +829,7 @@ describe("exportSequence, a cancel while the file is encoded", () => {
       return { sampleRate: 8000, channels: [Float32Array.of(0.5)] };
     };
     const done = await exportSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit,
       stepsPerBar: 16,
       onMessage,
@@ -903,7 +903,7 @@ describe("renderSequence, in windows", () => {
     const start = offline.ctx.startRendering;
     offline.ctx.startRendering = () => start().then((rendered) => ((ended = true), rendered)); // the render ran to its end
     const done = renderSequence({
-      song: songOf(sequence({ 0: steps })),
+      beat: beatOf(sequence({ 0: steps })),
       kit: createKit([played]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -962,7 +962,7 @@ describe("renderSequence, in windows", () => {
     );
     await expect(
       renderSequence({
-        song: songOf(sequence({ 0: [0, 4, 8, 12] })),
+        beat: beatOf(sequence({ 0: [0, 4, 8, 12] })),
         kit: createKit([sound("a")]),
         stepsPerBar: 16,
         sampleRate: 1000,
@@ -978,7 +978,7 @@ describe("renderSequence, in windows", () => {
     const sample = { id: "s", name: "s", play: vi.fn(() => ({ stop: (time) => stops.push(time) })), setTrim() {} };
     const offline = fakeOffline({ pausable: true });
     await renderSequence({
-      song: songOf(sequence({ 0: [0, 8] })), // 120 BPM: two hits a second apart, in a loop of two seconds
+      beat: beatOf(sequence({ 0: [0, 8] })), // 120 BPM: two hits a second apart, in a loop of two seconds
       kit: createKit([sample]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1003,7 +1003,7 @@ describe("renderSequence, in windows", () => {
     };
     const offline = fakeOffline({ pausable: true });
     const done = renderSequence({
-      song: songOf(sequence({ 0: [0, 4, 8, 12] })),
+      beat: beatOf(sequence({ 0: [0, 4, 8, 12] })),
       kit: createKit([failing]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1045,7 +1045,7 @@ describe("renderSequence, progress and cancel", () => {
   const render = (extra = {}, offlineOptions = { pausable: true }) => {
     const offline = fakeOffline(offlineOptions);
     const done = renderSequence({
-      song: songOf(sequence({ 0: [0] }, {}, 2)),
+      beat: beatOf(sequence({ 0: [0] }, {}, 2)),
       kit: createKit([sound("a")]),
       stepsPerBar: 16,
       sampleRate: 44100,
@@ -1104,7 +1104,7 @@ describe("renderSequence, progress and cancel", () => {
     const controller = new AbortController();
     let settled = false;
     const done = renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit: createKit([sound("a")]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1146,7 +1146,7 @@ describe("renderSequence, progress and cancel", () => {
     const controller = new AbortController();
     let settled = false;
     const done = renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit: createKit([sound("a")]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1417,37 +1417,37 @@ describe("createExportAction", () => {
 
 describe("stemPads", () => {
   it("is the pads that have a step in the bars the sequence has, in pad order", () => {
-    expect(stemPads(songOf(sequence({ 5: [0], 2: [3, 4], 9: [] })), 16)).toEqual([2, 5]);
+    expect(stemPads(beatOf(sequence({ 5: [0], 2: [3, 4], 9: [] })), 16)).toEqual([2, 5]);
   });
 
   it("leaves out a pad whose only steps are in bars the sequence does not have", () => {
-    expect(stemPads(songOf(sequence({ 0: [0], 1: [20] }, {}, 1)), 16)).toEqual([0]);
-    expect(stemPads(songOf(sequence({ 0: [0], 1: [20] }, {}, 2)), 16)).toEqual([0, 1]);
+    expect(stemPads(beatOf(sequence({ 0: [0], 1: [20] }, {}, 1)), 16)).toEqual([0]);
+    expect(stemPads(beatOf(sequence({ 0: [0], 1: [20] }, {}, 2)), 16)).toEqual([0, 1]);
   });
 
   it("is nothing for a sequence with nothing in it", () => {
-    expect(stemPads(songOf(sequence({})), 16)).toEqual([]);
+    expect(stemPads(beatOf(sequence({})), 16)).toEqual([]);
   });
 });
 
 describe("stemName and stemsName", () => {
   const kit = createKit([sound("Kick"), sound("Closed Hat!"), sound("  ")]);
-  const song = songOf(sequence({ 0: [0] }), { bpm: 100 });
+  const beat = beatOf(sequence({ 0: [0] }), { bpm: 100 });
 
   it("names a stem for the sequence, the options, the pad's number (from 1) and its sound", () => {
-    expect(stemName(song, { loops: 1, channels: "stereo" }, kit, 0)).toBe("pad16-seq-01-100bpm-pad01-kick.wav");
-    expect(stemName(song, { loops: 4, channels: "mono" }, kit, 1)).toBe(
+    expect(stemName(beat, { loops: 1, channels: "stereo" }, kit, 0)).toBe("pad16-seq-01-100bpm-pad01-kick.wav");
+    expect(stemName(beat, { loops: 4, channels: "mono" }, kit, 1)).toBe(
       "pad16-seq-01-100bpm-x4-mono-pad02-closed-hat.wav",
     );
   });
 
   it("falls back to the pad's number alone when its sound has no name worth a file name", () => {
-    expect(stemName(song, undefined, kit, 2)).toBe("pad16-seq-01-100bpm-pad03.wav");
+    expect(stemName(beat, undefined, kit, 2)).toBe("pad16-seq-01-100bpm-pad03.wav");
   });
 
   it("keeps a loaded sample's name to letters and digits, accents taken off, and not too long", () => {
     const sampleKit = createKit([sound("Caja Ñandú (90s) — the extremely long file name of a sample.wav")]);
-    const name = stemName(song, undefined, sampleKit, 0);
+    const name = stemName(beat, undefined, sampleKit, 0);
     expect(name).toMatch(/^pad16-seq-01-100bpm-pad01-[a-z0-9-]+\.wav$/);
     expect(name).toContain("caja-nandu-90s");
     expect(name.length).toBeLessThan(70);
@@ -1456,16 +1456,16 @@ describe("stemName and stemsName", () => {
 
   it("gives two pads with the same sound two different names", () => {
     const twins = createKit([sound("Kick"), sound("Kick")]);
-    expect(stemName(song, undefined, twins, 0)).not.toBe(stemName(song, undefined, twins, 1));
+    expect(stemName(beat, undefined, twins, 0)).not.toBe(stemName(beat, undefined, twins, 1));
   });
 
   it("names the zip for the sequence and the options, as the file is", () => {
-    expect(stemsName(song, { loops: 1, channels: "stereo" })).toBe("pad16-seq-01-100bpm-stems.zip");
-    expect(stemsName(song, { loops: 2, channels: "mono" })).toBe("pad16-seq-01-100bpm-x2-mono-stems.zip");
+    expect(stemsName(beat, { loops: 1, channels: "stereo" })).toBe("pad16-seq-01-100bpm-stems.zip");
+    expect(stemsName(beat, { loops: 2, channels: "mono" })).toBe("pad16-seq-01-100bpm-x2-mono-stems.zip");
   });
 
   it("leaves the name of the plain export as it was", () => {
-    expect(exportName(song, { loops: 4, channels: "mono" })).toBe("pad16-seq-01-100bpm-x4-mono.wav");
+    expect(exportName(beat, { loops: 4, channels: "mono" })).toBe("pad16-seq-01-100bpm-x4-mono.wav");
   });
 });
 
@@ -1476,7 +1476,7 @@ describe("planRender, for one pad's stem", () => {
     return kit;
   };
   const stemPlan = (pad, kit, pattern = { 0: [0, 8], 1: [4], 2: [12] }) =>
-    planRender({ song: songOf(sequence(pattern)), kit, stepsPerBar: 16, sampleRate: 1000, pad });
+    planRender({ beat: beatOf(sequence(pattern)), kit, stepsPerBar: 16, sampleRate: 1000, pad });
 
   it("is the pad's own hits alone when it is in no choke group: another pad cannot cut it", () => {
     const plan = stemPlan(0, kitOf(0, 0, 0));
@@ -1504,7 +1504,7 @@ describe("planRender, for one pad's stem", () => {
 
   it("is the whole sequence, with no hit silent, when no pad is asked for", () => {
     const plan = planRender({
-      song: songOf(sequence({ 0: [0], 1: [4] })),
+      beat: beatOf(sequence({ 0: [0], 1: [4] })),
       kit: kitOf(1, 1, 0),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1516,15 +1516,15 @@ describe("planRender, for one pad's stem", () => {
   it("is on the whole sequence's timeline, but schedules only the passes its own pad can be heard from", () => {
     const longTail = createKit([sound("a"), sample(1, { start: 0, end: 1 })]);
     longTail.setSetting(1, "release", 100); // a loaded sample's Release: 5 s, in a loop of 2 s: three more warm-up passes
-    const song = songOf(sequence({ 0: [0], 1: [4] }));
-    const whole = planRender({ song, kit: longTail, stepsPerBar: 16, sampleRate: 1000 });
+    const beat = beatOf(sequence({ 0: [0], 1: [4] }));
+    const whole = planRender({ beat, kit: longTail, stepsPerBar: 16, sampleRate: 1000 });
     expect(whole.warmUp).toBe(4);
     expect(whole.skipped).toBe(0);
-    const short = planRender({ song, kit: longTail, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
+    const short = planRender({ beat, kit: longTail, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
     expect(short.warmUp).toBe(4); // the mix's, so its hits sound at the frames they do there
     expect(short.skipped).toBe(3); // but the pad's own tail is short: one warm-up pass is enough
     expect(short.first).toBe(whole.first);
-    const long = planRender({ song, kit: longTail, stepsPerBar: 16, sampleRate: 1000, pad: 1 });
+    const long = planRender({ beat, kit: longTail, stepsPerBar: 16, sampleRate: 1000, pad: 1 });
     expect(long.skipped).toBe(0);
   });
 
@@ -1534,8 +1534,8 @@ describe("planRender, for one pad's stem", () => {
     const kit = createKit([sample(1), sample(1), sound("c")]);
     kit.setSetting(0, "release", 80);
     kit.setSetting(1, "release", 100);
-    const song = songOf(sequence({ 0: [15], 1: [3], 2: [0] }));
-    const skipped = (pad) => planRender({ song, kit, stepsPerBar: 16, sampleRate: 1000, pad }).skipped;
+    const beat = beatOf(sequence({ 0: [15], 1: [3], 2: [0] }));
+    const skipped = (pad) => planRender({ beat, kit, stepsPerBar: 16, sampleRate: 1000, pad }).skipped;
     expect(skipped(1)).toBe(0); // the longest release is the mix's own
     expect(skipped(0)).toBe(0); // one release would be 1 + ceil(2.56 / 2) = 3 passes and skip one: a tail of -61 dB is left out
     expect(skipped(2)).toBe(3); // a sound with no release needs the one pass
@@ -1547,7 +1547,7 @@ describe("planRender, for one pad's stem", () => {
     longTail.setSetting(0, "choke", 1);
     longTail.setSetting(1, "choke", 1);
     const plan = planRender({
-      song: songOf(sequence({ 0: [0], 1: [4] })),
+      beat: beatOf(sequence({ 0: [0], 1: [4] })),
       kit: longTail,
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1558,7 +1558,7 @@ describe("planRender, for one pad's stem", () => {
 
   it("is the same length as the whole render: a stem lines up with the mix", () => {
     const kit = kitOf(1, 1, 0);
-    const whole = planRender({ song: songOf(sequence({ 0: [0], 1: [4] })), kit, stepsPerBar: 16, sampleRate: 1000 });
+    const whole = planRender({ beat: beatOf(sequence({ 0: [0], 1: [4] })), kit, stepsPerBar: 16, sampleRate: 1000 });
     const stem = stemPlan(1, kit, { 0: [0], 1: [4] });
     expect([stem.first, stem.frames, stem.total]).toEqual([whole.first, whole.frames, whole.total]);
   });
@@ -1568,7 +1568,7 @@ describe("renderCost", () => {
   it("is more for a pad with more hits, and counts the passes", () => {
     const kit = createKit([sound("a"), sound("b")]);
     const plan = (pattern, loops) =>
-      planRender({ song: songOf(sequence(pattern)), kit, stepsPerBar: 16, sampleRate: 1000, loops });
+      planRender({ beat: beatOf(sequence(pattern)), kit, stepsPerBar: 16, sampleRate: 1000, loops });
     expect(renderCost(plan({ 0: [0, 1, 2, 3] }, 1))).toBeGreaterThan(renderCost(plan({ 0: [0] }, 1)));
     expect(renderCost(plan({ 0: [0] }, 4))).toBeGreaterThan(renderCost(plan({ 0: [0] }, 1)));
   });
@@ -1576,9 +1576,9 @@ describe("renderCost", () => {
   it("counts only the passes a stem schedules: the empty ones before it cost next to nothing", () => {
     const kit = createKit([sound("a"), sample(1, { start: 0, end: 1 })]);
     kit.setSetting(1, "release", 100); // the mix warms up for four passes
-    const song = songOf(sequence({ 0: [0], 1: [4] }));
-    const stem = planRender({ song, kit, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
-    const whole = planRender({ song, kit, stepsPerBar: 16, sampleRate: 1000 });
+    const beat = beatOf(sequence({ 0: [0], 1: [4] }));
+    const stem = planRender({ beat, kit, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
+    const whole = planRender({ beat, kit, stepsPerBar: 16, sampleRate: 1000 });
     expect(stem.passes).toBe(whole.passes);
     expect(renderCost(stem)).toBe((stem.passes - 3) * 2); // one hit, in the passes from the fourth on
   });
@@ -1587,9 +1587,9 @@ describe("renderCost", () => {
     const kit = createKit([sound("a"), sound("b")]);
     kit.setSetting(0, "choke", 1);
     kit.setSetting(1, "choke", 1);
-    const song = songOf(sequence({ 0: [0], 1: [4, 5, 6, 7] }));
-    const withCutters = planRender({ song, kit, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
-    const alone = planRender({ song: songOf(sequence({ 0: [0] })), kit, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
+    const beat = beatOf(sequence({ 0: [0], 1: [4, 5, 6, 7] }));
+    const withCutters = planRender({ beat, kit, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
+    const alone = planRender({ beat: beatOf(sequence({ 0: [0] })), kit, stepsPerBar: 16, sampleRate: 1000, pad: 0 });
     expect(renderCost(withCutters)).toBe(renderCost(alone));
   });
 });
@@ -1601,7 +1601,7 @@ describe("renderSequence, one pad's stem", () => {
     choke.forEach((group, row) => kit.setSetting(row, "choke", group));
     const offline = fakeOffline();
     const done = renderSequence({
-      song: songOf(sequence(pattern)),
+      beat: beatOf(sequence(pattern)),
       kit,
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1670,7 +1670,7 @@ describe("renderSequence, one pad's stem", () => {
       kit.setSetting(1, "release", 100); // 5 s in a loop of 2 s: the mix warms up for four passes
       const offline = fakeOffline();
       const done = renderSequence({
-        song: songOf(sequence({ 0: [0, 8], 1: [4] })),
+        beat: beatOf(sequence({ 0: [0, 8], 1: [4] })),
         kit,
         stepsPerBar: 16,
         sampleRate: 1000,
@@ -1703,7 +1703,7 @@ describe("renderSequence, one pad's stem", () => {
     const base = offline.createContext;
     const shaper = { curve: null, oversample: "2x", connect: vi.fn() };
     await renderSequence({
-      song: songOf(sequence({ 0: [0] }), { volume: 50 }),
+      beat: beatOf(sequence({ 0: [0] }), { volume: 50 }),
       kit,
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1722,7 +1722,7 @@ describe("renderSequence, one pad's stem", () => {
     const base = offline.createContext;
     const shaper = { curve: null, oversample: "2x", connect: vi.fn() };
     await renderSequence({
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       kit: createKit([sound("a")]),
       stepsPerBar: 16,
       sampleRate: 1000,
@@ -1734,7 +1734,7 @@ describe("renderSequence, one pad's stem", () => {
 
 describe("renderStems", () => {
   const kit = createKit([sound("Kick"), sound("Snare"), sound("Hat")]);
-  const song = songOf(sequence({ 2: [0, 8], 0: [0, 4, 8, 12], 1: [4] }), { bpm: 100 });
+  const beat = beatOf(sequence({ 2: [0, 8], 0: [0, 4, 8, 12], 1: [4] }), { bpm: 100 });
   // A render that gives back a stereo file of the length the real one would, with the pad in every frame, and says how far it got.
   const fakeRender = () =>
     vi.fn(async ({ pad, sampleRate, onProgress }) => {
@@ -1743,7 +1743,7 @@ describe("renderStems", () => {
     });
   const stems = (extra = {}) =>
     renderStems({
-      song,
+      beat,
       kit,
       stepsPerBar: 16,
       sampleRate: 8000,
@@ -1782,7 +1782,7 @@ describe("renderStems", () => {
     expect(render.mock.calls.map((call) => call[0].pad)).toEqual([0, 1, 2]);
     for (const [args] of render.mock.calls) {
       expect(args).toMatchObject({ clip: false, loops: 2, channels: "mono", sampleRate: 8000, stepsPerBar: 16 });
-      expect(args.song).toBe(song);
+      expect(args.beat).toBe(beat);
       expect(args.kit).toBe(kit);
     }
   });
@@ -1825,12 +1825,12 @@ describe("renderStems", () => {
 
   it("is cancelled by a cancel that comes while the last stem is encoded: nothing is handed back to be saved", async () => {
     const controller = new AbortController();
-    const only = songOf(sequence({ 0: [0] }));
+    const only = beatOf(sequence({ 0: [0] }));
     const render = vi.fn(async ({ sampleRate }) => {
       queueMicrotask(() => controller.abort()); // the press lands as the render ends, before the encoding is done
       return { sampleRate, channels: [new Float32Array(2)] };
     });
-    await expect(stems({ song: only, render, signal: controller.signal })).rejects.toSatisfy(wasCancelled);
+    await expect(stems({ beat: only, render, signal: controller.signal })).rejects.toSatisfy(wasCancelled);
     expect(render).toHaveBeenCalledTimes(1);
   });
 
@@ -1851,7 +1851,7 @@ describe("renderStems", () => {
 
   it("is nothing for a sequence with nothing in it", async () => {
     const render = fakeRender();
-    expect(await stems({ song: songOf(sequence({})), render })).toEqual([]);
+    expect(await stems({ beat: beatOf(sequence({})), render })).toEqual([]);
     expect(render).not.toHaveBeenCalled();
   });
 
@@ -1863,14 +1863,14 @@ describe("renderStems", () => {
 
 describe("renderStems, saying which stem it is on", () => {
   const kit = createKit([sound("Kick"), sound("Snare")]);
-  const song = songOf(sequence({ 0: [0], 1: [4] }));
+  const beat = beatOf(sequence({ 0: [0], 1: [4] }));
   const render = async ({ sampleRate }) => ({ sampleRate, channels: [new Float32Array(2)] });
 
   it("says the number of each stem, from 1, and how many there are, before it renders it", async () => {
     const seen = [];
     const order = [];
     await renderStems({
-      song,
+      beat,
       kit,
       stepsPerBar: 16,
       sampleRate: 8000,
@@ -1893,7 +1893,7 @@ describe("renderStems, saying which stem it is on", () => {
 
 describe("exportStems", () => {
   const kit = createKit([sound("Kick"), sound("Snare")]);
-  const song = songOf(sequence({ 0: [0, 8], 1: [4] }), { bpm: 100 });
+  const beat = beatOf(sequence({ 0: [0, 8], 1: [4] }), { bpm: 100 });
   const render = vi.fn(async ({ sampleRate }) => ({
     sampleRate,
     channels: [Float32Array.of(0.5, -0.5), Float32Array.of(0, 0)],
@@ -1901,7 +1901,7 @@ describe("exportStems", () => {
   const run = (extra = {}) => {
     const onMessage = vi.fn();
     const save = vi.fn();
-    const done = exportStems({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true, ...extra });
+    const done = exportStems({ beat, kit, stepsPerBar: 16, onMessage, save, render, supported: true, ...extra });
     return { done, onMessage, save };
   };
   // The entry count and the names in a zip, read from its directory
@@ -1969,7 +1969,7 @@ describe("exportStems", () => {
     const none = run({ supported: false });
     expect(await none.done).toBe(false);
     expect(none.onMessage).toHaveBeenCalledWith("EXPORT NOT SUPPORTED");
-    const empty = run({ song: songOf(sequence({})) });
+    const empty = run({ beat: beatOf(sequence({})) });
     expect(await empty.done).toBe(false);
     expect(empty.onMessage).toHaveBeenCalledWith("NOTHING TO EXPORT");
     expect(render).not.toHaveBeenCalled();
@@ -1997,7 +1997,7 @@ describe("exportStems", () => {
     });
     const { done, onMessage, save } = run({
       render: late,
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
       signal: controller.signal,
     });
     expect(await done).toBe(false);
@@ -2015,7 +2015,7 @@ describe("exportStems", () => {
     const { done, onMessage, save } = run({
       onProgress,
       signal: controller.signal,
-      song: songOf(sequence({ 0: [0] })),
+      beat: beatOf(sequence({ 0: [0] })),
     });
     expect(await done).toBe(false);
     expect(save).not.toHaveBeenCalled();
@@ -2055,11 +2055,11 @@ describe("stemsInfo against a real zip", () => {
     { loops: 2, channels: "mono" },
     { loops: 8, channels: "stereo" },
   ])("is within thirty bytes a file of the zip made with %o", async ({ loops, channels }) => {
-    const song = songOf(sequence({ 0: [0], 1: [4], 2: [8] }, {}, 1), { bpm: 120 });
+    const beat = beatOf(sequence({ 0: [0], 1: [4], 2: [8] }, {}, 1), { bpm: 120 });
     const sampleRate = 1000;
     const options = { loops, channels, files: "stems" };
     const files = await renderStems({
-      song,
+      beat,
       kit,
       stepsPerBar: 16,
       sampleRate,
@@ -2067,7 +2067,7 @@ describe("stemsInfo against a real zip", () => {
       channels,
       render: async () => {
         // A file of the length the dialog says, in the channels asked for
-        const frames = exportInfo(song, options, 16, sampleRate).frames;
+        const frames = exportInfo(beat, options, 16, sampleRate).frames;
         return {
           sampleRate,
           channels: Array.from({ length: channels === "mono" ? 1 : 2 }, () => new Float32Array(frames)),
@@ -2078,7 +2078,7 @@ describe("stemsInfo against a real zip", () => {
       files.map((file) => ({ name: file.name, data: file.wav })),
       new Date(2026, 0, 1),
     ).reduce((sum, part) => sum + part.byteLength, 0);
-    const estimate = stemsInfo(song, options, 16, sampleRate, files.length).bytes;
+    const estimate = stemsInfo(beat, options, 16, sampleRate, files.length).bytes;
     expect(files).toHaveLength(3);
     expect(Math.abs(real - estimate)).toBeLessThanOrEqual(30 * files.length);
   });
@@ -2088,7 +2088,7 @@ describe("stemsInfo against a real zip", () => {
 // repeats, with a tail: three sequences of 1, 2 and 1 bars at 120 BPM are 2 s, 4 s and 2 s, and the pass of each begins where the
 // one before ends. Pad i has the steps of sequence i, to tell them apart.
 describe("exporting the song", () => {
-  const allSong = (sequences, extra = {}) => ({
+  const allBeat = (sequences, extra = {}) => ({
     bpm: 120,
     volume: 80,
     current: 0,
@@ -2097,7 +2097,7 @@ describe("exporting the song", () => {
     ...extra,
   });
   const three = (extra = {}) =>
-    allSong([sequence({ 0: [0, 15] }), sequence({ 1: [8] }, {}, 2), sequence({ 2: [0] })], extra);
+    allBeat([sequence({ 0: [0, 15] }), sequence({ 1: [8] }, {}, 2), sequence({ 2: [0] })], extra);
   const kitOf = (sounds = [sound("a"), sound("b"), sound("c")]) => createKit(sounds);
   const TAIL = 4;
   // The song after an edit in the Song panel: sequence 3 twice, then sequence 1 once; sequence 2 is left out.
@@ -2127,11 +2127,11 @@ describe("exporting the song", () => {
   });
 
   describe("planRender", () => {
-    const plan = (song, extra = {}) =>
-      planRender({ song, kit: kitOf(), stepsPerBar: 16, sampleRate: 1000, scope: "song", ...extra });
+    const plan = (beat, extra = {}) =>
+      planRender({ beat, kit: kitOf(), stepsPerBar: 16, sampleRate: 1000, scope: "song", ...extra });
 
     it("is a pass for each sequence, one after the other, whatever is in them, with no warm-up", () => {
-      const p = plan(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 1: [3] }, {}, 2)]));
+      const p = plan(allBeat([sequence({ 0: [0] }), sequence({}), sequence({ 1: [3] }, {}, 2)]));
       expect(p.passList.map(({ startStep, length, hits }) => [startStep, length, hits.length])).toEqual([
         [0, 16, 1],
         [16, 16, 0], // an empty sequence is a pass of silence, as Song mode plays it
@@ -2172,7 +2172,7 @@ describe("exporting the song", () => {
 
     it("has the sequence showing's passes as it always did when the scope is the sequence, as a list too", () => {
       const p = planRender({
-        song: songOf(sequence({ 0: [0] })),
+        beat: beatOf(sequence({ 0: [0] })),
         kit: kitOf(),
         stepsPerBar: 16,
         sampleRate: 1000,
@@ -2187,13 +2187,13 @@ describe("exporting the song", () => {
     });
 
     it("weighs the work by the sounds in every pass, empty ones as nothing but the pass", () => {
-      const p = plan(allSong([sequence({ 0: [0, 1] }), sequence({}), sequence({ 1: [3] })]));
+      const p = plan(allBeat([sequence({ 0: [0, 1] }), sequence({}), sequence({ 1: [3] })]));
       expect(renderCost(p)).toBe(1 + 2 + (1 + 0) + (1 + 1)); // a pass and its sounds, for each
     });
 
     it("weighs a sequence that comes round again each time round: the passes are the work", () => {
       const p = plan(
-        allSong([sequence({ 0: [0, 1] }), sequence({ 1: [3] })], { arrangement: [{ sequence: 0, repeats: 3 }] }),
+        allBeat([sequence({ 0: [0, 1] }), sequence({ 1: [3] })], { arrangement: [{ sequence: 0, repeats: 3 }] }),
       );
       expect(renderCost(p)).toBe(3 * (1 + 2));
     });
@@ -2202,7 +2202,7 @@ describe("exporting the song", () => {
       const kit = kitOf();
       kit.setSetting(1, "choke", 1);
       kit.setSetting(2, "choke", 1);
-      const p = plan(allSong([sequence({ 1: [0] }), sequence({ 2: [4] }), sequence({ 1: [8], 0: [0] })]), {
+      const p = plan(allBeat([sequence({ 1: [0] }), sequence({ 2: [4] }), sequence({ 1: [8], 0: [0] })]), {
         kit,
         pad: 1,
       });
@@ -2217,11 +2217,11 @@ describe("exporting the song", () => {
   });
 
   describe("renderSequence", () => {
-    const render = (song, extra = {}, sounds = [sound("a"), sound("b"), sound("c")]) => {
+    const render = (beat, extra = {}, sounds = [sound("a"), sound("b"), sound("c")]) => {
       const offline = fakeOffline();
       const kit = createKit(sounds);
       const done = renderSequence({
-        song,
+        beat,
         kit,
         stepsPerBar: 16,
         sampleRate: 1000,
@@ -2250,10 +2250,10 @@ describe("exporting the song", () => {
     });
 
     it("lets a pad's last hit be cut by its first in the next time round the same entry, as the page's chain does", async () => {
-      const song = allSong([sequence({ 0: [15] }), sequence({ 1: [0] })], {
+      const beat = allBeat([sequence({ 0: [15] }), sequence({ 1: [0] })], {
         arrangement: [{ sequence: 0, repeats: 2 }],
       });
-      const { done, sounds } = render(song);
+      const { done, sounds } = render(beat);
       await done;
       expect(sounds[0].play).toHaveBeenCalledTimes(2);
       const first = sounds[0].play.mock.calls[0][1];
@@ -2284,42 +2284,42 @@ describe("exporting the song", () => {
     });
 
     it("keeps an empty sequence as silence between the others", async () => {
-      const { done, sounds } = render(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 0: [0] })]));
+      const { done, sounds } = render(allBeat([sequence({ 0: [0] }), sequence({}), sequence({ 0: [0] })]));
       await done;
       expect(times(sounds[0])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 4]); // a sequence of silence is 2 s between them
     });
 
     it("plays the odd steps late with the swing, in every sequence", async () => {
-      const { done, sounds } = render(allSong([sequence({ 0: [0] }), sequence({ 0: [1] })], { swing: 66 }));
+      const { done, sounds } = render(allBeat([sequence({ 0: [0] }), sequence({ 0: [1] })], { swing: 66 }));
       await done;
       expect(times(sounds[0])[1]).toBeCloseTo(LEAD_SECONDS + 2 + 0.125 + 0.04);
     });
 
     it("lets a pad's hit be cut by its next, across the end of a sequence, as the page's chain does", async () => {
-      const { done, sounds } = render(allSong([sequence({ 0: [15] }), sequence({ 0: [0] })]));
+      const { done, sounds } = render(allBeat([sequence({ 0: [15] }), sequence({ 0: [0] })]));
       await done;
       const last = sounds[0].play.mock.calls[0][1];
       expect(last.gain.setTargetAtTime).toHaveBeenCalledWith(0, LEAD_SECONDS + 2, expect.any(Number));
     });
 
     it("does not cut the last hit of the whole: it rings on into the tail, and nothing from the start cuts it", async () => {
-      const { done, sounds } = render(allSong([sequence({ 0: [0] }), sequence({ 0: [15] })]));
+      const { done, sounds } = render(allBeat([sequence({ 0: [0] }), sequence({ 0: [15] })]));
       await done;
       const last = sounds[0].play.mock.calls[1][1];
       expect(last.gain.setTargetAtTime).not.toHaveBeenCalled();
     });
 
     it("does not play steps in bars a sequence no longer has", async () => {
-      const { done, sounds } = render(allSong([sequence({ 0: [0, 20] }, {}, 1), sequence({ 0: [0] })]));
+      const { done, sounds } = render(allBeat([sequence({ 0: [0, 20] }, {}, 1), sequence({ 0: [0] })]));
       await done;
       expect(times(sounds[0])).toEqual([LEAD_SECONDS, LEAD_SECONDS + 2]);
     });
 
     it("is as long and as big as the dialog said it would be", async () => {
-      const song = three();
-      const { done } = render(song, { channels: "mono" });
+      const beat = three();
+      const { done } = render(beat, { channels: "mono" });
       const audio = await done;
-      const info = exportInfo(song, { channels: "mono", scope: "song" }, 16, 1000);
+      const info = exportInfo(beat, { channels: "mono", scope: "song" }, 16, 1000);
       expect(audio.channels).toHaveLength(1);
       expect(audio.channels[0]).toHaveLength(info.frames);
     });
@@ -2336,7 +2336,7 @@ describe("exporting the song", () => {
       const offline = fakeOffline({ pausable: true });
       const progress = [];
       await renderSequence({
-        song: three(),
+        beat: three(),
         kit: kitOf(),
         stepsPerBar: 16,
         sampleRate: 1000,
@@ -2351,23 +2351,23 @@ describe("exporting the song", () => {
 
   describe("what it asks about the song", () => {
     it("has steps when any sequence has, whichever is showing, and not when none does", () => {
-      const song = allSong([sequence({}), sequence({ 0: [3] })], { current: 0 });
-      expect(hasSteps(song, 16, "song")).toBe(true);
-      expect(hasSteps(song, 16, "sequence")).toBe(false);
-      expect(hasSteps(allSong([sequence({}), sequence({})]), 16, "song")).toBe(false);
-      expect(hasSteps(song, 16)).toBe(false);
+      const beat = allBeat([sequence({}), sequence({ 0: [3] })], { current: 0 });
+      expect(hasSteps(beat, 16, "song")).toBe(true);
+      expect(hasSteps(beat, 16, "sequence")).toBe(false);
+      expect(hasSteps(allBeat([sequence({}), sequence({})]), 16, "song")).toBe(false);
+      expect(hasSteps(beat, 16)).toBe(false);
     });
 
     it("does not count steps in bars a sequence no longer has", () => {
-      expect(hasSteps(allSong([sequence({ 0: [20] }), sequence({})]), 16, "song")).toBe(false);
+      expect(hasSteps(allBeat([sequence({ 0: [20] }), sequence({})]), 16, "song")).toBe(false);
     });
 
     it("has steps when a sequence the song plays has, and not when only a sequence it leaves out does", () => {
       const sequences = [sequence({}), sequence({ 0: [3] }), sequence({})];
-      expect(hasSteps(allSong(sequences, { arrangement: [{ sequence: 1, repeats: 1 }] }), 16, "song")).toBe(true);
+      expect(hasSteps(allBeat(sequences, { arrangement: [{ sequence: 1, repeats: 1 }] }), 16, "song")).toBe(true);
       expect(
         hasSteps(
-          allSong(sequences, {
+          allBeat(sequences, {
             arrangement: [
               { sequence: 0, repeats: 2 },
               { sequence: 2, repeats: 1 },
@@ -2381,14 +2381,14 @@ describe("exporting the song", () => {
 
     it("lists the sequences with no steps, counting from 1", () => {
       expect(
-        emptySequences(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 0: [20] }), sequence({ 1: [0] })]), 16),
+        emptySequences(allBeat([sequence({ 0: [0] }), sequence({}), sequence({ 0: [20] }), sequence({ 1: [0] })]), 16),
       ).toEqual([2, 3]);
       expect(emptySequences(three(), 16)).toEqual([]);
     });
 
     it("lists the sequences with no steps that the song plays, once each, and not one it leaves out", () => {
       const sequences = [sequence({ 0: [0] }), sequence({}), sequence({})];
-      const list = (arrangement) => emptySequences(allSong(sequences, { arrangement }), 16);
+      const list = (arrangement) => emptySequences(allBeat(sequences, { arrangement }), 16);
       expect(list(undefined)).toEqual([2, 3]);
       expect(
         list([
@@ -2407,36 +2407,36 @@ describe("exporting the song", () => {
     });
 
     it("gives a stem to each pad that has a step in any sequence, in pad order", () => {
-      const song = allSong([sequence({ 2: [0] }), sequence({ 0: [1] }), sequence({ 2: [5], 1: [0] })], { current: 0 });
-      expect(stemPads(song, 16, "song")).toEqual([0, 1, 2]);
-      expect(stemPads(song, 16, "sequence")).toEqual([2]);
-      expect(stemPads(song, 16)).toEqual([2]);
+      const beat = allBeat([sequence({ 2: [0] }), sequence({ 0: [1] }), sequence({ 2: [5], 1: [0] })], { current: 0 });
+      expect(stemPads(beat, 16, "song")).toEqual([0, 1, 2]);
+      expect(stemPads(beat, 16, "sequence")).toEqual([2]);
+      expect(stemPads(beat, 16)).toEqual([2]);
     });
 
     it("gives a stem to the pads of the sequences the song plays only", () => {
-      const song = allSong([sequence({ 2: [0] }), sequence({ 0: [1] }), sequence({ 2: [5], 1: [0] })], {
+      const beat = allBeat([sequence({ 2: [0] }), sequence({ 0: [1] }), sequence({ 2: [5], 1: [0] })], {
         arrangement: [
           { sequence: 2, repeats: 2 },
           { sequence: 0, repeats: 1 },
         ],
       });
-      expect(stemPads(song, 16, "song")).toEqual([1, 2]); // pad 1 is in the second sequence, which the song leaves out
+      expect(stemPads(beat, 16, "song")).toEqual([1, 2]); // pad 1 is in the second sequence, which the song leaves out
     });
   });
 
   describe("names", () => {
-    const song = { current: 3, bpm: 100, sequences: [] };
+    const beat = { current: 3, bpm: 100, sequences: [] };
 
     it("says song, in place of a sequence, and not how many loops, which it does not have", () => {
-      expect(exportName(song, { scope: "song" })).toBe("pad16-song-100bpm.wav");
-      expect(exportName(song, { scope: "song", loops: 4 })).toBe("pad16-song-100bpm.wav");
-      expect(exportName(song, { scope: "song", channels: "mono" })).toBe("pad16-song-100bpm-mono.wav");
-      expect(exportName(song, { scope: "sequence", loops: 4 })).toBe("pad16-seq-04-100bpm-x4.wav");
+      expect(exportName(beat, { scope: "song" })).toBe("pad16-song-100bpm.wav");
+      expect(exportName(beat, { scope: "song", loops: 4 })).toBe("pad16-song-100bpm.wav");
+      expect(exportName(beat, { scope: "song", channels: "mono" })).toBe("pad16-song-100bpm-mono.wav");
+      expect(exportName(beat, { scope: "sequence", loops: 4 })).toBe("pad16-seq-04-100bpm-x4.wav");
     });
 
     it("names the zip and the stems the same way", () => {
-      expect(stemsName(song, { scope: "song" })).toBe("pad16-song-100bpm-stems.zip");
-      expect(stemName(song, { scope: "song" }, createKit([sound("Snare")]), 0)).toBe(
+      expect(stemsName(beat, { scope: "song" })).toBe("pad16-song-100bpm-stems.zip");
+      expect(stemName(beat, { scope: "song" }, createKit([sound("Snare")]), 0)).toBe(
         "pad16-song-100bpm-pad01-snare.wav",
       );
     });
@@ -2445,17 +2445,17 @@ describe("exporting the song", () => {
   describe("exportSequence and exportStems", () => {
     const kit = createKit([sound("a"), sound("b"), sound("c")]);
     const render = vi.fn(async () => ({ sampleRate: 8000, channels: [Float32Array.of(0.5), Float32Array.of(0.5)] }));
-    const run = (make, song, options) => {
+    const run = (make, beat, options) => {
       const onMessage = vi.fn();
       const save = vi.fn();
-      const done = make({ song, kit, stepsPerBar: 16, onMessage, save, render, supported: true, options });
+      const done = make({ beat, kit, stepsPerBar: 16, onMessage, save, render, supported: true, options });
       return { done, onMessage, save };
     };
 
     it("exports the whole song as one file when it is asked to, even when the sequence showing is empty", async () => {
       render.mockClear();
-      const song = allSong([sequence({}), sequence({ 0: [0] })], { current: 0 });
-      const { done, save, onMessage } = run(exportSequence, song, { scope: "song" });
+      const beat = allBeat([sequence({}), sequence({ 0: [0] })], { current: 0 });
+      const { done, save, onMessage } = run(exportSequence, beat, { scope: "song" });
       expect(await done).toBe(true);
       expect(render).toHaveBeenCalledWith(expect.objectContaining({ scope: "song" }));
       expect(save.mock.calls[0][1]).toBe("pad16-song-120bpm.wav");
@@ -2463,24 +2463,24 @@ describe("exporting the song", () => {
     });
 
     it("has nothing to export when no sequence has steps, with its own message the same as before", async () => {
-      const { done, onMessage } = run(exportSequence, allSong([sequence({}), sequence({})]), { scope: "song" });
+      const { done, onMessage } = run(exportSequence, allBeat([sequence({}), sequence({})]), { scope: "song" });
       expect(await done).toBe(false);
       expect(onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
     });
 
     it("exports the song as it is arranged: the arrangement is in what is rendered, and the name is the song's", async () => {
       render.mockClear();
-      const song = arranged();
-      const { done, save } = run(exportSequence, song, { scope: "song" });
+      const beat = arranged();
+      const { done, save } = run(exportSequence, beat, { scope: "song" });
       expect(await done).toBe(true);
-      expect(render.mock.calls[0][0].song.arrangement).toEqual(song.arrangement);
+      expect(render.mock.calls[0][0].beat.arrangement).toEqual(beat.arrangement);
       expect(save.mock.calls[0][1]).toBe("pad16-song-120bpm.wav");
     });
 
     it("has nothing to export when the sequences the song plays have no steps, though one it leaves out has", async () => {
       render.mockClear();
-      const song = allSong([sequence({ 0: [0] }), sequence({})], { arrangement: [{ sequence: 1, repeats: 3 }] });
-      const { done, onMessage } = run(exportSequence, song, { scope: "song" });
+      const beat = allBeat([sequence({ 0: [0] }), sequence({})], { arrangement: [{ sequence: 1, repeats: 3 }] });
+      const { done, onMessage } = run(exportSequence, beat, { scope: "song" });
       expect(await done).toBe(false);
       expect(onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
       expect(render).not.toHaveBeenCalled();
@@ -2489,7 +2489,7 @@ describe("exporting the song", () => {
     it("will not render a song longer than Export makes, and says so before it starts, for a file and for stems", async () => {
       render.mockClear();
       // 120 BPM: 8 bars are 16 s, and 26 times round them are 416 s, with the tail over 400
-      const song = allSong([sequence({ 0: [0] }, {}, 8)], {
+      const beat = allBeat([sequence({ 0: [0] }, {}, 8)], {
         arrangement: [
           { sequence: 0, repeats: 16 },
           { sequence: 0, repeats: 10 },
@@ -2499,7 +2499,7 @@ describe("exporting the song", () => {
         [exportSequence, { scope: "song" }],
         [exportStems, { scope: "song", files: "stems" }],
       ]) {
-        const { done, onMessage, save } = run(make, song, options);
+        const { done, onMessage, save } = run(make, beat, options);
         expect(await done).toBe(false);
         expect(onMessage.mock.calls).toEqual([["SONG TOO LONG"]]); // not EXPORTING..., which would make it look as though it began
         expect(save).not.toHaveBeenCalled();
@@ -2509,22 +2509,22 @@ describe("exporting the song", () => {
 
     it("does not stop a long run of the sequence showing, which the loops make and the dialog warns of by memory", async () => {
       render.mockClear();
-      const song = allSong([sequence({ 0: [0] }, {}, 8)], { bpm: 40 });
-      const { done } = run(exportSequence, song, { scope: "sequence", loops: 8 });
+      const beat = allBeat([sequence({ 0: [0] }, {}, 8)], { bpm: 40 });
+      const { done } = run(exportSequence, beat, { scope: "sequence", loops: 8 });
       expect(await done).toBe(true);
     });
 
     it("still exports the sequence showing, and says there is nothing when it is empty, when the scope is the sequence", async () => {
-      const song = allSong([sequence({}), sequence({ 0: [0] })], { current: 0 });
-      const { done, onMessage } = run(exportSequence, song, { scope: "sequence" });
+      const beat = allBeat([sequence({}), sequence({ 0: [0] })], { current: 0 });
+      const { done, onMessage } = run(exportSequence, beat, { scope: "sequence" });
       expect(await done).toBe(false);
       expect(onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
     });
 
     it("makes a stem for each pad of any sequence, all of them as long as the whole, in a zip with the song's name", async () => {
       render.mockClear();
-      const song = allSong([sequence({ 2: [0] }), sequence({ 0: [1] })], { current: 0 });
-      const { done, save } = run(exportStems, song, { scope: "song", files: "stems" });
+      const beat = allBeat([sequence({ 2: [0] }), sequence({ 0: [1] })], { current: 0 });
+      const { done, save } = run(exportStems, beat, { scope: "song", files: "stems" });
       expect(await done).toBe(true);
       expect(render.mock.calls.map(([args]) => [args.pad, args.scope])).toEqual([
         [0, "song"],
@@ -2537,11 +2537,11 @@ describe("exporting the song", () => {
 
     it("makes stems of all the sequences when the sequence showing is empty, and says there is nothing only when none has a step", async () => {
       render.mockClear();
-      const song = allSong([sequence({}), sequence({ 1: [0] })], { current: 0 });
-      const { done, onMessage } = run(exportStems, song, { scope: "song", files: "stems" });
+      const beat = allBeat([sequence({}), sequence({ 1: [0] })], { current: 0 });
+      const { done, onMessage } = run(exportStems, beat, { scope: "song", files: "stems" });
       expect(await done).toBe(true);
       expect(onMessage).toHaveBeenLastCalledWith("EXPORTED pad16-song-120bpm-stems.zip");
-      const none = run(exportStems, allSong([sequence({}), sequence({})]), { scope: "song", files: "stems" });
+      const none = run(exportStems, allBeat([sequence({}), sequence({})]), { scope: "song", files: "stems" });
       expect(await none.done).toBe(false);
       expect(none.onMessage).toHaveBeenLastCalledWith("NOTHING TO EXPORT");
     });
@@ -2549,9 +2549,9 @@ describe("exporting the song", () => {
     it("weighs the stems by their work over every sequence", async () => {
       // Pad 1 has a step in the second sequence and pad 3 has three in the first: a stem is a pass for each sequence and the
       // sounds in them, so pad 1's is (1 + 0) + (1 + 1) = 3 and pad 3's is (1 + 3) + (1 + 0) = 5
-      const song = allSong([sequence({ 2: [0, 1, 2] }), sequence({ 0: [1] })]);
+      const beat = allBeat([sequence({ 2: [0, 1, 2] }), sequence({ 0: [1] })]);
       const onProgress = vi.fn();
-      await renderStems({ song, kit, stepsPerBar: 16, sampleRate: 1000, scope: "song", onProgress, render });
+      await renderStems({ beat, kit, stepsPerBar: 16, sampleRate: 1000, scope: "song", onProgress, render });
       const reported = onProgress.mock.calls.map(([fraction]) => fraction);
       expect(reported[0]).toBeCloseTo(3 / 8); // the first stem done
       expect(reported.at(-1)).toBe(1);
