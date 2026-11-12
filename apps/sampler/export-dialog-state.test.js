@@ -123,17 +123,17 @@ describe("isEarlyPress", () => {
 describe("exportDialogModel", () => {
   const sound = () => ({ id: "s", name: "s", play() {} });
   const kit = createKit(Array.from({ length: 16 }, sound)); // the pads of the page
-  const song = (bars, pattern, bpm = 120) => ({
+  const beat = (bars, pattern, bpm = 120) => ({
     bpm,
     volume: 80,
     current: 0,
     sequences: [{ bars, pattern, velocities: {} }],
   });
-  const model = (songValue, options = { loops: 1, channels: "stereo" }, supported = true) =>
-    exportDialogModel({ song: songValue, kit, options, stepsPerBar: 16, sampleRate: EXPORT_SAMPLE_RATE, supported });
+  const model = (beatValue, options = { loops: 1, channels: "stereo" }, supported = true) =>
+    exportDialogModel({ beat: beatValue, kit, options, stepsPerBar: 16, sampleRate: EXPORT_SAMPLE_RATE, supported });
 
   it("is the heading, what the file will be, its format, and nothing to warn of or to block, for an ordinary sequence", () => {
-    expect(model(song(1, { 0: [0, 4] }))).toEqual({
+    expect(model(beat(1, { 0: [0, 4] }))).toEqual({
       title: "SEQ 01 · 1 BAR · 120 BPM",
       readout: "2.0 s · stereo · 345 KB",
       format: "16-bit 44.1 kHz",
@@ -146,7 +146,7 @@ describe("exportDialogModel", () => {
   describe("for stems", () => {
     const stems = { loops: 1, channels: "stereo", files: "stems" };
     // Pads 0, 3 and 9 have steps: three stems
-    const three = song(1, { 0: [0, 4], 3: [8], 9: [12] });
+    const three = beat(1, { 0: [0, 4], 3: [8], 9: [12] });
 
     it("counts a stem for each pad that has steps, in the readout, and says what they are in the hint", () => {
       const m = model(three, stems);
@@ -158,7 +158,7 @@ describe("exportDialogModel", () => {
 
     it("is as big as the zip will be: a file for each pad", () => {
       // 240 BPM: a bar of a second, 172 KB a stem, so three stay in kilobytes
-      const size = (pads) => Number(model(song(1, pads, 240), stems).readout.match(/([\d.]+) KB zip/)[1]);
+      const size = (pads) => Number(model(beat(1, pads, 240), stems).readout.match(/([\d.]+) KB zip/)[1]);
       const one = size({ 0: [0] });
       expect(size({ 0: [0], 3: [8], 9: [12] })).toBeGreaterThan(one * 2.9);
       expect(size({ 0: [0], 3: [8], 9: [12] })).toBeLessThan(one * 3.1);
@@ -171,7 +171,7 @@ describe("exportDialogModel", () => {
     });
 
     it("says the memory it takes where the stems together are large, though one mix that long would not be", () => {
-      const long = song(
+      const long = beat(
         8,
         { 0: [0], 1: [1], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6], 7: [7], 8: [8], 9: [9], 10: [10], 11: [11] },
         40,
@@ -183,7 +183,7 @@ describe("exportDialogModel", () => {
     });
 
     it("is blocked for a sequence with nothing in it, as the mix is, and says it has no stems and not the mix's size", () => {
-      const m = model(song(2, {}), stems);
+      const m = model(beat(2, {}), stems);
       expect(m.readout).toBe("No stems");
       expect(m.blocked).toBe("This sequence has no steps yet, so there is nothing to export.");
       expect(m.note).toBe("");
@@ -197,21 +197,21 @@ describe("exportDialogModel", () => {
   });
 
   it("follows the options: loops and mono change the length and the size", () => {
-    const m = model(song(1, { 0: [0] }), { loops: 4, channels: "mono" });
+    const m = model(beat(1, { 0: [0] }), { loops: 4, channels: "mono" });
     expect(m.readout).toBe("8.0 s · mono · 689 KB");
   });
 
   it("says which bars have no steps", () => {
-    expect(model(song(4, { 0: [0, 33] })).note).toBe(
+    expect(model(beat(4, { 0: [0, 33] })).note).toBe(
       "Bars 2 and 4 have no steps: nothing plays in them but what is still ringing.",
     );
   });
 
   it("warns of a large export, and says nothing of one that fits", () => {
-    const big = model(song(8, { 0: [0, 64] }, 40), { loops: 8, channels: "stereo" });
+    const big = model(beat(8, { 0: [0, 64] }, 40), { loops: 8, channels: "stereo" });
     expect(big.note).toMatch(/Making this takes about \d+ MB of memory/);
-    expect(model(song(8, { 0: [0, 64] }, 40), { loops: 1, channels: "stereo" }).note).toMatch(/^Bars 2/);
-    expect(model(song(8, { 0: [0, 64] }, 40), { loops: 1, channels: "stereo" }).note).not.toMatch(/memory/);
+    expect(model(beat(8, { 0: [0, 64] }, 40), { loops: 1, channels: "stereo" }).note).toMatch(/^Bars 2/);
+    expect(model(beat(8, { 0: [0, 64] }, 40), { loops: 1, channels: "stereo" }).note).not.toMatch(/memory/);
   });
 
   it("counts a loaded sample's long release: it adds a warm-up pass, so the memory figure is bigger", () => {
@@ -221,7 +221,7 @@ describe("exportDialogModel", () => {
     const megabytes = (kitValue) =>
       Number(
         exportDialogModel({
-          song: song(8, { 0: [0] }, 40),
+          beat: beat(8, { 0: [0] }, 40),
           kit: kitValue,
           options: { loops: 8, channels: "stereo" },
           stepsPerBar: 16,
@@ -233,19 +233,19 @@ describe("exportDialogModel", () => {
   });
 
   it("gives both, the bars first, when both apply", () => {
-    const m = model(song(8, { 0: [0] }, 40), { loops: 8, channels: "stereo" });
+    const m = model(beat(8, { 0: [0] }, 40), { loops: 8, channels: "stereo" });
     expect(m.note.indexOf("Bars 2")).toBe(0);
     expect(m.note).toMatch(/ Making this takes about /);
   });
 
   it("has no note, and blocks Export WAV with the reason, for a sequence with nothing in it", () => {
-    const m = model(song(2, {}));
+    const m = model(beat(2, {}));
     expect(m.note).toBe("");
     expect(m.blocked).toBe("This sequence has no steps yet, so there is nothing to export.");
   });
 
   describe("for the song", () => {
-    const song3 = (patterns, bars = [1, 1, 1], extra = {}) => ({
+    const beat3 = (patterns, bars = [1, 1, 1], extra = {}) => ({
       bpm: 120,
       volume: 80,
       current: 0,
@@ -255,47 +255,47 @@ describe("exportDialogModel", () => {
     const all = { loops: 4, channels: "stereo", files: "mix", scope: "song" };
 
     it("is headed by how many entries there are, and says how long the whole is and how big, with the tail on the end", () => {
-      const m = model(song3([{ 0: [0] }, { 1: [0] }]), all); // two bars of 2 s, and 4 s of tail
+      const m = model(beat3([{ 0: [0] }, { 1: [0] }]), all); // two bars of 2 s, and 4 s of tail
       expect(m.title).toBe("SONG · 2 ENTRIES · 120 BPM");
       expect(m.readout).toMatch(/^8\.0 s · stereo · 1\.\d MB$/);
       expect(m.blocked).toBe("");
     });
 
     it("does not count loops: the same length and size whatever they say", () => {
-      const one = model(song3([{ 0: [0] }]), { ...all, loops: 1 });
-      expect(model(song3([{ 0: [0] }]), { ...all, loops: 8 }).readout).toBe(one.readout);
+      const one = model(beat3([{ 0: [0] }]), { ...all, loops: 1 });
+      expect(model(beat3([{ 0: [0] }]), { ...all, loops: 8 }).readout).toBe(one.readout);
     });
 
     it("says what the file is in the hint, with the stems' own words for stems", () => {
-      expect(model(song3([{ 0: [0] }]), all).hint).toMatch(/each entry of the song, in order/i);
-      expect(model(song3([{ 0: [0] }]), { ...all, files: "stems" }).hint).toMatch(/one file for each pad/i);
+      expect(model(beat3([{ 0: [0] }]), all).hint).toMatch(/each entry of the song, in order/i);
+      expect(model(beat3([{ 0: [0] }]), { ...all, files: "stems" }).hint).toMatch(/one file for each pad/i);
     });
 
     it("says which sequences have no steps, and not which bars, and that they are in the file", () => {
-      const m = model(song3([{ 0: [0] }, {}, { 1: [0] }], [1, 1, 2]), all);
+      const m = model(beat3([{ 0: [0] }, {}, { 1: [0] }], [1, 1, 2]), all);
       expect(m.note).toBe("Sequence 2 has no steps: nothing plays in it but what is still ringing.");
     });
 
     it("does not list the empty bars of the sequence showing: the note is of sequences, for the whole", () => {
-      const m = model(song3([{ 0: [0] }, { 1: [0] }], [2, 1]), all); // the first has two bars and a step only in the first
+      const m = model(beat3([{ 0: [0] }, { 1: [0] }], [2, 1]), all); // the first has two bars and a step only in the first
       expect(m.note).toBe("");
-      expect(model(song3([{ 0: [0] }, { 1: [0] }], [2, 1]), { ...all, scope: "sequence" }).note).toMatch(
+      expect(model(beat3([{ 0: [0] }, { 1: [0] }], [2, 1]), { ...all, scope: "sequence" }).note).toMatch(
         /^Bar 2 has no steps/,
       );
     });
 
     it("exports when the sequence showing is empty and another is not, and blocks only when none has a step", () => {
-      expect(model(song3([{}, { 0: [0] }]), all).blocked).toBe("");
-      expect(model(song3([{}, { 0: [0] }]), { ...all, scope: "sequence" }).blocked).toMatch(
+      expect(model(beat3([{}, { 0: [0] }]), all).blocked).toBe("");
+      expect(model(beat3([{}, { 0: [0] }]), { ...all, scope: "sequence" }).blocked).toMatch(
         /this sequence has no steps/i,
       );
-      const none = model(song3([{}, {}]), all);
+      const none = model(beat3([{}, {}]), all);
       expect(none.blocked).toBe("No sequence in the song has any steps yet, so there is nothing to export.");
       expect(none.note).toBe("");
     });
 
     it("counts a stem for each pad of any sequence, each as long as the whole", () => {
-      const m = model(song3([{ 0: [0] }, { 3: [0] }, { 0: [4], 9: [0] }]), { ...all, files: "stems" });
+      const m = model(beat3([{ 0: [0] }, { 3: [0] }, { 0: [4], 9: [0] }]), { ...all, files: "stems" });
       expect(m.readout).toMatch(/^3 stems · 10\.0 s each · stereo · /); // three bars of 2 s and the tail
     });
 
@@ -309,31 +309,31 @@ describe("exportDialogModel", () => {
 
     it("reads the song's order and repeats: the length is the passes it plays, and the title counts its entries", () => {
       const patterns = [{ 0: [0] }, { 1: [0] }, { 2: [0] }];
-      const m = model(song3(patterns, [1, 1, 1], arranged), all); // four bars of 2 s and the tail
+      const m = model(beat3(patterns, [1, 1, 1], arranged), all); // four bars of 2 s and the tail
       expect(m.title).toBe("SONG · 2 ENTRIES · 120 BPM");
       expect(m.readout).toMatch(/^12\.0 s · stereo · /);
-      expect(model(song3(patterns), all).readout).toMatch(/^10\.0 s · stereo · /); // not edited: the three sequences, once each
-      expect(model(song3(patterns, [1, 1, 1], { arrangement: [{ sequence: 0, repeats: 8 }] }), all).readout).toMatch(
+      expect(model(beat3(patterns), all).readout).toMatch(/^10\.0 s · stereo · /); // not edited: the three sequences, once each
+      expect(model(beat3(patterns, [1, 1, 1], { arrangement: [{ sequence: 0, repeats: 8 }] }), all).readout).toMatch(
         /^20\.0 s · /,
       );
     });
 
     it("gives a stem to the pads of the sequences the song plays, and none to a sequence it leaves out", () => {
       const patterns = [{ 0: [0] }, { 5: [0] }, { 2: [0] }];
-      const m = model(song3(patterns, [1, 1, 1], arranged), { ...all, files: "stems" });
+      const m = model(beat3(patterns, [1, 1, 1], arranged), { ...all, files: "stems" });
       expect(m.readout).toMatch(/^2 stems · /); // pads 1 and 3: the second sequence, with pad 6, is not in the song
     });
 
     it("names the sequences with no steps that the song plays, and not one it leaves out", () => {
       const patterns = [{ 0: [0] }, {}, { 2: [0] }];
-      expect(model(song3(patterns, [1, 1, 1], arranged), all).note).toBe(""); // the empty one is left out
+      expect(model(beat3(patterns, [1, 1, 1], arranged), all).note).toBe(""); // the empty one is left out
       const plays = {
         arrangement: [
           { sequence: 1, repeats: 3 },
           { sequence: 0, repeats: 1 },
         ],
       };
-      expect(model(song3(patterns, [1, 1, 1], plays), all).note).toBe(
+      expect(model(beat3(patterns, [1, 1, 1], plays), all).note).toBe(
         "Sequence 2 has no steps: nothing plays in it but what is still ringing.", // once, though it goes round three times
       );
     });
@@ -341,7 +341,7 @@ describe("exportDialogModel", () => {
     it("blocks it when the sequences the song plays have no steps, though another sequence has", () => {
       const patterns = [{}, { 1: [0] }, {}];
       const m = model(
-        song3(patterns, [1, 1, 1], {
+        beat3(patterns, [1, 1, 1], {
           arrangement: [
             { sequence: 0, repeats: 1 },
             { sequence: 2, repeats: 2 },
@@ -354,13 +354,13 @@ describe("exportDialogModel", () => {
 
     it("says it is the song that has no steps when a sequence it leaves out has some, and not that no sequence has", () => {
       const patterns = [{ 0: [0] }, { 1: [0] }, {}];
-      const m = model(song3(patterns, [1, 1, 1], { arrangement: [{ sequence: 2, repeats: 2 }] }), all);
+      const m = model(beat3(patterns, [1, 1, 1], { arrangement: [{ sequence: 2, repeats: 2 }] }), all);
       expect(m.blocked).toBe("No sequence in the song has any steps yet, so there is nothing to export.");
     });
 
     it("blocks a song longer than Export can make, with its length, and has no note: the memory warning would be for a file that is not made", () => {
       const patterns = [{ 0: [0] }];
-      const long = song3(patterns, [8], {
+      const long = beat3(patterns, [8], {
         bpm: 40,
         arrangement: [
           { sequence: 0, repeats: 16 },
@@ -376,7 +376,7 @@ describe("exportDialogModel", () => {
 
     it("does not block the longest song that is allowed, and does not block the sequence showing for what the song would be", () => {
       const patterns = [{ 0: [0] }];
-      const big = song3(patterns, [8], {
+      const big = beat3(patterns, [8], {
         bpm: 40,
         arrangement: [
           { sequence: 0, repeats: 16 },
@@ -384,7 +384,7 @@ describe("exportDialogModel", () => {
         ],
       });
       expect(model(big, { ...all, scope: "sequence" }).blocked).toBe("");
-      const biggest = song3(
+      const biggest = beat3(
         Array.from({ length: 8 }, () => ({ 0: [0] })),
         Array.from({ length: 8 }, () => 8),
         { bpm: 40 },
@@ -393,7 +393,7 @@ describe("exportDialogModel", () => {
     });
 
     it("says the memory it takes where the whole is large, and what makes it smaller: not loops, which it has none of", () => {
-      const long = song3(
+      const long = beat3(
         Array.from({ length: 8 }, () => ({ 0: [0] })),
         Array.from({ length: 8 }, () => 8),
         { bpm: 40 },
@@ -409,7 +409,7 @@ describe("exportDialogModel", () => {
   });
 
   it("blocks it, with the browser first, when the browser cannot render a file", () => {
-    expect(model(song(1, { 0: [0] }), undefined, false).blocked).toMatch(/browser/);
-    expect(model(song(1, {}), undefined, false).blocked).toMatch(/browser/);
+    expect(model(beat(1, { 0: [0] }), undefined, false).blocked).toMatch(/browser/);
+    expect(model(beat(1, {}), undefined, false).blocked).toMatch(/browser/);
   });
 });

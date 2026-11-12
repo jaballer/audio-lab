@@ -6,7 +6,7 @@
 // A song nobody has edited has no arrangement (`null`), and that means every sequence once, in order, including one made
 // or removed later: nothing is made up for it, so it cannot go out of step with the sequences. The first edit (insertEntry and
 // the others below) makes the list explicit; from then on a sequence made or removed has to be
-// followed here (afterSequenceAdded, afterSequenceRemoved), and `song.js` keeps it through saving and loading
+// followed here (afterSequenceAdded, afterSequenceRemoved), and `beat.js` keeps it through saving and loading
 // (cleanArrangement).
 //
 //   cleanArrangement(raw, count)         // what storage gave, as a list of entries or null
@@ -26,8 +26,8 @@ export const MAX_REPEATS = 16;
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// Turn whatever was in storage into a list of entries, or null when there is nothing usable in it, which is a song with no
-// arrangement: an entry for a sequence the song does not have is dropped (the song can have fewer than when it was saved),
+// Turn whatever was in storage into a list of entries, or null when there is nothing usable in it, which is a beat with no
+// arrangement: an entry for a sequence the beat does not have is dropped (the beat can have fewer than when it was saved),
 // repeats are brought into range (one that is not a whole number reads as 1, as a sequence with no length reads as one bar),
 // and only the first MAX_ENTRIES that are kept count. An arrangement with nothing left in it is none, not an empty song: a
 // person is never left with a song that plays nothing.

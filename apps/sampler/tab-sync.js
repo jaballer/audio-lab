@@ -3,7 +3,7 @@
 // edit made there). The browser tells the other tabs of a site when one changes localStorage (a `storage` event), and that
 // is the cue to stop saving here. No DOM, and nothing at import time: the page passes in what to listen on.
 //
-//   const sync = createTabSync({ target: window, keys: [SONG_KEY, SAMPLES_KEY], onStale: (key) => {} });
+//   const sync = createTabSync({ target: window, keys: [BEAT_KEY, SAMPLES_KEY], onStale: (key) => {} });
 //   sync.isStale;   // true once another tab has changed one of the keys: this tab's copy is behind and must not save
 //
 // Stale stays stale until the page is loaded again, which reads what is kept. The whole of storage being cleared (a `storage`

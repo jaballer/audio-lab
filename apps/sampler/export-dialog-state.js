@@ -7,7 +7,7 @@
 //
 //   const state = dialogState({ busy, cancelling, blocked, hasNote, files });   // { optionsDisabled, goHidden, cancelLabel, ... }
 //   isEarlyPress(event.timeStamp, changedAt)                             // a double click's second press, say
-//   exportDialogModel({ song, kit, options, stepsPerBar, sampleRate, supported })   // what `dialog.refresh` is given
+//   exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate, supported })   // what `dialog.refresh` is given
 
 import {
   exportBlockedReason,
@@ -58,27 +58,27 @@ export function dialogState({ busy, cancelling, blocked, hasNote, files = "mix",
 // WAV is off. `supported` is whether the browser can render audio to a file. A sequence with nothing in it, or a song longer than
 // Export makes, is blocked with its own reason and has no note: that is said once, and a memory warning for a file that is not made
 // would only be noise (nor is the plan of it worked out).
-export function exportDialogModel({ song, kit, options, stepsPerBar, sampleRate, supported }) {
+export function exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate, supported }) {
   const scope = options.scope === "song" ? "song" : "sequence";
-  const nothing = !hasSteps(song, stepsPerBar, scope);
-  const tooLong = scope === "song" && songTooLong(song, stepsPerBar);
+  const nothing = !hasSteps(beat, stepsPerBar, scope);
+  const tooLong = scope === "song" && songTooLong(beat, stepsPerBar);
   const stemsChosen = options.files === "stems";
-  const stems = stemsChosen ? stemPads(song, stepsPerBar, scope).length : 0;
+  const stems = stemsChosen ? stemPads(beat, stepsPerBar, scope).length : 0;
   const memory = { ...(stems ? { stems, channels: options.channels } : {}), scope }; // (what the note advises depends on the scope)
   const note =
     nothing || tooLong
       ? ""
       : exportNote(
-          planRender({ song, kit, stepsPerBar, sampleRate, loops: options.loops, scope }),
-          scope === "song" ? [] : emptyBars(song, stepsPerBar),
+          planRender({ beat, kit, stepsPerBar, sampleRate, loops: options.loops, scope }),
+          scope === "song" ? [] : emptyBars(beat, stepsPerBar),
           memory,
-          scope === "song" ? emptySequences(song, stepsPerBar) : [],
+          scope === "song" ? emptySequences(beat, stepsPerBar) : [],
         );
   const info = stemsChosen
-    ? stemsInfo(song, options, stepsPerBar, sampleRate, stems)
-    : exportInfo(song, options, stepsPerBar, sampleRate);
+    ? stemsInfo(beat, options, stepsPerBar, sampleRate, stems)
+    : exportInfo(beat, options, stepsPerBar, sampleRate);
   return {
-    title: exportTitle(song, scope),
+    title: exportTitle(beat, scope),
     readout: exportReadout(info),
     format: exportFormat(sampleRate),
     note,
@@ -87,7 +87,7 @@ export function exportDialogModel({ song, kit, options, stepsPerBar, sampleRate,
       supported,
       hasSteps: !nothing,
       scope,
-      seconds: scope === "song" ? songFileSeconds(song, stepsPerBar) : 0,
+      seconds: scope === "song" ? songFileSeconds(beat, stepsPerBar) : 0,
     }),
   };
 }

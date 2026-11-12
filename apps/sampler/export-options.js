@@ -52,33 +52,33 @@ export const channelCount = (channels) => (channels === "mono" ? 1 : 2);
 
 // The song's arrangement as it plays (arrangement.js): a list of entries, or null for a song nobody has edited, which is every
 // sequence once, in order. Read as the page reads a saved one, so an entry for a sequence there is not cannot reach the render.
-const arrangementOf = (song) => cleanArrangement(song.arrangement, song.sequences.length);
+const arrangementOf = (beat) => cleanArrangement(beat.arrangement, beat.sequences.length);
 
 // How many entries the song has: the Song panel's, or with no arrangement a sequence each.
-export const songEntries = (song) => resolveArrangement(arrangementOf(song), song.sequences.length).length;
+export const songEntries = (beat) => resolveArrangement(arrangementOf(beat), beat.sequences.length).length;
 
 // The sequence of each pass of the song, in order, with every entry's repeats counted out ([2, 2, 2, 1]): what the render of it is
 // made of, the one walk that playback and export share.
-export const songPassOrder = (song) => passOrder(arrangementOf(song), song.sequences.length);
+export const songPassOrder = (beat) => passOrder(arrangementOf(beat), beat.sequences.length);
 
 // How many steps the song plays between its first and its last, before the tail: every pass of it, a sequence that repeats as often
 // as it does and one the song leaves out not at all.
-export const songSteps = (song, stepsPerBar) =>
-  songPassOrder(song).reduce((sum, index) => sum + song.sequences[index].bars * stepsPerBar, 0);
+export const songSteps = (beat, stepsPerBar) =>
+  songPassOrder(beat).reduce((sum, index) => sum + beat.sequences[index].bars * stepsPerBar, 0);
 
 // How long the file of the song is, in seconds: its steps at the tempo and the tail.
-export const songFileSeconds = (song, stepsPerBar) =>
-  songSteps(song, stepsPerBar) * stepSeconds(song.bpm) + SONG_TAIL_SECONDS;
+export const songFileSeconds = (beat, stepsPerBar) =>
+  songSteps(beat, stepsPerBar) * stepSeconds(beat.bpm) + SONG_TAIL_SECONDS;
 
 // Is the song longer than Export makes (MAX_SONG_EXPORT_SECONDS)?
-export const songTooLong = (song, stepsPerBar) => songFileSeconds(song, stepsPerBar) > MAX_SONG_EXPORT_SECONDS;
+export const songTooLong = (beat, stepsPerBar) => songFileSeconds(beat, stepsPerBar) > MAX_SONG_EXPORT_SECONDS;
 
 // How many frames the file has: `loops` times the sequence showing, rounded once, so eight loops are eight times
 // the length and not eight roundings of it; or for `scope` "song" the song once through, and the tail (loops are not counted).
-export function exportFrames(song, stepsPerBar, loops, sampleRate, scope = "sequence") {
-  if (scope === "song") return Math.round(songFileSeconds(song, stepsPerBar) * sampleRate);
-  const sequence = song.sequences[song.current];
-  const loopSeconds = sequence.bars * stepsPerBar * stepSeconds(song.bpm);
+export function exportFrames(beat, stepsPerBar, loops, sampleRate, scope = "sequence") {
+  if (scope === "song") return Math.round(songFileSeconds(beat, stepsPerBar) * sampleRate);
+  const sequence = beat.sequences[beat.current];
+  const loopSeconds = sequence.bars * stepsPerBar * stepSeconds(beat.bpm);
   return Math.round(loopSeconds * loops * sampleRate);
 }
 
@@ -86,9 +86,9 @@ export function exportFrames(song, stepsPerBar, loops, sampleRate, scope = "sequ
 const WAV_HEADER_BYTES = 44;
 const BYTES_PER_SAMPLE = 2;
 
-export function exportInfo(song, options, stepsPerBar, sampleRate) {
+export function exportInfo(beat, options, stepsPerBar, sampleRate) {
   const { loops, channels, scope } = normalizeExportOptions(options);
-  const frames = exportFrames(song, stepsPerBar, loops, sampleRate, scope);
+  const frames = exportFrames(beat, stepsPerBar, loops, sampleRate, scope);
   return {
     frames,
     seconds: frames / sampleRate,
@@ -104,8 +104,8 @@ const ZIP_END_BYTES = 22;
 
 // The same as exportInfo for `stems` stems in a zip: each stem is a file as long as the mix, and the zip is the files and
 // its headers (nothing is compressed).
-export function stemsInfo(song, options, stepsPerBar, sampleRate, stems) {
-  const info = exportInfo(song, options, stepsPerBar, sampleRate);
+export function stemsInfo(beat, options, stepsPerBar, sampleRate, stems) {
+  const info = exportInfo(beat, options, stepsPerBar, sampleRate);
   return { ...info, bytes: stems * (info.bytes + ZIP_BYTES_PER_FILE) + ZIP_END_BYTES, stems };
 }
 
@@ -154,13 +154,13 @@ export function exportFormat(sampleRate) {
 
 // The dialog's heading: which sequence, how long, at what tempo ("SEQ 01 · 2 BARS · 100 BPM"), or for the song how many entries
 // it has ("SONG · 3 ENTRIES · 100 BPM"): its length is the readout's to say, with the repeats in it.
-export function exportTitle(song, scope = "sequence") {
+export function exportTitle(beat, scope = "sequence") {
   if (scope === "song") {
-    const count = songEntries(song);
-    return `SONG · ${count} ${count === 1 ? "ENTRY" : "ENTRIES"} · ${Math.round(song.bpm)} BPM`;
+    const count = songEntries(beat);
+    return `SONG · ${count} ${count === 1 ? "ENTRY" : "ENTRIES"} · ${Math.round(beat.bpm)} BPM`;
   }
-  const bars = song.sequences[song.current].bars;
-  return `SEQ ${pad2(song.current + 1)} · ${bars} ${bars === 1 ? "BAR" : "BARS"} · ${Math.round(song.bpm)} BPM`;
+  const bars = beat.sequences[beat.current].bars;
+  return `SEQ ${pad2(beat.current + 1)} · ${bars} ${bars === 1 ? "BAR" : "BARS"} · ${Math.round(beat.bpm)} BPM`;
 }
 
 // How much memory making the file takes at most, which is what a phone may run out of before it runs out of time. A render

@@ -10,20 +10,20 @@
 //     kit,                 // the sounds on the pads (kit.js)
 //     steps,               // steps in one bar (the pattern is up to maxBars of them)
 //     maxBars,
-//     sequenceCount,       // how many sequences a start with no saved song has (1); a saved song brings its own
+//     sequenceCount,       // how many sequences a start with no saved beat has (1); a saved beat brings its own
 //     maxSequences,        // the most there can be (default: no limit)
-//     song,                // a parseSong() result to start from, or null for the starter beat
+//     beat,                // a parseBeat() result to start from, or null for the starter beat
 //     onChange,            // something on screen is out of date: read getState() and redraw
 //     onMessage,           // (text) a short note for the LCD
 //     onPadHit,            // (index) a pad just sounded live: flash it
 //     onPadPlayed,         // (index) the sequence just reached a pad that is on: light it (a pad does not move for this)
-//     onSongChange,        // the pattern, tempo or volume changed: worth saving
+//     onBeatChange,        // the pattern, tempo or volume changed: worth saving
 //   });
 //
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
-//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke or colour, saved with the song
+//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke or colour, saved with the beat
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setStepVelocity(5, 90, { activate: true })   // the same, and turns the step on first if it is off: one undo
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
@@ -61,7 +61,7 @@
 //                                // `song` is where the song is in Song mode, or null: { entry, entries, sequence, rep, repeats, next }, `entry` and `rep` -1 when not known,
 //                                // `next` -1 when the song ends after this pass);
 //                                // the rest, with sequence, bars and page, is the one showing, for the keys and for editing
-//   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings, arrangement?, loopSong? }: what song.js saves
+//   sampler.getBeat()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings, arrangement?, loopSong? }: what beat.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
@@ -105,43 +105,43 @@ export function createSampler({
   maxBars = 1,
   sequenceCount = 1,
   maxSequences = Infinity,
-  song = null,
+  beat = null,
   now = () => performance.now(),
   onChange = noop,
   onMessage = noop,
   onPadHit = noop,
   onPadPlayed = noop,
-  onSongChange = noop,
+  onBeatChange = noop,
 }) {
   let selected = 0;
   let recording = false;
-  let volume = song ? song.volume : DEFAULT_VOLUME;
+  let volume = beat ? beat.volume : DEFAULT_VOLUME;
   let page = 0;
-  let current = song?.current ?? 0;
+  let current = beat?.current ?? 0;
 
-  // Each sequence has its own steps and length; tempo and volume are shared. With no saved song the
+  // Each sequence has its own steps and length; tempo and volume are shared. With no saved beat the
   // first sequence is the starter beat and the rest are empty. A pattern has room for every bar, so
   // shortening a sequence keeps what was in the bars it drops.
   const makeSlot = ({ bars = 1, pattern: initial = {}, velocities } = {}) => ({
     bars: Math.min(maxBars, bars),
     history: createHistory(), // undo and redo are per sequence
-    pattern: createPattern(kit.length, steps * maxBars, initial, { onChange: onSongChange, velocities }),
+    pattern: createPattern(kit.length, steps * maxBars, initial, { onChange: onBeatChange, velocities }),
   });
-  const slots = Array.from({ length: Math.max(1, song ? song.sequences.length : sequenceCount) }, (_, i) => {
-    const saved = song?.sequences[i];
+  const slots = Array.from({ length: Math.max(1, beat ? beat.sequences.length : sequenceCount) }, (_, i) => {
+    const saved = beat?.sequences[i];
     return makeSlot({
       bars: saved?.bars,
-      pattern: saved ? saved.pattern : i === 0 && !song ? STARTER_BEAT : {},
+      pattern: saved ? saved.pattern : i === 0 && !beat ? STARTER_BEAT : {},
       velocities: saved?.velocities,
     });
   });
   // The order the sequences play in, with repeats, once a person has edited it (arrangement.js); null until then, which is every
   // sequence once, in order. Song mode goes by it (`songAt`, below), and it is kept, saved and followed through adding, copying and
   // removing sequences, so that the order is always about the sequences there are. The Song panel edits it, and Export reads it.
-  let arrangement = cleanArrangement(song?.arrangement, slots.length);
+  let arrangement = cleanArrangement(beat?.arrangement, slots.length);
   // Does the song go round again at its end instead of stopping? Off until a person turns it on, and saved with the beat. It is only about
   // Song mode: a beat that is not in Song mode is a loop of the sequence showing, whatever this says.
-  let loopSong = song?.loopSong === true;
+  let loopSong = beat?.loopSong === true;
   // The entry of the song that is selected (the strip shows it, and the tools act on it): where Song mode begins when Play is pressed.
   // Kept in range when it is read, since the song can have fewer entries than it had.
   let selectedEntry = 0;
@@ -237,8 +237,8 @@ export function createSampler({
   const scheduler = createScheduler({
     clock,
     steps: playingSteps(),
-    bpm: song?.bpm,
-    swing: song?.swing,
+    bpm: beat?.bpm,
+    swing: beat?.swing,
     onStep(step, time, heard, gridTime) {
       const { ctx, master } = audio;
       const { pattern: playingPattern } = playing;
@@ -444,14 +444,14 @@ export function createSampler({
     onChange();
   }
 
-  // The one place a pad's setting (gain, pitch, envelope, choke group, colour) changes: for the selected pad, saved with the song. The kit
+  // The one place a pad's setting (gain, pitch, envelope, choke group, colour) changes: for the selected pad, saved with the beat. The kit
   // clamps the value and tells the views.
   function setPadSetting(name, value) {
     kit.setSetting(selected, name, value);
     onMessage(
       `PAD ${pad2(selected + 1)} ${SETTINGS[name].label.toUpperCase()} ${formatSetting(name, kit.settings(selected)[name])}`,
     );
-    onSongChange();
+    onBeatChange();
     onChange();
   }
 
@@ -500,7 +500,7 @@ export function createSampler({
     // what is queued is still right.)
     if (shorter && alters) rescheduleQueuedHits();
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   // What showing the sequence in slot `next` (which exists) changes here: the editor, and not what plays.
@@ -564,7 +564,7 @@ export function createSampler({
     // In Song mode the first line of the display says which sequence plays, so this one says that it is only showing.
     onMessage(songMode ? `SHOWING SEQ ${pad2(current + 1)}` : `SEQ ${pad2(current + 1)}`);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   function toggleSong() {
@@ -579,7 +579,7 @@ export function createSampler({
     const showing = current;
     if (!songMode && scheduler.playing) followPlaying();
     onChange();
-    if (current !== showing) onSongChange(); // the sequence showing is saved with the beat
+    if (current !== showing) onBeatChange(); // the sequence showing is saved with the beat
   }
 
   // Song mode turned off while the beat plays: it goes on as a loop of the sequence that was playing, and the editor moves to it, so that
@@ -712,7 +712,7 @@ export function createSampler({
     // Turned on or off in the moment before a pass end that is, or is not, the song's end has sounded, it is for that pass end.
     reconsiderPassEnd();
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   function addEntry(at = entryCount()) {
@@ -727,7 +727,7 @@ export function createSampler({
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(place + 1)} ADDED`);
     onChange();
-    onSongChange();
+    onBeatChange();
     return place;
   }
 
@@ -742,7 +742,7 @@ export function createSampler({
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} REMOVED`);
     onChange();
-    onSongChange();
+    onBeatChange();
     return selectedEntry;
   }
 
@@ -755,7 +755,7 @@ export function createSampler({
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} MOVED TO ${pad2(to + 1)}`);
     onChange();
-    onSongChange();
+    onBeatChange();
     return to;
   }
 
@@ -771,7 +771,7 @@ export function createSampler({
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} REPEATS ${now}`);
     onChange();
-    onSongChange();
+    onBeatChange();
     return now;
   }
 
@@ -816,7 +816,7 @@ export function createSampler({
     scheduler.startPass(playingSteps());
     if (!automatic) onMessage(`SEQ ${pad2(next + 1)}`); // the one that began to play
     onChange();
-    if (!automatic) onSongChange();
+    if (!automatic) onBeatChange();
   }
 
   // Queued after the pass ended in the scheduler, but before its next step has sounded: the steps already handed to the audio
@@ -877,7 +877,7 @@ export function createSampler({
     reconsiderPassEnd(); // the new sequence is in the song after the last: a pass end that was the song's end is not
     onMessage(`SEQ ${pad2(current + 1)} ADDED`);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   function copySequence() {
@@ -889,7 +889,7 @@ export function createSampler({
     reconsiderPassEnd();
     onMessage(`SEQ ${pad2(from + 1)} COPIED TO ${pad2(current + 1)}`);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   // Not undoable (undo is of the steps of one sequence), so the page asks first when there is anything in it (sequenceHasSteps).
@@ -914,7 +914,7 @@ export function createSampler({
     reconsiderPassEnd(); // a sequence that went may have been the one the song was to go on to, or the one that plays
     onMessage(`SEQ ${pad2(removed + 1)} REMOVED`);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   // Any step on any pad, in any bar: a sequence made shorter keeps the steps of the bars it dropped.
@@ -993,7 +993,7 @@ export function createSampler({
   // made steps late. It is saved, though, for a setting changed from elsewhere (a sample's pitch cleared).
   function kitChanged(what) {
     if (what === "sound") rescheduleQueuedHits();
-    else onSongChange();
+    else onBeatChange();
   }
 
   // ---------- Play and stop ----------
@@ -1061,14 +1061,14 @@ export function createSampler({
   function setBpm(value) {
     scheduler.setBpm(value);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   function setSwing(value) {
     const swing = scheduler.setSwing(value);
     onMessage(swing === SWING_DEFAULT ? "SWING OFF" : `SWING ${swing}%`);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   function tapTempo() {
@@ -1086,7 +1086,7 @@ export function createSampler({
     audio.setVolume(volume / VOLUME_SCALE);
     onMessage(`VOLUME ${volume}`);
     onChange();
-    onSongChange();
+    onBeatChange();
   }
 
   return {
@@ -1212,7 +1212,7 @@ export function createSampler({
       };
     },
 
-    getSong: () => ({
+    getBeat: () => ({
       bpm: scheduler.bpm,
       swing: scheduler.swing,
       volume,
@@ -1223,7 +1223,7 @@ export function createSampler({
         pattern: slot.pattern.snapshot(),
         velocities: slot.pattern.velocitySnapshot(),
       })),
-      // A copy, and left out while there is none (a song nobody edited is saved as it always was).
+      // A copy, and left out while there is none (a beat nobody edited is saved as it always was).
       ...(arrangement ? { arrangement: arrangement.map((entry) => ({ ...entry })) } : {}),
       ...(loopSong ? { loopSong: true } : {}),
     }),

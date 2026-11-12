@@ -51,6 +51,10 @@ Numbers link to the pull request.
 
 ### Maintenance
 
+- Sampler code: the saved snapshot (sequences, tempo, swing, volume, pad settings) is called the beat, as the page calls
+  it, so that "song" means only the chain of sequences Song mode plays: `song.js` is now `beat.js`, with `parseBeat`,
+  `getBeat` and the rest. No change on the page; the storage key, the saved fields and the project file keep their names, so
+  every saved beat and project still opens (#159 step 5)
 - The scheduler can end a run at a pass end (`endAt`, with `onEnd`): it stops queuing steps and goes on playing until the clock
   gets there, so the last steps handed to the audio clock are not taken back. A beat can carry `loopSong` (saved format 11, an
   upgrade that changes nothing: a beat saved before has Loop off) ([#179](https://github.com/jaballer/audio-lab/pull/179))

@@ -1,20 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STARTER_BEAT } from "./starter-beat.js";
 import {
-  SONG_BACKUP_KEY,
-  SONG_KEY,
-  SONG_VERSION,
+  BEAT_BACKUP_KEY,
+  BEAT_KEY,
+  BEAT_VERSION,
   backUpUnusable,
-  createSongSaver,
+  createBeatSaver,
   needsBackup,
-  parseSong,
-  serializeSong,
-  upgradeSong,
-} from "./song.js";
+  parseBeat,
+  serializeBeat,
+  upgradeBeat,
+} from "./beat.js";
 
 const SHAPE = { rows: 16, steps: 16, maxBars: 8, maxSequences: 4 };
 const empty = { bars: 1, pattern: {}, velocities: {} };
-const song = {
+const beat = {
   bpm: 96.5,
   swing: 58,
   volume: 60,
@@ -30,23 +30,23 @@ const song = {
 
 // What storage does to a value: it goes out as JSON text and comes back as a copy.
 const stored = (value) => JSON.parse(JSON.stringify(value));
-const parse = (raw) => parseSong(stored(raw), SHAPE);
-// The song with the first sequence's pattern (or bars) replaced.
+const parse = (raw) => parseBeat(stored(raw), SHAPE);
+// The beat with the first sequence's pattern (or bars) replaced.
 const withPattern = (pattern) => withFirst({ pattern });
 const withFirst = (change) => ({
-  ...serializeSong(song),
-  sequences: [{ ...song.sequences[0], ...change }, ...song.sequences.slice(1)],
+  ...serializeBeat(beat),
+  sequences: [{ ...beat.sequences[0], ...change }, ...beat.sequences.slice(1)],
 });
 
-describe("serializeSong", () => {
-  it("tags the song with a format version", () => {
-    expect(serializeSong(song)).toEqual({ version: SONG_VERSION, ...song });
+describe("serializeBeat", () => {
+  it("tags the beat with a format version", () => {
+    expect(serializeBeat(beat)).toEqual({ version: BEAT_VERSION, ...beat });
   });
 });
 
-describe("parseSong", () => {
-  it("gives back what serializeSong was given", () => {
-    expect(parse(serializeSong(song))).toEqual(song);
+describe("parseBeat", () => {
+  it("gives back what serializeBeat was given", () => {
+    expect(parse(serializeBeat(beat))).toEqual(beat);
   });
 
   it("reads the starter beat's shape", () => {
@@ -73,31 +73,31 @@ describe("parseSong", () => {
     expect(sequences[0].pattern).toEqual({ 0: [3, 16, 127] });
   });
 
-  it("keeps as many sequences as the song has, and drops the ones past the most there can be", () => {
+  it("keeps as many sequences as the beat has, and drops the ones past the most there can be", () => {
     const some = (count) => ({
-      ...serializeSong(song),
-      sequences: Array.from({ length: count }, () => song.sequences[0]),
+      ...serializeBeat(beat),
+      sequences: Array.from({ length: count }, () => beat.sequences[0]),
     });
-    expect(parse(some(1)).sequences).toEqual([song.sequences[0]]);
+    expect(parse(some(1)).sequences).toEqual([beat.sequences[0]]);
     expect(parse(some(3)).sequences).toHaveLength(3);
     expect(parse(some(4)).sequences).toHaveLength(4);
     expect(parse(some(9)).sequences).toHaveLength(4);
   });
 
-  it("gives a song with no sequences one empty one: there is always something to play and edit", () => {
-    expect(parse({ ...serializeSong(song), sequences: [] }).sequences).toEqual([empty]);
+  it("gives a beat with no sequences one empty one: there is always something to play and edit", () => {
+    expect(parse({ ...serializeBeat(beat), sequences: [] }).sequences).toEqual([empty]);
   });
 
   it.each([0, -3, NaN, 1.5, undefined, "4"])(
     "keeps at least one sequence when the most there can be is %s",
     (maxSequences) => {
-      const many = { ...serializeSong(song), sequences: [song.sequences[0], song.sequences[1], empty] };
-      expect(parseSong(stored(many), { ...SHAPE, maxSequences }).sequences).toHaveLength(1);
+      const many = { ...serializeBeat(beat), sequences: [beat.sequences[0], beat.sequences[1], empty] };
+      expect(parseBeat(stored(many), { ...SHAPE, maxSequences }).sequences).toHaveLength(1);
     },
   );
 
-  it("brings the current sequence into the ones the song has", () => {
-    const two = { ...serializeSong(song), sequences: [song.sequences[0], song.sequences[1]] };
+  it("brings the current sequence into the ones the beat has", () => {
+    const two = { ...serializeBeat(beat), sequences: [beat.sequences[0], beat.sequences[1]] };
     expect(parse({ ...two, current: 1 }).current).toBe(1);
     expect(parse({ ...two, current: 2 }).current).toBe(0);
     expect(parse({ ...two, current: 3 }).current).toBe(0);
@@ -111,10 +111,10 @@ describe("parseSong", () => {
     ["1", 0],
     [undefined, 0],
   ])("brings the current sequence %s into range as %s", (current, expected) => {
-    expect(parse({ ...serializeSong(song), current }).current).toBe(expected);
+    expect(parse({ ...serializeBeat(beat), current }).current).toBe(expected);
   });
 
-  it("accepts an empty pattern: clearing everything is a valid song", () => {
+  it("accepts an empty pattern: clearing everything is a valid beat", () => {
     expect(parse(withPattern({})).sequences[0].pattern).toEqual({});
   });
 
@@ -125,33 +125,33 @@ describe("parseSong", () => {
     ["a number", 42],
     ["an array", []],
     ["no version", { bpm: 100, volume: 80, sequences: [] }],
-    ["another version", { ...serializeSong(song), version: SONG_VERSION + 1 }],
-    ["a version of the wrong type", { ...serializeSong(song), version: String(SONG_VERSION) }],
-    ["no bpm", { ...serializeSong(song), bpm: undefined }],
-    ["a bpm that is not a number", { ...serializeSong(song), bpm: "fast" }],
-    ["a bpm that is not finite", { ...serializeSong(song), bpm: Infinity }],
-    ["a volume that is not a number", { ...serializeSong(song), volume: "loud" }],
-    ["no sequences", { ...serializeSong(song), sequences: undefined }],
-    ["sequences that are not a list", { ...serializeSong(song), sequences: { 0: song.sequences[0] } }],
-    ["a sequence that is not an object", { ...serializeSong(song), sequences: [null] }],
+    ["another version", { ...serializeBeat(beat), version: BEAT_VERSION + 1 }],
+    ["a version of the wrong type", { ...serializeBeat(beat), version: String(BEAT_VERSION) }],
+    ["no bpm", { ...serializeBeat(beat), bpm: undefined }],
+    ["a bpm that is not a number", { ...serializeBeat(beat), bpm: "fast" }],
+    ["a bpm that is not finite", { ...serializeBeat(beat), bpm: Infinity }],
+    ["a volume that is not a number", { ...serializeBeat(beat), volume: "loud" }],
+    ["no sequences", { ...serializeBeat(beat), sequences: undefined }],
+    ["sequences that are not a list", { ...serializeBeat(beat), sequences: { 0: beat.sequences[0] } }],
+    ["a sequence that is not an object", { ...serializeBeat(beat), sequences: [null] }],
     ["a sequence with no pattern", withFirst({ pattern: undefined })],
     ["a null pattern", withFirst({ pattern: null })],
     ["an array for a pattern", withFirst({ pattern: [[0, 4]] })],
   ])("gives up on %s", (_what, raw) => {
-    // Not passed through `stored`: Infinity and undefined don't survive JSON, and parseSong must cope with them.
-    expect(parseSong(raw, SHAPE)).toBeNull();
+    // Not passed through `stored`: Infinity and undefined don't survive JSON, and parseBeat must cope with them.
+    expect(parseBeat(raw, SHAPE)).toBeNull();
   });
 
   it("keeps the tempo in range, to one decimal place", () => {
-    expect(parse({ ...serializeSong(song), bpm: 500 }).bpm).toBe(240);
-    expect(parse({ ...serializeSong(song), bpm: 10 }).bpm).toBe(40);
-    expect(parse({ ...serializeSong(song), bpm: 99.94 }).bpm).toBe(99.9);
+    expect(parse({ ...serializeBeat(beat), bpm: 500 }).bpm).toBe(240);
+    expect(parse({ ...serializeBeat(beat), bpm: 10 }).bpm).toBe(40);
+    expect(parse({ ...serializeBeat(beat), bpm: 99.94 }).bpm).toBe(99.9);
   });
 
   it("keeps the volume a whole number from 0 to 100", () => {
-    expect(parse({ ...serializeSong(song), volume: -5 }).volume).toBe(0);
-    expect(parse({ ...serializeSong(song), volume: 150 }).volume).toBe(100);
-    expect(parse({ ...serializeSong(song), volume: 55.6 }).volume).toBe(56);
+    expect(parse({ ...serializeBeat(beat), volume: -5 }).volume).toBe(0);
+    expect(parse({ ...serializeBeat(beat), volume: 150 }).volume).toBe(100);
+    expect(parse({ ...serializeBeat(beat), volume: 55.6 }).volume).toBe(56);
   });
 
   it("drops pads that don't exist", () => {
@@ -179,20 +179,20 @@ describe("parseSong", () => {
   });
 
   it("checks pads and steps against the size it is given", () => {
-    const small = parseSong(stored(withPattern({ 0: [0, 3, 4], 2: [1], 3: [1] })), { rows: 3, steps: 4 });
+    const small = parseBeat(stored(withPattern({ 0: [0, 3, 4], 2: [1], 3: [1] })), { rows: 3, steps: 4 });
     expect(small.sequences[0].pattern).toEqual({ 0: [0, 3], 2: [1] });
   });
 });
 
-describe("createSongSaver", () => {
+describe("createBeatSaver", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
   const setup = (delayMs = 300) => {
-    // The tempo stands in for "the song": saved lists the tempo of each song written.
+    // The tempo stands in for "the beat": saved lists the tempo of each beat written.
     let bpm = 1;
     const saved = [];
-    const saver = createSongSaver({
+    const saver = createBeatSaver({
       read: () => ({ bpm, volume: 80, current: 0, sequences: [empty] }),
       save: (written) => saved.push(written.bpm),
       delayMs,
@@ -220,7 +220,7 @@ describe("createSongSaver", () => {
     expect(saved).toEqual([1]);
   });
 
-  it("saves what the song is when it writes, not when it was asked to", () => {
+  it("saves what the beat is when it writes, not when it was asked to", () => {
     const { saver, saved, change } = setup();
     saver.schedule();
     change(2);
@@ -272,37 +272,37 @@ describe("createSongSaver", () => {
   });
 });
 
-describe("upgradeSong", () => {
-  const current = serializeSong(song);
+describe("upgradeBeat", () => {
+  const current = serializeBeat(beat);
 
-  it("leaves a song that is already current as it is", () => {
-    expect(upgradeSong(current)).toEqual(current);
+  it("leaves a beat that is already current as it is", () => {
+    expect(upgradeBeat(current)).toEqual(current);
   });
 
-  it("gives up on a song from a newer page", () => {
-    expect(upgradeSong({ ...current, version: SONG_VERSION + 1 })).toBeNull();
+  it("gives up on a beat from a newer page", () => {
+    expect(upgradeBeat({ ...current, version: BEAT_VERSION + 1 })).toBeNull();
   });
 
-  it("gives up on an older song when no migration covers it", () => {
-    expect(upgradeSong({ ...current, version: SONG_VERSION - 1 }, {})).toBeNull();
+  it("gives up on an older beat when no migration covers it", () => {
+    expect(upgradeBeat({ ...current, version: BEAT_VERSION - 1 }, {})).toBeNull();
   });
 
   it("gives up on anything without a whole-number version", () => {
     for (const bad of [null, "song", [], {}, { ...current, version: "1" }, { ...current, version: 1.5 }]) {
-      expect(upgradeSong(bad)).toBeNull();
+      expect(upgradeBeat(bad)).toBeNull();
     }
   });
 
   it("applies each migration in turn, stamping the version after it", () => {
-    const old = { version: SONG_VERSION - 1, bpm: 90, volume: 50, pattern: { 0: [1] } };
-    const migrations = { [SONG_VERSION - 1]: (s) => ({ ...s, bpm: s.bpm + 1 }) };
-    expect(upgradeSong(old, migrations)).toEqual({ version: SONG_VERSION, bpm: 91, volume: 50, pattern: { 0: [1] } });
+    const old = { version: BEAT_VERSION - 1, bpm: 90, volume: 50, pattern: { 0: [1] } };
+    const migrations = { [BEAT_VERSION - 1]: (s) => ({ ...s, bpm: s.bpm + 1 }) };
+    expect(upgradeBeat(old, migrations)).toEqual({ version: BEAT_VERSION, bpm: 91, volume: 50, pattern: { 0: [1] } });
   });
 
   it("stops at a gap in the chain", () => {
-    const old = { version: SONG_VERSION - 2, bpm: 90, volume: 50, pattern: {} };
-    const migrations = { [SONG_VERSION - 2]: (s) => s }; // nothing for the next step
-    expect(upgradeSong(old, migrations)).toBeNull();
+    const old = { version: BEAT_VERSION - 2, bpm: 90, volume: 50, pattern: {} };
+    const migrations = { [BEAT_VERSION - 2]: (s) => s }; // nothing for the next step
+    expect(upgradeBeat(old, migrations)).toBeNull();
   });
 });
 
@@ -311,7 +311,7 @@ describe("velocities", () => {
   const velocitiesOf = (raw) => parse(raw).sequences[0].velocities;
 
   it("come back as they were saved", () => {
-    expect(velocitiesOf(serializeSong(song))).toEqual({ 0: { 4: 90, 12: 20 } });
+    expect(velocitiesOf(serializeBeat(beat))).toEqual({ 0: { 4: 90, 12: 20 } });
   });
 
   it("are brought into 1-127 and rounded, and full ones are not kept", () => {
@@ -338,14 +338,14 @@ describe("velocities", () => {
 
 describe("pad settings", () => {
   it("come back as they were saved", () => {
-    expect(parse(serializeSong(song)).padSettings).toEqual({
+    expect(parse(serializeBeat(beat)).padSettings).toEqual({
       1: { gain: -6, pitch: 3, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("are brought into range, and pads that are not there or are at the defaults are dropped", () => {
     const raw = {
-      ...serializeSong(song),
+      ...serializeBeat(beat),
       padSettings: { 0: { gain: 40, pitch: -40 }, 2: { gain: 0, pitch: 0 }, 99: { gain: 1, pitch: 1 } },
     };
     expect(parse(raw).padSettings).toEqual({
@@ -354,13 +354,13 @@ describe("pad settings", () => {
   });
 
   it("are empty when there are none, or they are the wrong shape", () => {
-    expect(parse({ ...serializeSong(song), padSettings: undefined }).padSettings).toEqual({});
-    expect(parse({ ...serializeSong(song), padSettings: [1, 2] }).padSettings).toEqual({});
-    expect(parse({ ...serializeSong(song), padSettings: "loud" }).padSettings).toEqual({});
+    expect(parse({ ...serializeBeat(beat), padSettings: undefined }).padSettings).toEqual({});
+    expect(parse({ ...serializeBeat(beat), padSettings: [1, 2] }).padSettings).toEqual({});
+    expect(parse({ ...serializeBeat(beat), padSettings: "loud" }).padSettings).toEqual({});
   });
 });
 
-describe("songs saved by version 8", () => {
+describe("beats saved by version 8", () => {
   // What a page of version 8 kept: always eight sequences, the ones nobody used empty.
   const blank = { bars: 1, pattern: {}, velocities: {} };
   const used = { bars: 1, pattern: { 0: [0, 4] }, velocities: { 0: { 4: 90 } } };
@@ -374,7 +374,7 @@ describe("songs saved by version 8", () => {
     sequences,
   });
   const eight = { ...SHAPE, maxSequences: 8 };
-  const load = (raw) => parseSong(stored(raw), eight);
+  const load = (raw) => parseBeat(stored(raw), eight);
 
   it("lose the empty sequences at the end, and keep the ones that were used", () => {
     const loaded = load(v8([used, { ...used, bars: 2 }, blank, blank, blank, blank, blank, blank]));
@@ -449,71 +449,71 @@ describe("songs saved by version 8", () => {
     expect(load({ ...v8([]), sequences: undefined })).toBeNull();
   });
 
-  it("are not made usable by trimming: a sequence that is not shaped like one is kept, and the song refused", () => {
+  it("are not made usable by trimming: a sequence that is not shaped like one is kept, and the beat refused", () => {
     expect(load(v8([used, { bars: 1 }, blank]))).toBeNull();
     expect(load(v8([used, null]))).toBeNull();
     expect(load(v8([used, blank, "x"]))).toBeNull();
   });
 
   it("are stamped as the current version", () => {
-    expect(upgradeSong(stored(v8([used, blank]))).version).toBe(SONG_VERSION);
-    expect(SONG_VERSION).toBe(11);
+    expect(upgradeBeat(stored(v8([used, blank]))).version).toBe(BEAT_VERSION);
+    expect(BEAT_VERSION).toBe(11);
   });
 });
 
-describe("songs saved by version 9", () => {
+describe("beats saved by version 9", () => {
   // What a page of version 9 kept: the sequences in order and no arrangement, which is every sequence once, in order.
-  const v9 = { ...serializeSong(song), version: 9 };
+  const v9 = { ...serializeBeat(beat), version: 9 };
 
   it("load as they were saved, with no arrangement", () => {
-    const loaded = parseSong(stored(v9), SHAPE);
-    expect(loaded).toEqual(song);
+    const loaded = parseBeat(stored(v9), SHAPE);
+    expect(loaded).toEqual(beat);
     expect(loaded).not.toHaveProperty("arrangement");
   });
 
   it("are changed by the upgrade in nothing but the version", () => {
-    expect(upgradeSong(stored(v9))).toEqual({ ...stored(v9), version: SONG_VERSION });
+    expect(upgradeBeat(stored(v9))).toEqual({ ...stored(v9), version: BEAT_VERSION });
   });
 });
 
-describe("songs saved by version 10", () => {
+describe("beats saved by version 10", () => {
   // What a page of version 10 kept: no Loop setting, which is Loop off (the song stops at its end).
-  const v10 = { ...serializeSong(song), version: 10, arrangement: [{ sequence: 0, repeats: 2 }] };
+  const v10 = { ...serializeBeat(beat), version: 10, arrangement: [{ sequence: 0, repeats: 2 }] };
 
   it("load as they were saved, with Loop off", () => {
-    const loaded = parseSong(stored(v10), SHAPE);
+    const loaded = parseBeat(stored(v10), SHAPE);
     expect(loaded.arrangement).toEqual([{ sequence: 0, repeats: 2 }]);
     expect(loaded).not.toHaveProperty("loopSong");
   });
 
   it("are changed by the upgrade in nothing but the version", () => {
-    expect(upgradeSong(stored(v10))).toEqual({ ...stored(v10), version: SONG_VERSION });
+    expect(upgradeBeat(stored(v10))).toEqual({ ...stored(v10), version: BEAT_VERSION });
   });
 });
 
 describe("Loop", () => {
-  it("is left out of a song that has it off, so that a song nobody turned it on for is saved as it was", () => {
-    expect(serializeSong(song)).not.toHaveProperty("loopSong");
-    expect(serializeSong({ ...song, loopSong: false })).not.toHaveProperty("loopSong");
-    expect(parse(serializeSong(song))).not.toHaveProperty("loopSong");
+  it("is left out of a beat that has it off, so that a beat nobody turned it on for is saved as it was", () => {
+    expect(serializeBeat(beat)).not.toHaveProperty("loopSong");
+    expect(serializeBeat({ ...beat, loopSong: false })).not.toHaveProperty("loopSong");
+    expect(parse(serializeBeat(beat))).not.toHaveProperty("loopSong");
   });
 
   it("is saved when it is on, and comes back", () => {
-    expect(serializeSong({ ...song, loopSong: true })).toEqual({ ...serializeSong(song), loopSong: true });
-    expect(parse(serializeSong({ ...song, loopSong: true }))).toEqual({ ...song, loopSong: true });
+    expect(serializeBeat({ ...beat, loopSong: true })).toEqual({ ...serializeBeat(beat), loopSong: true });
+    expect(parse(serializeBeat({ ...beat, loopSong: true }))).toEqual({ ...beat, loopSong: true });
   });
 
   it("is kept apart from the arrangement: on with none, and off with one", () => {
     const arrangement = [{ sequence: 1, repeats: 3 }];
-    expect(parse(serializeSong({ ...song, loopSong: true }))).not.toHaveProperty("arrangement");
-    const loaded = parse(serializeSong({ ...song, arrangement }));
+    expect(parse(serializeBeat({ ...beat, loopSong: true }))).not.toHaveProperty("arrangement");
+    const loaded = parse(serializeBeat({ ...beat, arrangement }));
     expect(loaded.arrangement).toEqual(arrangement);
     expect(loaded).not.toHaveProperty("loopSong");
   });
 
   it("reads as off unless it is exactly true: a stored value that is something else is not trusted", () => {
     for (const raw of [false, null, undefined, 1, "true", {}, []]) {
-      expect(parse({ ...serializeSong(song), loopSong: raw })).not.toHaveProperty("loopSong");
+      expect(parse({ ...serializeBeat(beat), loopSong: raw })).not.toHaveProperty("loopSong");
     }
   });
 });
@@ -524,20 +524,20 @@ describe("the arrangement", () => {
     { sequence: 0, repeats: 1 },
     { sequence: 1, repeats: 16 },
   ];
-  const withArrangement = (value) => ({ ...serializeSong(song), arrangement: value });
+  const withArrangement = (value) => ({ ...serializeBeat(beat), arrangement: value });
 
-  it("is left out of a song that has none, so a song nobody edited is saved as it was", () => {
-    expect(serializeSong(song)).not.toHaveProperty("arrangement");
-    expect(serializeSong({ ...song, arrangement: null })).not.toHaveProperty("arrangement");
-    expect(parse(serializeSong(song))).not.toHaveProperty("arrangement");
+  it("is left out of a beat that has none, so a beat nobody edited is saved as it was", () => {
+    expect(serializeBeat(beat)).not.toHaveProperty("arrangement");
+    expect(serializeBeat({ ...beat, arrangement: null })).not.toHaveProperty("arrangement");
+    expect(parse(serializeBeat(beat))).not.toHaveProperty("arrangement");
   });
 
-  it("is saved with the song, and comes back as it was, in its order and with its repeats", () => {
-    expect(serializeSong({ ...song, arrangement })).toEqual({ ...serializeSong(song), arrangement });
-    expect(parse(serializeSong({ ...song, arrangement }))).toEqual({ ...song, arrangement });
+  it("is saved with the beat, and comes back as it was, in its order and with its repeats", () => {
+    expect(serializeBeat({ ...beat, arrangement })).toEqual({ ...serializeBeat(beat), arrangement });
+    expect(parse(serializeBeat({ ...beat, arrangement }))).toEqual({ ...beat, arrangement });
   });
 
-  it("is brought into range: entries for a sequence the song does not have go, repeats are kept from 1 to 16", () => {
+  it("is brought into range: entries for a sequence the beat does not have go, repeats are kept from 1 to 16", () => {
     const loaded = parse(
       withArrangement([
         { sequence: 0, repeats: 0 },
@@ -554,8 +554,8 @@ describe("the arrangement", () => {
     ]);
   });
 
-  it("is checked against the sequences the song keeps: the ones past the most there can be take their entries with them", () => {
-    const loaded = parseSong(
+  it("is checked against the sequences the beat keeps: the ones past the most there can be take their entries with them", () => {
+    const loaded = parseBeat(
       stored(
         withArrangement([
           { sequence: 3, repeats: 2 },
@@ -567,7 +567,7 @@ describe("the arrangement", () => {
     expect(loaded.arrangement).toEqual([{ sequence: 1, repeats: 2 }]);
   });
 
-  it("is dropped when nothing in it can be used, as a song with none: every sequence plays once", () => {
+  it("is dropped when nothing in it can be used, as a beat with none: every sequence plays once", () => {
     for (const raw of [[], [{ sequence: 9, repeats: 1 }], {}, "1,2", 3, null]) {
       expect(parse(withArrangement(raw))).not.toHaveProperty("arrangement");
     }
@@ -578,15 +578,15 @@ describe("the arrangement", () => {
     expect(parse(withArrangement(many)).arrangement).toEqual(many.slice(0, 32));
   });
 
-  it("is a copy: changing the song that was read does not change what it was read from", () => {
+  it("is a copy: changing the beat that was read does not change what it was read from", () => {
     const raw = stored(withArrangement(arrangement));
-    const loaded = parseSong(raw, SHAPE);
+    const loaded = parseBeat(raw, SHAPE);
     loaded.arrangement[0].repeats = 9;
     expect(raw.arrangement[0].repeats).toBe(3);
   });
 });
 
-describe("songs saved by version 6", () => {
+describe("beats saved by version 6", () => {
   it("load with every pad's envelope at its defaults, keeping the other settings", () => {
     const v6 = {
       version: 6,
@@ -602,16 +602,16 @@ describe("songs saved by version 6", () => {
   });
 
   it("keep a pad's envelope through saving and loading", () => {
-    const saved = serializeSong({
-      ...song,
+    const saved = serializeBeat({
+      ...beat,
       padSettings: { 2: { gain: 0, pitch: 0, choke: 0, color: 0, attack: 30, decay: 20, sustain: 40, release: 60 } },
     });
-    expect(saved.version).toBe(SONG_VERSION);
+    expect(saved.version).toBe(BEAT_VERSION);
     expect(parse(saved).padSettings).toEqual(saved.padSettings);
   });
 });
 
-describe("songs saved by version 5", () => {
+describe("beats saved by version 5", () => {
   it("load with every pad in no colour, keeping the gain, pitch and choke group that were saved", () => {
     const v5 = {
       version: 5,
@@ -627,8 +627,8 @@ describe("songs saved by version 5", () => {
   });
 
   it("keep a pad's colour through saving and loading, even when it is the only thing set", () => {
-    const saved = serializeSong({
-      ...song,
+    const saved = serializeBeat({
+      ...beat,
       padSettings: { 6: { gain: 0, pitch: 0, choke: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 } },
     });
     expect(parse(saved).padSettings).toEqual({
@@ -637,7 +637,7 @@ describe("songs saved by version 5", () => {
   });
 });
 
-describe("songs saved by version 4", () => {
+describe("beats saved by version 4", () => {
   it("load with every pad in no choke group, keeping the gain and pitch that were saved", () => {
     const v4 = {
       version: 4,
@@ -653,18 +653,18 @@ describe("songs saved by version 4", () => {
   });
 
   it("keep a choke group through saving and loading", () => {
-    const saved = serializeSong({
-      ...song,
+    const saved = serializeBeat({
+      ...beat,
       padSettings: { 4: { gain: 0, pitch: 0, choke: 5, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 } },
     });
-    expect(saved.version).toBe(SONG_VERSION);
+    expect(saved.version).toBe(BEAT_VERSION);
     expect(parse(saved).padSettings).toEqual({
       4: { gain: 0, pitch: 0, choke: 5, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 });
 
-describe("songs saved by version 3", () => {
+describe("beats saved by version 3", () => {
   it("load with every pad at its defaults", () => {
     const v3 = {
       version: 3,
@@ -677,7 +677,7 @@ describe("songs saved by version 3", () => {
   });
 });
 
-describe("songs saved by version 2", () => {
+describe("beats saved by version 2", () => {
   it("load with every step at full velocity", () => {
     const v2 = {
       version: 2,
@@ -690,10 +690,10 @@ describe("songs saved by version 2", () => {
   });
 });
 
-describe("songs saved by version 1", () => {
+describe("beats saved by version 1", () => {
   const v1 = { version: 1, bpm: 120, volume: 70, pattern: { 0: [0, 8], 2: [4] } };
 
-  it("become a song with that pattern as the first sequence, selected", () => {
+  it("become a beat with that pattern as the first sequence, selected", () => {
     expect(parse(v1)).toEqual({
       bpm: 120,
       swing: 50,
@@ -724,17 +724,17 @@ describe("needsBackup", () => {
   it("is not for nothing in storage (a first visit), or for what was used", () => {
     expect(needsBackup(null, false)).toBe(false);
     expect(needsBackup(undefined, false)).toBe(false);
-    expect(needsBackup({ version: SONG_VERSION }, true)).toBe(false);
+    expect(needsBackup({ version: BEAT_VERSION }, true)).toBe(false);
   });
 
-  it("matches what parseSong does with a song from a newer page or a damaged one", () => {
-    const newer = { ...serializeSong(song), version: SONG_VERSION + 1 };
+  it("matches what parseBeat does with a beat from a newer page or a damaged one", () => {
+    const newer = { ...serializeBeat(beat), version: BEAT_VERSION + 1 };
     expect(needsBackup(newer, parse(newer) !== null)).toBe(true);
-    expect(needsBackup(serializeSong(song), parse(serializeSong(song)) !== null)).toBe(false);
+    expect(needsBackup(serializeBeat(beat), parse(serializeBeat(beat)) !== null)).toBe(false);
   });
 
-  it("has a key of its own, beside the song's", () => {
-    expect(SONG_BACKUP_KEY).toBe(`${SONG_KEY}:backup`);
+  it("has a key of its own, beside the beat's", () => {
+    expect(BEAT_BACKUP_KEY).toBe(`${BEAT_KEY}:backup`);
   });
 });
 
@@ -748,17 +748,17 @@ describe("backUpUnusable", () => {
   it("saves nothing for a first visit or for what was used", () => {
     const save = vi.fn();
     expect(backUpUnusable(null, false, "k:backup", save)).toBe(false);
-    expect(backUpUnusable({ version: SONG_VERSION }, true, "k:backup", save)).toBe(false);
+    expect(backUpUnusable({ version: BEAT_VERSION }, true, "k:backup", save)).toBe(false);
     expect(save).not.toHaveBeenCalled();
   });
 });
 
 describe("swing", () => {
   it("is kept through saving and loading", () => {
-    expect(parse(serializeSong(song)).swing).toBe(58);
+    expect(parse(serializeBeat(beat)).swing).toBe(58);
   });
 
-  it("is straight in a song that does not say, as one saved by version 7 does not", () => {
+  it("is straight in a beat that does not say, as one saved by version 7 does not", () => {
     const v7 = {
       version: 7,
       bpm: 100,
@@ -768,13 +768,13 @@ describe("swing", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v7).swing).toBe(50);
-    expect(serializeSong({ ...song, swing: undefined }).swing).toBe(50);
+    expect(serializeBeat({ ...beat, swing: undefined }).swing).toBe(50);
   });
 
   it("is brought into range, and a value that is not a number is straight", () => {
-    expect(parse({ ...serializeSong(song), swing: 99 }).swing).toBe(75);
-    expect(parse({ ...serializeSong(song), swing: 10 }).swing).toBe(50);
-    expect(parse({ ...serializeSong(song), swing: "58" }).swing).toBe(50);
-    expect(parse({ ...serializeSong(song), swing: 58.4 }).swing).toBe(58);
+    expect(parse({ ...serializeBeat(beat), swing: 99 }).swing).toBe(75);
+    expect(parse({ ...serializeBeat(beat), swing: 10 }).swing).toBe(50);
+    expect(parse({ ...serializeBeat(beat), swing: "58" }).swing).toBe(50);
+    expect(parse({ ...serializeBeat(beat), swing: 58.4 }).swing).toBe(58);
   });
 });

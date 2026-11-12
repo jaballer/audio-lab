@@ -15,11 +15,11 @@ import {
   projectBlob,
 } from "./project.js";
 import { SAMPLES_VERSION, sampleKey } from "./samples.js";
-import { SONG_VERSION, parseSong } from "./song.js";
+import { BEAT_VERSION, parseBeat } from "./beat.js";
 import { readZip, zipParts } from "./zip.js";
 
 const LAYOUT = { rows: 16, steps: 16, maxBars: 8, maxSequences: 8 };
-const song = {
+const beat = {
   bpm: 96,
   volume: 70,
   current: 1,
@@ -47,7 +47,7 @@ const join = (parts) => {
 const archive = (files) => join(zipParts(files));
 const json = (value) => new TextEncoder().encode(JSON.stringify(value));
 // A project's files with the manifest changed by `edit`, for the files that are damaged in one place only.
-function edited(edit, project = { song, samples }) {
+function edited(edit, project = { beat, samples }) {
   const files = buildProject(project);
   const manifest = JSON.parse(new TextDecoder().decode(files[0].data));
   edit(manifest, files);
@@ -57,7 +57,7 @@ function edited(edit, project = { song, samples }) {
 
 describe("buildProject", () => {
   it("writes a manifest and one file for each sample", () => {
-    const files = buildProject({ song, samples, savedAt: new Date(Date.UTC(2026, 10, 9)) });
+    const files = buildProject({ beat, samples, savedAt: new Date(Date.UTC(2026, 10, 9)) });
     expect(files.map((file) => file.name)).toEqual([PROJECT_FILE, "samples/pad-01.bin", "samples/pad-06.bin"]);
     const manifest = JSON.parse(new TextDecoder().decode(files[0].data));
     expect(manifest).toMatchObject({
@@ -65,7 +65,7 @@ describe("buildProject", () => {
       version: PROJECT_VERSION,
       savedAt: "2026-11-09T00:00:00.000Z",
     });
-    expect(manifest.song.version).toBe(SONG_VERSION);
+    expect(manifest.song.version).toBe(BEAT_VERSION);
     // The trim is only there for a sample that is trimmed, as in the page's own map.
     expect(manifest.samples).toEqual({
       0: { name: "Kick", bytes: 40, trim: { start: 0.1, end: 0.9 } },
@@ -74,16 +74,16 @@ describe("buildProject", () => {
   });
 
   it("makes a project with no samples", () => {
-    expect(buildProject({ song, samples: [] })).toHaveLength(1);
+    expect(buildProject({ beat, samples: [] })).toHaveLength(1);
   });
 });
 
 describe("parseProject", () => {
-  it("gives back what was built: the song, and each sample's name, trim and bytes", () => {
-    const result = parseProject(archive(buildProject({ song, samples })), LAYOUT);
+  it("gives back what was built: the beat, and each sample's name, trim and bytes", () => {
+    const result = parseProject(archive(buildProject({ beat, samples })), LAYOUT);
     expect(result.ok).toBe(true);
-    expect(parseSong(result.song, LAYOUT)).toEqual(parseSong({ ...song, version: SONG_VERSION }, LAYOUT));
-    expect(result.song.version).toBe(SONG_VERSION);
+    expect(parseBeat(result.beat, LAYOUT)).toEqual(parseBeat({ ...beat, version: BEAT_VERSION }, LAYOUT));
+    expect(result.beat.version).toBe(BEAT_VERSION);
     expect(result.samples.map(({ pad, name, trim }) => ({ pad, name, trim }))).toEqual([
       { pad: 0, name: "Kick", trim: { start: 0.1, end: 0.9 } },
       { pad: 5, name: "Hat", trim: undefined },
@@ -93,31 +93,31 @@ describe("parseProject", () => {
   });
 
   it("keeps the order of the song and Loop, which a song that stops at its end does not need but one that goes round does", () => {
-    const arranged = { ...song, arrangement: [{ sequence: 0, repeats: 3 }], loopSong: true };
-    const result = parseProject(archive(buildProject({ song: arranged, samples: [] })), LAYOUT);
+    const arranged = { ...beat, arrangement: [{ sequence: 0, repeats: 3 }], loopSong: true };
+    const result = parseProject(archive(buildProject({ beat: arranged, samples: [] })), LAYOUT);
     expect(result.ok).toBe(true);
-    expect(parseSong(result.song, LAYOUT)).toMatchObject({
+    expect(parseBeat(result.beat, LAYOUT)).toMatchObject({
       arrangement: [{ sequence: 0, repeats: 3 }],
       loopSong: true,
     });
-    const plain = parseProject(archive(buildProject({ song, samples: [] })), LAYOUT);
-    expect(parseSong(plain.song, LAYOUT)).not.toHaveProperty("loopSong");
+    const plain = parseProject(archive(buildProject({ beat, samples: [] })), LAYOUT);
+    expect(parseBeat(plain.beat, LAYOUT)).not.toHaveProperty("loopSong");
   });
 
   it("reads the Blob projectBlob makes, as bytes", async () => {
-    const blob = projectBlob({ song, samples });
+    const blob = projectBlob({ beat, samples });
     expect(blob.type).toBe("application/octet-stream");
     expect(parseProject(new Uint8Array(await blob.arrayBuffer()), LAYOUT).ok).toBe(true);
   });
 
-  it("writes the song again, so what the page does not know is not kept", () => {
+  it("writes the beat again, so what the page does not know is not kept", () => {
     const bytes = edited((manifest) => {
       manifest.song.surprise = "x";
-      manifest.song.bpm = 9999; // out of range is brought back into it, as a saved song is
+      manifest.song.bpm = 9999; // out of range is brought back into it, as a saved beat is
     });
     const result = parseProject(bytes, LAYOUT);
-    expect(result.song.surprise).toBeUndefined();
-    expect(result.song.bpm).toBeLessThan(9999);
+    expect(result.beat.surprise).toBeUndefined();
+    expect(result.beat.bpm).toBeLessThan(9999);
   });
 
   it("refuses what is not a zip, or a zip that is not a project", () => {
@@ -159,15 +159,15 @@ describe("parseProject", () => {
   });
 
   it("refuses a manifest that is not JSON", () => {
-    const files = buildProject({ song, samples });
+    const files = buildProject({ beat, samples });
     files[0] = { name: PROJECT_FILE, data: new TextEncoder().encode("{not json") };
     expect(parseProject(archive(files), LAYOUT).reason).toBe(REASONS.damaged);
   });
 
-  it("refuses a song the page cannot read, such as one from a newer page", () => {
+  it("refuses a beat the page cannot read, such as one from a newer page", () => {
     expect(
       parseProject(
-        edited((m) => (m.song.version = SONG_VERSION + 1)),
+        edited((m) => (m.song.version = BEAT_VERSION + 1)),
         LAYOUT,
       ).reason,
     ).toBe(REASONS.damaged);
@@ -216,7 +216,7 @@ describe("parseProject", () => {
   });
 
   it("does not read a file named by the manifest: a sample is found by its pad", () => {
-    const files = buildProject({ song, samples });
+    const files = buildProject({ beat, samples });
     files[1] = { name: "../../evil", data: files[1].data };
     expect(parseProject(archive(files), LAYOUT).reason).toBe(REASONS.damaged);
   });
@@ -228,20 +228,20 @@ describe("parseProject", () => {
       trim: null,
       bytes: audio(5 * 1024 * 1024, 1),
     }));
-    expect(parseProject(archive(buildProject({ song, samples: big })), LAYOUT).reason).toBe(REASONS.tooBig);
+    expect(parseProject(archive(buildProject({ beat, samples: big })), LAYOUT).reason).toBe(REASONS.tooBig);
     expect(parseProject({ byteLength: MAX_PROJECT_BYTES + 1 }, LAYOUT).reason).toBe(REASONS.tooBig);
   });
 
   it("opens a project with no samples", () => {
-    const result = parseProject(archive(buildProject({ song, samples: [] })), LAYOUT);
+    const result = parseProject(archive(buildProject({ beat, samples: [] })), LAYOUT);
     expect(result).toMatchObject({ ok: true, samples: [] });
   });
 
   it("keeps a zip's own files out of the way: a damaged archive is not a project", () => {
-    const whole = archive(buildProject({ song, samples }));
+    const whole = archive(buildProject({ beat, samples }));
     whole[60] ^= 0xff;
     expect(parseProject(whole, LAYOUT).ok).toBe(false);
-    expect(readZip(archive(buildProject({ song, samples }))).length).toBe(3);
+    expect(readZip(archive(buildProject({ beat, samples }))).length).toBe(3);
   });
 });
 
@@ -262,40 +262,40 @@ describe("installProject", () => {
       delete: vi.fn(async (key) => data.delete(key) || true),
     };
   }
-  const project = () => parseProject(archive(buildProject({ song, samples })), LAYOUT);
+  const project = () => parseProject(archive(buildProject({ beat, samples })), LAYOUT);
 
-  it("keeps each pad's bytes, replaces the map and the song, and takes off what the project does not have", async () => {
+  it("keeps each pad's bytes, replaces the map and the beat, and takes off what the project does not have", async () => {
     const store = fakeStore();
     const writeMap = vi.fn(() => true);
-    const writeSong = vi.fn(() => true);
+    const writeBeat = vi.fn(() => true);
     const parsed = project();
-    expect(await installProject(parsed, { store, readMap: () => null, writeMap, writeSong, padCount: 16 })).toBe(true);
+    expect(await installProject(parsed, { store, readMap: () => null, writeMap, writeBeat, padCount: 16 })).toBe(true);
     expect([...store.data.keys()].sort()).toEqual([sampleKey(0), sampleKey(5)].sort());
     expect(store.data.get(sampleKey(0)).byteLength).toBe(40);
     expect(writeMap).toHaveBeenCalledWith({
       version: SAMPLES_VERSION,
       pads: { 0: { name: "Kick", bytes: 40, trim: { start: 0.1, end: 0.9 } }, 5: { name: "Hat", bytes: 10 } },
     });
-    expect(writeSong).toHaveBeenCalledWith(parsed.song);
+    expect(writeBeat).toHaveBeenCalledWith(parsed.beat);
   });
 
-  it("leaves the song alone when the bytes cannot be kept, and says so", async () => {
+  it("leaves the beat alone when the bytes cannot be kept, and says so", async () => {
     const writeMap = vi.fn(() => true);
-    const writeSong = vi.fn(() => true);
+    const writeBeat = vi.fn(() => true);
     const store = fakeStore({ failSet: sampleKey(5) });
-    expect(await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 })).toBe(
+    expect(await installProject(project(), { store, readMap: () => null, writeMap, writeBeat, padCount: 16 })).toBe(
       false,
     );
     expect(writeMap).not.toHaveBeenCalled();
-    expect(writeSong).not.toHaveBeenCalled();
+    expect(writeBeat).not.toHaveBeenCalled();
   });
 
   it("puts every pad back as it was when the bytes cannot all be kept", async () => {
     const store = fakeStore({ failSet: sampleKey(5) });
     const before = new Map(store.data);
     const writeMap = vi.fn(() => true);
-    const writeSong = vi.fn(() => true);
-    await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 });
+    const writeBeat = vi.fn(() => true);
+    await installProject(project(), { store, readMap: () => null, writeMap, writeBeat, padCount: 16 });
     expect([...store.data.keys()].sort()).toEqual([...before.keys()].sort());
     for (const [key, bytes] of before) expect(store.data.get(key)).toBe(bytes);
   });
@@ -323,7 +323,7 @@ describe("installProject", () => {
       store,
       readMap: () => null,
       writeMap: () => true,
-      writeSong: () => true,
+      writeBeat: () => true,
       padCount: 16,
     });
     expect(ok).toBe(true);
@@ -331,14 +331,14 @@ describe("installProject", () => {
   });
 
   it("gives the old bytes back in full when a swap fails near the quota: new blobs are freed before old ones return", async () => {
-    // Room for 60. Old: pad 0 holds 55. The project needs 40 on pad 0 and 10 on pad 5, then its song fails to write.
+    // Room for 60. Old: pad 0 holds 55. The project needs 40 on pad 0 and 10 on pad 5, then its beat fails to write.
     const old = new ArrayBuffer(55);
     const store = limitedStore(60, { [sampleKey(0)]: old });
     const ok = await installProject(project(), {
       store,
       readMap: () => null,
       writeMap: () => true,
-      writeSong: () => false,
+      writeBeat: () => false,
       padCount: 16,
     });
     expect(ok).toBe(false);
@@ -359,7 +359,7 @@ describe("installProject", () => {
       store,
       readMap: () => oldMap,
       writeMap: () => true,
-      writeSong: () => true,
+      writeBeat: () => true,
       padCount: 16,
     });
     expect(ok).toBe(false);
@@ -371,16 +371,16 @@ describe("installProject", () => {
     const before = new Map(store.data);
     store.delete.mockImplementation(async () => false);
     const writeMap = vi.fn(() => true);
-    const writeSong = vi.fn(() => true);
-    const ok = await installProject(project(), { store, readMap: () => null, writeMap, writeSong, padCount: 16 });
+    const writeBeat = vi.fn(() => true);
+    const ok = await installProject(project(), { store, readMap: () => null, writeMap, writeBeat, padCount: 16 });
     expect(ok).toBe(false);
     expect(writeMap).not.toHaveBeenCalled();
-    expect(writeSong).not.toHaveBeenCalled();
+    expect(writeBeat).not.toHaveBeenCalled();
     expect([...store.data.keys()].sort()).toEqual([...before.keys()].sort());
     for (const [key, bytes] of before) expect(store.data.get(key)).toBe(bytes);
   });
 
-  it("puts the map back when the song cannot be written", async () => {
+  it("puts the map back when the beat cannot be written", async () => {
     const store = fakeStore();
     const oldMap = { version: SAMPLES_VERSION, pads: { 0: { name: "Old", bytes: 1 } } };
     const written = [];
@@ -388,7 +388,7 @@ describe("installProject", () => {
       store,
       readMap: () => oldMap,
       writeMap: (map) => written.push(map) && true,
-      writeSong: () => false,
+      writeBeat: () => false,
       padCount: 16,
     });
     expect(ok).toBe(false);
@@ -397,7 +397,7 @@ describe("installProject", () => {
     expect(store.data.has(sampleKey(3))).toBe(true); // and a pad the project would have emptied was not
   });
 
-  it("says so when the map or the song cannot be written", async () => {
+  it("says so when the map or the beat cannot be written", async () => {
     const ok = () => true;
     const fail = () => false;
     expect(
@@ -405,7 +405,7 @@ describe("installProject", () => {
         store: fakeStore(),
         readMap: () => null,
         writeMap: fail,
-        writeSong: ok,
+        writeBeat: ok,
         padCount: 16,
       }),
     ).toBe(false);
@@ -414,7 +414,7 @@ describe("installProject", () => {
         store: fakeStore(),
         readMap: () => null,
         writeMap: ok,
-        writeSong: fail,
+        writeBeat: fail,
         padCount: 16,
       }),
     ).toBe(false);

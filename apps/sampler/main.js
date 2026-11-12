@@ -50,14 +50,14 @@ import {
   projectFileName,
 } from "./project.js";
 import { SAMPLES_KEY, createSamples, isSamplesMap, parseSamples } from "./samples.js";
-import { STARTERS, starterSong } from "./starters.js";
+import { STARTERS, starterBeat } from "./starters.js";
 import { createTabSync } from "./tab-sync.js";
 import { createUpdateNotice } from "../../shared/update-notice.js";
 import { createSampleLoader } from "./sample-loader.js";
 import { decodeSample } from "./sample-voice.js";
 import { createSettingsSliders } from "./settings-sliders.js";
 import { createTrimView } from "./trim-view.js";
-import { SONG_BACKUP_KEY, SONG_KEY, backUpUnusable, createSongSaver, parseSong } from "./song.js";
+import { BEAT_BACKUP_KEY, BEAT_KEY, backUpUnusable, createBeatSaver, parseBeat } from "./beat.js";
 import { createBlobStore } from "../../shared/blob-store.js";
 import { createDisclosure } from "../../shared/disclosure.js";
 import { saveBlob } from "../../shared/download.js";
@@ -176,38 +176,38 @@ const playBtn = $("play");
 const recBtn = $("rec");
 const songBtn = $("song-mode");
 
-// ---------- Saved song ----------
+// ---------- Saved beat ----------
 // The pattern, tempo and volume come back on the next visit. This is read first
 // because the audio engine takes its starting level from the saved volume.
 // With nothing usable saved (first visit, blocked storage), the page starts
 // from the starter beat as it always did.
-const storedSong = loadJson(SONG_KEY);
-const song = parseSong(storedSong, {
+const storedBeat = loadJson(BEAT_KEY);
+const beat = parseBeat(storedBeat, {
   rows: PAD_COUNT,
   steps: STEPS,
   maxBars: MAX_BARS,
   maxSequences: MAX_SEQUENCES,
 });
 
-// A song this page cannot read (from a newer page, or damaged) is kept under another key before the first edit
+// A beat this page cannot read (from a newer page, or damaged) is kept under another key before the first edit
 // saves over it, and so is a samples map. The page starts from the starter beat and no samples, as before.
-backUpUnusable(storedSong, song, SONG_BACKUP_KEY, saveJson);
+backUpUnusable(storedBeat, beat, BEAT_BACKUP_KEY, saveJson);
 const storedSamples = loadJson(SAMPLES_KEY);
 backUpUnusable(storedSamples, isSamplesMap(storedSamples), SAMPLES_BACKUP_KEY, saveJson);
 
-// True while a project is being written over what is kept: the page being replaced saves no song of its own then, so that
-// an edit made meanwhile cannot land after the project's song (see openProject).
-let replacingSong = false;
-const saver = createSongSaver({
-  read: () => sampler.getSong(),
+// True while a project is being written over what is kept: the page being replaced saves no beat of its own then, so that
+// an edit made meanwhile cannot land after the project's beat (see openProject).
+let replacingBeat = false;
+const saver = createBeatSaver({
+  read: () => sampler.getBeat(),
   save(data) {
-    if (replacingSong) return false;
+    if (replacingBeat) return false;
     if (tabSync.isStale) {
       // The strip may have been put away with Later, and an edit made since would be lost when the tab closes: say so each time.
       sayStale("NOT SAVED");
       return false;
     }
-    return saveJson(SONG_KEY, data);
+    return saveJson(BEAT_KEY, data);
   },
 });
 window.addEventListener("pagehide", () => saver.flush());
@@ -226,10 +226,10 @@ window.addEventListener("pageshow", (event) => {
 const tabNotice = createUpdateNotice($("tab-notice"));
 const tabSync = createTabSync({
   target: window,
-  keys: [SONG_KEY, SAMPLES_KEY],
+  keys: [BEAT_KEY, SAMPLES_KEY],
   onStale() {
     saver.cancel();
-    // A sample loaded here would store its bytes but not the pad settings that go with it (they are in the song), so the next
+    // A sample loaded here would store its bytes but not the pad settings that go with it (they are in the beat), so the next
     // visit would pair them with the other tab's older ones: samples are left as they are until this tab reloads.
     samples.freeze();
     tabNotice.show(
@@ -278,7 +278,7 @@ function levelLoop(now) {
 let powerSequence = null; // built once the LCD and pads exist (below); the engine can report before that
 const audioNotice = createAudioNotice($("audio-notice"));
 const audio = createAudioEngine({
-  volume: (song ? song.volume : DEFAULT_VOLUME) / 100,
+  volume: (beat ? beat.volume : DEFAULT_VOLUME) / 100,
   onStateChange: (state) => {
     audioNotice.update(state);
     header.setPowered(state === "running");
@@ -296,7 +296,7 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 // is fine because the sampler reports nothing until something happens.
 // What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
 const kit = createKit(SOUNDS, {
-  settings: song ? song.padSettings : {}, // each pad's gain, pitch, choke group and colour, kept with the song
+  settings: beat ? beat.padSettings : {}, // each pad's gain, pitch, choke group and colour, kept with the beat
   onChange(index, what) {
     if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
     if (what === "setting") padGrid.setColor(index, kit.settings(index).color);
@@ -315,7 +315,7 @@ const sampler = createSampler({
   steps: STEPS,
   maxBars: MAX_BARS,
   maxSequences: MAX_SEQUENCES,
-  song,
+  beat,
   onChange: render,
   onMessage: say,
   onPadHit(index) {
@@ -328,7 +328,7 @@ const sampler = createSampler({
     flashLight(index);
     midi.padHit(index);
   },
-  onSongChange() {
+  onBeatChange() {
     saver.schedule();
     if (exportDialog?.isOpen) refreshExportDialog(); // a tempo knob on a controller can move while it is open
   },
@@ -368,7 +368,7 @@ const saveProject = () =>
       if (!kit.isDefault(pad)) playing.push({ pad, name: sound.name, bytes: sound.info?.bytes, trim: sound.trim });
     }
     const left = padsNotSaved({ playing, samples: kept, missing });
-    saveBlob(projectBlob({ song: sampler.getSong(), samples: kept }), projectFileName(new Date()));
+    saveBlob(projectBlob({ beat: sampler.getBeat(), samples: kept }), projectFileName(new Date()));
     say(left.length ? `PROJECT SAVED, ${left.length} SAMPLE${left.length === 1 ? "" : "S"} NOT KEPT` : "PROJECT SAVED");
     return false;
   });
@@ -401,10 +401,10 @@ const openProject = (file) =>
     if (unreadable) return say(`PAD ${pad2(unreadable.pad + 1)} ${unreadable.reason}`);
     // Nothing is undoable once the page starts again, so ask first.
     if (!window.confirm("Open this project? The beat and samples on the page now will be replaced.")) return false;
-    // The page being replaced writes nothing more of its own: not a waiting song change, nor a sample still loading.
+    // The page being replaced writes nothing more of its own: not a waiting beat change, nor a sample still loading.
     saver.cancel();
     samples.freeze();
-    replacingSong = true;
+    replacingBeat = true;
     // The writes below are several, and a page that goes away between them leaves the old map over other bytes. They take
     // a moment, so the browser is asked to confirm leaving rather than made atomic: a crash is not covered. Held from here,
     // not from the install: waiting for a write that was already under way is part of it.
@@ -415,14 +415,14 @@ const openProject = (file) =>
       store: blobs,
       readMap: () => loadJson(SAMPLES_KEY),
       writeMap: (map) => saveJson(SAMPLES_KEY, map),
-      writeSong: (song) => saveJson(SONG_KEY, song),
+      writeBeat: (beat) => saveJson(BEAT_KEY, beat),
       padCount: PAD_COUNT,
     });
     if (!kept) {
       window.removeEventListener("beforeunload", keepOpen);
       samples.freeze(false);
-      replacingSong = false;
-      saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
+      replacingBeat = false;
+      saver.schedule(); // the beat as it is on this page, including an edit the cancel dropped
       say("PROJECT NOT OPENED: STORAGE FULL");
       return false;
     }
@@ -438,7 +438,7 @@ projectInput.addEventListener("change", () => {
   if (file) openProject(file);
 });
 
-// A starter (starters.js) is a beat in a style. It goes the way Open does, for the same reason: the song is written where
+// A starter (starters.js) is a beat in a style. It goes the way Open does, for the same reason: the beat is written where
 // the page keeps its own, and the page starts again and reads it, so nothing live has to be taken apart. The samples are
 // not touched (a starter has none), so the pads that have one keep it, and so do the settings the person gave them
 // (gain, pitch, envelope); the volume stays where the person has it.
@@ -492,16 +492,16 @@ const loadStarter = (starter) =>
     )
       return false;
     saver.cancel(); // a change that is waiting would otherwise be written over the starter
-    replacingSong = true;
+    replacingBeat = true;
     const staleNow = () => {
       if (!tabSync.isStale) return false;
-      replacingSong = false;
+      replacingBeat = false;
       sayStale("NOT LOADED");
       return true;
     };
     const stay = () => {
-      replacingSong = false;
-      saver.schedule(); // the song as it is on this page, including an edit the cancel dropped
+      replacingBeat = false;
+      saver.schedule(); // the beat as it is on this page, including an edit the cancel dropped
       return false;
     };
     // Samples are not frozen, as Open freezes them: a starter writes no samples, so a load that is still under way should
@@ -522,14 +522,14 @@ const loadStarter = (starter) =>
       told = [...told, ...lost];
     }
     // Read now, not before the wait: a load that finished meanwhile put its own sample on its pad and reset the pad's settings.
-    const current = sampler.getSong();
+    const current = sampler.getBeat();
     // A pad with a sample kept for it counts as one even where the sample is not playing yet (still being restored, or one
     // this browser could not decode this visit): it comes back on the next visit, with the settings it was given.
     const keep = {};
     for (let pad = 0; pad < PAD_COUNT; pad++)
       if ((!kit.isDefault(pad) || samples.isKept(pad)) && current.padSettings[pad])
         keep[pad] = current.padSettings[pad];
-    const song = starterSong(starter, {
+    const beat = starterBeat(starter, {
       rows: PAD_COUNT,
       steps: STEPS,
       maxBars: MAX_BARS,
@@ -537,11 +537,11 @@ const loadStarter = (starter) =>
       volume: current.volume,
       keep,
     });
-    if (!song) {
+    if (!beat) {
       say("STARTER NOT LOADED");
       return stay();
     }
-    if (!saveJson(SONG_KEY, song)) {
+    if (!saveJson(BEAT_KEY, beat)) {
       say("STARTER NOT LOADED: CANNOT SAVE");
       return stay();
     }
@@ -592,7 +592,7 @@ const padGrid = createPadGrid($("pads"), {
   sounds: SOUNDS,
   onTrigger: pressPad,
 });
-// The colours saved with the song, on the pads from the start.
+// The colours saved with the beat, on the pads from the start.
 for (let index = 0; index < kit.length; index++) padGrid.setColor(index, kit.settings(index).color);
 
 // The page starts powered off (dark display, unlit pads, as the HTML has them); the first interaction unlocks audio
@@ -910,11 +910,11 @@ const exportRate = () => exportSampleRate(audio.ctx?.sampleRate);
 
 let exportedSequence = -1; // the sequence the open Export dialog describes
 function refreshExportDialog() {
-  const song = sampler.getSong();
-  exportedSequence = song.current;
+  const beat = sampler.getBeat();
+  exportedSequence = beat.current;
   exportDialog.refresh(
     exportDialogModel({
-      song,
+      beat,
       kit,
       options: exportOptions,
       stepsPerBar: STEPS,
@@ -943,14 +943,14 @@ exportDialog = createExportDialog($("export-dialog"), {
 exportDialog.setOptions(exportOptions);
 
 const pressExport = createExportAction({
-  snapshot: () => ({ song: sampler.getSong(), options: exportOptions, sampleRate: exportRate() }),
+  snapshot: () => ({ beat: sampler.getBeat(), options: exportOptions, sampleRate: exportRate() }),
   ready: () => restoring,
   run: ({ signal, onProgress, snapshot }) => {
     const make = snapshot.options.files === "stems" ? exportStems : exportSequence;
     return make({
-      song: snapshot.song,
+      beat: snapshot.beat,
       // Taken here, once the saved samples are back (`ready` has been waited for): a kit snapshot at the press could hold
-      // the built-in sound of a pad whose sample is still being restored. Stems are many renders of this one kit and song,
+      // the built-in sound of a pad whose sample is still being restored. Stems are many renders of this one kit and beat,
       // which is why both are snapshots: stems made from two states would not add up.
       kit: kit.snapshot(),
       stepsPerBar: STEPS,
