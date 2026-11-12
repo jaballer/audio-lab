@@ -25,6 +25,8 @@ A small set of browser audio tools built with Vite, the Web Audio API and Web MI
 - Tempo knob (drag, scroll, or arrow keys), tap tempo, and a volume fader
 - Your sequences, tempo, volume, pad settings and samples are kept in your browser between visits (nothing is uploaded). Save writes all of it to a `.audiolab` project file, and Open puts one back, in case the browser's storage is cleared
 
+New to it? [Using the sampler](docs/using-the-sampler.md) is a one-page tour.
+
 [CHANGELOG.md](CHANGELOG.md) lists what has changed, by day.
 
 ## MIDI
@@ -71,6 +73,7 @@ files never hide edits; try it with `npm run build && npm run preview`.
 
 [docs/](docs/README.md) has the rest, short enough to read before a change, for people and coding agents alike:
 
+- [using-the-sampler.md](docs/using-the-sampler.md): a one-page tour of the sampler, for someone using it
 - [architecture.md](docs/architecture.md): how the code fits together, and every file and what it is for
 - [sampler.md](docs/sampler.md), [export.md](docs/export.md), [mpc-sample.md](docs/mpc-sample.md): why each part works the way it does
 - [CLAUDE.md](CLAUDE.md) (also `AGENTS.md`): the conventions, architecture rules and pull request workflow
