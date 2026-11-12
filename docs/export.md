@@ -231,7 +231,9 @@ share).
   rate; the memory it means is not: 400 s is about 270 MB at 44.1 kHz, 290 at 48 and 590 at 96 (as the dialog counts, `exportMemoryBytes`), which the note
   warns of from 200 MB and does not stop, as for any export. The cap bounds the mix and not the stems: each stem is as long as the song, and every one
   is held until the zip is made (twice, as the note counts it), so 16 stems of a 400 s song are about 2.6 GB at 48 kHz. That is as it already was for
-  stems of eight loops of eight bars at 40 BPM (384 s), and only warned of. A chunked render would lift the cap, and is not built.
+  stems of eight loops of eight bars at 40 BPM (384 s), and only warned of. The cap is on time and not on work: a dense one-bar song at 240 BPM (396 passes of 16 pads on every step) is
+  about 100,000 hits inside it, five times the most a song of every sequence once had; the windowed render does not mind (a fake-context render of it took
+  under a second), and Firefox, which cannot pause and starts every node up front, was not run. A chunked render would lift the cap, and is not built.
 - **Checked in a real browser (Chromium, 48 kHz), when the song was every sequence once.** Not run again for the arrangement: only which
   passes are listed changed (the hit feeder, the voices and the render are as they were), and what the tests with a fake audio context
   say about the order and the repeats is below.

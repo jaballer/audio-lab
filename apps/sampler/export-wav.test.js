@@ -2212,6 +2212,7 @@ describe("exporting the song", () => {
         [[1, false]],
       ]);
       expect(p.frames).toBe((6 + TAIL) * 1000); // as long as the mix: three bars and the tail
+      expect(renderCost(p)).toBe(1 + 1 + (1 + 0) + (1 + 1)); // a silent hit only cuts: it is not a sound to make
     });
   });
 
