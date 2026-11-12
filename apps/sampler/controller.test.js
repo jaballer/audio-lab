@@ -4329,6 +4329,18 @@ describe("Song mode", () => {
       expect(heardSong(s)).toEqual({ entry: 0, entries: 2, sequence: 0, rep: 0, repeats: 1, next: 1 });
     });
 
+    it("says the sequence the scheduler has built to sound next, whatever took it over, when Song mode is turned on in the moment before it does", () => {
+      const s = setup({ song: songWith(3) });
+      s.sampler.start();
+      run(s, 0.3);
+      s.sampler.queueSequence(2); // not the one the song would go to next
+      run(s, 1.65); // 1.95 s: the third has taken over in state, and the first still sounds until 2.05 s
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toMatchObject({ sequence: 0, next: 2 });
+      run(s, 0.2); // 2.15 s: the third sounds
+      expect(heardSong(s)).toMatchObject({ sequence: 2, next: 0 });
+    });
+
     it("counts the entries as the song has them, with none made up for a song nobody edited", () => {
       const s = setup({ song: songWith(4) });
       s.sampler.toggleSong();

@@ -355,8 +355,10 @@ export function createSampler({
   // sequence that sounds is in no entry) is the first entry that names the sequence, as the chain takes it, or -1 for none.
   // `heardSequence` is the sequence that sounds; what follows it is worked out as the chain will at the pass end.
   // `gone` says the slot of the sequence that sounds has been removed (it plays out its pass): its place is not known, and what follows is
-  // what the chain takes after it, the first entry (`nextPass` with no sequence it knows).
-  function heardSong(heardSequence, gone) {
+  // what the chain takes after it, the first entry (`nextPass` with no sequence it knows). `built` is the sequence the scheduler has already
+  // built to follow the one that sounds, while it still does (a sequence has taken over in state, whatever asked for it): that is the one
+  // that is next, which the arrangement alone does not say when a person queued it, or Song mode was turned on after it was.
+  function heardSong(heardSequence, gone, built = -1) {
     if (!songMode) return null;
     const entries = resolveArrangement(arrangement, slots.length);
     const known = (place) => (place && entries[place.entry] ? place : null);
@@ -377,7 +379,10 @@ export function createSampler({
       sequence,
       rep: at ? at.rep : -1,
       repeats: at ? entries[at.entry].repeats : 0,
-      next: nextPass(arrangement, slots.length, at, gone && scheduler.playing ? -1 : sequence).sequence,
+      next:
+        scheduler.playing && built >= 0
+          ? built
+          : nextPass(arrangement, slots.length, at, gone && scheduler.playing ? -1 : sequence).sequence,
     };
   }
 
@@ -1094,7 +1099,7 @@ export function createSampler({
               page: outgoing.page,
               stepsOn: outgoing.pattern.row(selected).slice(outgoing.page * steps, (outgoing.page + 1) * steps),
               playheadStep: playheadOnPage(scheduler.playheadStep, outgoing.page),
-              song: heardSong(heardOut, outgoingAt === -1),
+              song: heardSong(heardOut, outgoingAt === -1, playingIndex()),
             }
           : {
               // (A sequence that was removed while it played goes on to the end of its pass: the display says the one showing.)
