@@ -4478,6 +4478,11 @@ describe("the end of the song", () => {
   };
   // The hit that was last handed to the audio clock for the pad, as a node that is cut off when the step is taken back.
   const lastBus = (s, pad) => busOf(s.sounds[pad].play.mock.calls.at(-1)[1]);
+  // Where the audio clock was when the song ended (to the tick), running on until it has.
+  const endedAt = (s) => {
+    for (let i = 0; i < 400 && playingNow(s); i++) tick(s, 1);
+    return s.audio.ctx.currentTime;
+  };
 
   describe("with Loop off", () => {
     it("plays each entry as often as it repeats, once through, and stops where the last one ends", () => {
@@ -4789,6 +4794,90 @@ describe("the end of the song", () => {
       expect(s.sampler.getState().heard.song).toMatchObject({ entry: 1, next: -1 });
     });
 
+    it("that takes away the entry the song is in, which leaves the first entry (the same sequence) the last, ends it, as it does earlier in the pass", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(1, [entry(0), entry(0)]) });
+        s.sampler.selectEntry(1);
+        songMode(s);
+        tick(s, ticks); // 1 s into the pass, then the moment before its end at 2.05 s
+        s.sampler.removeEntry(1);
+        expect(endedAt(s)).toBeCloseTo(2.07, 1);
+        expect(timesOf(s, 0)).toEqual(closeTo(0.05));
+      }
+    });
+
+    it("that adds a sequence takes the song on to it, in the moment before the end as it does earlier in the pass", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(2, null) });
+        s.sampler.selectEntry(1);
+        songMode(s); // begins at the last entry, which is sequence 2
+        tick(s, ticks);
+        s.sampler.addSequence(); // one more, at the end: the song has it after sequence 2
+        expect(endedAt(s)).toBeCloseTo(4.07, 1);
+      }
+    });
+
+    it("that copies a sequence takes the song on to the copy, and it sounds", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(2, null) });
+        s.sampler.selectEntry(1);
+        songMode(s);
+        tick(s, ticks);
+        s.sampler.copySequence(); // a copy of the sequence showing, the first, which has its hit on pad 1
+        endedAt(s);
+        expect(timesOf(s, 0)).toEqual(closeTo(2.05));
+      }
+    });
+
+    it("that removes the sequence the song was going on to makes the one that plays the last, and ends the song there", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(3, null) });
+        s.sampler.selectEntry(1);
+        songMode(s);
+        tick(s, ticks);
+        s.sampler.setSequence(2); // the last sequence shows, and goes
+        s.sampler.removeSequence();
+        expect(endedAt(s)).toBeCloseTo(2.07, 1);
+      }
+    });
+
+    it("that removes the sequence that plays lets its pass play out and goes on from the first entry, as it does earlier in the pass", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(3, null) });
+        s.sampler.selectEntry(2);
+        songMode(s);
+        s.sampler.setSequence(2);
+        tick(s, ticks);
+        s.sampler.removeSequence(); // sequence 3 goes while it plays: nothing says where the song was
+        expect(endedAt(s)).toBeCloseTo(6.07, 1);
+        expect(timesOf(s, 0)).toEqual(closeTo(2.05));
+        expect(timesOf(s, 1)).toEqual(closeTo(4.05));
+      }
+    });
+
+    it("that removes the sequence that plays, and then Loop turned on, goes round: the end is not left standing with Loop on", () => {
+      for (const ticks of [20, 39]) {
+        const s = setup({ song: songWith(3, null) });
+        s.sampler.selectEntry(2);
+        songMode(s);
+        s.sampler.setSequence(2);
+        tick(s, ticks);
+        s.sampler.removeSequence();
+        s.sampler.toggleLoop();
+        run(s, 8);
+        expect(playingNow(s)).toBe(true);
+      }
+    });
+
+    it("that ends the song after taking over, and then a longer sequence, carries on in the longer length", () => {
+      const s = setup({ song: songWith(2, null) });
+      songMode(s);
+      tick(s, 39); // the end of the first pass (2.05 s) has been reached, and the second sequence has taken over
+      s.sampler.removeEntry(1); // the first is the last: the pass end is the song's end, back to the first sequence
+      s.sampler.setBars(2); // the sequence showing, which plays: two bars, so the pass end it had reached is not one
+      expect(endedAt(s)).toBeCloseTo(4.07, 1);
+    });
+
     it("that gives the last entry fewer times round, in its last-but-one, ends the song at the end of that pass", () => {
       const s = setup({ song: songWith(2, [entry(0), entry(1, 3)]) });
       songMode(s);
@@ -4878,6 +4967,16 @@ describe("the end of the song", () => {
       run(s, 1);
       expect(playingNow(s)).toBe(false);
       expect(timesOf(s, 1)).toEqual(closeTo(0.05, 2.05)); // the second was built and taken back
+    });
+
+    it("Song mode turned off once the clock has got to the end, before the scheduler has stopped, does not bring the song back", () => {
+      const s = setup({ song: songWith(1, null) });
+      songMode(s);
+      tick(s, 39); // 1.95 s: the end at 2.05 s has been reached
+      s.audio.ctx.currentTime = 2.06; // the clock gets there between two ticks
+      s.sampler.toggleSong();
+      run(s, 2);
+      expect(playingNow(s)).toBe(false);
     });
 
     it("Stop pressed there stops it at once, like any stop, and the end does not come after", () => {

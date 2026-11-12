@@ -1119,6 +1119,34 @@ describe("the end of a run", () => {
     }
   });
 
+  it("is taken back by a loop made longer even when the pass it ends was begun just before: the end is the pass end, not a pass that begins there", () => {
+    // What a page does to end a pass end it had taken over: back to the pass end, a pass begun there (startPass), and the end.
+    const { scheduler, run, ends, log } = withEnd({ onWrap: endsOnce() });
+    scheduler.start();
+    run(0.35);
+    scheduler.rewindTo(0, 0.55);
+    scheduler.startPass(4);
+    scheduler.endAt(0.55);
+    scheduler.setSteps(8);
+    run(0.8);
+    expect(ends).toEqual([]);
+    expect(log).toContain("step 4 @0.550");
+  });
+
+  it("cannot be taken back once the clock has got there, in the moment before the scheduler stops itself at its next tick", () => {
+    const { scheduler, clock, ends, advance } = withEnd({ onWrap: endsAtFirstWrap });
+    scheduler.start();
+    clock.time = 0.35;
+    advance(0);
+    expect(scheduler.endsAt).toBeCloseTo(0.55);
+    clock.time = 0.56; // the clock is past it, and no tick has run
+    scheduler.endAt(null);
+    expect(scheduler.endsAt).toBeCloseTo(0.55);
+    advance(0);
+    expect(ends).toHaveLength(1);
+    expect(scheduler.playing).toBe(false);
+  });
+
   it("ignores an end told while it is stopped: there is no run to end, and the next one is not ended by it", () => {
     const { scheduler, run, ends, clock } = withEnd();
     scheduler.endAt(0.3);

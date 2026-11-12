@@ -285,8 +285,16 @@ export function createScheduler({
   // The run ends at `time`, a pass end (see the top): null takes it back. Anything that is not a time is ignored.
   function endAt(time) {
     if (!playing) return; // a run ends: there is nothing to end while it is stopped, and `stop` has already taken any end back
-    if (time === null || time === undefined) endTime = null;
-    else if (Number.isFinite(time)) endTime = time;
+    if (time === null || time === undefined) {
+      // An end that the clock has reached is the end: the scheduler stops at its next tick (up to SCHEDULER_TICK_MS later), and it is too late
+      // to take it back.
+      if (endTime === null || clock.now() < endTime) endTime = null;
+    } else if (Number.isFinite(time)) {
+      endTime = time;
+      // The run ends where a pass would begin, so no pass has begun there: a loop made longer is carried on past this pass end (`setSteps`)
+      // even if a page had just begun a pass at it (`startPass`) before it found out that it is the end.
+      freshPass = false;
+    }
   }
 
   // Take back the steps scheduled from `step` (at `time`) on, and schedule them again from there: the

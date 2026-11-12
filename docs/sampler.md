@@ -68,10 +68,12 @@ What `song.js` keeps, and `controller.js` plays:
     the default, as decided for the epic: a song that is played once through is what a person who has made one expects, and a loop is a choice.
   - **The end can be changed in the moment before it sounds**, as a press on a sequence key can (the scheduler has reached the pass end
     and its first step has not sounded, up to a quarter of a second at 100 BPM): Loop turned on or off, an entry added, removed, moved or
-    given more or fewer repeats, and Song mode turned on all count at that pass end (`reconsiderPassEnd`, `chainAtOpenPassEnd`). What was
+    given more or fewer repeats, a sequence added, copied or removed (a new one comes after the last, and so changes which pass is the last), and Song mode
+    turned on all count at that pass end (`reconsiderPassEnd`, `chainAtOpenPassEnd`). What was
     built after the pass end is taken back (`takeBackBuilt`) and the run ends there (`endSongLate`), or the end is taken back
     (`scheduler.endAt(null)`) and the song goes on, from the sequence that ended or by a takeover. Song mode turned off ends nothing: what was
-    playing goes on as a loop. The scheduler takes an end back by itself when it goes back over the pass end (`rewindTo`: a rebuild of the
+    playing goes on as a loop, unless the clock has already reached the end (the scheduler stops itself at its next tick, up to 25 ms later, and
+    it is too late to take back: `endAt(null)` ignores it). The scheduler takes an end back by itself when it goes back over the pass end (`rewindTo`: a rebuild of the
     steps is told of the pass end again and decides it once more, as for a repeat), when a pass begins (`startPass`) and when a loop made
     longer carries on past it (`setSteps`).
   - **The LCD has a screen for each mode** (`SCREENS` in `lcd.js`, chosen by `screenFor`, each a pure function of the state that gives the

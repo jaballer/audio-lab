@@ -663,13 +663,19 @@ export function createSampler({
     if (!songMode || !scheduler.playing || !passEndOpen() || wrapped.time !== lastWrap) return;
     const ended =
       wrapped.repeat || wrapped.end ? playingIndex() : slots.findIndex((slot) => slot.pattern === outgoing?.pattern);
-    if (ended < 0) return;
+    // A takeover whose sequence that gave way has been removed is left as it is. Where the pass end was the song's end, or the entry went
+    // round again, the sequence that plays may have been removed (-1): the pass end is decided again from where nothing is known of the song.
+    if (ended < 0 && !(wrapped.repeat || wrapped.end)) return;
+    // Where the pass that ended is in the list as it is now (an entry that was removed leaves its place unknown, and then it is the first
+    // entry that names the sequence), as onWrap and chainAtOpenPassEnd resolve it before they ask whether it is the end.
+    const here = wherePassWas(arrangement, slots.length, wrapped.from, ended);
     // It is, or has become, the song's end (Loop turned off, the last entry taken away or given fewer times round, another moved last).
-    if (endsAt(wrapped.from)) {
-      if (!wrapped.end) endSongLate(ended, wrapped.from);
+    if (endsAt(here)) {
+      if (!wrapped.end) endSongLate(ended, here);
+      else wrapped = { ...wrapped, from: here };
       return;
     }
-    const pass = nextPass(arrangement, slots.length, wrapped.from, ended);
+    const pass = nextPass(arrangement, slots.length, here, ended);
     const wasEnd = wrapped.end;
     songAt = { entry: pass.entry, rep: pass.rep };
     // Still the entry going round again with nothing taken over, only if it was and is: when this takes over, even back to the sequence that
@@ -868,6 +874,7 @@ export function createSampler({
     slots.push(makeSlot());
     arrangement = afterSequenceAdded(arrangement, slots.length - 1);
     showSequence(slots.length - 1);
+    reconsiderPassEnd(); // the new sequence is in the song after the last: a pass end that was the song's end is not
     onMessage(`SEQ ${pad2(current + 1)} ADDED`);
     onChange();
     onSongChange();
@@ -879,6 +886,7 @@ export function createSampler({
     slots.push(makeSlot({ bars, pattern: pattern.snapshot(), velocities: pattern.velocitySnapshot() }));
     arrangement = afterSequenceAdded(arrangement, slots.length - 1);
     showSequence(slots.length - 1);
+    reconsiderPassEnd();
     onMessage(`SEQ ${pad2(from + 1)} COPIED TO ${pad2(current + 1)}`);
     onChange();
     onSongChange();
@@ -903,6 +911,7 @@ export function createSampler({
     const selection = entryAfter(selectedEntry);
     selectedEntry = Math.min(selection < 0 ? selectedEntry : selection, entryCount() - 1);
     showSequence(Math.min(removed, slots.length - 1));
+    reconsiderPassEnd(); // a sequence that went may have been the one the song was to go on to, or the one that plays
     onMessage(`SEQ ${pad2(removed + 1)} REMOVED`);
     onChange();
     onSongChange();
