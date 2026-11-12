@@ -1,16 +1,18 @@
 // The sequencer's clock: a lookahead scheduler. No DOM. Shared by every page that runs a step
 // sequencer; the sampler's runs on the audio clock.
 //
-//   const scheduler = createScheduler({ clock, steps: 16, onStep });   // also bpm, bpmRange: { min, max }, onWrap
+//   const scheduler = createScheduler({ clock, steps: 16, onStep });   // also bpm, bpmRange: { min, max }, onWrap, onEnd
 //   scheduler.start();      // false if it was already playing; start(at) puts the first step at time `at`
 //   scheduler.stop();
 //   scheduler.setSteps(32); // change the loop length, while playing too
 //   scheduler.startPass(8); // from onWrap: the pass that is beginning is 8 steps long, whatever the last one was
+//   scheduler.endAt(time);  // from onWrap, with the time it was given: the run ends at that pass end (below); endAt(null) takes it back
 //   scheduler.setBpm(120);  // returns the tempo actually set (clamped to bpmRange, 40-240 by default)
 //   scheduler.setSwing(58); // 50 (straight) to 75: the odd steps sound later (tempo.js); `swing` in the options starts it there
 //   scheduler.poll();       // call every animation frame; true when the playhead moved
 //
 //   scheduler.playing, scheduler.bpm, scheduler.playheadStep, scheduler.playheadTime
+//   scheduler.endsAt        // where the run is to end, or null
 //   scheduler.pendingSteps  // how many scheduled steps the playhead has yet to catch up with
 //   scheduler.markHeard(row, step)  // see below
 //
@@ -37,6 +39,15 @@
 // and lands in the last pass where the grid is. A page that stops the scheduler from here is not scheduled for again. A loop made shorter with
 // `setSteps` so that it ends exactly where the scheduler is has come round too, and `onWrap` is called from inside that call.
 //
+// `endAt(time)` ends the run (one that is playing) at a pass end: no step at or after `time` is scheduled (the steps of the pass before it are, in full), and the
+// scheduler goes on playing, so that the playhead reaches the last step and the last of what was handed to the audio clock sounds, until
+// the clock reaches `time`. Then it stops itself, as `stop()` does, and calls `onEnd()`, with `playing` already false. It is for the pass
+// end `onWrap` has just been told (the scheduler is at it: `time` is `nextTime`), or one that a page has taken the steps after back from
+// (`rewindTo`); it cannot take back steps already scheduled. A page can change its mind until the clock gets there: `endAt(null)` goes on
+// from where the scheduler is, and so does anything that begins another pass or goes back over the end (`startPass`, `rewindTo`, a loop made
+// longer that carries on past it, `start`, `stop`), so the end is told again with the pass end if the scheduler comes to it again. Calling
+// `stop()` from `onWrap` instead would take back the steps handed to the audio clock for the last 120 ms or so, and cut the end of the song.
+//
 // `onStep(step, time, heard)` also gets `heard`, a Set of the rows (pads) that
 // must stay silent on this pass because they were just heard live: see
 // markHeard(). It is part of the scheduler, not the sampler, because it is tied to which
@@ -58,6 +69,7 @@ export function createScheduler({
   steps: initialSteps,
   onStep,
   onWrap,
+  onEnd,
   bpm: initialBpm = 100,
   bpmRange,
   swing: initialSwing = SWING_DEFAULT,
@@ -70,6 +82,7 @@ export function createScheduler({
   let nextStep = 0;
   let nextTime = 0;
   let scheduledAny = false; // has this run scheduled a step yet? (nextStep === 0 can mean "not yet" or "just wrapped")
+  let endTime = null; // the run ends when the clock gets here, and no step from here on is scheduled (endAt)
   let freshPass = false; // startPass has begun a pass whose first step has not been scheduled yet: setSteps changes that pass, it does not carry on from it
   let playheadStep = -1;
   let playheadTime = 0;
@@ -93,6 +106,7 @@ export function createScheduler({
   // the next scheduled one arrives. So the last skipped step is queued for
   // poll(), which only needs the newest step that has gone by.
   function skipMissedSteps(now) {
+    if (atEnd()) return; // nothing after the end is skipped over, and no pass end beyond it is told
     const length = stepSeconds(bpm);
     let missed = Math.ceil((now - MAX_LATE_S - nextTime) / length);
     if (missed <= 0) return;
@@ -122,6 +136,7 @@ export function createScheduler({
         nextStep = 0;
         onWrap?.(nextTime);
         if (!playing) return;
+        if (atEnd()) break; // the pass end the page ended the run at: what was skipped before it is all there is
       }
     }
     visualQueue.push({ step: lastStep, time: lastTime, delay: lastDelay });
@@ -156,11 +171,24 @@ export function createScheduler({
     heardRows.clear();
   }
 
+  // The scheduler has come to the time the run ends at, so there is nothing more to schedule.
+  const atEnd = () => endTime !== null && nextTime >= endTime;
+
+  // The clock has reached the end: stopped like any stop, and then the page is told, so that it reads the scheduler as stopped.
+  function finish() {
+    stop();
+    onEnd?.();
+  }
+
   function schedule() {
     const now = clock.now();
     dropSupersededSteps(now);
     skipMissedSteps(now);
-    while (playing && nextTime < now + SCHEDULE_AHEAD_S) {
+    if (playing && endTime !== null && now >= endTime) {
+      finish();
+      return;
+    }
+    while (playing && nextTime < now + SCHEDULE_AHEAD_S && !atEnd()) {
       // `nextTime` is the step's place on the grid, which swing does not move: only when the step sounds (and when the
       // playhead reaches it) is later, so tempo changes and stalls are still worked out on the even grid.
       const time = nextTime + swingDelay(nextStep, bpm, swing);
@@ -196,6 +224,7 @@ export function createScheduler({
 
   function stop() {
     playing = false;
+    endTime = null;
     clearInterval(timer);
     visualQueue.length = 0;
     forgetHeard();
@@ -233,6 +262,7 @@ export function createScheduler({
     const landed = nextStep;
     steps = value;
     nextStep = value > oldSteps && wrappedJustNow ? oldSteps : nextStep % steps;
+    if (value > oldSteps && wrappedJustNow) endTime = null; // it carries on past the pass end: that was not the end of the run
     if (playheadStep >= steps) playheadStep %= steps;
     for (const queued of visualQueue) queued.step %= steps;
     if (heardStep >= steps) forgetHeard();
@@ -249,6 +279,14 @@ export function createScheduler({
     steps = value;
     nextStep = 0;
     freshPass = true;
+    endTime = null; // a pass is beginning: the run goes on
+  }
+
+  // The run ends at `time`, a pass end (see the top): null takes it back. Anything that is not a time is ignored.
+  function endAt(time) {
+    if (!playing) return; // a run ends: there is nothing to end while it is stopped, and `stop` has already taken any end back
+    if (time === null || time === undefined) endTime = null;
+    else if (Number.isFinite(time)) endTime = time;
   }
 
   // Take back the steps scheduled from `step` (at `time`) on, and schedule them again from there: the
@@ -259,6 +297,7 @@ export function createScheduler({
     nextStep = step % steps;
     nextTime = time;
     freshPass = false;
+    endTime = null; // back before the end, which the page is told of again if the scheduler comes to it again
     for (let i = visualQueue.length - 1; i >= 0; i--) if (visualQueue[i].time >= time) visualQueue.splice(i, 1);
     forgetHeard();
   }
@@ -281,7 +320,11 @@ export function createScheduler({
     setSwing,
     setSteps,
     startPass,
+    endAt,
     rewindTo,
+    get endsAt() {
+      return endTime;
+    },
     get playing() {
       return playing;
     },
