@@ -120,7 +120,7 @@ describe("the choke setting", () => {
     });
   });
 
-  it("is brought into range, and filled in as no group when it is missing (a song saved before it existed)", () => {
+  it("is brought into range, and filled in as no group when it is missing (a beat saved before it existed)", () => {
     expect(parsePadSettings({ 0: { gain: -3, choke: 50 }, 1: { gain: 2, pitch: 1 } }, 4)).toEqual({
       0: { gain: -3, pitch: 0, choke: 8, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
       1: { gain: 2, pitch: 1, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
