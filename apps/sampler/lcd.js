@@ -3,14 +3,14 @@
 // `formatLcd` builds the text from the sequencer's state with no DOM, so it can
 // be tested; `createLcd` writes it into the page's elements.
 //
-//   state = { playing, recording, sequence, sequenceCount, playAll, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
+//   state = { playing, recording, sequence, sequenceCount, songMode, selected, soundName, bpm, playheadStep, playheadPosition, steps, bars, page, stepsOn }
 //     steps:     how many steps one bar has (the STEP line counts all of them: steps times bars)
 //     bars:      how many bars the sequence has
 //     page:      the 0-based bar the step keys show (the progress bar marks it)
 //     playheadStep / stepsOn:  of the bar the step keys show; playheadPosition is the step in the whole sequence
 //     sequence:  the current sequence, 0-based
 //     sequenceCount:  how many sequences there are; when given the line reads "SEQ 02/04", and without it "SEQ 02"
-//     playAll:  Play All is on, and the line reads "ALL 02/04" (or "ALL 02"): the same width
+//     songMode:  Song mode is on, and the line reads "SONG 02/04" (or "SONG 02"): one letter wider
 //     selected:  the selected pad, 0-based
 //     stepsOn:  the selected pad's steps, as booleans
 
@@ -27,7 +27,7 @@ export function formatLcd({
   recording,
   sequence = 0,
   sequenceCount,
-  playAll = false,
+  songMode = false,
   selected,
   soundName,
   bpm,
@@ -47,8 +47,8 @@ export function formatLcd({
     // One value to a line, so that a line has one job and one rate of change: the tempo changes when it is turned, the
     // bar and the step with every beat. A song's position and repeats can have lines of their own the same way.
     lines: [
-      // ALL for SEQ while Play All is on: the same width, and it says the sequence number is a place in the chain
-      `${playAll ? "ALL" : "SEQ"} ${sequenceLabel}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
+      // SONG for SEQ while Song mode is on: the sequence that plays, out of the sequences there are (the song's own position is for the song screen)
+      `${songMode ? "SONG" : "SEQ"} ${sequenceLabel}  ${playing ? "PLAYING" : "STOPPED"}${recording ? "  REC" : ""}`,
       `PAD ${pad2(selected + 1)}  ${soundName}`,
       `BPM ${bpm.toFixed(1)}`,
       `BAR ${barLabel}/${pad2(bars)}`,

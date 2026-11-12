@@ -188,9 +188,9 @@ Per-pad stems ([#116](https://github.com/jaballer/audio-lab/issues/116)) were bu
 The Sequences choice in the dialog, Showing or All ([#117](https://github.com/jaballer/audio-lab/issues/117), step 3 of song
 mode in [#159](https://github.com/jaballer/audio-lab/issues/159)), exports every sequence in order, once each, as the Play All key
 played them before the beat could have an arrangement. It is the simple reading of a song: the sequences there are, in the order
-they are in. Play All now goes by the arrangement (its order and repeats, `arrangement.js`) and the export does not yet, so the
-two differ for a beat that has one (nothing can make one in the page yet); `songPasses(song)` in `export-wav.js` is where the
-export will read it.
+they are in. Song mode (the Song key, which took the All key's place) goes by the arrangement (its order and repeats,
+`arrangement.js`) and the export does not yet, so the two differ for a beat whose song has been edited in the Song panel;
+`songPasses(song)` in `export-wav.js` is where the export will read it.
 
 - **What is exported is a list of passes.** `planRender` builds `passList`, a pass for each stretch of the render, with the step it
   begins at and its hits. For the sequence showing it is the same one sequence over and over (the warm-up and the loops, as
@@ -201,7 +201,7 @@ export will read it.
   its start. A fixed time, so that the dialog can say how long and how big the file is without the kit's releases; a sample longer than
   the tail is cut at its end. A pad's hit is cut by its next across the end of a sequence, as the page's chain does, and the last hit of
   the whole is not cut.
-- **Empty sequences are kept**, as Play All plays them: a pass of silence of their length (apart from what is still ringing from the one
+- **Empty sequences are kept**, as Song mode plays them: a pass of silence of their length (apart from what is still ringing from the one
   before). The dialog's note names them ("Sequence 3 has no steps: nothing plays in it but what is still ringing."), and the dialog
   blocks Export only when no sequence has a step. The sequence showing does not have to be one with steps.
 - **Loops do not apply**, so the Loops row goes and the file name leaves them out: `pad16-all-90bpm.wav`, `pad16-all-90bpm-mono.wav`,

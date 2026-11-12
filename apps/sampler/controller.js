@@ -29,8 +29,9 @@
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
 //   sampler.queueSequence(2)     // 0-based; while playing, the one that takes over where this pass ends (pressed again, or the one showing: taken back);
 //                                // stopped, it shows it at once
-//   sampler.togglePlayAll()      // Play All: while it plays, each pass is followed by the next of the song (every sequence once, in order, or the arrangement
-//                                // with its repeats), and the last by the first
+//   sampler.toggleSong()         // Song mode: Play begins at the entry selected, each pass is followed by the next of the song (every sequence once, in order, or
+//                                // the arrangement with its repeats), and the last by the first; the editor stays where it is, and a sequence key only shows
+//   sampler.selectEntry(2)       // the entry of the song that is selected (0-based): where Song mode begins, and what the tools act on
 //   sampler.addEntry(at)         // the sequence showing, once, as an entry of the song at that place (default: the end); its place, or -1
 //   sampler.removeEntry(index)   // the entry goes (the last cannot); the one to be on after it, or -1
 //   sampler.moveEntry(index, 1)  // an entry one place later (-1: earlier); where it is now
@@ -51,9 +52,9 @@
 //   sampler.setSwing(58)         // 50 (straight) to 75: the second step of each pair sounds later (tempo.js)
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, playAll, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
+//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, songMode, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar). For a moment
-//                                // after a sequence takes over (queued, or the next of Play All) what sounds is still the one that gave way: `heard` is
+//                                // after a sequence takes over (queued, or the next of the song) what sounds is still the one that gave way: `heard` is
 //                                // { sequence, bars, page, stepsOn, playheadStep } of what sounds, for the display (playheadPosition is in its numbering);
 //                                // the rest, with sequence, bars and page, is the one showing, for the keys and for editing
 //   sampler.getSong()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings, arrangement? }: what song.js saves
@@ -130,9 +131,12 @@ export function createSampler({
     });
   });
   // The order the sequences play in, with repeats, once a person has edited it (arrangement.js); null until then, which is every
-  // sequence once, in order. Play All goes by it (`songAt`, below), and it is kept, saved and followed through adding, copying and
-  // removing sequences, so that the order is always about the sequences there are. Nothing edits it yet, and Export does not read it.
+  // sequence once, in order. Song mode goes by it (`songAt`, below), and it is kept, saved and followed through adding, copying and
+  // removing sequences, so that the order is always about the sequences there are. The Song panel edits it; Export does not read it yet.
   let arrangement = cleanArrangement(song?.arrangement, slots.length);
+  // The entry of the song that is selected (the strip shows it, and the tools act on it): where Song mode begins when Play is pressed.
+  // Kept in range when it is read, since the song can have fewer entries than it had.
+  let selectedEntry = 0;
   let pattern = slots[current].pattern;
   let history = slots[current].history;
   let clipboard = null; // a bar of one pad's steps and velocities, from copySteps; kept across sequences
@@ -151,18 +155,18 @@ export function createSampler({
   const playingIndex = () => slots.indexOf(playing);
   const playingSteps = () => playing.bars * steps;
 
-  // A sequence can take over where the pass ends: one queued (queueSequence), or the next of Play All. The scheduler hands the first
+  // A sequence can take over where the pass ends: one queued (queueSequence), or the next of the song. The scheduler hands the first
   // step of the next pass to the audio clock before the last steps of this one have sounded (by the lookahead and a step: about a
   // quarter of a second at 100 BPM), so the switch is made in state that much early, and three things need to know which pass a
   // step belongs to: the hits already scheduled (`pass` on each: only those of the pass that has begun are built again from the
   // sequence now showing), the playhead, whose step numbers are the old sequence's until it reaches `passStart` (the display
   // follows that sequence till then: `heard`), and a live hit, which goes to the old one (`outgoing`).
   let queued = -1; // the sequence that takes over at the end of the pass, or -1
-  // Play All: with nothing queued, the song goes on at the end of the pass: the next time round its entry, or the next entry
+  // Song mode: with nothing queued, the song goes on at the end of the pass: the next time round its entry, or the next entry
   // (arrangement.js: with no arrangement, the next sequence, and the first after the last). Where it goes is worked out at the pass
   // end, from the sequence then showing and `songAt`, so a sequence added, removed or switched to meanwhile cannot leave it pointing
   // at one that is not there. A mode of this visit: not saved with the beat.
-  let playAll = false;
+  let songMode = false;
   // Where the pass that has just begun is in the song ({ entry, rep }, arrangement.js), or null when it is not known: Play was just
   // pressed, a person has picked a sequence, or the sequence is not in the song. The chain then takes the sequence showing for the
   // first time round the first entry that names it.
@@ -179,7 +183,7 @@ export function createSampler({
   const SAME_PASS_END_S = 0.01;
   const isSamePassEnd = (a, b) => Math.abs(a - b) < SAME_PASS_END_S;
   let wrapped = NO_WRAP;
-  // A person picked a sequence, or Play or Play All was pressed: where the song was means nothing now.
+  // A person picked a sequence in Pattern mode, or Play or the Song key was pressed: where the song was means nothing now.
   function forgetSongPosition() {
     songAt = null;
     wrapped = NO_WRAP;
@@ -204,8 +208,8 @@ export function createSampler({
   // What the sequence that gave way at the last switch was (its pattern, its undo history, how many steps it had), for a live
   // hit in the moment before the playhead reaches the new pass: that hit is a step of the pass that is still sounding.
   let outgoing = null;
-  // The pattern of the sequence the chain picked at the last pass end, when it picked it by itself (Play All, nothing asked for), or
-  // null. Turning Play All off before that pass end sounds takes the pick back, as long as it is still what is showing.
+  // The pattern of the sequence the chain picked at the last pass end, when it picked it by itself (Song mode, nothing asked for), or
+  // null. Turning Song mode off before that pass end sounds takes the pick back, as long as it is still what is showing.
   let chained = null;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
@@ -260,7 +264,7 @@ export function createSampler({
       const asked = queued >= 0;
       const was = playingIndex(); // the sequence whose pass has ended
       let next = asked ? queued : was;
-      if (!asked && playAll) {
+      if (!asked && songMode) {
         const from = isSamePassEnd(wrapped.time, time) ? wrapped.from : songAt;
         // Where that pass was, worked out now, so that what is remembered of it can follow an edit (a position not known is the first
         // entry that names the sequence in the list as it is, and an edit changes the list).
@@ -422,8 +426,8 @@ export function createSampler({
     slots[current].bars = bars;
     page = Math.min(page, lastPage());
     onMessage(`${bars} ${bars === 1 ? "BAR" : "BARS"}`);
-    // Made shorter, the loop may end exactly where the scheduler is, which is a pass end: a queued sequence (or the next of Play
-    // All) takes over there, from inside this call, and a queued one says so (after the message above, which was of the sequence that has gone). So everything
+    // Made shorter, the loop may end exactly where the scheduler is, which is a pass end: a queued sequence (or the next of the
+    // song) takes over there, from inside this call, and a queued one says so (after the message above, which was of the sequence that has gone). So everything
     // that is of this sequence is settled before it, and nothing after it is.
     if (alters) scheduler.setSteps(playingSteps());
     // A step queued from a bar that is gone must not sound: build the queued ones again. (Made longer,
@@ -433,11 +437,10 @@ export function createSampler({
     onSongChange();
   }
 
-  // What showing and playing the sequence in slot `next` (which exists) changes here, apart from the scheduler.
-  function adoptSequence(next) {
+  // What showing the sequence in slot `next` (which exists) changes here: the editor, and not what plays.
+  function showOnly(next) {
     queued = -1;
     current = next;
-    playing = slots[next];
     pattern = slots[current].pattern;
     history = slots[current].history;
     lastMergedAt = -Infinity;
@@ -445,10 +448,29 @@ export function createSampler({
     page = 0;
   }
 
+  // Showing and playing the sequence in slot `next` (which exists), apart from the scheduler: what Pattern mode does with every pick
+  // and takeover, so that a person sees and edits what plays.
+  function adoptSequence(next) {
+    showOnly(next);
+    playing = slots[next];
+  }
+
+  // Not playing, what is said to sound is what is showing (and the length the scheduler will begin with is its length).
+  function mirrorPlaying() {
+    playing = slots[current];
+    scheduler.setSteps(playingSteps());
+  }
+
   // Show the sequence in slot `next` now. If it is playing, the playhead carries on into it. It drops a sequence that was
   // waiting for the end of the pass: a person who picks one now, or adds or removes one (which moves the numbers), is not
   // leaving a plan behind.
   function showSequence(next) {
+    // In Song mode a pick is the editor's alone: what plays, and where the song is, go on as they were.
+    if (songMode) {
+      showOnly(next);
+      if (!scheduler.playing) mirrorPlaying();
+      return;
+    }
     if (slots[next].bars > playing.bars) lastWrap = -Infinity; // as for setBars: a longer one carries on past the pass end
     adoptSequence(next);
     forgetSongPosition(); // a person picked it (or made or removed one): the song goes on from where this sequence first is
@@ -473,17 +495,32 @@ export function createSampler({
       return;
     }
     showSequence(next);
-    onMessage(`SEQ ${pad2(current + 1)}`);
+    // In Song mode the first line of the display says which sequence plays, so this one says that it is only showing.
+    onMessage(songMode ? `SHOWING SEQ ${pad2(current + 1)}` : `SEQ ${pad2(current + 1)}`);
     onChange();
     onSongChange();
   }
 
-  function togglePlayAll() {
-    playAll = !playAll;
+  function toggleSong() {
+    songMode = !songMode;
     forgetSongPosition();
-    onMessage(playAll ? "PLAY ALL ON" : "PLAY ALL OFF");
+    // The keys only show in Song mode, so a sequence that was waiting to play next has nothing to wait for.
+    if (songMode) queued = -1;
+    onMessage(songMode ? "SONG ON" : "SONG OFF");
     chainAtOpenPassEnd();
+    const showing = current;
+    if (!songMode && scheduler.playing) followPlaying();
     onChange();
+    if (current !== showing) onSongChange(); // the sequence showing is saved with the beat
+  }
+
+  // Song mode turned off while the beat plays: it goes on as a loop of the sequence that was playing, and the editor moves to it, so that
+  // in Pattern mode what is seen and heard are the same again. If that sequence has been removed there is nothing to move to, and what
+  // is showing plays from here.
+  function followPlaying() {
+    const at = playingIndex();
+    if (at === -1) showSequence(current);
+    else if (slots[at] !== slots[current]) showOnly(at);
   }
 
   // Turned on or off in the moment after the scheduler has reached a pass end and before the display has: the mode is for that end,
@@ -493,7 +530,7 @@ export function createSampler({
   function chainAtOpenPassEnd() {
     // (An open pass end has nothing queued: a sequence queued in that moment takes over at once.)
     if (!scheduler.playing || !passEndOpen()) return;
-    if (playAll) {
+    if (songMode) {
       const was = playingIndex();
       const here = wherePassWas(arrangement, slots.length, songAt, was);
       const pass = nextPass(arrangement, slots.length, here, was);
@@ -516,11 +553,9 @@ export function createSampler({
   const entryCount = () => resolveArrangement(arrangement, slots.length).length;
   const entryRepeats = (index) => resolveArrangement(arrangement, slots.length)[index]?.repeats ?? -1;
 
-  function followEdit({ arrangement: next, entryAfter }) {
-    // A pass that is playing and has not been told yet (the first after Play, or after a pick) is on the first entry that names its
-    // sequence, in the list as it is now: said before the list changes, so that the edit moves it and does not choose it again.
-    if (!songAt && playAll && scheduler.playing) songAt = positionOf(arrangement, slots.length, playingIndex());
-    arrangement = next;
+  // Where the song is, and what is remembered of its last pass end, go with an entry that has moved: `entryAfter(index)` says where the
+  // entry that was at `index` is now (-1 when it is gone).
+  function followPosition(entryAfter) {
     const follow = (at) => {
       if (!at) return at;
       const entry = entryAfter(at.entry);
@@ -530,13 +565,30 @@ export function createSampler({
     wrapped = wrapped.from ? { ...wrapped, from: follow(wrapped.from) } : wrapped;
   }
 
+  // A pass that is playing and has not been told yet (the first after Play, or after a pick) is on the first entry that names its
+  // sequence, in the list as it is now: said before the list changes, so that a change moves it and does not choose it again.
+  function resolvePosition() {
+    if (!songAt && songMode && scheduler.playing) songAt = positionOf(arrangement, slots.length, playingIndex());
+  }
+
+  function followEdit({ arrangement: next, entryAfter }) {
+    resolvePosition();
+    arrangement = next;
+    followPosition(entryAfter);
+  }
+
+  function selectEntry(index) {
+    selectedEntry = Math.min(entryCount() - 1, Math.max(0, Math.round(index)));
+    onChange();
+  }
+
   // An edit made in the moment after the scheduler has reached a pass end and before its first step has sounded counts at that pass end,
   // as a press on a sequence key does (takeOverLate): what the song picked for it is worked out again from where the song was before
   // it, in the list as it is now. What the pass end gave was either a sequence taking over (the one that gave way is `outgoing`) or
   // the entry going round again, and a different answer takes back the steps built for the first and builds them again. A pass end
   // that was asked for (a queued sequence) is not the song's to change, and one that has sounded is heard from the next.
   function reconsiderPassEnd() {
-    if (!playAll || !scheduler.playing || !passEndOpen() || wrapped.time !== lastWrap) return;
+    if (!songMode || !scheduler.playing || !passEndOpen() || wrapped.time !== lastWrap) return;
     const ended = wrapped.repeat ? playingIndex() : slots.findIndex((slot) => slot.pattern === outgoing?.pattern);
     if (ended < 0) return;
     const pass = nextPass(arrangement, slots.length, wrapped.from, ended);
@@ -555,6 +607,7 @@ export function createSampler({
     }
     const place = Math.min(entryCount(), Math.max(0, at));
     followEdit(edit);
+    selectedEntry = place;
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(place + 1)} ADDED`);
     onChange();
@@ -569,11 +622,12 @@ export function createSampler({
       return -1;
     }
     followEdit(edit);
+    selectedEntry = Math.min(index, entryCount() - 1);
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} REMOVED`);
     onChange();
     onSongChange();
-    return Math.min(index, entryCount() - 1);
+    return selectedEntry;
   }
 
   function moveEntry(index, delta) {
@@ -581,6 +635,7 @@ export function createSampler({
     const edit = moveArrangementEntry(arrangement, slots.length, index, to);
     if (!edit) return index; // already at that end of the song
     followEdit(edit);
+    selectedEntry = to;
     reconsiderPassEnd();
     onMessage(`ENTRY ${pad2(index + 1)} MOVED TO ${pad2(to + 1)}`);
     onChange();
@@ -615,7 +670,7 @@ export function createSampler({
   // The sequence in slot `next` takes over at `time`, where the pass that is ending is followed by the first step of the one
   // that is coming, which has the length of the sequence now.
   //
-  // `automatic` is the chain's own (Play All, with nothing asked for): it says nothing and saves nothing, which a pass at a time
+  // `automatic` is the chain's own (Song mode, with nothing asked for): it says nothing and saves nothing, which a pass at a time
   // would be an announcement for a screen reader and a write that tells another tab it is out of date, and it leaves the pass end
   // open for a sequence that is asked for just ahead of it (takeOverLate), since nobody asked for this one. `keepOutgoing` is for
   // taking over again at a pass end that was already taken over: what is still sounding is the sequence that gave way first.
@@ -631,10 +686,13 @@ export function createSampler({
         steps: playingSteps(),
         sequence: playingIndex(),
         bars: goneBars,
-        page,
+        // The bar the display was in for it: the one the step keys showed if they showed it, else the last (the playhead is near the end of a pass).
+        page: slots[current] === playing ? page : goneBars - 1,
       };
     }
-    adoptSequence(next);
+    // The song, in Song mode, moves what plays and leaves the editor where it is.
+    if (songMode) playing = slots[next];
+    else adoptSequence(next);
     // Asked for, not the chain's pick (which has worked out where it is): the song goes on from the first entry that names it.
     if (!automatic) songAt = positionOf(arrangement, slots.length, next);
     chained = automatic ? playing.pattern : null;
@@ -663,7 +721,7 @@ export function createSampler({
   // Stopped, there is no pass to wait for and it is shown at once.
   function queueSequence(value) {
     const next = clampSequence(value);
-    if (!scheduler.playing) {
+    if (songMode || !scheduler.playing) {
       setSequence(next);
       return;
     }
@@ -717,8 +775,17 @@ export function createSampler({
       return;
     }
     const removed = current;
+    // The entries that name the sequence go and the ones after them move down, and where the song is, and the entry selected, go with
+    // theirs. In Pattern mode picking the sequence that is shown next forgets where the song was, as it always did.
+    const before = resolveArrangement(arrangement, slots.length);
+    resolvePosition();
     slots.splice(removed, 1);
     arrangement = afterSequenceRemoved(arrangement, removed);
+    const gone = before.map(({ sequence }) => sequence === removed);
+    const entryAfter = (index) => (gone[index] ? -1 : index - gone.slice(0, index).filter(Boolean).length);
+    if (songMode) followPosition(entryAfter);
+    const selection = entryAfter(selectedEntry);
+    selectedEntry = Math.min(selection < 0 ? selectedEntry : selection, entryCount() - 1);
     showSequence(Math.min(removed, slots.length - 1));
     onMessage(`SEQ ${pad2(removed + 1)} REMOVED`);
     onChange();
@@ -824,16 +891,26 @@ export function createSampler({
   }
 
   // Play always begins at the first step, as the button does on hardware: pressed while the
-  // sequence is running, it starts again from the top.
+  // sequence is running, it starts again from the top. With the sequence showing, or in Song mode with the entry selected.
   function start() {
     scheduler.stop();
     cancelQueuedHits();
     cancelQueue();
     passStart = -Infinity;
     lastWrap = -Infinity;
-    forgetSongPosition(); // from the top, with the sequence showing
+    forgetSongPosition();
+    if (songMode) beginSong();
     scheduler.start();
     onChange();
+  }
+
+  // Song mode begins at the first time round the entry that is selected: its sequence plays, in its length, and the editor stays where it is.
+  function beginSong() {
+    const entries = resolveArrangement(arrangement, slots.length);
+    const entry = Math.min(selectedEntry, entries.length - 1);
+    playing = slots[entries[entry].sequence];
+    scheduler.setSteps(playingSteps());
+    songAt = { entry, rep: 0 };
   }
 
   // The first press stops the sequence and lets what is sounding ring out; a press when it is already stopped
@@ -843,6 +920,7 @@ export function createSampler({
     scheduler.stop();
     cancelQueuedHits();
     cancelQueue();
+    if (songMode && playing !== slots[current]) mirrorPlaying(); // stopped, the display says the sequence showing again
     // Nothing to cut off before the audio exists (a fresh page), so nothing is said.
     if (!wasPlaying && audio.killSound()) onMessage("ALL SOUND OFF");
     onChange();
@@ -896,10 +974,11 @@ export function createSampler({
     setBars,
     setSequence,
     queueSequence,
-    togglePlayAll,
+    toggleSong,
     addSequence,
     copySequence,
     removeSequence,
+    selectEntry,
     addEntry,
     removeEntry,
     moveEntry,
@@ -928,7 +1007,13 @@ export function createSampler({
 
     getState: () => {
       const stepsOn = pattern.row(selected).slice(page * steps, (page + 1) * steps);
-      const playheadStep = playheadOnPage(scheduler.playheadStep);
+      // The step keys have a cursor only while they show the sequence that plays: in Song mode the editor can be on another.
+      const showsPlaying = slots[current] === playing;
+      const playheadStep = showsPlaying ? playheadOnPage(scheduler.playheadStep) : -1;
+      // The bar the display is in for what plays: the one the step keys show, or the bar the playhead is in when they show another sequence.
+      const heardPage = showsPlaying
+        ? page
+        : Math.min(playing.bars - 1, Math.floor(Math.max(0, scheduler.playheadStep) / steps));
       return {
         selected,
         recording,
@@ -937,12 +1022,16 @@ export function createSampler({
         swing: scheduler.swing,
         volume,
         sequence: current,
+        // The sequence the scheduler plays from (what the song has gone on to, in Song mode): the one showing in Pattern mode. It goes
+        // ahead of what is heard by the lookahead; `heard.sequence` is what sounds.
+        playingSequence: playingIndex() === -1 ? current : playingIndex(),
         sequenceCount: slots.length,
         canAddSequence: !atMost(),
         canRemoveSequence: slots.length > 1,
         queuedSequence: queued,
-        playAll,
-        // The song's entries as they play (a copy), whether a person has edited them, and where the song is while Play All plays it, which
+        songMode,
+        selectedEntry: Math.min(selectedEntry, entryCount() - 1),
+        // The song's entries as they play (a copy), whether a person has edited them, and where the song is while Song mode plays it, which
         // leads what is heard by the lookahead as the sequence keys do: the entry and the time round it, or null (not playing it, or the
         // sequence playing is in no entry).
         arrangement: resolveArrangement(arrangement, slots.length).map((entry) => ({ ...entry })),
@@ -950,7 +1039,7 @@ export function createSampler({
         canAddEntry: entryCount() < MAX_ENTRIES,
         canRemoveEntry: entryCount() > 1,
         songPass:
-          playAll && scheduler.playing
+          songMode && scheduler.playing
             ? songAt
               ? { ...songAt }
               : positionOf(arrangement, slots.length, playingIndex())
@@ -961,18 +1050,19 @@ export function createSampler({
         // the one playing: the same sequence for now).
         heard: playheadInOldPass()
           ? {
-              sequence: Math.min(outgoing.sequence, slots.length - 1),
+              sequence: Math.max(0, Math.min(outgoing.sequence, slots.length - 1)),
               bars: outgoing.bars,
               page: outgoing.page,
               stepsOn: outgoing.pattern.row(selected).slice(outgoing.page * steps, (outgoing.page + 1) * steps),
               playheadStep: playheadOnPage(scheduler.playheadStep, outgoing.page),
             }
           : {
-              sequence: playingIndex(),
+              // (A sequence that was removed while it played goes on to the end of its pass: the display says the one showing.)
+              sequence: playingIndex() === -1 ? current : playingIndex(),
               bars: playing.bars,
-              page,
-              stepsOn: playing.pattern.row(selected).slice(page * steps, (page + 1) * steps),
-              playheadStep,
+              page: heardPage,
+              stepsOn: playing.pattern.row(selected).slice(heardPage * steps, (heardPage + 1) * steps),
+              playheadStep: playheadOnPage(scheduler.playheadStep, heardPage),
             },
         bars,
         page,

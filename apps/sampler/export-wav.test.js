@@ -2115,7 +2115,7 @@ describe("exporting all the sequences", () => {
       const p = plan(allSong([sequence({ 0: [0] }), sequence({}), sequence({ 1: [3] }, {}, 2)]));
       expect(p.passList.map(({ startStep, length, hits }) => [startStep, length, hits.length])).toEqual([
         [0, 16, 1],
-        [16, 16, 0], // an empty sequence is a pass of silence, as Play All plays it
+        [16, 16, 0], // an empty sequence is a pass of silence, as Song mode plays it
         [32, 32, 1],
       ]);
       expect(p).toMatchObject({ passes: 3, warmUp: 0, skipped: 0, copies: 1, length: 64 });

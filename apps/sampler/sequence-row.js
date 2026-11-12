@@ -3,8 +3,8 @@
 // addSequence, copySequence, removeSequence), and the page asks before a sequence with steps is removed.
 //
 //   const row = createSequenceRow(element, { onSelect, onLatch, onAdd, onCopy, onRemove });   // onSelect(index, { now }), 0-based
-//   row.refresh({ count: 3, current: 1, queued: 2, playing: true, latched: true, canAdd: true, canRemove: true });
-//   sequenceKeys(3, 1, { queued: 2, playing: true, latched: true })   // [{ index: 0, label: "1", name: "Sequence 1", pressed: false, queued: false, title: "..." }, ...]
+//   row.refresh({ count: 3, current: 1, queued: 2, playing: true, latched: true, songMode: false, canAdd: true, canRemove: true });
+//   sequenceKeys(3, 1, { queued: 2, playing: true, latched: true, songMode: false })   // [{ index: 0, label: "1", name: "Sequence 1", pressed: false, queued: false, title: "..." }, ...]
 //   sequenceKey(2)           // { index: 2, label: "3", name: "Sequence 3" }: what the view puts on a key and names it
 //
 // The keys are one joined group like the bar lengths (a button with aria-pressed), made as the number of sequences
@@ -13,7 +13,8 @@
 // A press asks for that sequence to play next, and the sampler decides what that means: while the beat plays it waits for
 // the end of the pass, and `now` asks for it at once; stopped, it is shown at once. `now` is Shift held, or the other way
 // round when the Next latch is off (a touch screen has no Shift, so the latch is how it switches at once): pressIsNow. The key
-// that plays next is marked (`data-queued`, which the style blinks) and named so for a screen reader.
+// that plays next is marked (`data-queued`, which the style blinks) and named so for a screen reader. In Song mode (`songMode`) a
+// press only shows the sequence, with no effect on the sound: the keys lose their titles and the Next latch is disabled.
 
 import { setAttr, setDisabledMany } from "../../shared/dom-updates.js";
 
@@ -29,8 +30,9 @@ export const latchFromStored = (stored) => stored !== false;
 export const pressIsNow = ({ latched, shift }) => latched === shift;
 
 // What a press does is only worth saying while the beat plays, when it can wait for the end of the pass instead of switching.
-function keyTitle({ playing, pressed, queued, waiting, latched }) {
-  if (!playing) return "";
+// In Song mode a press only shows the sequence, so there is nothing to say (the Next latch beside the keys says why it is off).
+function keyTitle({ playing, pressed, queued, waiting, latched, songMode }) {
+  if (!playing || songMode) return "";
   // A press on the one showing takes back what was queued, whichever way the latch is.
   if (pressed) return waiting ? "Press to take back the sequence that plays next" : "";
   // Read after the key's name as its description, so an instruction: "Sequence 2, Plays next" would say it is already queued.
@@ -44,7 +46,7 @@ function keyTitle({ playing, pressed, queued, waiting, latched }) {
 
 // Each key: whether it is the pressed one (the sequence showing), whether it is the one that plays next, and a title for
 // what a press does. `queued` is the index of the sequence waiting for the end of the pass, or -1.
-export function sequenceKeys(count, current, { queued = -1, playing = false, latched = true } = {}) {
+export function sequenceKeys(count, current, { queued = -1, playing = false, latched = true, songMode = false } = {}) {
   return Array.from({ length: count }, (_, index) => {
     const key = sequenceKey(index);
     const next = index === queued;
@@ -54,7 +56,7 @@ export function sequenceKeys(count, current, { queued = -1, playing = false, lat
       name: next ? `${key.name}, plays next` : key.name,
       pressed,
       queued: next,
-      title: keyTitle({ playing, pressed, queued: next, waiting: queued >= 0, latched }),
+      title: keyTitle({ playing, pressed, queued: next, waiting: queued >= 0, latched, songMode }),
     };
   });
 }
@@ -117,21 +119,24 @@ export function createSequenceRow(element, { onSelect, onLatch, onAdd, onCopy, o
   }
 
   return {
-    refresh({ count, current, queued = -1, playing = false, latched: on = true, canAdd, canRemove }) {
+    refresh({ count, current, queued = -1, playing = false, latched: on = true, songMode = false, canAdd, canRemove }) {
       latched = on;
       syncChips(count);
       setAttr(latch, "aria-pressed", String(on));
       setAttr(
         latch,
         "title",
-        on
-          ? "On: while the beat plays, a press on a sequence waits for the end of the pass (Shift: at once)"
-          : "Off: while the beat plays, a press on a sequence switches at once (Shift: waits for the end of the pass)",
+        songMode
+          ? "Song mode: a press on a sequence only shows it, and what plays goes on as the song says"
+          : on
+            ? "On: while the beat plays, a press on a sequence waits for the end of the pass (Shift: at once)"
+            : "Off: while the beat plays, a press on a sequence switches at once (Shift: waits for the end of the pass)",
       );
       for (const { index, pressed, queued: next, name, title } of sequenceKeys(count, current, {
         queued,
         playing,
         latched: on,
+        songMode,
       })) {
         setAttr(chips[index], "aria-pressed", String(pressed));
         setAttr(chips[index], "data-queued", String(next));
@@ -144,6 +149,7 @@ export function createSequenceRow(element, { onSelect, onLatch, onAdd, onCopy, o
       setAttr(copy, "title", canAdd ? "" : "There is no room for another sequence");
       setAttr(remove, "title", canRemove ? "" : "A beat keeps at least one sequence");
       setDisabledMany([
+        [latch, songMode, showing], // nothing to wait for: in Song mode a press only shows
         [add, !canAdd, showing],
         [copy, !canAdd, showing],
         // Not to Add: a key held down on Remove would turn into one held down on Add, and take away what it had just removed.

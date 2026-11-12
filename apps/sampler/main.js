@@ -174,7 +174,7 @@ function toggleLights() {
 
 const playBtn = $("play");
 const recBtn = $("rec");
-const allBtn = $("all");
+const songBtn = $("song-mode");
 
 // ---------- Saved song ----------
 // The pattern, tempo and volume come back on the next visit. This is read first
@@ -309,7 +309,6 @@ const kit = createKit(SOUNDS, {
   },
 });
 
-let editingEntries = false; // inside the strip's edit of the song's entries (editEntries): the sampler's own redraw waits for it
 const sampler = createSampler({
   audio,
   kit,
@@ -317,7 +316,7 @@ const sampler = createSampler({
   maxBars: MAX_BARS,
   maxSequences: MAX_SEQUENCES,
   song,
-  onChange: () => (editingEntries ? undefined : render()),
+  onChange: render,
   onMessage: say,
   onPadHit(index) {
     padGrid.flash(index);
@@ -712,46 +711,19 @@ const sequenceRow = createSequenceRow($("seq-row"), {
   onCopy: () => sampler.copySequence(),
   onRemove: removeSequence,
 });
-// The song: the order Play All plays the sequences in, with repeats. Which entry is selected is the page's (the strip shows it and the
-// tools act on it, and selecting one changes nothing about what plays): an edit brings the selection with it, and render keeps it in range.
-let selectedEntry = 0;
-// An edit of the entries asks the sampler to redraw before the selection has moved with it (the entry added is the one selected next),
-// and a draw with the old selection would hand focus to the wrong cell when a button goes disabled: so it is drawn once, after
-// (`editingEntries`, declared before the sampler, which draws through it).
-function editEntries(edit) {
-  editingEntries = true;
-  try {
-    edit();
-  } finally {
-    editingEntries = false;
-  }
-  render();
-}
+// The song: the order Song mode plays the sequences in, with repeats. The entry selected is the sampler's (Play begins at it in Song mode),
+// and selecting one changes nothing about what plays; the tools act on it, and an edit takes the selection with it.
 const chainStrip = createChainStrip(
   { strip: $("song-strip"), tools: $("song-tools") },
   {
-    onSelect(index) {
-      selectedEntry = index;
-      render();
+    onSelect: (index) => sampler.selectEntry(index),
+    onAdd: () => sampler.addEntry(sampler.getState().selectedEntry + 1),
+    onRemove: () => sampler.removeEntry(sampler.getState().selectedEntry),
+    onMove: (delta) => sampler.moveEntry(sampler.getState().selectedEntry, delta),
+    onRepeats(delta) {
+      const { selectedEntry, arrangement } = sampler.getState();
+      sampler.setEntryRepeats(selectedEntry, arrangement[selectedEntry].repeats + delta);
     },
-    onAdd: () =>
-      editEntries(() => {
-        const at = sampler.addEntry(selectedEntry + 1);
-        if (at >= 0) selectedEntry = at;
-      }),
-    onRemove: () =>
-      editEntries(() => {
-        const next = sampler.removeEntry(selectedEntry);
-        if (next >= 0) selectedEntry = next;
-      }),
-    onMove: (delta) =>
-      editEntries(() => {
-        selectedEntry = sampler.moveEntry(selectedEntry, delta);
-      }),
-    onRepeats: (delta) =>
-      editEntries(() => {
-        sampler.setEntryRepeats(selectedEntry, sampler.getState().arrangement[selectedEntry].repeats + delta);
-      }),
   },
 );
 const stepsPrev = $("steps-prev");
@@ -838,13 +810,13 @@ function render() {
     queued: state.queuedSequence,
     playing: state.playing,
     latched: queuePresses,
+    songMode: state.songMode,
     canAdd: state.canAddSequence,
     canRemove: state.canRemoveSequence,
   });
-  selectedEntry = Math.min(selectedEntry, state.arrangement.length - 1);
   chainStrip.refresh({
     entries: state.arrangement,
-    selected: selectedEntry,
+    selected: state.selectedEntry,
     at: state.songPass,
     canAdd: state.canAddEntry,
     canRemove: state.canRemoveEntry,
@@ -860,19 +832,19 @@ function render() {
   swingKnob.render(state.swing);
   setAttr(playBtn, "aria-pressed", String(state.playing));
   setAttr(recBtn, "aria-pressed", String(state.recording));
-  setAttr(allBtn, "aria-pressed", String(state.playAll));
+  setAttr(songBtn, "aria-pressed", String(state.songMode));
   setAttr(
-    allBtn,
+    songBtn,
     "title",
-    state.playAll
-      ? "On: each pass is followed by the next sequence, and the last by the first"
+    state.songMode
+      ? "On: Play begins at the entry selected in the song, each pass is followed by the next, and the editor stays where it is"
       : "Off: the sequence showing plays round and round",
   );
   // Armed (waiting for Play) blinks; once the sequence runs, the lamp stays lit.
   recBtn.classList.toggle("armed", state.recording && !state.playing);
   // The display is of what sounds: for a moment after a sequence takes over, still the one that gave way (playheadPosition is in its numbering).
   lcd.render({ ...state, ...state.heard, soundName, steps: STEPS });
-  // A sequence that takes over while the Export dialog is open (Play All) is the one Export would save: the dialog says so.
+  // A sequence that takes over while the Export dialog is open is the one Export would save: the dialog says so.
   if (exportDialog?.isOpen && state.sequence !== exportedSequence) refreshExportDialog();
   midi.refresh();
   if (state.playing) startPaintLoop();
@@ -901,7 +873,7 @@ function paintLoop() {
 playBtn.addEventListener("click", sampler.start);
 $("stop").addEventListener("click", sampler.stop);
 recBtn.addEventListener("click", sampler.toggleRec);
-allBtn.addEventListener("click", sampler.togglePlayAll);
+songBtn.addEventListener("click", sampler.toggleSong);
 $("clear").addEventListener("click", sampler.clearPad);
 $("clear-all").addEventListener("click", sampler.clearAll);
 $("copy").addEventListener("click", sampler.copySteps);

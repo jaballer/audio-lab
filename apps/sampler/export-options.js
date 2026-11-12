@@ -17,8 +17,8 @@ export const LOOP_CHOICES = [1, 2, 4, 8];
 export const CHANNEL_CHOICES = ["stereo", "mono"];
 // The mix is one file, as the export has always been; stems are a file for each pad that has steps, in a zip.
 export const FILE_CHOICES = ["mix", "stems"];
-// The sequence showing, looped as asked, as the export has always been; or every sequence in order, once each (see the Play All
-// key), with no loop to come round and a tail on the end for what rings on.
+// The sequence showing, looped as asked, as the export has always been; or every sequence in order, once each (as Song mode plays a
+// song nobody has edited), with no loop to come round and a tail on the end for what rings on.
 export const SCOPE_CHOICES = ["sequence", "all"];
 export const DEFAULT_EXPORT_OPTIONS = Object.freeze({ loops: 1, channels: "stereo", files: "mix", scope: "sequence" });
 

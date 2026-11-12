@@ -10,6 +10,13 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: a Song key, in the place of All, turns Song mode on and off. In Song mode Play begins at the entry selected in the Song panel
+  (the first one when none is) and goes by the panel's order and repeats, round and round until Stop; the sequence you are
+  editing stays where it is, so you can work on one sequence while the song plays another, and the panel marks the one that
+  plays. The sequence keys only show a sequence there (they do not change what sounds, so the Next button is disabled), the
+  display says SONG, and when it stops the display goes back to the sequence you are editing. Turning Song mode off while it plays carries on as a
+  loop of the sequence that was playing and moves the editor to it. Export does not use the song yet
+  ([#176](https://github.com/jaballer/audio-lab/pull/176))
 - A footer on every page with links to the source code, the documentation, the design notes, the changelog, the issue
   tracker, the author's GitHub profile and the license. They open in a new tab, so the sampler keeps playing ([#169](https://github.com/jaballer/audio-lab/pull/169))
 - Sampler: a Song panel, under the pads, edits the order the All key plays. It has a cell for each entry, with its sequence and

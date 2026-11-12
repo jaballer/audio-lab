@@ -71,6 +71,13 @@ describe("sequenceKeys", () => {
     expect(sequenceKeys(3, 0, { queued: 7 }).some((key) => key.queued)).toBe(false);
   });
 
+  it("says nothing about a press in Song mode, where it only shows the sequence, whichever way the latch is", () => {
+    for (const latched of [true, false]) {
+      const keys = sequenceKeys(3, 0, { playing: true, latched, songMode: true });
+      expect(keys.map((key) => key.title)).toEqual(["", "", ""]);
+    }
+  });
+
   it("says what a press does with the latch off: it switches at once, and Shift is what waits", () => {
     const keys = sequenceKeys(3, 0, { playing: true, queued: 2, latched: false });
     expect(keys[1].title).toBe("Press to switch now. Hold Shift to play next, after this pass");

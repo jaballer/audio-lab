@@ -35,16 +35,18 @@ describe("formatLcd", () => {
     expect(formatLcd({ ...stopped, sequenceCount: undefined }).lines[0]).toBe("SEQ 01  STOPPED");
   });
 
-  it("says ALL where it says SEQ while Play All is on, so the line is no longer", () => {
-    expect(formatLcd({ ...stopped, sequence: 1, sequenceCount: 4, playAll: true }).lines[0]).toBe("ALL 02/04  STOPPED");
+  it("says SONG where it says SEQ while Song mode is on", () => {
+    expect(formatLcd({ ...stopped, sequence: 1, sequenceCount: 4, songMode: true }).lines[0]).toBe(
+      "SONG 02/04  STOPPED",
+    );
     expect(
-      formatLcd({ ...stopped, sequence: 7, sequenceCount: 8, playAll: true, playing: true, recording: true }).lines[0],
-    ).toBe("ALL 08/08  PLAYING  REC");
-    expect(formatLcd({ ...stopped, playAll: true }).lines[0]).toBe("ALL 01  STOPPED");
+      formatLcd({ ...stopped, sequence: 7, sequenceCount: 8, songMode: true, playing: true, recording: true }).lines[0],
+    ).toBe("SONG 08/08  PLAYING  REC");
+    expect(formatLcd({ ...stopped, songMode: true }).lines[0]).toBe("SONG 01  STOPPED");
   });
 
-  it("says SEQ when Play All is off or not said", () => {
-    expect(formatLcd({ ...stopped, sequence: 1, sequenceCount: 4, playAll: false }).lines[0]).toBe(
+  it("says SEQ when Song mode is off or not said", () => {
+    expect(formatLcd({ ...stopped, sequence: 1, sequenceCount: 4, songMode: false }).lines[0]).toBe(
       "SEQ 02/04  STOPPED",
     );
     expect(formatLcd({ ...stopped, sequence: 1, sequenceCount: 4 }).lines[0]).toBe("SEQ 02/04  STOPPED");

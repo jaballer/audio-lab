@@ -1,15 +1,15 @@
 // The song's strip: a cell for each entry of the song (arrangement.js) in the order it plays them, each with its sequence and how many
 // times it goes round, and the tools to add, remove, move and repeat the entry that is selected. It shows and reports; the sampler
-// decides (addEntry, removeEntry, moveEntry, setEntryRepeats), and which entry is selected is the page's.
+// decides (addEntry, removeEntry, moveEntry, setEntryRepeats), and which entry is selected is the sampler's (selectEntry).
 //
 //   const strip = createChainStrip({ strip: element, tools: element }, { onSelect, onAdd, onRemove, onMove, onRepeats });
-//   strip.refresh({ entries, selected: 1, at: { entry: 1, rep: 0 }, canAdd: true, canRemove: true });   // `at`: where Play All is, or null
+//   strip.refresh({ entries, selected: 1, at: { entry: 1, rep: 0 }, canAdd: true, canRemove: true });   // `at`: where Song mode is, or null
 //   entryCells(entries, 1, at)    // [{ index, label: "3", times: "×2", name: "Entry 2, sequence 3, 2 times", pressed, playing }, ...]
 //   neighbourEntry(2, "ArrowLeft", 5)   // 1: where a key moves the selection (-1 for a key that does not)
 //
 // The cells are one joined group like the sequence keys, a button with aria-pressed for the entry that is selected. There can be 32, so
 // only the selected one is a stop for Tab (the arrow keys, Home and End move the selection along the row, as in a toolbar), and the rest
-// are reached from it. The entry that Play All is playing is marked (`data-playing`), with its time round while it repeats.
+// are reached from it. The entry that Song mode is playing is marked (`data-playing`), with its time round while it repeats.
 // Selecting an entry changes nothing about what plays: it is the one the tools act on.
 
 import { MAX_REPEATS } from "./arrangement.js";

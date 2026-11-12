@@ -324,7 +324,7 @@
 
 .buttons {
   display: grid;
-  grid-template-columns: repeat(4, 1fr); /* Rec, Play, Stop and All */
+  grid-template-columns: repeat(4, 1fr); /* Rec, Play, Stop and Song */
   gap: 12px 10px;
 }
 
@@ -780,7 +780,7 @@
 }
 /* ---------- The song (chain-strip.js) ---------- */
 /* A cell for each entry of the song, joined like the sequence keys and wrapping in rows (there can be 32). The one selected is pressed in,
-   with a dark face; the one Play All is playing has an orange ring and a triangle (a shape, so it is not said only by a colour), and
+   with a dark face; the one Song mode is playing has an orange ring and a triangle (a shape, so it is not said only by a colour), and
    shows its time round while it repeats. The ring on the dark face is the brighter orange the blinking key uses, which the ink on it
    has 5:1 against; on the light face it is a darker one, 4:1. */
 .song-strip {

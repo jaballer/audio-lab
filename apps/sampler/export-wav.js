@@ -230,8 +230,8 @@ export function planRender({
   };
 }
 
-// The order every sequence is played in, one pass each: what the render of all of them is made of, as the Play All key plays them.
-// (An order that a person edits, with repeats, is the next step of song mode: this is the one place that will change.)
+// The order every sequence is played in, one pass each: what the render of all of them is made of, which is how Song mode plays a
+// song nobody has edited. (The order a person edits in the Song panel, with repeats, is a later step: this is the one place that will change.)
 export const songPasses = (song) => song.sequences.map(({ bars }, index) => ({ index, bars }));
 
 // The plan for all the sequences: a pass for each, one after the other and never repeated, so no warm-up (nothing comes round
@@ -534,7 +534,7 @@ export function emptyBars(song, stepsPerBar) {
 }
 
 // The sequences with no steps (in the bars they have), counting from 1: a file of all of them has each as a pass of silence
-// (apart from what is still ringing from the one before), as Play All plays it.
+// (apart from what is still ringing from the one before), as Song mode plays it.
 export function emptySequences(song, stepsPerBar) {
   return song.sequences
     .map((sequence, index) => (hitsOf(sequence, stepsPerBar).length === 0 ? index + 1 : 0))
