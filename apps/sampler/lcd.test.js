@@ -35,14 +35,57 @@ describe("formatLcd", () => {
     expect(formatLcd({ ...stopped, sequenceCount: undefined }).lines[0]).toBe("SEQ 01  STOPPED");
   });
 
-  it("says SONG where it says SEQ while Song mode is on", () => {
-    expect(formatLcd({ ...stopped, sequence: 1, sequenceCount: 4, songMode: true }).lines[0]).toBe(
-      "SONG 02/04  STOPPED",
-    );
-    expect(
-      formatLcd({ ...stopped, sequence: 7, sequenceCount: 8, songMode: true, playing: true, recording: true }).lines[0],
-    ).toBe("SONG 08/08  PLAYING  REC");
-    expect(formatLcd({ ...stopped, songMode: true }).lines[0]).toBe("SONG 01  STOPPED");
+  describe("the song screen", () => {
+    // Where the song is (what sounds, or where Play would begin): entry 2 of 5, sequence 3 on its 2nd time round of 4, then sequence 1.
+    const song = { entry: 1, entries: 5, sequence: 2, rep: 1, repeats: 4, next: 0 };
+    const inSong = { ...stopped, songMode: true, song };
+
+    it("is chosen by the mode: the same state reads as the pattern screen with Song mode off", () => {
+      expect(formatLcd({ ...inSong, songMode: false }).lines).toEqual(formatLcd(stopped).lines);
+      expect(formatLcd(inSong).lines).not.toEqual(formatLcd(stopped).lines);
+    });
+
+    it("has the five lines the page has, the first three doing the jobs they do in the pattern screen", () => {
+      const lines = formatLcd(inSong).lines;
+      expect(lines).toHaveLength(formatLcd(stopped).lines.length);
+      expect(lines.slice(1, 3)).toEqual(formatLcd(stopped).lines.slice(1, 3)); // the pad and the tempo
+    });
+
+    it("says where the song is on its first line, and whether it plays, with REC after it", () => {
+      expect(formatLcd(inSong).lines[0]).toBe("SONG 02/05  STOPPED");
+      expect(formatLcd({ ...inSong, playing: true }).lines[0]).toBe("SONG 02/05  PLAYING");
+      expect(formatLcd({ ...inSong, playing: true, recording: true }).lines[0]).toBe("SONG 02/05  PLAYING  REC");
+    });
+
+    it("gives the sequence and the time round it, then the sequence that comes next", () => {
+      expect(formatLcd(inSong).lines.slice(3)).toEqual(["SEQ 03  REPEAT 2/4", "NEXT SEQ 01"]);
+    });
+
+    it("counts from 1, and says a song of one entry that goes round once as it is", () => {
+      const once = { entry: 0, entries: 1, sequence: 0, rep: 0, repeats: 1, next: 0 };
+      expect(formatLcd({ ...inSong, song: once }).lines).toEqual([
+        "SONG 01/01  STOPPED",
+        "PAD 01  Kick",
+        "BPM 100.0",
+        "SEQ 01  REPEAT 1/1",
+        "NEXT SEQ 01",
+      ]);
+    });
+
+    it("leaves the place and the time round blank while it is not known, and still says the sequence and what is next", () => {
+      const unknown = { entry: -1, entries: 5, sequence: 2, rep: -1, repeats: 0, next: 0 };
+      const lines = formatLcd({ ...inSong, playing: true, song: unknown }).lines;
+      expect(lines[0]).toBe("SONG --/05  PLAYING");
+      expect(lines.slice(3)).toEqual(["SEQ 03  REPEAT --", "NEXT SEQ 01"]);
+    });
+
+    it("falls back to the pattern screen when Song mode is on and nothing is said of the song", () => {
+      expect(formatLcd({ ...stopped, songMode: true }).lines).toEqual(formatLcd(stopped).lines);
+    });
+
+    it("does not need the sequence count, which is the pattern screen's", () => {
+      expect(formatLcd({ ...inSong, sequenceCount: 8, sequence: 6 }).lines).toEqual(formatLcd(inSong).lines);
+    });
   });
 
   it("says SEQ when Song mode is off or not said", () => {

@@ -51,12 +51,19 @@ What `song.js` keeps, and `controller.js` plays:
     (`playing`), as it sounds. Edits to the step keys are to what shows, heard when that sequence comes round.
   - **Turning Song mode off while it plays** goes on as a loop of the sequence that was playing, and the editor jumps to it
     (`followPlaying`); turning it on goes on playing what played, until the end of its pass, then the song's next pass.
-  - **Stop** leaves the editor where it is, and what plays becomes the sequence showing again (`mirrorPlaying`), so the display says that
-    one while stopped. The next Play begins at the entry selected, as always.
-  - **The LCD** only changes the first word of its sequence line for now (SONG for SEQ, the number and count are those of what
-    plays, from `heard`). The song's own position and repeats come in a later step, as lines swapped in for the mode, a stopgap
-    towards a screen for each function, so `formatLcd` stays a pure function of what the mode needs.
-    Export's "All the sequences" does not read the arrangement yet and plays every sequence once, in order (`songPasses` in
+  - **Stop** leaves the editor where it is, and what plays becomes the sequence showing again (`mirrorPlaying`). The next Play begins at
+    the entry selected, as always, and the display says so (below).
+  - **The LCD has a screen for each mode** (`SCREENS` in `lcd.js`, chosen by `screenFor`, each a pure function of the state that gives the
+    five lines; the display is five lines tall and the level meter beside it is sized to them). The pattern screen is the sequence,
+    the pad, the tempo, the bar and the step. The song screen keeps the first three lines' jobs (`SONG 02/05  PLAYING`, where the
+    first number is the entry of the song, then the pad and the tempo) and puts in the places of the bar and the step, which the
+    timeline along the bottom of the display already says, the sequence that plays with the time round its entry (`SEQ 03  REPEAT
+2/4`) and the sequence that comes next (`NEXT SEQ 01`). Stopped, it says where Play would begin, the entry selected. A stopgap
+    towards a screen of its own for the song, as the display will have a screen for each function. The controller says where the song
+    is in `getState().heard.song` (`heardSong`): what sounds, not the pass the scheduler has begun (the strip's `songPass` leads
+    by the lookahead, the display does not, as for `heard.sequence`); a place not known (Song mode joined in mid-pass) is the first
+    entry that names the sequence, as the chain takes it, and is blank when no entry does.
+  - Export's "All the sequences" does not read the arrangement yet and plays every sequence once, in order (`songPasses` in
     `export-wav.js` is where the export will).
 - **Starters** (`starters.js`) are whole beats to begin from (tempo, swing, patterns, choke groups, colours). The pads'
   sounds are the same in every starter: a starter changes the beat, not the kit.

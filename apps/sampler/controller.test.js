@@ -2390,6 +2390,7 @@ describe("Song mode: the chain", () => {
         page: state.page,
         stepsOn: state.stepsOn,
         playheadStep: state.playheadStep,
+        song: null, // Pattern mode: no song to say where it is
       });
     });
   });
@@ -4209,6 +4210,143 @@ describe("Song mode", () => {
       expect(timesOf(s, 0)).toEqual(closeTo(0.05)); // nothing more from the sequence that was removed
       expect(timesOf(s, 1)).toEqual(closeTo(2.05, 4.05));
       expect(timesOf(s, 2)).toEqual([]);
+    });
+  });
+
+  describe("where the song is, for the display (heard.song)", () => {
+    const heardSong = (s) => s.sampler.getState().heard.song;
+
+    it("is none in Pattern mode, and while Song mode is on it says where the song is", () => {
+      const s = setup({ song: song3() });
+      expect(heardSong(s)).toBeNull();
+      s.sampler.toggleSong();
+      expect(heardSong(s)).not.toBeNull();
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toBeNull();
+    });
+
+    it("is, while stopped, where Play would begin: the entry selected, its sequence, and what comes after it", () => {
+      const s = setup({ song: song3() });
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toEqual({ entry: 0, entries: 3, sequence: 0, rep: 0, repeats: 1, next: 1 });
+      s.sampler.selectEntry(1);
+      expect(heardSong(s)).toEqual({ entry: 1, entries: 3, sequence: 1, rep: 0, repeats: 2, next: 1 });
+      s.sampler.selectEntry(2);
+      expect(heardSong(s)).toEqual({ entry: 2, entries: 3, sequence: 2, rep: 0, repeats: 1, next: 0 });
+      expect(s.sampler.getState().sequence).toBe(0); // the editor is elsewhere: this is the song's
+    });
+
+    it("follows the song while it plays: the entry, the time round it, and the sequence after it", () => {
+      const s = setup({ song: song3() });
+      play(s);
+      run(s, 0.5);
+      expect(heardSong(s)).toEqual({ entry: 0, entries: 3, sequence: 0, rep: 0, repeats: 1, next: 1 });
+      run(s, 1.8); // 2.3 s
+      expect(heardSong(s)).toEqual({ entry: 1, entries: 3, sequence: 1, rep: 0, repeats: 2, next: 1 });
+      run(s, 2.0); // 4.3 s
+      expect(heardSong(s)).toEqual({ entry: 1, entries: 3, sequence: 1, rep: 1, repeats: 2, next: 2 });
+      run(s, 2.0); // 6.3 s
+      expect(heardSong(s)).toEqual({ entry: 2, entries: 3, sequence: 2, rep: 0, repeats: 1, next: 0 }); // the last goes on to the first
+    });
+
+    it("says what sounds and not the pass the scheduler has already begun: it changes when the pass begins to sound", () => {
+      const s = setup({ song: song3() });
+      play(s);
+      let led = 0; // ticks where the strip (songPass) was already on the next pass while the display was still on this one
+      for (let tick = 1; tick <= 180; tick++) {
+        s.advance(0.05);
+        s.sampler.poll();
+        const state = s.sampler.getState();
+        const at = state.heard.song;
+        // The entry the display says is the one whose sequence sounds, whichever way the scheduler is ahead.
+        expect(state.arrangement[at.entry].sequence).toBe(state.heard.sequence);
+        if (state.songPass && state.songPass.entry !== at.entry) led++;
+        if (state.songPass && state.songPass.rep !== at.rep && state.songPass.entry === at.entry) led++;
+      }
+      expect(led).toBeGreaterThan(0); // the window was there to be tested
+    });
+
+    it("keeps the time round of an entry that goes round again until the next time round sounds", () => {
+      const s = setup({ song: song3() });
+      s.sampler.selectEntry(1);
+      play(s);
+      run(s, 1.9); // the second pass of the entry (at 2.05 s) is built and waiting; the first still sounds
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 1 }); // the strip is already on it
+      expect(heardSong(s)).toMatchObject({ entry: 1, rep: 0 });
+      run(s, 0.2); // 2.1 s: it sounds
+      expect(heardSong(s)).toMatchObject({ entry: 1, rep: 1 });
+    });
+
+    it("says the first entry that names the sequence, as the chain will, when Song mode joins in mid-pass", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(2), entry(1)]) });
+      s.sampler.setSequence(2);
+      s.sampler.start();
+      run(s, 0.5);
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toEqual({ entry: 1, entries: 3, sequence: 2, rep: 0, repeats: 1, next: 1 });
+    });
+
+    it("leaves the place blank when the sequence that sounds is in no entry, and the song goes on from its first", () => {
+      const s = setup({ song: songWith(3, [entry(0), entry(1)]) });
+      s.sampler.setSequence(2);
+      s.sampler.start();
+      run(s, 0.5);
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toEqual({ entry: -1, entries: 2, sequence: 2, rep: -1, repeats: 0, next: 0 });
+    });
+
+    it("follows the sequence that sounds by its number now when a lower one is removed just before the pass end sounds", () => {
+      const s = setup({ song: songWith(3) });
+      s.sampler.selectEntry(1); // the song begins on the second sequence, and the editor shows the first
+      play(s);
+      run(s, 1.95); // the pass end at 2.05 s has been reached: the third is built, and the second still sounds
+      expect(s.sampler.getState().songPass).toEqual({ entry: 2, rep: 0 });
+      s.sampler.removeSequence(); // the one showing, the first: the second is now the first
+      const { heard } = s.sampler.getState();
+      expect(heard.sequence).toBe(0);
+      expect(heard.song).toEqual({ entry: 0, entries: 2, sequence: 0, rep: 0, repeats: 1, next: 1 });
+    });
+
+    it("says no place, and the first entry for what comes next, when the sequence that sounds was removed, as the chain goes on from it", () => {
+      const s = setup({ song: songWith(3) });
+      play(s);
+      run(s, 0.3);
+      s.sampler.removeSequence(); // the one that plays and shows: it sounds out its pass, and its slot is gone
+      expect(heardSong(s)).toEqual({ entry: -1, entries: 2, sequence: 0, rep: -1, repeats: 0, next: 0 });
+      run(s, 2.0); // 2.3 s: the song went on from the first entry
+      expect(timesOf(s, 1)).toEqual(closeTo(2.05));
+      expect(heardSong(s)).toEqual({ entry: 0, entries: 2, sequence: 0, rep: 0, repeats: 1, next: 1 });
+    });
+
+    it("says no place either when the sequence that gave way is the one removed, in the moment before the next pass sounds", () => {
+      const s = setup({ song: songWith(3) });
+      play(s);
+      run(s, 1.95); // the pass end at 2.05 s has been reached: the second is built, and the first still sounds
+      expect(s.sampler.getState().songPass).toEqual({ entry: 1, rep: 0 });
+      s.sampler.removeSequence(); // the first, which is showing and still sounding
+      expect(heardSong(s)).toEqual({ entry: -1, entries: 2, sequence: 0, rep: -1, repeats: 0, next: 0 });
+      run(s, 0.2); // 2.15 s: the second, now the first, sounds, on the first entry
+      expect(heardSong(s)).toEqual({ entry: 0, entries: 2, sequence: 0, rep: 0, repeats: 1, next: 1 });
+    });
+
+    it("says the sequence the scheduler has built to sound next, whatever took it over, when Song mode is turned on in the moment before it does", () => {
+      const s = setup({ song: songWith(3) });
+      s.sampler.start();
+      run(s, 0.3);
+      s.sampler.queueSequence(2); // not the one the song would go to next
+      run(s, 1.65); // 1.95 s: the third has taken over in state, and the first still sounds until 2.05 s
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toMatchObject({ sequence: 0, next: 2 });
+      run(s, 0.2); // 2.15 s: the third sounds
+      expect(heardSong(s)).toMatchObject({ sequence: 2, next: 0 });
+    });
+
+    it("counts the entries as the song has them, with none made up for a song nobody edited", () => {
+      const s = setup({ song: songWith(4) });
+      s.sampler.toggleSong();
+      expect(heardSong(s)).toMatchObject({ entries: 4, entry: 0, repeats: 1 });
+      s.sampler.addEntry(1);
+      expect(heardSong(s).entries).toBe(5);
     });
   });
 
