@@ -44,8 +44,17 @@ how many times it repeats. Until you change it, it is every sequence once, in or
 Drop an audio file on a pad (up to 10 seconds and 5 MB). **Edit Pad** opens the pad's editor: trim the start and end,
 and set gain, pitch, an envelope, a **choke group** (pads in one group cut each other off, like a closed hat cutting an
 open one), a colour, and under **Mix** a **filter** (left of the middle darkens the pad's sound, right of it thins it out,
-the middle is off) and a **pan** (left to right). Filter and pan work on any sound, the built-in ones too. Delete or
-double-click a slider to reset it.
+the middle is off), a **pan** (left to right), and a **reverb** and a **delay** (how much of the pad goes to the effects
+below, none to begin with). These work on any sound, the built-in ones too. Delete or double-click a slider to reset it.
+
+## Reverb and delay
+
+The **Effects** panel, between the Song panel and the steps, has the one reverb and the one delay every pad can send to (a
+pad is heard in them as far as its **Reverb** and **Delay** under Mix are turned up). The reverb has a **Size** (how long the room
+rings, up to 3 seconds) and a **Level**. The delay has the **note** between echoes (a sixteenth, an eighth, a dotted eighth or a
+quarter of the tempo, so it follows the tempo), **Feedback** (how many echoes), a **Level**, and **Ping-Pong**, which sends the
+echoes from one side to the other. They are part of the beat, kept with it and in the project file, and in an export.
+Delete or double-click a slider to reset it; the heading hides the panel, and it starts hidden on a phone.
 
 ## Save and share
 

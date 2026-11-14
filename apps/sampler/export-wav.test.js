@@ -32,6 +32,7 @@ import {
 import { exportInfo, stemsInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
 import { filterSpec } from "./pad-settings.js";
+import { DEFAULT_EFFECTS, delaySeconds } from "./effects.js";
 import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
 import { readZip, zipParts } from "./zip.js";
 
@@ -122,8 +123,10 @@ describe("hasSteps", () => {
 });
 
 // The mixer's strips in a fake offline context (see fakeOffline): the input of each is the gain made two channels as
-// speakers are, and the rest of its nodes are made right after it.
-const stripInputs = (offline) => offline.nodes.filter((node) => node.channelCountMode === "explicit");
+// speakers are, and the rest of its nodes are made right after it. The reverb's and the delay's inputs are made two channels
+// too, and before the strips.
+const stripInputs = (offline) => offline.nodes.filter((node) => node.channelCountMode === "explicit").slice(RETURNS);
+const RETURNS = 2;
 // The nodes of the strip whose input is `input`, which the mixer makes together, in this order.
 const stripNodes = (offline, input) => {
   const at = offline.nodes.indexOf(input);
@@ -146,10 +149,11 @@ function fakeOffline({ pausable = false } = {}) {
   const nodes = [];
   const pauses = [];
   const resumes = { count: 0 };
-  const made = { frames: 0, rate: 0 };
+  const made = { frames: 0, rate: 0, delays: [], convolvers: [] };
   const destination = { id: "destination" };
   const ctx = {
     currentTime: 0,
+    sampleRate: 1000,
     destination,
     createGain: () => {
       const node = {
@@ -181,6 +185,22 @@ function fakeOffline({ pausable = false } = {}) {
     },
     createChannelSplitter: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
     createChannelMerger: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
+    // The reverb and the delay (returns.js): the delay lines and the convolver are recorded, not part of the list of gains.
+    createDelay: () => {
+      const node = {
+        delayTime: { value: 0, setTargetAtTime: vi.fn() },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      made.delays.push(node);
+      return node;
+    },
+    createConvolver: () => {
+      const node = { buffer: null, connect: vi.fn(), disconnect: vi.fn() };
+      made.convolvers.push(node);
+      return node;
+    },
+    createBuffer: (channels, length) => ({ getChannelData: () => new Float32Array(length) }),
     startRendering: async () => {
       for (const pause of [...pauses].sort((a, b) => a.time - b.time)) {
         const before = resumes.count;
@@ -208,6 +228,7 @@ function fakeOffline({ pausable = false } = {}) {
     createContext: (frames, rate) => {
       made.frames = frames;
       made.rate = rate;
+      ctx.sampleRate = rate;
       return ctx;
     },
   };
@@ -2637,6 +2658,97 @@ describe("exporting the song", () => {
       const reported = onProgress.mock.calls.map(([fraction]) => fraction);
       expect(reported[0]).toBeCloseTo(3 / 8); // the first stem done
       expect(reported.at(-1)).toBe(1);
+    });
+  });
+});
+
+// The reverb and the delay in an export: the same mixer the page plays through, and tails that are rendered and not cut off.
+describe("the reverb and delay in an export", () => {
+  const sampleOf = (n) => ({ id: `s${n}`, name: `s${n}`, play: vi.fn(), setTrim() {} });
+  // A loop of 2 s (a bar at 120 BPM), and a pad 0 with a sound of no release. `effects` is the beat's; `sends` what pad 0 sends.
+  const planFor = ({ effects, sends = {}, kit = createKit([sound("a"), sound("b")]), pad, bpm = 120 } = {}) => {
+    for (const [name, value] of Object.entries(sends)) kit.setSetting(0, name, value);
+    const beat = beatOf(sequence({ 0: [0], 1: [4] }), { bpm, ...(effects ? { effects } : {}) });
+    return planRender({ beat, kit, stepsPerBar: 16, sampleRate: 1000, pad });
+  };
+  const big = { ...DEFAULT_EFFECTS, reverbSize: 100, reverbLevel: 100, delayLevel: 100 };
+
+  it("warms up for as long as the room rings: a 3 s room in a 2 s loop is 1 + ceil(3 / 2) passes", () => {
+    expect(planFor({ effects: big, sends: { reverb: 50 } }).warmUp).toBe(3);
+  });
+
+  it("warms up for the echoes too: eleven eighths-and-more of them at half feedback", () => {
+    // a quarter note is 0.5 s at 120 BPM; half of each comes round again, so 11 echoes are 5.5 s: 1 + ceil(5.5 / 2)
+    const effects = { ...big, delayDivision: 3, delayFeedback: 50 };
+    expect(planFor({ effects, sends: { delay: 30 } }).warmUp).toBe(4);
+  });
+
+  it("adds the ring to the pad's own release, which is heard first", () => {
+    const kit = createKit([sampleOf(0), sound("b")]);
+    kit.setSetting(0, "release", 100); // 5 s; with a 3 s room, 8 s: 1 + ceil(8 / 2) passes
+    expect(planFor({ effects: big, sends: { reverb: 50 }, kit }).warmUp).toBe(5);
+  });
+
+  it("adds nothing for an effect no pad sends to, or one that is turned right down, or none at all", () => {
+    expect(planFor({ effects: big }).warmUp).toBe(1);
+    expect(planFor({ effects: { ...big, reverbLevel: 0 }, sends: { reverb: 100 } }).warmUp).toBe(1);
+    expect(planFor({ sends: { reverb: 100, delay: 100 } }).warmUp).toBe(2); // the defaults' room (0.75 s) and echoes (2 s): one more pass
+    expect(planFor({ effects: big, sends: { delay: 100 } }).warmUp).toBeGreaterThan(1);
+  });
+
+  it("stops at the limit of passes, however long a slow delay rings", () => {
+    const effects = { ...big, delayDivision: 3, delayFeedback: 90 };
+    expect(planFor({ effects, sends: { delay: 100 }, bpm: 240 }).warmUp).toBeLessThanOrEqual(MAX_WARM_UP_PASSES);
+    expect(planFor({ effects, sends: { delay: 100 }, bpm: 40 }).warmUp).toBeLessThanOrEqual(MAX_WARM_UP_PASSES);
+  });
+
+  it("gives a stem the tail of the pad's own sends: a pad that sends nothing needs one pass of the mix's", () => {
+    const mix = planFor({ effects: big, sends: { reverb: 50 } });
+    expect(mix.warmUp).toBe(3);
+    const dry = planFor({ effects: big, sends: { reverb: 50 }, pad: 1 });
+    expect(dry.warmUp).toBe(3); // the mix's, so that the stem lines up with it
+    expect(dry.skipped).toBe(2); // and the passes the pad cannot be heard from are left empty
+    const wet = planFor({ effects: big, sends: { reverb: 50 }, pad: 0 });
+    expect(wet.skipped).toBe(0); // twice the room is 6 s: all of its passes are heard from
+  });
+
+  describe("the mixer it renders through", () => {
+    const render = async ({ effects, settings = {}, bpm = 120 } = {}) => {
+      const kit = createKit([sound("a"), sound("b")], { settings });
+      const offline = fakeOffline();
+      await renderSequence({
+        beat: beatOf(sequence({ 0: [0] }), { bpm, ...(effects ? { effects } : {}) }),
+        kit,
+        stepsPerBar: 16,
+        sampleRate: 1000,
+        createContext: offline.createContext,
+      });
+      return offline;
+    };
+
+    it("is given the beat's effects and tempo: the delay is a note of the beat", async () => {
+      const offline = await render({ effects: { ...DEFAULT_EFFECTS, delayDivision: 2 }, bpm: 100 });
+      const [left, right] = offline.made.delays;
+      expect(left.delayTime.value).toBeCloseTo(delaySeconds(2, 100), 9);
+      expect(right.delayTime.value).toBeCloseTo(delaySeconds(2, 100), 9);
+    });
+
+    it("has the delay at its defaults for a beat that saved no effects", async () => {
+      const offline = await render();
+      expect(offline.made.delays[0].delayTime.value).toBeCloseTo(delaySeconds(DEFAULT_EFFECTS.delayDivision, 120), 9);
+    });
+
+    it("makes no room for a beat that sends nothing to the reverb", async () => {
+      const offline = await render({ effects: big, settings: { 0: { delay: 80 } } });
+      expect(offline.made.convolvers).toHaveLength(0);
+    });
+
+    it("makes the room at the beat's size, once, for a beat that does, and lets go of nothing", async () => {
+      const offline = await render({ effects: { ...big, reverbSize: 60 }, settings: { 0: { reverb: 40 } } });
+      expect(offline.made.convolvers).toHaveLength(1);
+      const [convolver] = offline.made.convolvers;
+      expect(convolver.disconnect).not.toHaveBeenCalled();
+      expect(convolver.connect).toHaveBeenCalled();
     });
   });
 });

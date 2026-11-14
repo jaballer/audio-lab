@@ -31,6 +31,7 @@ import { createLcd } from "./lcd.js";
 import { createLevelReader } from "./level-meter.js";
 import { createLevelMeter } from "./level-meter-view.js";
 import { createChainStrip } from "./chain-strip.js";
+import { createEffectsPanel } from "./effects-panel.js";
 import { createSequenceRow, latchFromStored } from "./sequence-row.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
@@ -296,7 +297,7 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 // is fine because the sampler reports nothing until something happens.
 // What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
 const kit = createKit(SOUNDS, {
-  settings: beat ? beat.padSettings : {}, // each pad's gain, pitch, choke group, filter, pan and colour, kept with the beat
+  settings: beat ? beat.padSettings : {}, // each pad's gain, pitch, choke group, filter, pan, sends and colour, kept with the beat
   onChange(index, what) {
     if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
     if (what === "setting") padGrid.setColor(index, kit.settings(index).color);
@@ -487,7 +488,7 @@ const loadStarter = (starter) =>
     const warning = unsavedBefore.length ? ` ${unsavedWarning(unsavedBefore)}` : "";
     if (
       !window.confirm(
-        `Start from ${starter.name}? The beat, swing and pad settings on the page now will be replaced.${warning}`,
+        `Start from ${starter.name}? The beat, swing, effects and pad settings on the page now will be replaced.${warning}`,
       )
     )
       return false;
@@ -642,10 +643,15 @@ const envelopeSliders = createSettingsSliders($("pad-envelope"), {
   fallbackFocus: $("load-sample"), // where focus goes if they are disabled (a built-in sound came back) while one has it
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
-// The selected pad's Filter (a low-pass one way, a high-pass the other, off in the middle) and Pan: for any sound, a built-in one too.
+// The selected pad's Filter (a low-pass one way, a high-pass the other, off in the middle), Pan and sends to the shared reverb and
+// delay: for any sound, a built-in one too.
 const mixSliders = createSettingsSliders($("pad-mix"), {
-  names: ["filter", "pan"],
+  names: ["filter", "pan", "reverb", "delay"],
   onChange: (name, value) => sampler.setPadSetting(name, value),
+});
+// The reverb and the delay the pads send to: part of the beat, the same for every pad.
+const effectsPanel = createEffectsPanel($("effects-body"), {
+  onChange: (name, value) => sampler.setEffect(name, value),
 });
 // The waveform and the Start and End of the selected pad's sample, in the pad editor.
 const trimView = createTrimView($("pad-trim"), {
@@ -791,6 +797,7 @@ function render() {
   settingsSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   envelopeSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   mixSliders.refresh({ settings: state.padSettings, sampleEnabled: true });
+  effectsPanel.refresh({ effects: state.effects });
   colorSwatches.refresh({ color: state.padSettings.color });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
@@ -1044,6 +1051,16 @@ createDisclosure({
   regions: [$("song-loop"), $("song-tools"), $("song-body")],
   open: loadJson(SONG_PANEL_KEY, true) !== false,
   onToggle: (open) => saveJson(SONG_PANEL_KEY, open),
+});
+
+// The effects panel hides the same way, and is shown by default except on a narrow screen, where it would push the step editor
+// a long way down: there it starts hidden, and the choice is remembered once made.
+const EFFECTS_PANEL_KEY = "pad-sampler:effects-panel";
+createDisclosure({
+  toggle: $("effects-toggle"),
+  regions: [$("effects-body")],
+  open: loadJson(EFFECTS_PANEL_KEY, !window.matchMedia("(max-width: 800px)").matches) !== false,
+  onToggle: (open) => saveJson(EFFECTS_PANEL_KEY, open),
 });
 
 // The velocity bars are off until the Velocity switch asks for them; the choice is remembered.

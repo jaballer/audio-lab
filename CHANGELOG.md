@@ -10,6 +10,12 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: every pad can send to one shared reverb and one shared delay. Each pad has a Reverb and a Delay under Mix in the
+  pad editor (none to begin with), and a new Effects panel, between the Song panel and the steps, has the reverb's Size and
+  Level and the delay's note (it follows the tempo), Feedback, Level and Ping-Pong. They are kept with the beat and the
+  project file, and an export renders them, with the song's tail made longer for the reverb and the echoes
+  ([#190](https://github.com/jaballer/audio-lab/pull/190))
+
 - Sampler: each pad has a Filter and a Pan, under Mix in the pad editor. Filter is one slider: left of the middle darkens
   the pad's sound (a low-pass), right of it thins it out (a high-pass), and the middle is off. Pan moves the pad from
   left to right, with the centre as the sound is now. Both work on the built-in sounds as well as a loaded sample, are

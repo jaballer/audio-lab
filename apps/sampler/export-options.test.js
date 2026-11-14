@@ -27,10 +27,12 @@ import {
   MAX_SONG_EXPORT_SECONDS,
   songPassOrder,
   songFileSeconds,
+  songTailSeconds,
   songSteps,
   stemsInfo,
   songTooLong,
 } from "./export-options.js";
+import { DEFAULT_EFFECTS } from "./effects.js";
 
 // 120 BPM: a sixteenth is 0.125 s, a bar of 16 steps is 2 s
 const beatOf = (bars, extra = {}) => ({ bpm: 120, current: 0, sequences: [{ bars }], ...extra });
@@ -719,5 +721,51 @@ describe("how long a song may be", () => {
   it("is within what the arrangement can hold: the most a song can be (32 entries of 16 repeats) is far over it, so the cap is what limits it", () => {
     const most = long(Array.from({ length: 32 }, () => ({ sequence: 0, repeats: 16 })));
     expect(songTooLong(most, 16)).toBe(true);
+  });
+});
+
+describe("the song's tail with the reverb and the delay", () => {
+  const wet = { ...DEFAULT_EFFECTS, reverbSize: 100, reverbLevel: 100, delayLevel: 100, delayFeedback: 0 };
+  const song = (padSettings, effects) => ({
+    ...beatOf(4, { padSettings }),
+    ...(effects ? { effects } : {}),
+  });
+
+  it("is the usual tail when no pad sends, or the beat has no effects of its own that matter", () => {
+    expect(songTailSeconds(song({}))).toBe(SONG_TAIL_SECONDS);
+    expect(songTailSeconds(beatOf(4))).toBe(SONG_TAIL_SECONDS); // an older beat, with no pad settings at all
+    expect(songTailSeconds(song({ 1: { reverb: 0, delay: 0 } }, wet))).toBe(SONG_TAIL_SECONDS);
+  });
+
+  it("has what the room rings on for on top of it, when a pad sends to the reverb", () => {
+    expect(songTailSeconds(song({ 1: { reverb: 30, delay: 0 } }, wet))).toBeCloseTo(SONG_TAIL_SECONDS + 3, 6);
+  });
+
+  it("has the echoes' ring on top of it, when a pad sends to the delay: the one echo with no feedback", () => {
+    // an eighth at 120 BPM is a quarter of a second
+    expect(songTailSeconds(song({ 1: { reverb: 0, delay: 30 } }, wet))).toBeCloseTo(SONG_TAIL_SECONDS + 0.25, 6);
+  });
+
+  it("is no more than the limit longer, however slow the echo", () => {
+    const slow = { ...wet, delayDivision: 3, delayFeedback: 90 };
+    expect(songTailSeconds({ ...song({ 1: { delay: 100 } }, slow), bpm: 40 })).toBe(SONG_TAIL_SECONDS + 10);
+  });
+
+  it("makes the file longer by as much, in the length the dialog tells and in the frames rendered", () => {
+    const beat = song({ 1: { reverb: 30 } }, wet);
+    expect(songFileSeconds(beat, 16)).toBeCloseTo(songSteps(beat, 16) * 0.125 + SONG_TAIL_SECONDS + 3, 6);
+    expect(exportFrames(beat, 16, 1, 1000, "song")).toBe(Math.round(songFileSeconds(beat, 16) * 1000));
+    expect(exportFrames(beat, 16, 1, 1000, "sequence")).toBe(8 * 1000); // a loop is its own length: it is warmed up, not extended
+  });
+
+  it("says what the tail is, and that the reverb and the delay are in it, in the dialog's hint", () => {
+    expect(exportHint("mix", "song", SONG_TAIL_SECONDS)).toMatch(
+      /then 4 s for what rings on \(a longer sound is cut\)/,
+    );
+    expect(exportHint("mix", "song", SONG_TAIL_SECONDS + 3)).toMatch(
+      /then 7 s for what rings on and for the reverb and delay/,
+    );
+    expect(exportHint("mix", "song", SONG_TAIL_SECONDS + 0.25)).toMatch(/then 4\.3 s/);
+    expect(exportHint("mix", "song")).toBe(exportHint("mix", "song", SONG_TAIL_SECONDS));
   });
 });

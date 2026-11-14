@@ -256,7 +256,7 @@
                     Mix
                   </button>
                 </h3>
-                <div id="pad-mix" role="group" aria-label="Filter and pan of the selected pad"></div>
+                <div id="pad-mix" role="group" aria-label="Filter, pan and effect sends of the selected pad"></div>
               </section>
               <section class="pad-drawer-section" aria-labelledby="pad-drawer-color">
                 <h3 id="pad-drawer-color" class="small-label">Color</h3>
@@ -279,6 +279,16 @@
           <div id="song-body">
             <div id="song-strip"></div>
           </div>
+        </section>
+
+        <section class="step-panel effects-panel" aria-label="Effects: the reverb and the delay the pads send to">
+          <div class="step-head">
+            <!-- The heading is the button that hides the controls. effects-panel.js draws them. -->
+            <button id="effects-toggle" class="small-label section-toggle" type="button" aria-expanded="true">
+              Effects
+            </button>
+          </div>
+          <div id="effects-body"></div>
         </section>
 
         <section class="step-panel" aria-label="Steps for the selected pad">
@@ -431,10 +441,11 @@
           Start and End (drag the picture, or use the sliders), Gain (for any sound), Pitch and an Envelope of Attack,
           Decay, Sustain and Release (for a loaded sample, drawn on its waveform: Release is also how long a hit cuts
           off the pad's last one), Filter (for any sound: a low-pass left of the middle, which darkens it, a high-pass
-          right of it, which thins it out, and off in the middle) and Pan (for any sound, left to right), and Choke (a
-          group number: pads in the same group cut each other off, like a closed hat cutting an open one) and Color (a
-          colour for the pad's rim, to group pads by sight); press Delete or double-click a slider to reset it. Escape,
-          pressed inside the editor, closes it
+          right of it, which thins it out, and off in the middle) and Pan (for any sound, left to right) and, under Mix,
+          Reverb and Delay (how much of the pad goes to the effects below, for any sound; none to start with), and Choke
+          (a group number: pads in the same group cut each other off, like a closed hat cutting an open one) and Color
+          (a colour for the pad's rim, to group pads by sight); press Delete or double-click a slider to reset it.
+          Escape, pressed inside the editor, closes it
         </li>
         <li>
           Under the display, each sequence has a key: press one to see and edit it. While the beat plays (and Song is
@@ -456,10 +467,14 @@
         </li>
         <li>
           The heading above the step keys hides or shows the step editor (the keys, the velocity bars and the edit
-          tools), and the page remembers which; Tune, Envelope and Mix in the pad editor hide and show the same way.
-          Press the Velocity switch to show the velocity bars under the step keys (they start hidden), then drag along
-          them to set how hard each step plays; pressing the bar of a step that is off turns it on at that height; a
-          step recorded live keeps the velocity of the hit
+          tools), and the page remembers which; so do the Song and Effects headings, and Tune, Envelope and Mix in the
+          pad editor hide and show the same way. Effects is the one reverb and the one delay that every pad sends to,
+          and they are part of the beat: the reverb's Size (how long the room rings) and Level, the delay's note (an
+          eighth, say, of the tempo, and it follows the tempo), Feedback (how many echoes) and Level, and Ping-Pong,
+          which sends the echoes from one side to the other. A pad is heard in them only as far as its Reverb and Delay
+          are turned up Press the Velocity switch to show the velocity bars under the step keys (they start hidden),
+          then drag along them to set how hard each step plays; pressing the bar of a step that is off turns it on at
+          that height; a step recorded live keeps the velocity of the hit
         </li>
         <li>
           Export, in the File group above the display, opens a window to save a 16-bit WAV file, at the tempo, volume

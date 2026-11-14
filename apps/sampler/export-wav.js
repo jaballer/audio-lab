@@ -37,6 +37,7 @@ import {
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
 import { createMixer } from "./mixer.js";
+import { effectsOf, effectsTail } from "./effects.js";
 import { zipBlob } from "./zip.js";
 
 // The rate an export is made at when the page has no audio running to take it from.
@@ -198,9 +199,15 @@ export function planRender({
   // `reach` is how many releases a tail is followed for: one is what a render needs to be a loop's steady state (the voice is
   // about 60 dB down by then), two is where it is 120 dB down (a cut fades over fourteen time constants of a seventh of
   // the release).
+  // What a pad's sound rings on for is its release and then what the reverb and the delay keep of what it sends them (effects.js).
+  const effects = effectsOf(beat);
+  const ringSeconds = (row) => {
+    const { reverb, delay } = kit.settings(row);
+    return (kit.envelope(row)?.release ?? 0) + effectsTail(effects, beat.bpm, { reverb: reverb > 0, delay: delay > 0 });
+  };
   const warmUpFor = (forHits, reach = 1) => {
-    const longestRelease = Math.max(0, ...forHits.map(({ row }) => kit.envelope(row)?.release ?? 0));
-    return Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil((reach * longestRelease) / loopSeconds));
+    const longestRing = Math.max(0, ...forHits.map(({ row }) => ringSeconds(row)));
+    return Math.min(MAX_WARM_UP_PASSES, 1 + Math.ceil((reach * longestRing) / loopSeconds));
   };
   // A stem is on the whole sequence's timeline: its hits sound at the very frames they do in the mix (a hit's position in
   // a render block and its fraction of a frame change what an oscillator or a sample's start makes of it, so a stem
@@ -368,8 +375,16 @@ export async function renderSequence({
   const plan = planRender({ beat, kit, stepsPerBar, sampleRate, loops, pad, scope });
   const ctx = createContext(plan.total, sampleRate);
   const master = connectOutput(ctx, beat.volume, clip);
-  // The same strips the page plays through, with each pad's filter and pan as the kit has them (a snapshot, for an export that renders for a while).
-  const mixer = createMixer(ctx, master, { pads: kit.length, settings: (pad) => kit.settings(pad) });
+  // The same strips, reverb and delay the page plays through, with each pad's settings as the kit has them and the effects and the
+  // tempo as the beat has them (a snapshot, for an export that renders for a while). They are set once and never change, so the
+  // reverb's room is made once and not let go of.
+  const effects = effectsOf(beat);
+  const mixer = createMixer(ctx, master, {
+    pads: kit.length,
+    settings: (pad) => kit.settings(pad),
+    effects: () => effects,
+    bpm: () => beat.bpm,
+  });
   const sink = pad === undefined ? null : ctx.createGain(); // where the voices of a stem's silent hits go: nowhere
   const voices = createVoices(kit.length, {
     cleanUp: false,
