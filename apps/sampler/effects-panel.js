@@ -21,15 +21,15 @@ const DELAY_SLIDERS = ["delayFeedback", "delayLevel"];
 export function createEffectsPanel(element, { onChange }) {
   const sliders = {};
   const idBase = `effects-${element.id || "panel"}`;
-  element.classList.add("effects-groups");
+  element.classList.add("sampler-effects-groups");
 
   function group(title) {
     const section = document.createElement("div");
-    section.className = "effects-group";
+    section.className = "sampler-effects-group";
     section.setAttribute("role", "group");
     const heading = document.createElement("h3");
     heading.id = `${idBase}-${title.toLowerCase()}`;
-    heading.className = "small-label effects-group-title";
+    heading.className = "small-label sampler-effects-group-title";
     heading.textContent = title;
     section.setAttribute("aria-labelledby", heading.id);
     section.appendChild(heading);
@@ -77,7 +77,7 @@ export function createEffectsPanel(element, { onChange }) {
   const delay = group("Delay");
   // The echoes' note and the switch share a row under the heading.
   const keys = document.createElement("div");
-  keys.className = "effects-delay-keys";
+  keys.className = "sampler-effects-delay-keys";
   const notes = document.createElement("div");
   notes.className = "btn-group";
   notes.setAttribute("role", "group");
@@ -95,7 +95,7 @@ export function createEffectsPanel(element, { onChange }) {
   });
   const pingPong = document.createElement("button");
   pingPong.type = "button";
-  pingPong.className = "btn btn-small effects-ping-pong";
+  pingPong.className = "btn btn-small sampler-effects-ping-pong";
   pingPong.textContent = EFFECTS.pingPong.label;
   pingPong.setAttribute("aria-pressed", "false");
   pingPong.addEventListener("click", () =>
