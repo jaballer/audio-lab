@@ -1,11 +1,14 @@
 // What can be set on a pad besides its sound: how loud it is, (for a loaded sample) how high and how its volume is
-// shaped over time, and which choke group it is in. No DOM, and plain numbers, so the same values are what the sliders show, the kit plays and the song saves.
+// shaped over time, which choke group it is in, and a filter and a pan for what it plays. No DOM, and plain numbers, so the same values are what the sliders show, the kit plays and the song saves.
 //
 //   gain:  decibels, -24 to +6 in whole steps (0 leaves the sound as it is)
 //   pitch: semitones, -12 to +12 in whole steps (0 plays the sample at its own pitch)
 //   attack, decay, release: (for a loaded sample) 0 to 100 on a slider, a time up to 2, 2 and 5 seconds (envelopeSeconds)
 //   sustain: (for a loaded sample) the level the decay falls to, 0 to 100 per cent (100 leaves the sample as it is)
 //   choke: a choke group, 0 (none) or 1 to 8: pads in the same group cut each other off (voices.js)
+//   filter: -100 to +100: one control for a low-pass (below 0: the cutoff comes down from the top of hearing, so the sound
+//           darkens) and a high-pass (above 0: the cutoff goes up from the bottom, so it thins); 0 is off (filterSpec)
+//   pan: -100 (left) to +100 (right), 0 in the centre: a balance, not a mix of the two sides (panGains)
 //   color: a colour for the pad, 0 (none) or 1 to 6 (pad-colors.js); only for looks, and chosen with swatches, not a slider
 //
 //   clampSetting("gain", 9.4)            // 6
@@ -15,12 +18,15 @@
 //   formatSetting("choke", 0)            // "OFF"; 3 is "GROUP 3"
 //   formatSetting("color", 3)            // "BLUE"
 //   formatSetting("attack", 50)          // "250 MS": a time, not the slider position; "sustain" is "50 %"
+//   filterSpec(-50)                      // { type: "lowpass", frequency: 1265 }: what the strip's filter is set to ({ type: "off" } at 0)
+//   panGains(50)                         // { left: 0.5, right: 1 }: what each side is multiplied by
 //   envelopeSeconds("release", 100)      // 5
 //   padEnvelope(settings)                // { attack, decay, sustain, release } in seconds and 0-1, or null when flat
-//   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke, color, attack, decay, sustain, release } } for the pads that differ from the default
+//   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke, filter, pan, color, attack, decay, sustain, release } } for the pads that differ from the default
 
 import { isFlat } from "./pad-envelope.js";
 import { COLOR_COUNT, padColorName } from "./pad-colors.js";
+import { exp } from "../../shared/scales.js";
 
 export const SETTINGS = {
   gain: { min: -24, max: 6, default: 0, unit: "dB", label: "Gain" },
@@ -35,6 +41,10 @@ export const SETTINGS = {
   decay: { min: 0, max: 100, default: 0, unit: "", label: "Decay", samples: true, seconds: 2 },
   sustain: { min: 0, max: 100, default: 100, unit: "%", label: "Sustain", samples: true },
   release: { min: 0, max: 100, default: 0, unit: "", label: "Release", samples: true, seconds: 5 },
+  // Whole numbers either side of an off in the middle, like a DJ filter and a balance: they apply to any sound, a built-in
+  // one as well as a sample, since they act on what comes out of the pad.
+  filter: { min: -100, max: 100, default: 0, unit: "", label: "Filter" },
+  pan: { min: -100, max: 100, default: 0, unit: "", label: "Pan" },
   // Which swatch: not a quantity, so it has no slider (`swatches`): the pad editor draws it as a row of colours.
   color: { min: 0, max: COLOR_COUNT, default: 0, unit: "", label: "Color", swatches: true },
 };
@@ -93,12 +103,46 @@ export function formatSetting(name, value) {
   if (name === "sustain") return `${value} %`;
   if (name === "choke") return value === 0 ? "OFF" : `GROUP ${value}`;
   if (name === "color") return padColorName(value).toUpperCase();
+  if (name === "filter")
+    return value === 0 ? "OFF" : `${value < 0 ? "LP" : "HP"} ${formatHz(filterSpec(value).frequency)}`;
+  if (name === "pan") return value === 0 ? "CENTER" : `${value < 0 ? "L" : "R"} ${Math.abs(value)}`;
   return `${value > 0 ? "+" : ""}${value} ${SETTINGS[name].unit}`;
 }
 
+// The filter control as what the strip does with it. A low-pass comes down from the top of hearing to 80 Hz and a high-pass
+// goes up from the bottom to 8 kHz (a high-pass any higher leaves nothing of most sounds), each an equal ratio for an equal
+// step (`exp`, so the sweep feels even). `type` is "off", "lowpass" or "highpass". Q is a Butterworth's, the flattest the
+// bend can be without a bump at the cutoff, and is in decibels, as a low-pass and a high-pass take it in Web Audio
+// (10 ** (dB / 20) is the usual Q of 0.707).
+const LOW_PASS_HZ = exp(80, 20000);
+const HIGH_PASS_HZ = exp(20, 8000);
+export const FILTER_Q_DB = 20 * Math.log10(Math.SQRT1_2);
+// Where a filter waits while it is not the one in use, so that it is already at work on the sound, and nearly out of the way,
+// when it is: a low-pass at the top of the range and a high-pass at the bottom.
+export const LOW_PASS_PARKED_HZ = LOW_PASS_HZ.toValue(100);
+export const HIGH_PASS_PARKED_HZ = HIGH_PASS_HZ.toValue(0);
+const FILTER_OFF = Object.freeze({ type: "off" });
+
+export function filterSpec(value) {
+  if (value === 0) return FILTER_OFF;
+  const amount = Math.abs(value);
+  if (value < 0) return { type: "lowpass", frequency: LOW_PASS_HZ.toValue(100 - amount) };
+  return { type: "highpass", frequency: HIGH_PASS_HZ.toValue(amount) };
+}
+
+// A balance: the side the sound is moved away from is turned down, and the other stays as it is, so the centre is the sound
+// untouched and a mono sound at the far edge is all on one side at its own level (about 3 dB quieter in all than at the
+// centre, where it is on both). A stereo sample is balanced the same way.
+export function panGains(value) {
+  const pan = value / 100;
+  return { left: Math.min(1, 1 - pan), right: Math.min(1, 1 + pan) };
+}
+
+const formatHz = (hz) => (hz < 1000 ? `${Math.round(hz)} HZ` : `${(hz / 1000).toFixed(1)} KHZ`);
+
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// What was stored, as { pad: { gain, pitch, envelope, choke, color } } for the pads that exist and have something other than the
+// What was stored, as { pad: { gain, pitch, envelope, choke, filter, pan, color } } for the pads that exist and have something other than the
 // defaults. Values are brought into range; anything unusable is left out.
 export function parsePadSettings(stored, padCount) {
   const pads = {};

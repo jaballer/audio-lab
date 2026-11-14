@@ -11,30 +11,49 @@ const PADS = 4;
 // nodes just remember what they were given.
 function fakeAudio() {
   const master = { id: "master" };
+  const param = (value = 1) => ({
+    value,
+    setTargetAtTime: vi.fn(),
+    setValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+  });
+  const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
   const ctx = {
     currentTime: 0,
-    createGain: vi.fn(() => ({
-      gain: { value: 1, setTargetAtTime: vi.fn(), setValueAtTime: vi.fn(), cancelScheduledValues: vi.fn() },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    })),
+    createGain: vi.fn(() => ({ ...node(), gain: param() })),
+    // What a mixer strip is made of (mixer.js)
+    createBiquadFilter: vi.fn(() => ({ ...node(), type: "peaking", frequency: param(), Q: param(), gain: param(0) })),
+    createChannelSplitter: vi.fn(node),
+    createChannelMerger: vi.fn(node),
   };
   return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn(), killSound: vi.fn(() => true) };
 }
 
 // A hit's sound goes through a voice of its pad (voices.js) and perhaps a velocity stage first, and each node says where it
-// sends its sound. The voice leads into its pad's strip of the mixer, and the strip into the master.
+// sends its sound. The voice leads into its pad's strip of the mixer (its filter, which is the strip's input), and the strip
+// on through its pan to the master.
 const stripOf = (voice) => voice.connect.mock.calls[0][0];
 
-// The voice a hit plays through: the last node before the pad's strip, which is what cutting the hit off disconnects.
+// Whether what `from` is connected to, and what that is connected to, and so on, reaches `target`.
+function reaches(from, target, seen = new Set()) {
+  if (from === target) return true;
+  if (seen.has(from) || !from.connect?.mock) return false;
+  seen.add(from);
+  return from.connect.mock.calls.some((call) => reaches(call[0], target, seen));
+}
+
+// The voice a hit plays through: the last node before the pad's strip (which is the one made two channels as speakers
+// are), which is what cutting the hit off disconnects.
 function voiceOf(node) {
   let current = node;
   for (;;) {
     const next = current.connect.mock.calls[0]?.[0];
-    if (!next || next.connect?.mock.calls[0]?.[0]?.id === "master") return current;
+    if (!next || next.channelCountMode === "explicit") return current;
     current = next;
   }
 }
+
+const STRIP_GAINS = 6; // a strip's gains (input, dry, low-pass, high-pass, left and right): the gains a mixer makes before the first voice
 
 const SEQUENCES = 4;
 // A saved beat with one sequence of the given pattern and length, the rest empty. It has Loop on unless the test says `loopSong: false`:
@@ -150,8 +169,8 @@ describe("triggerPad", () => {
     sampler.triggerPad(2);
     const voice = sounds[2].play.mock.calls[0][1]; // the pad's voice, which goes to its strip
     expect(sounds[2].play).toHaveBeenCalledWith(audio.ctx, voice, 1.5);
-    expect(stripOf(voice).connect).toHaveBeenCalledWith(audio.master);
-    expect(audio.ctx.createGain).toHaveBeenCalledTimes(PADS + 1); // a strip for each pad, and the voice
+    expect(reaches(stripOf(voice), audio.master)).toBe(true);
+    expect(audio.ctx.createGain).toHaveBeenCalledTimes(PADS * STRIP_GAINS + 1); // the gains of a strip for each pad, and the voice
     expect(padHit).toHaveBeenCalledWith(2);
     expect(sampler.getState().selected).toBe(2);
     expect(change).toHaveBeenCalled();
@@ -163,7 +182,7 @@ describe("triggerPad", () => {
     const [voice, gain] = audio.ctx.createGain.mock.results.slice(-2).map((result) => result.value); // the voice, then the stage (after the strips)
     expect(gain.gain.value).toBe(0.5);
     expect(gain.connect).toHaveBeenCalledWith(voice);
-    expect(stripOf(voice).connect).toHaveBeenCalledWith(audio.master);
+    expect(reaches(stripOf(voice), audio.master)).toBe(true);
     expect(sounds[1].play.mock.calls[0][1]).toBe(gain);
   });
 
@@ -174,7 +193,7 @@ describe("triggerPad", () => {
     sampler.triggerPad(0);
     const [first, second] = sounds[0].play.mock.calls.map((call) => stripOf(call[1]));
     expect(second).not.toBe(first);
-    expect(second.connect).toHaveBeenCalledWith(audio.master);
+    expect(reaches(second, audio.master)).toBe(true);
   });
 
   it("plays a step's hits into the master that replaced the old one, as a live hit does", () => {
@@ -183,12 +202,14 @@ describe("triggerPad", () => {
     });
     sampler.start();
     advance(0);
+    const oldMaster = audio.master;
     audio.master = { id: "master" }; // what killSound does
     advance(1); // the step at 8 is built after it
     const [before, after] = sounds[1].play.mock.calls.map((call) => stripOf(voiceOf(call[1])));
     expect(after).not.toBe(before);
-    expect(before.connect).toHaveBeenCalledWith(expect.objectContaining({ id: "master" }));
-    expect(after.connect).toHaveBeenCalledWith(audio.master);
+    expect(reaches(before, oldMaster)).toBe(true);
+    expect(reaches(after, audio.master)).toBe(true);
+    expect(reaches(after, oldMaster)).toBe(false);
   });
 
   it("stops every hit of a step that has not started, not only the first", () => {
@@ -205,6 +226,49 @@ describe("triggerPad", () => {
     for (const call of last) expect(voiceOf(call[1]).disconnect).toHaveBeenCalled();
   });
 
+  it("plays a pad through the filter and pan it was set to, and follows a change made while the strips are there", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const kit = createKit(sounds, { settings: { 1: { filter: -50 } } });
+    const sampler = createSampler({ audio, kit, steps: STEPS });
+    sampler.triggerPad(0);
+    // each strip's gains, in the order mixer.js makes them
+    const strips = () => {
+      const gains = audio.ctx.createGain.mock.results.map((result) => result.value);
+      return Array.from({ length: PADS }, (_, pad) => {
+        const [, dry, low, high, left, right] = gains.slice(pad * STRIP_GAINS, (pad + 1) * STRIP_GAINS);
+        return { dry, low, high, left, right };
+      });
+    };
+    const at = audio.ctx.currentTime;
+    expect([strips()[0].dry.gain.value, strips()[0].low.gain.value]).toEqual([1, 0]); // off
+    expect([strips()[1].dry.gain.value, strips()[1].low.gain.value]).toEqual([0, 1]); // a low-pass, set when the strips were made
+    kit.setSetting(0, "filter", 40);
+    sampler.kitChanged("setting", 0); // what the page does when the kit says a setting changed
+    expect(strips()[0].high.gain.setTargetAtTime).toHaveBeenCalledWith(1, at, expect.any(Number));
+    expect(strips()[0].dry.gain.setTargetAtTime).toHaveBeenCalledWith(0, at, expect.any(Number));
+    expect(strips()[1].high.gain.setTargetAtTime).not.toHaveBeenCalled(); // another pad's
+    kit.setSetting(2, "pan", 100);
+    sampler.kitChanged("setting", 2);
+    expect(strips()[2].left.gain.setTargetAtTime).toHaveBeenCalledWith(0, at, expect.any(Number));
+    expect(strips()[2].right.gain.setTargetAtTime).toHaveBeenCalledWith(1, at, expect.any(Number));
+  });
+
+  it("saves a setting that was changed whichever pad it was on", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const beatChange = vi.fn();
+    const sampler = createSampler({
+      audio: fakeAudio(),
+      kit: createKit(sounds),
+      steps: STEPS,
+      onBeatChange: beatChange,
+    });
+    sampler.kitChanged("setting", 3);
+    expect(beatChange).toHaveBeenCalledTimes(1);
+    sampler.kitChanged("setting"); // an older caller, with no pad: still saved
+    expect(beatChange).toHaveBeenCalledTimes(2);
+  });
+
   it("gives each pad a strip of its own, which the pad's hits share", () => {
     const { sampler, sounds } = setup();
     sampler.triggerPad(0);
@@ -218,11 +282,24 @@ describe("triggerPad", () => {
   it("never lets a hit go fully silent", () => {
     const { audio, sampler } = setup();
     sampler.triggerPad(0, 0);
-    expect(audio.ctx.createGain.mock.results[PADS + 1].value.gain.value).toBe(0.05); // the stage, after the strips and the pad's voice
+    expect(audio.ctx.createGain.mock.results[PADS * STRIP_GAINS + 1].value.gain.value).toBe(0.05); // the stage, after the strips and the pad's voice
   });
 });
 
 describe("pad settings", () => {
+  it("says a Filter or Pan change on the display, for the selected pad", () => {
+    const { sampler, message } = setup();
+    sampler.selectPad(2);
+    sampler.setPadSetting("filter", -51);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 FILTER LP 1.2 KHZ");
+    sampler.setPadSetting("filter", 0);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 FILTER OFF");
+    sampler.setPadSetting("pan", -30);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 PAN L 30");
+    sampler.setPadSetting("pan", 0);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 PAN CENTER");
+  });
+
   it("sets gain or pitch on the selected pad, says so, saves, and redraws", () => {
     const { sampler, message, beatChange, change } = setup();
     sampler.selectPad(2);
@@ -238,6 +315,8 @@ describe("pad settings", () => {
       gain: -6,
       pitch: 3,
       choke: 0,
+      filter: 0,
+      pan: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -249,6 +328,8 @@ describe("pad settings", () => {
       gain: 0,
       pitch: 0,
       choke: 0,
+      filter: 0,
+      pan: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -269,7 +350,7 @@ describe("pad settings", () => {
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", -5);
     expect(sampler.getBeat().padSettings).toEqual({
-      1: { gain: 0, pitch: -5, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 0, pitch: -5, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
@@ -333,7 +414,7 @@ describe("pad settings", () => {
     vi.advanceTimersByTime(SCHEDULER_TICK_MS);
     const last = sounds[0].play.mock.calls.at(-1)[1]; // the stage the last queued step plays through
     const bus = voiceOf(last); // ... which feeds the pad's voice, and the voice the pad's strip
-    expect(stripOf(bus).connect).toHaveBeenCalledWith(audio.master);
+    expect(reaches(stripOf(bus), audio.master)).toBe(true);
     sampler.stop();
     expect(bus.disconnect).toHaveBeenCalled(); // a step not yet started is cut off, stage and all
   });
@@ -398,7 +479,7 @@ describe("pad settings", () => {
     sampler.triggerPad(0);
     const [, stage, , options] = sounds[0].play.mock.calls[0];
     expect(stage.gain.value).toBeCloseTo(0.501, 3);
-    expect(stripOf(stage.connect.mock.calls[0][0]).connect).toHaveBeenCalledWith(audio.master); // into the pad's voice, and on through its strip
+    expect(reaches(stripOf(stage.connect.mock.calls[0][0]), audio.master)).toBe(true); // into the pad's voice, and on through its strip
     expect(options).toEqual({ rate: 2 });
   });
 
@@ -410,7 +491,7 @@ describe("pad settings", () => {
     sampler.triggerPad(0);
     const stage = sounds[0].play.mock.calls[0][1];
     expect(stage.gain.value).toBeCloseTo(0.501, 3);
-    expect(stripOf(stage.connect.mock.calls[0][0]).connect).toHaveBeenCalledWith(audio.master); // into the pad's voice, and on through its strip
+    expect(reaches(stripOf(stage.connect.mock.calls[0][0]), audio.master)).toBe(true); // into the pad's voice, and on through its strip
   });
 });
 
@@ -2707,7 +2788,7 @@ describe("pad colours", () => {
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
     expect(sampler.getState().padSettings.color).toBe(3);
     expect(sampler.getBeat().padSettings).toEqual({
-      1: { gain: 0, pitch: 0, choke: 0, color: 3, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 3, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
     expect(beatChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
@@ -2745,7 +2826,7 @@ describe("choke groups", () => {
     expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE GROUP 3");
     expect(sampler.getState().padSettings.choke).toBe(3);
     expect(sampler.getBeat().padSettings).toEqual({
-      2: { gain: 0, pitch: 0, choke: 3, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: 0, pitch: 0, choke: 3, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
     expect(beatChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
@@ -2877,7 +2958,7 @@ describe("transport", () => {
     // The starter beat: kick on step 0, closed hat (pad 2) on step 0, snare not yet.
     const bus = voiceOf(sounds[0].play.mock.calls[0][1]); // each hit plays through a voice, into its pad's strip, into the master
     expect(sounds[0].play).toHaveBeenCalledWith(audio.ctx, expect.anything(), expect.closeTo(0.05));
-    expect(stripOf(bus).connect).toHaveBeenCalledWith(audio.master);
+    expect(reaches(stripOf(bus), audio.master)).toBe(true);
     expect(sounds[2].play).toHaveBeenCalledTimes(1);
     expect(sounds[1].play).not.toHaveBeenCalled();
   });
@@ -2891,7 +2972,7 @@ describe("transport", () => {
     const quiet = sounds[0].play.mock.calls[0][1];
     expect(quiet.gain.value).toBeCloseTo(64 / 127);
     const bus = voiceOf(quiet); // the stage feeds the pad's voice, which feeds the pad's strip, which feeds the master
-    expect(stripOf(bus).connect).toHaveBeenCalledWith(audio.master);
+    expect(reaches(stripOf(bus), audio.master)).toBe(true);
     const full = sounds[1].play.mock.calls[0][1];
     expect(voiceOf(full)).toBe(full); // a step left at full velocity plays straight into its pad's voice
   });

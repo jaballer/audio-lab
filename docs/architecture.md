@@ -35,7 +35,7 @@ on every step and a screen reader would announce the same text again.
 ## Sound
 
 ```text
-pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pad, choke groups) ──> mixer.js (a strip for each pad) ──> audio.master
+pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pad, choke groups) ──> mixer.js (a filter and a pan for each pad) ──> audio.master
                                                                                                                                   │
                               shared/audio.js: master gain ──> soft clipper ──> speakers + analysers (lights, level meter)
 ```
@@ -45,13 +45,17 @@ pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pa
   browsers do not allow sound before one. One exception in who builds the context: the Tone.js demo passes
   `createContext: () => Tone.getContext().rawContext`, because Tone must wrap the context itself (handed a plain
   `AudioContext`, its setup throws in Firefox); the engine still owns the graph and the master on it.
-- **A strip for each pad, between the voices and the master.** `apps/sampler/mixer.js` gives every pad a node of its own that
-  its voices play into, and that leads to `audio.master`: where a pad's effects will go (a filter, a pan, sends to a shared
-  reverb and delay, planned in [issue 187](https://github.com/jaballer/audio-lab/issues/187)), so a hit is already routed
-  the way they need. The strips are neutral for now, so nothing sounds different. `audio.killSound()` replaces the master, so
-  the page's mixer (`createLiveMixer`) builds new strips on the new master the next time a hit asks, and the old ones are left
-  to the old master's fade-out. A queued step is cut off by disconnecting its voices' outputs, not a gain shared by the step,
-  because its pads now lead to different strips. The export builds the same mixer on its offline context.
+- **A strip for each pad, between the voices and the master.** `apps/sampler/mixer.js` gives every pad a strip of its own that
+  its voices play into, and that leads to `audio.master`: a dry path, a low-pass and a high-pass crossfaded by the pad's Filter
+  setting, then a pan (a balance: a left and a right gain), the pad's Pan; sends to a shared reverb and delay and a drive are to follow in the same strip
+  ([issue 187](https://github.com/jaballer/audio-lab/issues/187)). A strip is wired once and only its settings change, so a
+  change never reroutes a sound that is playing; it is heard at once by the hits already sounding and the ones queued, which
+  play through it. With the settings at their defaults a strip hands the sound on as it is: the filter's dry path is all that is heard, and a filter
+  is never changed from the type it was made as, because that resets its memory and is heard as a tick. `audio.killSound()` replaces the
+  master, so the page's mixer (`createLiveMixer`) builds new strips on the new master, from the settings as they are then, the
+  next time a hit asks, and the old ones are left to the old master's fade-out. A queued step is cut off by disconnecting its
+  voices' outputs, not a gain shared by the step, because its pads lead to different strips. The export builds the same mixer
+  on its offline context from the kit snapshot's settings.
 - **The audio clock, not timers.** `shared/scheduler.js` wakes on a timer but schedules each step at an `AudioContext` time
   about 0.12 s ahead; the playhead on screen follows separately.
 - **The MPC Sample page follows the device instead.** It makes no sound and runs no lookahead: the device is the clock.
@@ -134,8 +138,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `starters.js` — a few complete beats to start from, one per style (hip hop, techno, house, trap): tempo, patterns written as step grids, swing, and the pad settings that go with them (choke group, colours), built into the beat `beat.js` keeps; the pads' sounds are the same in every starter; no DOM
   - `beat.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `arrangement.js` — the order a song plays its sequences in (each with a number of repeats; none until a person edits it, which means every sequence once, in order): cleaning what was saved, following a sequence added or removed, the order of the passes, and which pass follows the one that ended (what Song mode walks) and whether a pass is the last of the song; no DOM
-  - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
-  - `mixer.js` — the strip each pad's voices play into on the way to the master (neutral for now, where a pad's effects will go), `createMixer` for a context and `createLiveMixer` for the page's audio engine, which follows `audio.master` when `killSound()` replaces it; the export builds its own; no DOM
+  - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group, filter, pan and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
+  - `mixer.js` — the strip each pad's voices play into on the way to the master: a filter and a pan for each pad, set from the pad's settings and followed when they change (`update`), where its other effects will go; `createMixer` for a context and `createLiveMixer` for the page's audio engine, which follows `audio.master` when `killSound()` replaces it; the export builds its own; no DOM
   - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing, and so do the other pads in its choke group (a fade on the audio clock), live, in the sequence or in the export; no DOM
   - `pad-envelope.js` — the shape of a pad's amplitude envelope (attack, decay, sustain, release) as the points a gain is ramped through, laid over the time a sample is heard for; no DOM
   - `pad-colors.js` — the fixed set of colours a pad can be given (with names for a screen reader); no DOM
@@ -148,10 +152,10 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `project.js` — the project file (`.audiolab`, a zip): the whole beat (sequences, tempo, volume, pad settings) and the samples' original bytes, for when the browser's storage is cleared; built from what the page keeps (`collectSamples`), checked as strictly as stored data on the way in (`parseProject`: the beat through `parseBeat`, the samples through `parseSamples`, a damaged or too-large file refused whole), and written where the page keeps its own (`installProject`), after which the page starts again; no DOM
   - `trim.js` — which part of a sample plays: a start and an end as fractions of its length, kept possible (inside the sample, never shorter than 5 ms), and which handle a press would move; no DOM
   - `waveform.js` — a sample's outline for drawing, the lowest and highest value of each slice; no DOM
-  - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the choke group, the text, and reading them back from a saved beat; no DOM
+  - `pad-settings.js` — the pad settings: their ranges, clamping, decibels to a multiplier, semitones to a playback rate, the choke group, the filter as the biquad that makes it, the pan as the gain of each side, the text, and reading them back from a saved beat; no DOM
   - `sample-voice.js` — a loaded sample as a pad sound, and decoding a file (with the length and size caps and the reason a file was refused); no DOM
   - `samples.js` — loading a file onto a pad, resetting it, and keeping the samples between visits (the files' bytes in IndexedDB, which pad has which in localStorage), restored at the start of a visit; no DOM
-  - `pads.js`, `tempo-knob.js`, `volume-knob.js` (also the Swing knob), `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `export-dialog.js`, `trim-view.js`, `lcd.js`, `level-meter-view.js`, `sequence-row.js`, `chain-strip.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `settings-sliders.js` is the Gain, Pitch, Choke and envelope sliders, `color-swatches.js` is the row of colours for the pad, `pad-drawer.js` is the pad editor drawer (open, close, heading), `export-dialog.js` is the Export window (loops, stereo or mono, size, progress and cancel), `trim-view.js` is the waveform with its Start and End and the pad's envelope drawn on it, `lcd.js` has the pure text formatter and the progress bar along the bottom of the display, `level-meter-view.js` is the two bars at the right of the display, `sequence-row.js` is the row of sequence keys with Add, Copy and Remove, and has the pure `sequenceKeys`, `chain-strip.js` is the Song panel: a cell for each entry, its tools and the Loop key)
+  - `pads.js`, `tempo-knob.js`, `volume-knob.js` (also the Swing knob), `velocity-bars.js`, `sample-loader.js`, `settings-sliders.js`, `pad-drawer.js`, `export-dialog.js`, `trim-view.js`, `lcd.js`, `level-meter-view.js`, `sequence-row.js`, `chain-strip.js` — the on-screen views (`pads.js` also maps computer keys to pads, `velocity-bars.js` has the pure velocity-from-pointer and key maths, `sample-loader.js` is the Load Sample button and dropping a file on a pad, `settings-sliders.js` is the Gain, Pitch, Choke, envelope, Filter and Pan sliders, `color-swatches.js` is the row of colours for the pad, `pad-drawer.js` is the pad editor drawer (open, close, heading), `export-dialog.js` is the Export window (loops, stereo or mono, size, progress and cancel), `trim-view.js` is the waveform with its Start and End and the pad's envelope drawn on it, `lcd.js` has the pure text formatter and the progress bar along the bottom of the display, `level-meter-view.js` is the two bars at the right of the display, `sequence-row.js` is the row of sequence keys with Add, Copy and Remove, and has the pure `sequenceKeys`, `chain-strip.js` is the Song panel: a cell for each entry, its tools and the Loop key)
   - `devices.js` — device profiles: the Novation Launchpad (pads, step keys, transport buttons, LED colours), the Akai MPC Sample (any pad bank plays pads 1-16) and any other controller (notes 36-51 play pads)
   - `midi.js` — connects the profiles to the app: routes their events to it and keeps the lit controller's LEDs in step
   - `sampler.css` — sampler-only styles

@@ -43,7 +43,9 @@ how many times it repeats. Until you change it, it is every sequence once, in or
 
 Drop an audio file on a pad (up to 10 seconds and 5 MB). **Edit Pad** opens the pad's editor: trim the start and end,
 and set gain, pitch, an envelope, a **choke group** (pads in one group cut each other off, like a closed hat cutting an
-open one) and a colour. Delete or double-click a slider to reset it.
+open one), a colour, and under **Mix** a **filter** (left of the middle darkens the pad's sound, right of it thins it out,
+the middle is off) and a **pan** (left to right). Filter and pan work on any sound, the built-in ones too. Delete or
+double-click a slider to reset it.
 
 ## Save and share
 

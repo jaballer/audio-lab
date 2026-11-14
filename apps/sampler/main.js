@@ -296,11 +296,11 @@ audio.unlockOnInteraction(); // so a Launchpad hit on a return visit isn't silen
 // is fine because the sampler reports nothing until something happens.
 // What each pad plays: the built-in sound, or a sample loaded onto it (see `samples` below).
 const kit = createKit(SOUNDS, {
-  settings: beat ? beat.padSettings : {}, // each pad's gain, pitch, choke group and colour, kept with the beat
+  settings: beat ? beat.padSettings : {}, // each pad's gain, pitch, choke group, filter, pan and colour, kept with the beat
   onChange(index, what) {
     if (what === "sound") padGrid.setName(index, kit.get(index).name, !kit.isDefault(index));
     if (what === "setting") padGrid.setColor(index, kit.settings(index).color);
-    sampler.kitChanged(what); // rebuilds the queued steps for a new sound, saves for a setting (see the controller)
+    sampler.kitChanged(what, index); // rebuilds the queued steps for a new sound, saves for a setting (see the controller)
     render(); // the LCD shows the selected pad's sound, and Default Sound is for a pad that has changed
     // An Export dialog that is open says how much memory its render takes, which depends on the sounds (a loaded sample's
     // release adds warm-up passes): the saved samples come back pad by pad after the page opens, and a dialog opened before
@@ -441,7 +441,7 @@ projectInput.addEventListener("change", () => {
 // A starter (starters.js) is a beat in a style. It goes the way Open does, for the same reason: the beat is written where
 // the page keeps its own, and the page starts again and reads it, so nothing live has to be taken apart. The samples are
 // not touched (a starter has none), so the pads that have one keep it, and so do the settings the person gave them
-// (gain, pitch, envelope); the volume stays where the person has it.
+// (gain, pitch, envelope, filter, pan); the volume stays where the person has it.
 const starterSelect = $("starter-select");
 const starterStart = $("starter-start");
 for (const { id, name, bpm } of STARTERS) starterSelect.append(new Option(`${name} \u00b7 ${bpm} BPM`, id));
@@ -642,6 +642,11 @@ const envelopeSliders = createSettingsSliders($("pad-envelope"), {
   fallbackFocus: $("load-sample"), // where focus goes if they are disabled (a built-in sound came back) while one has it
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
+// The selected pad's Filter (a low-pass one way, a high-pass the other, off in the middle) and Pan: for any sound, a built-in one too.
+const mixSliders = createSettingsSliders($("pad-mix"), {
+  names: ["filter", "pan"],
+  onChange: (name, value) => sampler.setPadSetting(name, value),
+});
 // The waveform and the Start and End of the selected pad's sample, in the pad editor.
 const trimView = createTrimView($("pad-trim"), {
   fallbackFocus: $("load-sample"), // where focus goes if the view is hidden (a sample was taken off) while it is in it
@@ -785,6 +790,7 @@ function render() {
   });
   settingsSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   envelopeSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
+  mixSliders.refresh({ settings: state.padSettings, sampleEnabled: true });
   colorSwatches.refresh({ color: state.padSettings.color });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
@@ -1055,11 +1061,12 @@ velocityToggle.addEventListener("click", () => {
   saveJson(VELOCITY_KEY, on);
 });
 
-// The pad editor's Tune and Envelope sections can be hidden too, each remembered, and shown by default. The button is
+// The pad editor's Tune, Envelope and Mix sections can be hidden too, each remembered, and shown by default. The button is
 // the section's heading, and what it hides is the sliders.
 for (const [toggle, region, key] of [
   ["tune-toggle", "pad-settings", "pad-sampler:tune"],
   ["envelope-toggle", "pad-envelope", "pad-sampler:envelope"],
+  ["mix-toggle", "pad-mix", "pad-sampler:mix"],
 ]) {
   createDisclosure({
     toggle: $(toggle),

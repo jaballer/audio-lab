@@ -11,7 +11,12 @@ import {
   SETTING_NAMES,
   SLIDER_NAMES,
   envelopeSeconds,
+  FILTER_Q_DB,
+  HIGH_PASS_PARKED_HZ,
+  LOW_PASS_PARKED_HZ,
+  filterSpec,
   padEnvelope,
+  panGains,
 } from "./pad-settings.js";
 import { COLOR_COUNT, padColorName } from "./pad-colors.js";
 
@@ -65,15 +70,15 @@ describe("parsePadSettings", () => {
       9: { gain: -1, pitch: 0 },
     };
     expect(parsePadSettings(stored, 4)).toEqual({
-      0: { gain: -6, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      2: { gain: 0, pitch: 5, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      0: { gain: -6, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: 0, pitch: 5, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("brings values into range and fills in what is missing", () => {
     expect(parsePadSettings({ 1: { gain: 100, pitch: -50 }, 2: { gain: -3 } }, 4)).toEqual({
-      1: { gain: 6, pitch: -12, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      2: { gain: -3, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 6, pitch: -12, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: -3, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
@@ -91,6 +96,8 @@ describe("parsePadSettings", () => {
       gain: 0,
       pitch: 0,
       choke: 0,
+      filter: 0,
+      pan: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -116,14 +123,14 @@ describe("the choke setting", () => {
 
   it("makes a pad count as not at the defaults when it is the only thing set", () => {
     expect(parsePadSettings({ 1: { choke: 2 } }, 4)).toEqual({
-      1: { gain: 0, pitch: 0, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 0, pitch: 0, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("is brought into range, and filled in as no group when it is missing (a beat saved before it existed)", () => {
     expect(parsePadSettings({ 0: { gain: -3, choke: 50 }, 1: { gain: 2, pitch: 1 } }, 4)).toEqual({
-      0: { gain: -3, pitch: 0, choke: 8, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      1: { gain: 2, pitch: 1, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      0: { gain: -3, pitch: 0, choke: 8, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: 2, pitch: 1, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 });
@@ -143,16 +150,16 @@ describe("the color setting", () => {
   });
 
   it("has no slider: the sliders are the other settings", () => {
-    expect(SLIDER_NAMES).toEqual(["gain", "pitch", "choke", "attack", "decay", "sustain", "release"]);
+    expect(SLIDER_NAMES).toEqual(["gain", "pitch", "choke", "attack", "decay", "sustain", "release", "filter", "pan"]);
     expect(SETTING_NAMES).toContain("color");
   });
 
   it("makes a pad count as not at the defaults when it is the only thing set, and fills in none when missing", () => {
     expect(parsePadSettings({ 2: { color: 4 } }, 4)).toEqual({
-      2: { gain: 0, pitch: 0, choke: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
     expect(parsePadSettings({ 1: { gain: -2 } }, 4)).toEqual({
-      1: { gain: -2, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: -2, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 });
@@ -210,8 +217,98 @@ describe("the envelope settings", () => {
 
   it("make a pad count as not at the defaults when only one is set, and fill in the defaults when missing", () => {
     expect(parsePadSettings({ 0: { sustain: 70 } }, 2)).toEqual({
-      0: { gain: 0, pitch: 0, choke: 0, color: 0, attack: 0, decay: 0, sustain: 70, release: 0 },
+      0: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 70, release: 0 },
     });
     expect(parsePadSettings({ 0: { gain: 2 } }, 2)[0]).toMatchObject({ sustain: 100, attack: 0 });
+  });
+});
+
+describe("the filter setting", () => {
+  it("is off in the middle, a low-pass below it and a high-pass above it, for any sound", () => {
+    expect(SETTINGS.filter).toMatchObject({ min: -100, max: 100, default: 0 });
+    expect(SETTINGS.filter.samples).toBeUndefined(); // a built-in sound has it too
+    expect(filterSpec(0)).toEqual({ type: "off" }); // no filter at all: the strip's dry path
+    expect(filterSpec(-40).type).toBe("lowpass");
+    expect(filterSpec(40).type).toBe("highpass");
+  });
+
+  it("brings a low-pass down from the top of hearing to 80 Hz, and a high-pass up from the bottom to 8 kHz, in equal ratios", () => {
+    expect(filterSpec(-100).frequency).toBeCloseTo(80, 6);
+    expect(filterSpec(100).frequency).toBeCloseTo(8000, 6);
+    expect(filterSpec(-1).frequency).toBeGreaterThan(18000);
+    expect(filterSpec(1).frequency).toBeLessThan(22);
+    // an equal step is an equal ratio
+    const ratio = (a, b) => filterSpec(a).frequency / filterSpec(b).frequency;
+    expect(ratio(-40, -50)).toBeCloseTo(ratio(-60, -70), 6);
+    expect(ratio(60, 50)).toBeCloseTo(ratio(40, 30), 6);
+    // more of either makes it do more: a lower cutoff for the low-pass, a higher one for the high-pass
+    expect(filterSpec(-60).frequency).toBeLessThan(filterSpec(-30).frequency);
+    expect(filterSpec(60).frequency).toBeGreaterThan(filterSpec(30).frequency);
+  });
+
+  it("has a Butterworth Q, in the decibels a low-pass and a high-pass are given it in", () => {
+    expect(10 ** (FILTER_Q_DB / 20)).toBeCloseTo(Math.SQRT1_2, 6);
+  });
+
+  it("parks each filter at the end of its range where it is nearly out of the way", () => {
+    expect(LOW_PASS_PARKED_HZ).toBeCloseTo(20000, 6);
+    expect(HIGH_PASS_PARKED_HZ).toBeCloseTo(20, 6);
+    // the parking places are the ends the sliders start from
+    expect(filterSpec(-1).frequency).toBeLessThan(LOW_PASS_PARKED_HZ);
+    expect(filterSpec(1).frequency).toBeGreaterThan(HIGH_PASS_PARKED_HZ);
+  });
+
+  it("is a whole number inside the range, and 0 when it is not a number", () => {
+    expect(clampSetting("filter", 150)).toBe(100);
+    expect(clampSetting("filter", -150)).toBe(-100);
+    expect(clampSetting("filter", -12.6)).toBe(-13);
+    expect(clampSetting("filter", NaN)).toBe(0);
+  });
+
+  it("says off, or which pass and where", () => {
+    expect(formatSetting("filter", 0)).toBe("OFF");
+    expect(formatSetting("filter", -100)).toBe("LP 80 HZ");
+    expect(formatSetting("filter", 100)).toBe("HP 8.0 KHZ");
+    expect(formatSetting("filter", -1)).toMatch(/^LP 1\d\.\d KHZ$/);
+    expect(formatSetting("filter", 1)).toBe("HP 21 HZ");
+  });
+});
+
+describe("the pan setting", () => {
+  it("is the centre in the middle, and for any sound", () => {
+    expect(SETTINGS.pan).toMatchObject({ min: -100, max: 100, default: 0 });
+    expect(SETTINGS.pan.samples).toBeUndefined();
+  });
+
+  it("leaves both sides as they are at the centre, and turns the far side down to nothing at the edge", () => {
+    expect(panGains(0)).toEqual({ left: 1, right: 1 });
+    expect(panGains(100)).toEqual({ left: 0, right: 1 });
+    expect(panGains(-100)).toEqual({ left: 1, right: 0 });
+  });
+
+  it("turns only the side that is moved away from down, in a straight line", () => {
+    expect(panGains(50)).toEqual({ left: 0.5, right: 1 });
+    expect(panGains(-25)).toEqual({ left: 1, right: 0.75 });
+  });
+
+  it("is a whole number inside the range, and the centre when it is not a number", () => {
+    expect(clampSetting("pan", 400)).toBe(100);
+    expect(clampSetting("pan", -400)).toBe(-100);
+    expect(clampSetting("pan", undefined)).toBe(0);
+  });
+
+  it("says the centre, or which side and how far", () => {
+    expect(formatSetting("pan", 0)).toBe("CENTER");
+    expect(formatSetting("pan", -30)).toBe("L 30");
+    expect(formatSetting("pan", 100)).toBe("R 100");
+  });
+});
+
+describe("a pad with only a filter or a pan set", () => {
+  it("is kept by parsePadSettings, with the rest at the defaults", () => {
+    expect(parsePadSettings({ 1: { filter: -40 }, 2: { pan: 25 } }, 4)).toEqual({
+      1: { ...DEFAULT_SETTINGS, filter: -40 },
+      2: { ...DEFAULT_SETTINGS, pan: 25 },
+    });
   });
 });
