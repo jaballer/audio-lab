@@ -21,7 +21,7 @@ export const BEAT_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A beat newer than
 // this page is ignored, so an old page never misreads a newer beat.
-export const BEAT_VERSION = 11;
+export const BEAT_VERSION = 12;
 
 // { [version]: (beat) => the same beat in the next version's shape }. The version
 // field itself is set by upgradeBeat.
@@ -51,6 +51,8 @@ const MIGRATIONS = {
   // Version 11 adds the optional `loopSong` (the song goes round again at its end instead of stopping). A version 10 beat has none, which
   // reads as Loop off.
   10: (beat) => beat,
+  // Version 12 adds each pad's `filter` and `pan` to `padSettings`. A version 11 entry has none, which reads as no filter and the centre.
+  11: (beat) => beat,
 };
 
 const VOLUME_MAX = 100;
@@ -84,7 +86,7 @@ function trimBlankSequences(beat) {
 //
 // `swing` is how much of each pair of steps the first takes, in per cent, 50 (straight) to 75 (tempo.js).
 //
-// `padSettings` is { pad: { gain, pitch, choke, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
+// `padSettings` is { pad: { gain, pitch, choke, filter, pan, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
 //
 // `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a beat that has none: a beat
 // nobody edited is saved as it always was.

@@ -368,7 +368,8 @@ export async function renderSequence({
   const plan = planRender({ beat, kit, stepsPerBar, sampleRate, loops, pad, scope });
   const ctx = createContext(plan.total, sampleRate);
   const master = connectOutput(ctx, beat.volume, clip);
-  const mixer = createMixer(ctx, master, { pads: kit.length }); // the same strips the page plays through
+  // The same strips the page plays through, with each pad's filter and pan as the kit has them (a snapshot, for an export that renders for a while).
+  const mixer = createMixer(ctx, master, { pads: kit.length, settings: (pad) => kit.settings(pad) });
   const sink = pad === undefined ? null : ctx.createGain(); // where the voices of a stem's silent hits go: nowhere
   const voices = createVoices(kit.length, {
     cleanUp: false,

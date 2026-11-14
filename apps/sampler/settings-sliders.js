@@ -4,7 +4,7 @@
 //   const sliders = createSettingsSliders(element, { names, onChange, fallbackFocus });   // onChange(name, value)
 //   sliders.refresh({ settings, sampleEnabled });
 //
-// `names` are the settings this one draws (the page uses two: Gain, Pitch and Choke, and the envelope); default all the
+// `names` are the settings this one draws (the page uses three: Gain, Pitch and Choke; the envelope; and Filter and Pan); default all the
 // sliders. A slider is a native range input, so it works from the keyboard (arrows, Home, End); Delete or Backspace,
 // or a double-click, puts it back to its default. Some settings are for loaded samples only (`samples` in
 // pad-settings.js: Pitch and the envelope), so while the pad plays a built-in sound their sliders are disabled, show

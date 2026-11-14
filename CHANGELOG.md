@@ -8,6 +8,14 @@ Numbers link to the pull request.
 
 ## [Unreleased]
 
+### Added
+
+- Sampler: each pad has a Filter and a Pan, under Mix in the pad editor. Filter is one slider: left of the middle darkens
+  the pad's sound (a low-pass), right of it thins it out (a high-pass), and the middle is off. Pan moves the pad from
+  left to right, with the centre as the sound is now. Both work on the built-in sounds as well as a loaded sample, are
+  kept with the beat and the project file, and are in an export and its stems
+  ([#189](https://github.com/jaballer/audio-lab/pull/189))
+
 ### Changed
 
 - Sampler: Next stands on its own beside the joined +, Copy and − keys under the display, and the Song panel's Loop starts the row

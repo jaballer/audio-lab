@@ -31,6 +31,7 @@ import {
 } from "./export-wav.js";
 import { exportInfo, stemsInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
+import { filterSpec } from "./pad-settings.js";
 import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
 import { readZip, zipParts } from "./zip.js";
 
@@ -120,6 +121,24 @@ describe("hasSteps", () => {
   });
 });
 
+// The mixer's strips in a fake offline context (see fakeOffline): the input of each is the gain made two channels as
+// speakers are, and the rest of its nodes are made right after it.
+const stripInputs = (offline) => offline.nodes.filter((node) => node.channelCountMode === "explicit");
+// The nodes of the strip whose input is `input`, which the mixer makes together, in this order.
+const stripNodes = (offline, input) => {
+  const at = offline.nodes.indexOf(input);
+  const [dry, lowPass, highPass, lowGain, highGain, left, right] = offline.nodes.slice(at + 1, at + 8);
+  return { input, dry, lowPass, highPass, lowGain, highGain, left, right };
+};
+
+// Whether what `from` is connected to, and what that is connected to, and so on, reaches `target`.
+function reaches(from, target, seen = new Set()) {
+  if (from === target) return true;
+  if (seen.has(from) || !from.connect?.mock) return false;
+  seen.add(from);
+  return from.connect.mock.calls.some((call) => reaches(call[0], target, seen));
+}
+
 // An offline context that records what is done to it and hands back a render with a marker in every frame.
 // With `pausable`, it pauses the way a real one does: suspend(time) returns a promise that settles when the render
 // reaches that time, and the render stays paused until resume() is called (so one never resumed never finishes).
@@ -141,6 +160,27 @@ function fakeOffline({ pausable = false } = {}) {
       nodes.push(node);
       return node;
     },
+    // What a mixer strip is made of (mixer.js): the filter is a node of the list, the splitter and merger are not.
+    createBiquadFilter: () => {
+      const param = (value) => ({
+        value,
+        setTargetAtTime: vi.fn(),
+        setValueAtTime: vi.fn(),
+        cancelScheduledValues: vi.fn(),
+      });
+      const node = {
+        type: "peaking",
+        frequency: param(350),
+        Q: param(1),
+        gain: param(0),
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      nodes.push(node);
+      return node;
+    },
+    createChannelSplitter: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
+    createChannelMerger: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
     startRendering: async () => {
       for (const pause of [...pauses].sort((a, b) => a.time - b.time)) {
         const before = resumes.count;
@@ -265,13 +305,40 @@ describe("renderSequence", () => {
   it("plays each pad through a strip of its own that leads to the master", async () => {
     const { render, offline } = setup(sequence({ 0: [0, 4], 1: [0] }));
     await render();
-    const master = offline.nodes[0];
-    const strips = offline.nodes.filter((node) => node.connect.mock.calls.some((call) => call[0] === master));
-    expect(strips).toHaveLength(3); // a strip for each pad
+    const inputs = stripInputs(offline); // the filter of each strip, made two channels as speakers are
+    expect(inputs).toHaveLength(3); // a strip for each pad
+    expect(inputs.every((input) => reaches(input, offline.nodes[0]))).toBe(true);
     for (const pad of [0, 1]) {
-      const voices = offline.nodes.filter((node) => node.connect.mock.calls.some((call) => call[0] === strips[pad]));
+      const voices = offline.nodes.filter((node) => node.connect.mock.calls.some((call) => call[0] === inputs[pad]));
       expect(voices.length).toBeGreaterThan(0);
     }
+  });
+
+  it("sets each strip to the pad's filter and pan as the kit has them, and leaves the rest as they are", async () => {
+    const kit = createKit([sound("a"), sound("b"), sound("c")], {
+      settings: { 0: { filter: -50, pan: 40 }, 1: { filter: 60, pan: -100 } },
+    });
+    const offline = fakeOffline();
+    await renderSequence({
+      beat: beatOf(sequence({ 0: [0], 1: [0] })),
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+    });
+    const [lowPad, highPad, flatPad] = stripInputs(offline).map((input) => stripNodes(offline, input));
+    const gains = (strip) => [strip.dry, strip.lowGain, strip.highGain].map((node) => node.gain.value);
+    // pad 0: a low-pass at its cutoff, the high-pass waiting; pad 1: the other way; pad 2: the dry sound only
+    expect(gains(lowPad)).toEqual([0, 1, 0]);
+    expect(lowPad.lowPass.frequency.value).toBeCloseTo(filterSpec(-50).frequency, 6);
+    expect(gains(highPad)).toEqual([0, 0, 1]);
+    expect(highPad.highPass.frequency.value).toBeCloseTo(filterSpec(60).frequency, 6);
+    expect(gains(flatPad)).toEqual([1, 0, 0]);
+    // each strip's two sides are the pad's balance
+    expect(lowPad.left.gain.value).toBeCloseTo(0.6, 9);
+    expect(lowPad.right.gain.value).toBe(1);
+    expect([highPad.left.gain.value, highPad.right.gain.value]).toEqual([1, 0]);
+    expect([flatPad.left.gain.value, flatPad.right.gain.value]).toEqual([1, 1]);
   });
 
   it("is a whole number of frames long at a tempo where a bar is not, and the second pass starts where the first ends", async () => {
@@ -1656,12 +1723,10 @@ describe("renderSequence, one pad's stem", () => {
     // The voices that are heard: those connected to a pad's strip of the mixer, the nodes that lead to the master (a silent
     // hit's voice goes to the sink)
     const zeroGains = (offline, time) => {
-      const strips = offline.nodes.filter((node) =>
-        node.connect.mock.calls.some((call) => call[0] === offline.nodes[0]),
-      );
+      const inputs = stripInputs(offline);
       return offline.nodes.filter(
         (node) =>
-          node.connect.mock.calls.some((call) => strips.includes(call[0])) &&
+          node.connect.mock.calls.some((call) => inputs.includes(call[0])) &&
           node.gain.setValueAtTime.mock.calls.some((call) => call[0] === 0 && call[1] === time),
       ).length;
     };

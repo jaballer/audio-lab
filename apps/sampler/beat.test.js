@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STARTER_BEAT } from "./starter-beat.js";
+import { DEFAULT_SETTINGS } from "./pad-settings.js";
 import {
   BEAT_BACKUP_KEY,
   BEAT_KEY,
@@ -19,7 +20,9 @@ const beat = {
   swing: 58,
   volume: 60,
   current: 1,
-  padSettings: { 1: { gain: -6, pitch: 3, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 } },
+  padSettings: {
+    1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+  },
   sequences: [
     { bars: 2, pattern: { 0: [0, 4, 8, 12], 3: [2] }, velocities: { 0: { 4: 90, 12: 20 } } },
     { bars: 4, pattern: { 5: [1] }, velocities: {} },
@@ -339,7 +342,7 @@ describe("velocities", () => {
 describe("pad settings", () => {
   it("come back as they were saved", () => {
     expect(parse(serializeBeat(beat)).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
@@ -349,7 +352,7 @@ describe("pad settings", () => {
       padSettings: { 0: { gain: 40, pitch: -40 }, 2: { gain: 0, pitch: 0 }, 99: { gain: 1, pitch: 1 } },
     };
     expect(parse(raw).padSettings).toEqual({
-      0: { gain: 6, pitch: -12, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      0: { gain: 6, pitch: -12, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
@@ -457,7 +460,7 @@ describe("beats saved by version 8", () => {
 
   it("are stamped as the current version", () => {
     expect(upgradeBeat(stored(v8([used, blank]))).version).toBe(BEAT_VERSION);
-    expect(BEAT_VERSION).toBe(11);
+    expect(BEAT_VERSION).toBe(12);
   });
 });
 
@@ -488,6 +491,48 @@ describe("beats saved by version 10", () => {
 
   it("are changed by the upgrade in nothing but the version", () => {
     expect(upgradeBeat(stored(v10))).toEqual({ ...stored(v10), version: BEAT_VERSION });
+  });
+});
+
+describe("beats saved by version 11", () => {
+  // What a page of version 11 kept: pad settings with no filter or pan, which read as no filter and the centre.
+  const v11 = {
+    ...serializeBeat(beat),
+    version: 11,
+    padSettings: { 1: { gain: -6, pitch: 3, choke: 2, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 } },
+  };
+
+  it("load with every pad's filter off and in the centre, keeping the other settings", () => {
+    expect(parse(v11).padSettings).toEqual({
+      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+    });
+  });
+
+  it("keep a pad's filter and pan through saving and loading", () => {
+    const saved = serializeBeat({
+      ...beat,
+      padSettings: {
+        3: { ...DEFAULT_SETTINGS, filter: -35, pan: 60 },
+      },
+    });
+    expect(saved.version).toBe(BEAT_VERSION);
+    expect(parse(saved).padSettings).toEqual({ 3: { ...DEFAULT_SETTINGS, filter: -35, pan: 60 } });
+  });
+
+  it("read a filter and a pan that are not whole numbers as the settings do: rounded, or off when they are not numbers", () => {
+    const odd = {
+      ...serializeBeat(beat),
+      padSettings: { 1: { filter: 12.6, pan: -7.4 }, 2: { filter: "50", pan: NaN }, 3: { filter: null, pan: 5 } },
+    };
+    const { padSettings } = parse(odd);
+    expect(padSettings[1]).toMatchObject({ filter: 13, pan: -7 });
+    expect(padSettings[2]).toBeUndefined(); // neither is a number: nothing but the defaults, so not kept
+    expect(padSettings[3]).toMatchObject({ filter: 0, pan: 5 });
+  });
+
+  it("bring a filter and a pan that are out of range back into it", () => {
+    const wild = { ...serializeBeat(beat), padSettings: { 3: { filter: 900, pan: -900 } } };
+    expect(parse(wild).padSettings[3]).toMatchObject({ filter: 100, pan: -100 });
   });
 });
 
@@ -597,14 +642,27 @@ describe("beats saved by version 6", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v6).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("keep a pad's envelope through saving and loading", () => {
     const saved = serializeBeat({
       ...beat,
-      padSettings: { 2: { gain: 0, pitch: 0, choke: 0, color: 0, attack: 30, decay: 20, sustain: 40, release: 60 } },
+      padSettings: {
+        2: {
+          gain: 0,
+          pitch: 0,
+          choke: 0,
+          filter: 0,
+          pan: 0,
+          color: 0,
+          attack: 30,
+          decay: 20,
+          sustain: 40,
+          release: 60,
+        },
+      },
     });
     expect(saved.version).toBe(BEAT_VERSION);
     expect(parse(saved).padSettings).toEqual(saved.padSettings);
@@ -622,17 +680,19 @@ describe("beats saved by version 5", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v5).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("keep a pad's colour through saving and loading, even when it is the only thing set", () => {
     const saved = serializeBeat({
       ...beat,
-      padSettings: { 6: { gain: 0, pitch: 0, choke: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 } },
+      padSettings: {
+        6: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+      },
     });
     expect(parse(saved).padSettings).toEqual({
-      6: { gain: 0, pitch: 0, choke: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+      6: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 });
@@ -648,18 +708,20 @@ describe("beats saved by version 4", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v4).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: { gain: -6, pitch: 3, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 
   it("keep a choke group through saving and loading", () => {
     const saved = serializeBeat({
       ...beat,
-      padSettings: { 4: { gain: 0, pitch: 0, choke: 5, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 } },
+      padSettings: {
+        4: { gain: 0, pitch: 0, choke: 5, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      },
     });
     expect(saved.version).toBe(BEAT_VERSION);
     expect(parse(saved).padSettings).toEqual({
-      4: { gain: 0, pitch: 0, choke: 5, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      4: { gain: 0, pitch: 0, choke: 5, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
     });
   });
 });

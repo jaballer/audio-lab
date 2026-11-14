@@ -132,9 +132,9 @@ as on a hardware sampler where they are on a screen of their own.
   button that says whether it is open. Opening it with the button moves focus to its heading (so a keyboard user
   is in it however far it sits from the button); Escape, with focus inside it, closes it and returns to the
   button. Moving it between its two places keeps focus on the control that had it.
-- **Sections, not tabs, for now.** Sound and Tune. Tabs when there are enough sections to need them.
-- **Where later features go.** Waveform and trim, reverse, one-shot or hold, a voice limit, an amp
-  envelope and pan each become a section drawn into the drawer by a view of its own.
+- **Sections, not tabs, for now.** Sound, Tune, Envelope, Mix and Color. Tabs when there are enough sections to need them.
+- **Where later features go.** Reverse, one-shot or hold and a voice limit each become a section drawn into the drawer by a view
+  of its own; the sends to the reverb and delay will join Filter and Pan under Mix.
 
 ## Trim
 
@@ -169,7 +169,7 @@ A pad has a choke group, 0 (none) or 1 to 8, set with a Choke slider in the pad 
 
 ## Pad colours
 
-A pad can be given a colour in the pad editor (a row of swatches under Tune), to tell pads apart by your own grouping: drums, loops, bass, one-shots (#122).
+A pad can be given a colour in the pad editor (a row of swatches at the end of the pad editor), to tell pads apart by your own grouping: drums, loops, bass, one-shots (#122).
 
 - **A fixed set of eight colours, plus none** (`pad-colors.js`), not a free picker. Each is chosen to be seen against a pad's face (at least 3:1, checked by a test) and kept clear of the orange selection ring and the red hit light, so it can never be mistaken for either. The value kept is the swatch number, so a colour can be added at the end of the list but not reordered.
 - **How it shows:** the pad's rim (the ring just inside its edge) takes the colour, and the face stays dark, so the number, key and name keep their contrast. The selection ring and the hit light sit inside the rim, and the rim stays through a hit's light.
@@ -177,6 +177,43 @@ A pad can be given a colour in the pad editor (a row of swatches under Tune), to
 - **For a screen reader:** the pad's label ends with the colour's name (`Pad 3, Kick, key C, blue`), and each swatch has its name; the group of swatches is a radio group (arrow keys, Home and End).
 - **A pad setting like Gain, Pitch and Choke** (`pad-settings.js`, the kit, the beat's `padSettings`; beat version 6, a version 5 beat has no colours), shown on the LCD (`PAD 03 COLOR BLUE`), not part of the step undo history. It belongs to the pad, so Default Sound does not clear it. It has no effect on playback or the export.
 - **Not decided here:** default colours for the built-in kit, a swatch beside the pad editor's heading, mapping a colour to a Launchpad's LEDs (only red, green and amber), and naming a group.
+
+## Filter and pan
+
+Each pad has a Filter and a Pan, under Mix in the pad editor (#187, phase 2). They act on what comes out of the pad, so they
+work on a built-in sound as well as a loaded sample (unlike Pitch and the envelope, which need a sample).
+
+- **One filter control, two filters.** The slider runs from -100 to +100 with an off in the middle: left of it is a low-pass
+  (the cutoff comes down from the top of hearing to 80 Hz, so the sound darkens), right of it a high-pass (the cutoff goes up
+  from 20 Hz to 8 kHz, so it thins out), as on a DJ filter. Each is an equal ratio for an equal step (`scales.exp`), so the sweep
+  feels even. One control and not a cutoff and a type: it is what a person reaches for, and the two never want to be on
+  together. The Q is a Butterworth's (the flattest bend, no bump at the cutoff); resonance is not offered.
+- **Three paths, crossfaded, and no filter is ever retyped.** A strip has the dry sound, a low-pass and a high-pass side by
+  side, each through a gain; the Filter setting turns one gain up and the other two down. Off is the dry path alone, the sound
+  exactly as it is (measured: the output equals the input to float rounding, 3e-17). A single biquad that changed from
+  low-pass to high-pass as the slider crossed the middle was tried first, and measured to tick: changing the type of a
+  `BiquadFilterNode` that is playing resets its memory, and on a steady tone that left a step of about 8 % of the peak for 5 ms
+  (low-pass) and 2 % over 50 ms (high-pass). Both filters are made once, as what they are, and run on the sound all the
+  time, so one that is turned up is already at work and only its gain moves. The cost is two filters running on every pad that
+  is sounding, even at off (a filter at rest idles on silence); it was not measured on a phone.
+- **A filter waits at the end of its range, and moving the slider glides.** A filter that is not in use waits where it is nearly
+  out of the way (the low-pass at 20 kHz, the high-pass at 20 Hz). A setting is reached over a few milliseconds (a time
+  constant of 15 ms) so a dragged slider does not zipper; a filter that is turned on is set to its cutoff at once, from where
+  it waited, since a glide from the end of its range would sweep through every cutoff on the way.
+- **Pan is a balance, with 0 dB in the centre.** Moving a pad right turns its left side down in a straight line (to nothing at
+  +100) and leaves the right as it is, and the other way round: the centre is the sound untouched, so the default pad sounds as
+  it did. The strip first makes the sound two channels as speakers do (a mono sound is on both), so a stereo sample is
+  balanced as it is. Decided against the browser's `StereoPannerNode`, an equal-power pan: for a mono sound it is 3 dB down
+  at the centre, which would change every pad that is not panned (or dip the level the moment a pad moved off the
+  centre). The price is that a mono sound panned hard is about 3 dB quieter in all than at the centre; chosen over a +3 dB
+  at the edges.
+- **Default Sound keeps them; a starter resets them, as it does Gain.** They belong to the pad, so Default Sound and loading a sample leave a pad's Filter and Pan alone. A starter is a whole beat that sets the pads' settings itself, so a pad on a built-in sound goes back to off and the centre; a pad with a loaded sample keeps what the person gave it.
+- **Saved with the pad's other settings**, as whole numbers, in the beat's `padSettings` (beat version 12; a version 11 beat has
+  none, which reads as off and the centre). The export plays through the same strips, so a stem has its pad's filter and pan
+  and the stems still add up to the mix.
+- **On the LCD** as `PAD 03 FILTER LP 1.2 KHZ`, `HP 248 HZ` or `OFF`, and `PAD 03 PAN L 30`, `R 100` or `CENTER`.
+- **Not decided here:** a resonance control, a filter that follows the envelope, and mapping the filter to a MIDI knob (a DJ
+  Filter knob in the quick bar is a later phase of the effects work).
 
 ## Amplitude envelope
 
