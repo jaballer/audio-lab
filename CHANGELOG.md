@@ -14,6 +14,12 @@ Numbers link to the pull request.
   under its heading, as Velocity does in the step editor. Velocity has no lamp now: it is pressed in while the bars show, as Loop
   and Next are ([#183](https://github.com/jaballer/audio-lab/pull/183))
 
+### Maintenance
+
+- Sampler: every pad's sound now plays through a strip of its own on the way to the master, in the page and in an export,
+  where the effects planned in [issue 187](https://github.com/jaballer/audio-lab/issues/187) will go. The strips change
+  nothing that is heard, and Stop cuts a queued step off as before ([#188](https://github.com/jaballer/audio-lab/pull/188))
+
 ## 2026-11-12
 
 ### Added

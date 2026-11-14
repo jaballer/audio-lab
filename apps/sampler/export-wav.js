@@ -36,6 +36,7 @@ import {
 } from "./export-options.js";
 import { pad2 } from "./format.js";
 import { createVoices } from "./voices.js";
+import { createMixer } from "./mixer.js";
 import { zipBlob } from "./zip.js";
 
 // The rate an export is made at when the page has no audio running to take it from.
@@ -327,12 +328,12 @@ function createHitFeeder(plan) {
 // Starts one hit through the voices, so that it cuts the pad's earlier one and the pads of its choke group, as it does on
 // the page; a sound that gives back a way to stop its source has it stopped when the hit is cut. A silent hit (the other
 // pads of a stem's choke group) only cuts: its voice goes to `sink`, which leads nowhere, and its sound is not made.
-function startHit(ctx, { voices, kit, master, sink }, { row, velocity, time, silent }) {
+function startHit(ctx, { voices, kit, mixer, sink }, { row, velocity, time, silent }) {
   if (silent) {
     voices.start(ctx, row, sink, time);
     return;
   }
-  const started = voices.start(ctx, row, master, time);
+  const started = voices.start(ctx, row, mixer.padInput(row), time);
   const played = kit.voice(row).play(ctx, withVelocity(ctx, started.out, velocity / FULL_VELOCITY), time);
   started.stopWith(played?.stop);
 }
@@ -367,6 +368,7 @@ export async function renderSequence({
   const plan = planRender({ beat, kit, stepsPerBar, sampleRate, loops, pad, scope });
   const ctx = createContext(plan.total, sampleRate);
   const master = connectOutput(ctx, beat.volume, clip);
+  const mixer = createMixer(ctx, master, { pads: kit.length }); // the same strips the page plays through
   const sink = pad === undefined ? null : ctx.createGain(); // where the voices of a stem's silent hits go: nowhere
   const voices = createVoices(kit.length, {
     cleanUp: false,
@@ -376,7 +378,7 @@ export async function renderSequence({
   });
   const take = createHitFeeder(plan);
   const schedule = (until) => {
-    for (const hit of take(until)) startHit(ctx, { voices, kit, master, sink }, hit);
+    for (const hit of take(until)) startHit(ctx, { voices, kit, mixer, sink }, hit);
   };
   // A render that will not be used is let go of: nothing it still has to play is heard, and it runs on to its end quickly.
   // Left suspended it is never freed (Chromium keeps the whole graph and the output buffer): a cancel cost about 90 MB.

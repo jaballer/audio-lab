@@ -262,6 +262,18 @@ describe("renderSequence", () => {
     expect(master.connect).not.toHaveBeenCalledWith(offline.destination);
   });
 
+  it("plays each pad through a strip of its own that leads to the master", async () => {
+    const { render, offline } = setup(sequence({ 0: [0, 4], 1: [0] }));
+    await render();
+    const master = offline.nodes[0];
+    const strips = offline.nodes.filter((node) => node.connect.mock.calls.some((call) => call[0] === master));
+    expect(strips).toHaveLength(3); // a strip for each pad
+    for (const pad of [0, 1]) {
+      const voices = offline.nodes.filter((node) => node.connect.mock.calls.some((call) => call[0] === strips[pad]));
+      expect(voices.length).toBeGreaterThan(0);
+    }
+  });
+
   it("is a whole number of frames long at a tempo where a bar is not, and the second pass starts where the first ends", async () => {
     const kit = createKit([sound("a")]);
     const offline = fakeOffline();
@@ -1641,13 +1653,18 @@ describe("renderSequence, one pad's stem", () => {
   });
 
   it("is cut at its very start by a pad of its group with a higher number on the same step, and not by a lower one", async () => {
-    // The voices that are heard: those connected to the master (a silent hit's voice goes to the sink)
-    const zeroGains = (offline, time) =>
-      offline.nodes.filter(
+    // The voices that are heard: those connected to a pad's strip of the mixer, the nodes that lead to the master (a silent
+    // hit's voice goes to the sink)
+    const zeroGains = (offline, time) => {
+      const strips = offline.nodes.filter((node) =>
+        node.connect.mock.calls.some((call) => call[0] === offline.nodes[0]),
+      );
+      return offline.nodes.filter(
         (node) =>
-          node.connect.mock.calls.some((call) => call[0] === offline.nodes[0]) &&
+          node.connect.mock.calls.some((call) => strips.includes(call[0])) &&
           node.gain.setValueAtTime.mock.calls.some((call) => call[0] === 0 && call[1] === time),
       ).length;
+    };
     const pattern = { 0: [4], 1: [4] };
     const first = run({ pad: 0, choke: [1, 1, 0], pattern });
     await first.done;
