@@ -572,7 +572,10 @@
    (.sampler-setting), with a wider label than Gain and Pan need: "Feedback" is the longest. */
 .effects-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(17rem, 100%), 1fr)
+  ); /* 100%: a panel narrower than a group (a 320px phone) shrinks it */
   gap: 12px 32px;
 }
 .effects-group {

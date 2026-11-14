@@ -352,6 +352,14 @@ describe("the shared effects", () => {
     expect(sampler.getState().effects.delayFeedback).toBe(90);
   });
 
+  it("cannot be changed through the beat the sampler gives for saving", () => {
+    const { sampler } = setup();
+    sampler.setEffect("reverbSize", 70);
+    sampler.getBeat().effects.reverbSize = 5;
+    expect(sampler.getBeat().effects.reverbSize).toBe(70);
+    expect(sampler.getState().effects.reverbSize).toBe(70);
+  });
+
   it("leave the beat as it was saved once they are all back at the defaults", () => {
     const { sampler } = setup();
     sampler.setEffect("pingPong", 1);

@@ -713,6 +713,19 @@ describe("the sends, the reverb and the delay", () => {
       expect(newRoom.disconnect).not.toHaveBeenCalled();
     });
 
+    it("is silent from the moment it is connected, so no block of it is heard before the fade begins", () => {
+      const { ctx, mixer, state, timers } = setUp({ settings: { 0: { reverb: 50 } }, effects: sized(40) });
+      const heardAtConnection = [];
+      const [reverbInput] = ctx.made.gains;
+      reverbInput.connect.mockImplementation((node) => {
+        if (node.buffer !== undefined) heardAtConnection.push(ctx.made.gains.at(-1).gain.value);
+      });
+      state.effects = sized(80);
+      mixer.updateEffects();
+      timers.run(timers.pending()[0]);
+      expect(heardAtConnection).toEqual([0]); // the new room's gain, when the input was first connected to it
+    });
+
     it("does nothing for a size it already has, or while there is no room", () => {
       const { ctx, mixer, state, timers } = setUp({ settings: { 0: { reverb: 50 } }, effects: sized(40) });
       state.effects = { ...sized(40), reverbLevel: 10 };

@@ -242,7 +242,8 @@ between the Song panel and the steps: the reverb's **Size** and **Level**, the d
   or, for ping-pong, across to the other line: the settings only turn gains up and down (what goes into each line, and how much
   comes round or across), so Ping-Pong, Feedback and the note glide and nothing is ever rewired under a sound that is echoing.
   Ping-pong mixes both sides into the left line, so the first echo is on the left, the second on the right, and so on (measured);
-  the plain delay keeps each side where it was (a pad panned right echoes on the right).
+  the plain delay keeps each side where it was (a pad panned right echoes on the right). With no feedback ping-pong is the one echo,
+  on the left (nothing is passed across to the right).
 - **The note follows the tempo.** The time is a share of a beat (1/16, 1/8, a dotted 1/8 or 1/4; `delaySeconds`), so a change of
   tempo moves it: the line glides to the new time over about 50 ms (a time constant of 50 ms), which bends the echoes' pitch for a
   moment instead of clicking. The longest, a quarter note at 40 BPM, is 1.5 s.
@@ -255,8 +256,9 @@ between the Song panel and the steps: the reverb's **Size** and **Level**, the d
   and the effects are one optional `effects` object on the beat: `{ reverbSize, reverbLevel, delayDivision, delayFeedback,
 delayLevel, pingPong }`, whole numbers (`delayDivision` is the place in `DELAY_DIVISIONS`, so a new note goes on the end), left out
   while they are all at their defaults and read back through `parseEffects` like `swing`. Beat version 13 with a no-op migration:
-  a version 12 beat has no sends and no effects, which reads as dry. Starters have no effects of their own, so one starts dry
-  and the effects go back to the defaults with it. Not part of the step undo history, like the pad settings.
+  a version 12 beat has no sends and no effects, which reads as dry. A starter has no effects of its own: the effects go back to
+  the defaults, and its built-in pads send nothing, so it starts dry; a pad with a loaded sample keeps the sends it was given, as it
+  keeps its other settings, and so sends to the default effects. Not part of the step undo history, like the pad settings.
 - **On the LCD** as `PAD 03 REVERB 40 %` and `PAD 03 DELAY 25 %`, and for the panel `REVERB SIZE 0.8 S`, `REVERB LEVEL 50 %`,
   `DELAY TIME 1/8.`, `DELAY FEEDBACK 35 %`, `DELAY LEVEL 50 %` and `PING-PONG ON`.
 - **In an export**, the same mixer is built on the offline context with the beat's effects and tempo, so a stem has its pad's

@@ -111,7 +111,9 @@ export function createReverbReturn(ctx, output, { defer = null } = {}) {
   let cancelRelease = null;
   let cancelResize = null;
 
-  function build(size) {
+  // `start` is the room's own gain when it is connected: a room made to be faded in is silent from the first moment, since the
+  // input is carrying sound by then, and a browser may take the connection before a change to the gain made after it.
+  function build(size, start = 1) {
     const [leftSide, rightSide] = reverbImpulse(size, ctx.sampleRate);
     const buffer = ctx.createBuffer(2, leftSide.length, ctx.sampleRate);
     buffer.getChannelData(0).set(leftSide);
@@ -120,6 +122,7 @@ export function createReverbReturn(ctx, output, { defer = null } = {}) {
     convolver.normalize = true; // so the room's loudness does not depend on how long it is
     convolver.buffer = buffer;
     const gain = ctx.createGain();
+    gain.gain.value = start;
     input.connect(convolver);
     convolver.connect(gain);
     gain.connect(level);
@@ -137,8 +140,7 @@ export function createReverbReturn(ctx, output, { defer = null } = {}) {
     if (!room || room.size === size) return;
     const old = room;
     const now = ctx.currentTime;
-    room = build(size);
-    setParam(room.gain.gain, 0); // a gain is made at 1
+    room = build(size, 0);
     setParam(room.gain.gain, 1, now, { timeConstant: CROSSFADE_TIME_CONSTANT });
     setParam(old.gain.gain, 0, now, { timeConstant: CROSSFADE_TIME_CONSTANT });
     defer?.(() => drop(old), CROSSFADE_KEEP_MS);

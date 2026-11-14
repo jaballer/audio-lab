@@ -87,7 +87,8 @@ export function createEffectsPanel(element, { onChange }) {
     button.type = "button";
     button.className = "btn btn-small";
     button.textContent = name;
-    button.setAttribute("aria-label", spoken);
+    // The visible text is in the name (what a voice control says to press it), then the note said in words.
+    button.setAttribute("aria-label", `${name} ${spoken.toLowerCase()}`);
     button.addEventListener("click", () => onChange("delayDivision", index));
     notes.appendChild(button);
     return button;

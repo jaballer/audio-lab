@@ -207,7 +207,9 @@ share).
   the tail is cut at its end. When any pad sends to the reverb or the delay (and they are turned up), the tail is longer by what they
   keep (`songTailSeconds`: the room's length, or the echoes' time to 60 dB down, at most 10 s), worked out from the pads' settings
   and the effects alone (so the dialog still needs no kit): it counts a pad that sends but plays nothing in the song, which only makes
-  the file longer than it had to be. The dialog's hint says the tail, and that it is for the reverb and the delay. A pad's hit is cut by its next across the end of a pass, as the page's chain does, and that includes the
+  the file longer than it had to be. The dialog's hint says the tail, and that it is for the reverb and the delay. Echoes that would
+  ring on past the 10 s limit (high feedback, a slow note, a slow tempo) are cut at the end of the file with no fade, as a long
+  sample is: at 90 % feedback and a half-second echo the last repeat is still about 18 dB down. Not fixed here. A pad's hit is cut by its next across the end of a pass, as the page's chain does, and that includes the
   next time round the same entry (a sequence that ends on a hit and begins on one cuts itself); the last hit of the whole is not cut.
 - **A sequence the song leaves out is not in the file, and one that repeats is in it each time.** The dialog's heading counts the
   entries ("SONG · 3 ENTRIES · 100 BPM"), and what the song's length is, repeats and all, is the readout's to say. What the song plays
