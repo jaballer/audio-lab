@@ -35,8 +35,8 @@ on every step and a screen reader would announce the same text again.
 ## Sound
 
 ```text
-pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pad, choke groups) ──> audio.master
-                                                                                                │
+pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pad, choke groups) ──> mixer.js (a strip for each pad) ──> audio.master
+                                                                                                                                  │
                               shared/audio.js: master gain ──> soft clipper ──> speakers + analysers (lights, level meter)
 ```
 
@@ -45,6 +45,13 @@ pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pa
   browsers do not allow sound before one. One exception in who builds the context: the Tone.js demo passes
   `createContext: () => Tone.getContext().rawContext`, because Tone must wrap the context itself (handed a plain
   `AudioContext`, its setup throws in Firefox); the engine still owns the graph and the master on it.
+- **A strip for each pad, between the voices and the master.** `apps/sampler/mixer.js` gives every pad a node of its own that
+  its voices play into, and that leads to `audio.master`: where a pad's effects will go (a filter, a pan, sends to a shared
+  reverb and delay, planned in [issue 187](https://github.com/jaballer/audio-lab/issues/187)), so a hit is already routed
+  the way they need. The strips are neutral for now, so nothing sounds different. `audio.killSound()` replaces the master, so
+  the page's mixer (`createLiveMixer`) builds new strips on the new master the next time a hit asks, and the old ones are left
+  to the old master's fade-out. A queued step is cut off by disconnecting its voices' outputs, not a gain shared by the step,
+  because its pads now lead to different strips. The export builds the same mixer on its offline context.
 - **The audio clock, not timers.** `shared/scheduler.js` wakes on a timer but schedules each step at an `AudioContext` time
   about 0.12 s ahead; the playhead on screen follows separately.
 - **The MPC Sample page follows the device instead.** It makes no sound and runs no lookahead: the device is the clock.
@@ -128,6 +135,7 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `beat.js` — what is kept between visits (the sequences, tempo, volume): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `arrangement.js` — the order a song plays its sequences in (each with a number of repeats; none until a person edits it, which means every sequence once, in order): cleaning what was saved, following a sequence added or removed, the order of the passes, and which pass follows the one that ended (what Song mode walks) and whether a pass is the last of the song; no DOM
   - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
+  - `mixer.js` — the strip each pad's voices play into on the way to the master (neutral for now, where a pad's effects will go), `createMixer` for a context and `createLiveMixer` for the page's audio engine, which follows `audio.master` when `killSound()` replaces it; the export builds its own; no DOM
   - `voices.js` — one voice at a time on each pad: a pad hit again cuts off what it was still playing, and so do the other pads in its choke group (a fade on the audio clock), live, in the sequence or in the export; no DOM
   - `pad-envelope.js` — the shape of a pad's amplitude envelope (attack, decay, sustain, release) as the points a gain is ramped through, laid over the time a sample is heard for; no DOM
   - `pad-colors.js` — the fixed set of colours a pad can be given (with names for a screen reader); no DOM

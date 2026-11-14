@@ -84,6 +84,7 @@ import {
   wherePassWas,
 } from "./arrangement.js";
 import { createVoices } from "./voices.js";
+import { createLiveMixer } from "./mixer.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
 import { FULL_VELOCITY, createPattern, firstDifference } from "../../shared/pattern.js";
@@ -227,12 +228,14 @@ export function createSampler({
   let chained = null;
 
   // The sequencer runs on the audio clock; the context only exists once audio has been unlocked.
-  const scheduledHits = []; // { time, gridTime, step, rows, bus, chokes, pass } for each step handed to the scheduler, until its light is shown
+  const scheduledHits = []; // { time, gridTime, step, rows, outs, chokes, pass } for each step handed to the scheduler, until its light is shown
   // A pad plays one voice at a time: a hit cuts off what the pad was still playing (voices.js).
   const voices = createVoices(kit.length, {
     groupOf: (pad) => kit.settings(pad).choke,
     releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
   });
+  // Every voice leads into its pad's strip of the mixer, which leads to the master.
+  const mixer = createLiveMixer(audio, { pads: kit.length });
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -240,29 +243,27 @@ export function createSampler({
     bpm: beat?.bpm,
     swing: beat?.swing,
     onStep(step, time, heard, gridTime) {
-      const { ctx, master } = audio;
+      const { ctx } = audio;
       const { pattern: playingPattern } = playing;
       const rows = [];
+      const outs = []; // the voices' outputs: if playback is restarted or stopped before the step is reached, cutting them off silences it (see cancelQueuedHits)
       const chokes = []; // the voices these hits cut off, so cancelling the step can give them back
-      // The step's hits go through a gain of their own, so that if playback is restarted or
-      // stopped before the step is reached, its sounds can be cut off (see cancelQueuedHits).
-      const bus = ctx.createGain();
-      bus.connect(master);
       // With the power off nothing is built: the hits would be muted, but their tails would still be sounding when
       // the power came on (a 10 second sample, every step) and be heard all at once. The beat goes on silently.
       for (let row = 0; row < kit.length && audio.powered; row++) {
         if (playingPattern.isOn(row, step) && !heard.has(row)) {
-          const voice = voices.start(ctx, row, bus, time);
+          const voice = voices.start(ctx, row, mixer.padInput(row), time);
           kit
             .voice(row)
             .play(ctx, withVelocity(ctx, voice.out, playingPattern.velocity(row, step) / FULL_VELOCITY), time);
+          outs.push(voice.out);
           chokes.push(...voice.chokes);
           rows.push(row);
         }
       }
       // Remember what was scheduled, so the lights show what is heard even if the pattern is
       // edited in the lookahead before the playhead reaches this step.
-      scheduledHits.push({ time, gridTime, step, rows, bus, chokes, pass: passId });
+      scheduledHits.push({ time, gridTime, step, rows, outs, chokes, pass: passId });
       if (scheduledHits.length > MAX_SCHEDULED_HITS) scheduledHits.shift();
     },
     // The loop has come round, and the first step of the next pass is the next one to be built: if a sequence is queued,
@@ -322,7 +323,7 @@ export function createSampler({
   function playLive(index, velocity) {
     if (!audio.powered) return;
     const ctx = audio.ensure();
-    const { out } = voices.start(ctx, index, audio.master, ctx.currentTime);
+    const { out } = voices.start(ctx, index, mixer.padInput(index), ctx.currentTime);
     kit.voice(index).play(ctx, withVelocity(ctx, out, velocity), ctx.currentTime);
   }
 
@@ -1003,7 +1004,7 @@ export function createSampler({
   // playing are left to ring out.
   // A step that has not started is cut off, and what it was going to cut off (the pad's earlier voices) carries on.
   function cancelHit(hit) {
-    hit.bus.disconnect();
+    for (const out of hit.outs) out.disconnect();
     voices.undo(hit.chokes);
   }
 
