@@ -30,6 +30,9 @@ describe("clampEffect", () => {
     expect(clampEffect("delayLevel", 33.6)).toBe(34);
     expect(clampEffect("delayDivision", 9)).toBe(DELAY_DIVISIONS.length - 1);
     expect(clampEffect("pingPong", 5)).toBe(1);
+    expect(clampEffect("masterFilter", 140)).toBe(100);
+    expect(clampEffect("masterFilter", -140)).toBe(-100); // below the middle: a low-pass, as a pad's Filter
+    expect(clampEffect("masterFilter", 0)).toBe(0);
   });
 
   it("is the default when it is not a number", () => {
@@ -58,8 +61,13 @@ describe("parseEffects", () => {
     });
   });
 
+  it("keeps a master filter that is the only setting that is not the default", () => {
+    expect(parseEffects({ masterFilter: -30 })).toEqual({ ...DEFAULT_EFFECTS, masterFilter: -30 });
+    expect(parseEffects({ masterFilter: 0 })).toBeNull();
+  });
+
   it("leaves out what it does not know", () => {
-    expect(parseEffects({ reverbSize: 80, masterFilter: 30, extra: true })).toEqual({
+    expect(parseEffects({ reverbSize: 80, mysteryKnob: 30, extra: true })).toEqual({
       ...DEFAULT_EFFECTS,
       reverbSize: 80,
     });
@@ -126,6 +134,13 @@ describe("reverbSeconds", () => {
 
 describe("effectsTail", () => {
   const room = { ...DEFAULT_EFFECTS, reverbSize: 100, reverbLevel: 100, delayLevel: 100, delayFeedback: 50 };
+
+  it("is nothing when no pad sends to either, and not made longer by a master filter (it only takes away from what rings)", () => {
+    expect(effectsTail({ ...room, masterFilter: -80 }, 120, { reverb: false, delay: false })).toBe(0);
+    expect(effectsTail({ ...room, masterFilter: 80 }, 120, { reverb: true })).toBe(
+      effectsTail(room, 120, { reverb: true }),
+    );
+  });
 
   it("is nothing when no pad sends to either", () => {
     expect(effectsTail(room, 120, { reverb: false, delay: false })).toBe(0);
@@ -214,5 +229,13 @@ describe("formatEffect", () => {
     expect(formatEffect("pingPong", 0)).toBe("OFF");
     expect(formatEffect("reverbLevel", 50)).toBe("50 %");
     expect(formatEffect("delayFeedback", 35)).toBe("35 %");
+  });
+
+  it("shows the master filter as a pad's Filter is shown: off, or a low-pass or a high-pass at its cutoff", () => {
+    expect(formatEffect("masterFilter", 0)).toBe("OFF");
+    expect(formatEffect("masterFilter", -50)).toBe("LP 1.3 KHZ");
+    expect(formatEffect("masterFilter", -100)).toBe("LP 80 HZ");
+    expect(formatEffect("masterFilter", 100)).toBe("HP 8.0 KHZ");
+    expect(formatEffect("masterFilter", 20)).toMatch(/^HP \d+ HZ$/);
   });
 });

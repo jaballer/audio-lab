@@ -53,8 +53,9 @@ The **Effects** panel, between the Song panel and the steps, has the one reverb 
 pad is heard in them as far as its **Reverb** and **Delay** under Mix are turned up). The reverb has a **Size** (how long the room
 rings, up to 3 seconds) and a **Level**. The delay has the **note** between echoes (a sixteenth, an eighth, a dotted eighth or a
 quarter of the tempo, so it follows the tempo), **Feedback** (how many echoes), a **Level**, and **Ping-Pong**, which sends the
-echoes from one side to the other. They are part of the beat, kept with it and in the project file, and in an export.
-Delete or double-click a slider to reset it; the heading hides the panel, and it starts hidden on a phone.
+echoes from one side to the other. **Master Filter** is over the whole mix, the reverb and echoes too: left of the middle
+darkens everything, right of it thins it out, and the middle is off. They are part of the beat, kept with it and in the project
+file, and in an export. Delete or double-click a slider to reset it; the heading hides the panel, and it starts hidden on a phone.
 
 ## Save and share
 

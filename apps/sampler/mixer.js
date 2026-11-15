@@ -2,12 +2,13 @@
 // and nothing is built until it is asked for. A strip is a filter (a dry path, a low-pass and a high-pass), then a pan (a
 // balance), then the sound goes on to the output and, in some amount, to the reverb and the delay. A pad's Filter, Pan, Reverb
 // and Delay (pad-settings.js) are heard on whatever it plays, and the effects themselves (effects.js) are the same for every pad.
-// With the settings at their defaults a strip hands the sound on as it is, and nothing is sent.
+// The strips and the returns all lead through one more filter, the master filter, which is over the whole mix. With the
+// settings at their defaults a strip hands the sound on as it is, nothing is sent, and the master filter is off.
 //
 //   const mixer = createMixer(ctx, output, {
 //     pads: 16,
 //     settings: (pad) => ({ filter: 0, pan: 0, reverb: 0, delay: 0 }),   // a pad's settings
-//     effects: () => DEFAULT_EFFECTS,                                    // the reverb's and the delay's
+//     effects: () => DEFAULT_EFFECTS,                                    // the reverb's, the delay's and the master filter's
 //     bpm: () => 120,                                                    // the delay is a note of it
 //     defer,                                                             // see returns.js
 //   });
@@ -26,6 +27,12 @@
 //           ├── low-pass ── low gain ────┼── splitter ──> left gain, right gain ──> merger ──┬──> output
 //           └── high-pass ─ high gain ───┘                                                   ├── reverb send ──> the reverb
 //                                                                                            └── delay send ───> the delay
+//
+// and the output of every strip and of both returns is the master filter, the same three paths without the pan:
+//
+//   strips, reverb, delay ──> input ──┬── dry ─────────────┐
+//                                     ├── low-pass ── gain ┼──> the output
+//                                     └── high-pass ─ gain ┘
 //
 // The Filter setting turns one of the three gains up and the other two down: off is the dry path alone (the sound as it is,
 // exactly), and a low-pass or a high-pass is that filter alone. The two filters are never changed from what they were made
@@ -47,9 +54,10 @@ import { FILTER_Q_DB, HIGH_PASS_PARKED_HZ, LOW_PASS_PARKED_HZ, filterSpec, panGa
 import { createStereoGain, setParam } from "./audio-nodes.js";
 import { createDelayReturn, createReverbReturn } from "./returns.js";
 
-function createStrip(ctx, output, sendTo) {
-  // Made two channels as speakers are; the voices connect to it.
-  const input = createStereoGain(ctx);
+// The three paths a Filter setting chooses between (a dry one, a low-pass and a high-pass, each through a gain), made once and
+// never retyped: the strip of a pad and the master filter are both built from them. `connectTo` leads all three to what comes
+// next.
+function createFilterPaths(ctx, input) {
   const dry = ctx.createGain();
   const lowPass = ctx.createBiquadFilter();
   const highPass = ctx.createBiquadFilter();
@@ -61,18 +69,62 @@ function createStrip(ctx, output, sendTo) {
   highPass.frequency.value = HIGH_PASS_PARKED_HZ;
   const lowGain = ctx.createGain();
   const highGain = ctx.createGain();
+  input.connect(dry);
+  input.connect(lowPass);
+  input.connect(highPass);
+  lowPass.connect(lowGain);
+  highPass.connect(highGain);
+  return {
+    dry,
+    lowPass,
+    highPass,
+    lowGain,
+    highGain,
+    mode: "off",
+    connectTo(next) {
+      for (const path of [dry, lowGain, highGain]) path.connect(next);
+    },
+  };
+}
+
+// Makes the paths match a Filter setting (-100 to +100, 0 off): when they are built (`now` undefined) the values are simply
+// set, and afterwards they are glided to.
+function applyFilter(paths, filter, now) {
+  const spec = filterSpec(filter);
+  // A filter that is turned on is set to its cutoff at once, from where it waited, and not glided there; one that is already
+  // in use follows the slider.
+  const jump = now !== undefined && paths.mode !== spec.type;
+  if (spec.type === "lowpass") setParam(paths.lowPass.frequency, spec.frequency, now, { jump });
+  if (spec.type === "highpass") setParam(paths.highPass.frequency, spec.frequency, now, { jump });
+  setParam(paths.dry.gain, spec.type === "off" ? 1 : 0, now);
+  setParam(paths.lowGain.gain, spec.type === "lowpass" ? 1 : 0, now);
+  setParam(paths.highGain.gain, spec.type === "highpass" ? 1 : 0, now);
+  paths.mode = spec.type;
+}
+
+// The filter over the whole mix, the last thing before the output: the strips and the returns lead into its `input`. Off, it
+// is the dry path alone, so the mix goes through as it is.
+function createMasterFilter(ctx, output) {
+  const input = createStereoGain(ctx);
+  const paths = createFilterPaths(ctx, input);
+  paths.connectTo(output);
+  return {
+    input,
+    update: ({ masterFilter = 0 }, now) => applyFilter(paths, masterFilter, now),
+  };
+}
+
+function createStrip(ctx, output, sendTo) {
+  // Made two channels as speakers are; the voices connect to it.
+  const input = createStereoGain(ctx);
+  const paths = createFilterPaths(ctx, input);
   const splitter = ctx.createChannelSplitter(2);
   const left = ctx.createGain();
   const right = ctx.createGain();
   const merger = ctx.createChannelMerger(2);
   const reverbSend = ctx.createGain();
   const delaySend = ctx.createGain();
-  input.connect(dry);
-  input.connect(lowPass);
-  input.connect(highPass);
-  lowPass.connect(lowGain);
-  highPass.connect(highGain);
-  for (const path of [dry, lowGain, highGain]) path.connect(splitter);
+  paths.connectTo(splitter);
   splitter.connect(left, 0);
   splitter.connect(right, 1);
   left.connect(merger, 0, 0);
@@ -82,35 +134,13 @@ function createStrip(ctx, output, sendTo) {
   merger.connect(delaySend);
   reverbSend.connect(sendTo.reverb);
   delaySend.connect(sendTo.delay);
-  return {
-    input,
-    dry,
-    lowPass,
-    highPass,
-    lowGain,
-    highGain,
-    left,
-    right,
-    reverbSend,
-    delaySend,
-    mode: "off",
-    reverb: 0,
-  };
+  return { input, paths, left, right, reverbSend, delaySend, reverb: 0 };
 }
 
 // Makes the strip match the settings: when it is built (`now` undefined) the values are simply set, and afterwards they
 // are glided to.
 function applySettings(strip, { filter = 0, pan = 0, reverb = 0, delay = 0 }, now) {
-  const spec = filterSpec(filter);
-  // A filter that is turned on is set to its cutoff at once, from where it waited, and not glided there; one that is already
-  // in use follows the slider.
-  const jump = now !== undefined && strip.mode !== spec.type;
-  if (spec.type === "lowpass") setParam(strip.lowPass.frequency, spec.frequency, now, { jump });
-  if (spec.type === "highpass") setParam(strip.highPass.frequency, spec.frequency, now, { jump });
-  setParam(strip.dry.gain, spec.type === "off" ? 1 : 0, now);
-  setParam(strip.lowGain.gain, spec.type === "lowpass" ? 1 : 0, now);
-  setParam(strip.highGain.gain, spec.type === "highpass" ? 1 : 0, now);
-  strip.mode = spec.type;
+  applyFilter(strip.paths, filter, now);
   const { left, right } = panGains(pan);
   setParam(strip.left.gain, left, now);
   setParam(strip.right.gain, right, now);
@@ -124,13 +154,16 @@ export function createMixer(
   output,
   { pads, settings = () => ({}), effects = () => DEFAULT_EFFECTS, bpm = () => 120, defer = null },
 ) {
-  const reverb = createReverbReturn(ctx, output, { defer });
-  const delay = createDelayReturn(ctx, output);
+  // Everything, the strips and the returns alike, leads through the master filter on its way to the output.
+  const master = createMasterFilter(ctx, output);
+  const reverb = createReverbReturn(ctx, master.input, { defer });
+  const delay = createDelayReturn(ctx, master.input);
   const strips = Array.from({ length: pads }, (_, pad) => {
-    const strip = createStrip(ctx, output, { reverb: reverb.input, delay: delay.input });
+    const strip = createStrip(ctx, master.input, { reverb: reverb.input, delay: delay.input });
     applySettings(strip, settings(pad));
     return strip;
   });
+  master.update(effects());
   reverb.update(effects());
   delay.update(effects(), bpm());
   // The reverb is a convolver, which is not built until a pad sends to it, and is let go of when none does.
@@ -145,6 +178,7 @@ export function createMixer(
     },
     updateEffects() {
       const now = ctx.currentTime;
+      master.update(effects(), now);
       reverb.update(effects(), now);
       delay.update(effects(), bpm(), now);
     },

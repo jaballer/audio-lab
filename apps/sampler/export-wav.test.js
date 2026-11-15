@@ -123,10 +123,18 @@ describe("hasSteps", () => {
 });
 
 // The mixer's strips in a fake offline context (see fakeOffline): the input of each is the gain made two channels as
-// speakers are, and the rest of its nodes are made right after it. The reverb's and the delay's inputs are made two channels
-// too, and before the strips.
-const stripInputs = (offline) => offline.nodes.filter((node) => node.channelCountMode === "explicit").slice(RETURNS);
-const RETURNS = 2;
+// speakers are, and the rest of its nodes are made right after it. The master filter's input, the reverb's and the delay's are
+// made two channels too, and before the strips.
+const explicitInputs = (offline) => offline.nodes.filter((node) => node.channelCountMode === "explicit");
+const stripInputs = (offline) => explicitInputs(offline).slice(BEFORE_STRIPS);
+const BEFORE_STRIPS = 3;
+// The master filter, which is the first the mixer makes: its input, then the dry path, the two filters and their gains.
+const masterFilterOf = (offline) => {
+  const [input] = explicitInputs(offline);
+  const at = offline.nodes.indexOf(input);
+  const [dry, lowPass, highPass, lowGain, highGain] = offline.nodes.slice(at + 1, at + 6);
+  return { input, dry, lowPass, highPass, lowGain, highGain };
+};
 // The nodes of the strip whose input is `input`, which the mixer makes together, in this order.
 const stripNodes = (offline, input) => {
   const at = offline.nodes.indexOf(input);
@@ -2736,6 +2744,24 @@ describe("the reverb and delay in an export", () => {
     it("has the delay at its defaults for a beat that saved no effects", async () => {
       const offline = await render();
       expect(offline.made.delays[0].delayTime.value).toBeCloseTo(delaySeconds(DEFAULT_EFFECTS.delayDivision, 120), 9);
+    });
+
+    it("has the master filter off for a beat that saved no effects, and at the beat's setting for one that did", async () => {
+      const gains = ({ dry, lowGain, highGain }) => [dry, lowGain, highGain].map((node) => node.gain.value);
+      expect(gains(masterFilterOf(await render()))).toEqual([1, 0, 0]);
+      const low = masterFilterOf(await render({ effects: { ...DEFAULT_EFFECTS, masterFilter: -50 } }));
+      expect(gains(low)).toEqual([0, 1, 0]);
+      expect(low.lowPass.frequency.value).toBeCloseTo(filterSpec(-50).frequency, 6);
+      const high = masterFilterOf(await render({ effects: { ...DEFAULT_EFFECTS, masterFilter: 70 } }));
+      expect(gains(high)).toEqual([0, 0, 1]);
+      expect(high.highPass.frequency.value).toBeCloseTo(filterSpec(70).frequency, 6);
+    });
+
+    it("leads the strips into the master filter, and the master filter to the master", async () => {
+      const offline = await render({ effects: { ...DEFAULT_EFFECTS, masterFilter: 30 } });
+      const master = masterFilterOf(offline);
+      for (const input of stripInputs(offline)) expect(reaches(input, master.input)).toBe(true);
+      expect(reaches(master.input, offline.nodes[0])).toBe(true);
     });
 
     it("makes no room for a beat that sends nothing to the reverb", async () => {

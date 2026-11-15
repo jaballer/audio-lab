@@ -58,10 +58,12 @@ function voiceOf(node) {
   }
 }
 
-// A strip's gains: the input, dry, low-pass, high-pass, left, right, and the reverb and delay sends. The reverb and the delay make
-// theirs (11) before the strips, so these are the gains a mixer makes before the first voice.
+// A strip's gains: the input, dry, low-pass, high-pass, left, right, and the reverb and delay sends. The master filter makes its
+// own (4: the input and the three paths) and the reverb and the delay theirs (11) before the strips, so these are the gains a
+// mixer makes before the first voice.
 const STRIP_GAINS = 8;
-const RETURN_GAINS = 11;
+const MASTER_GAINS = 4;
+const RETURN_GAINS = MASTER_GAINS + 11;
 
 const SEQUENCES = 4;
 // A saved beat with one sequence of the given pattern and length, the rest empty. It has Loop on unless the test says `loopSong: false`:
@@ -332,6 +334,12 @@ describe("the shared effects", () => {
     expect(message).toHaveBeenLastCalledWith("DELAY LEVEL 70 %");
     sampler.setEffect("pingPong", 1);
     expect(message).toHaveBeenLastCalledWith("PING-PONG ON");
+    sampler.setEffect("masterFilter", -50);
+    expect(message).toHaveBeenLastCalledWith("MASTER FILTER LP 1.3 KHZ");
+    sampler.setEffect("masterFilter", 0);
+    expect(message).toHaveBeenLastCalledWith("MASTER FILTER OFF");
+    sampler.setEffect("masterFilter", 30);
+    expect(message).toHaveBeenLastCalledWith(expect.stringMatching(/^MASTER FILTER HP \d+ HZ$/));
     expect(sampler.getState().effects).toEqual({
       reverbSize: 100,
       reverbLevel: 25,
@@ -339,6 +347,7 @@ describe("the shared effects", () => {
       delayFeedback: 60,
       delayLevel: 70,
       pingPong: 1,
+      masterFilter: 30,
     });
     expect(sampler.getBeat().effects).toEqual(sampler.getState().effects);
   });
@@ -365,6 +374,24 @@ describe("the shared effects", () => {
     sampler.setEffect("pingPong", 1);
     sampler.setEffect("pingPong", 0);
     expect(sampler.getBeat()).not.toHaveProperty("effects");
+  });
+
+  it("start with the master filter off, and are heard through it at once, on what is playing", () => {
+    const { audio, sampler } = setup();
+    sampler.triggerPad(0); // builds the strips and the master filter
+    const [, dry, low, high] = audio.ctx.createGain.mock.results.slice(0, MASTER_GAINS).map((result) => result.value);
+    expect([dry.gain.value, low.gain.value, high.gain.value]).toEqual([1, 0, 0]);
+    sampler.setEffect("masterFilter", 40);
+    const at = audio.ctx.currentTime;
+    expect(high.gain.setTargetAtTime).toHaveBeenCalledWith(1, at, expect.any(Number));
+    expect(dry.gain.setTargetAtTime).toHaveBeenCalledWith(0, at, expect.any(Number));
+  });
+
+  it("start with the master filter a saved beat has, set when the strips are made", () => {
+    const { audio, sampler } = setup({ beat: { ...savedBeat(), effects: { ...DEFAULT_EFFECTS, masterFilter: -40 } } });
+    sampler.triggerPad(0);
+    const [, dry, low] = audio.ctx.createGain.mock.results.slice(0, MASTER_GAINS).map((result) => result.value);
+    expect([dry.gain.value, low.gain.value]).toEqual([0, 1]);
   });
 
   it("are heard by the delay that is playing, at once, and the delay follows the tempo", () => {

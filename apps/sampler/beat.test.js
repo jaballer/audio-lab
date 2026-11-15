@@ -1078,8 +1078,24 @@ describe("a beat's effects", () => {
   });
 
   it("do not keep what the page does not know", () => {
-    const loaded = parse({ ...serializeBeat(beat), effects: { ...room, masterFilter: 30, extra: 1 } });
+    const loaded = parse({ ...serializeBeat(beat), effects: { ...room, mysteryKnob: 30, extra: 1 } });
     expect(Object.keys(loaded.effects).sort()).toEqual(Object.keys(DEFAULT_EFFECTS).sort());
+  });
+
+  it("keep the master filter alone, and read a beat saved before it as having it off", () => {
+    const filtered = { ...DEFAULT_EFFECTS, masterFilter: -45 };
+    const saved = serializeBeat({ ...beat, effects: filtered });
+    expect(saved.effects).toEqual(filtered); // the one that is not the default is enough to keep them
+    expect(parse(saved).effects).toEqual(filtered);
+    const before = {
+      reverbSize: 75,
+      reverbLevel: 30,
+      delayDivision: 3,
+      delayFeedback: 35,
+      delayLevel: 50,
+      pingPong: 1,
+    };
+    expect(parse({ ...serializeBeat(beat), effects: before }).effects.masterFilter).toBe(0);
   });
 
   it("keep a pad's sends through saving and loading", () => {

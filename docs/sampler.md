@@ -254,7 +254,7 @@ between the Song panel and the steps: the reverb's **Size** and **Level**, the d
   feedback stops at 90 %, so an echo always dies away. Whether it sounds right can only be judged by ear.
 - **Saved with the beat.** The pad's sends are two more entries in `padSettings` (clamped, formatted and saved with the others),
   and the effects are one optional `effects` object on the beat: `{ reverbSize, reverbLevel, delayDivision, delayFeedback,
-delayLevel, pingPong }`, whole numbers (`delayDivision` is the place in `DELAY_DIVISIONS`, so a new note goes on the end), left out
+delayLevel, pingPong, masterFilter }` (the last came with phase 4, below), whole numbers (`delayDivision` is the place in `DELAY_DIVISIONS`, so a new note goes on the end), left out
   while they are all at their defaults and read back through `parseEffects` like `swing`. Beat version 13 with a no-op migration:
   a version 12 beat has no sends and no effects, which reads as dry. A starter has no effects of its own: the effects go back to
   the defaults, and its built-in pads send nothing, so it starts dry; a pad with a loaded sample keeps the sends it was given, as it
@@ -264,8 +264,33 @@ delayLevel, pingPong }`, whole numbers (`delayDivision` is the place in `DELAY_D
 - **In an export**, the same mixer is built on the offline context with the beat's effects and tempo, so a stem has its pad's
   sends and the stems still add up to the mix (they are linear: measured, a difference of 2e-7). How far the tails are followed
   is in `docs/export.md`.
-- **Not decided here:** a master filter (the next phase), a drive per pad, a pre-delay or damping control on the reverb, a delay
-  that is not a note (a time in milliseconds), and sends from a pad to the delay's own reverb.
+- **Not decided here:** a drive per pad, a pre-delay or damping control on the reverb, a delay that is not a note (a time in
+  milliseconds), and sends from a pad to the delay's own reverb.
+
+## Master filter
+
+One Filter over the whole mix (#187, phase 4), in the Effects panel under **Master**. It is the pad's Filter again (the same
+-100 to +100 slider, low-pass left of the middle, high-pass right of it, off in the middle, the same cutoffs from `filterSpec`),
+and it is one of the beat's effects: `masterFilter` in the `effects` object, whole numbers, off by default.
+
+- **Over everything that is heard, and nothing after it but the volume.** The strips and both returns lead into it, so it
+  darkens or thins the reverb and the echoes as well as the pads (measured in a browser: a reverb tail with the filter at its
+  lowest was 8 times quieter in level than with it off). It is the last thing in
+  the mixer, so the master volume and the soft clipper come after it and still catch a peak.
+- **The same three paths as a strip, built by the same code.** A dry path, a low-pass and a high-pass, each through a gain, made
+  once and never retyped, the unused filter waiting at the end of its range, glides for a moved cutoff and a jump for a filter
+  that is turned on (`createFilterPaths` and `applyFilter` in `mixer.js` are shared by the strips and the master filter). Off is
+  the dry path alone, so the mix goes through unchanged (measured: the difference from no mixer at all is 0). Moving it under a
+  steady tone is no rougher than the tone itself (0.9 to 1.15 times the second difference of a clean sine, in every direction across the middle; a click would be far more). Two
+  more filters run on the master for as long as the page is playing, which is nothing next to the sixteen strips'.
+- **Saved with the beat.** One more entry in `effects`, with no change of version: `parseEffects` fills a missing entry with the
+  default, so a beat saved before it reads as off, and one that has only a master filter is kept like any other that is not at
+  the defaults. A starter, like for the other effects, puts it back to off. The filter does not lengthen an export's tail (it only takes away from what rings).
+- **In an export**, the mixer is the page's, so the master filter is in the file and in every stem. A filter is linear, so the stems
+  still add up to the mix.
+- **On the LCD** as `MASTER FILTER LP 1.3 KHZ`, `HP 248 HZ` or `OFF`.
+- **Not decided here:** a resonance control, mapping it to a MIDI knob (a DJ Filter knob in the quick bar is a later phase of
+  the effects work), and a master filter that is part of a sequence or a song entry.
 
 ## Amplitude envelope
 
