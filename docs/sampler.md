@@ -315,7 +315,7 @@ delayLevel, pingPong, masterFilter }` (the last came with phase 4, below), whole
 - **In an export**, the same mixer is built on the offline context with the beat's effects and tempo, so a stem has its pad's
   sends and the stems still add up to the mix (they are linear: measured, a difference of 2e-7). How far the tails are followed
   is in `docs/export.md`.
-- **Not decided here:** a drive per pad, a pre-delay or damping control on the reverb, a delay that is not a note (a time in
+- **Not decided here:** a pre-delay or damping control on the reverb, a delay that is not a note (a time in
   milliseconds), and sends from a pad to the delay's own reverb.
 
 ## Master filter
