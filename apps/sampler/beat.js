@@ -22,7 +22,7 @@ export const BEAT_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A beat newer than
 // this page is ignored, so an old page never misreads a newer beat.
-export const BEAT_VERSION = 14;
+export const BEAT_VERSION = 15;
 
 // { [version]: (beat) => the same beat in the next version's shape }. The version
 // field itself is set by upgradeBeat.
@@ -61,6 +61,9 @@ const MIGRATIONS = {
   // Version 14 adds the master filter to `effects` (`masterFilter`). A version 13 beat has none, which reads as off. The version moves so a
   // page that does not know the filter refuses the beat, instead of opening it and saving it back without the setting.
   13: (beat) => beat,
+  // Version 15 adds each pad's `drive` to `padSettings`. A version 14 entry has none, which reads as no drive. The version moves for the same
+  // reason as before: a page that does not know the drive refuses the beat, instead of opening it and saving it back without the setting.
+  14: (beat) => beat,
 };
 
 const VOLUME_MAX = 100;
@@ -94,7 +97,7 @@ function trimBlankSequences(beat) {
 //
 // `swing` is how much of each pair of steps the first takes, in per cent, 50 (straight) to 75 (tempo.js).
 //
-// `padSettings` is { pad: { gain, pitch, choke, filter, pan, reverb, delay, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
+// `padSettings` is { pad: { gain, pitch, choke, drive, filter, pan, reverb, delay, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
 //
 // `effects` is { reverbSize, reverbLevel, delayDivision, delayFeedback, delayLevel, pingPong, masterFilter }, the reverb and delay the pads send to and the filter over the mix (effects.js), and is
 // left out while they are all at their defaults, which is how a beat is until a person turns one.

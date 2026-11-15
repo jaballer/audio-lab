@@ -643,10 +643,10 @@ const envelopeSliders = createSettingsSliders($("pad-envelope"), {
   fallbackFocus: $("load-sample"), // where focus goes if they are disabled (a built-in sound came back) while one has it
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
-// The selected pad's Filter (a low-pass one way, a high-pass the other, off in the middle), Pan and sends to the shared reverb and
-// delay: for any sound, a built-in one too.
+// The selected pad's Drive, Filter (a low-pass one way, a high-pass the other, off in the middle), Pan and sends to the shared reverb
+// and delay, in the order the sound goes through them: for any sound, a built-in one too.
 const mixSliders = createSettingsSliders($("pad-mix"), {
-  names: ["filter", "pan", "reverb", "delay"],
+  names: ["drive", "filter", "pan", "reverb", "delay"],
   onChange: (name, value) => sampler.setPadSetting(name, value),
 });
 // The reverb and the delay the pads send to: part of the beat, the same for every pad.

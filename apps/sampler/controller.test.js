@@ -4,6 +4,7 @@ import { createKit } from "./kit.js";
 import { SCHEDULER_TICK_MS } from "../../shared/scheduler.js";
 import { STARTER_BEAT } from "./starter-beat.js";
 import { DEFAULT_EFFECTS } from "./effects.js";
+import { driveSpec } from "./pad-settings.js";
 
 const STEPS = 16;
 const PADS = 4;
@@ -25,6 +26,7 @@ function fakeAudio() {
     createGain: vi.fn(() => ({ ...node(), gain: param() })),
     // What a mixer strip and the reverb and delay are made of (mixer.js, returns.js)
     createBiquadFilter: vi.fn(() => ({ ...node(), type: "peaking", frequency: param(), Q: param(), gain: param(0) })),
+    createWaveShaper: vi.fn(() => ({ ...node(), curve: null, oversample: "none" })),
     createChannelSplitter: vi.fn(node),
     createChannelMerger: vi.fn(node),
     createDelay: vi.fn(() => ({ ...node(), delayTime: param(0) })),
@@ -58,10 +60,10 @@ function voiceOf(node) {
   }
 }
 
-// A strip's gains: the input, dry, low-pass, high-pass, left, right, and the reverb and delay sends. The master filter makes its
+// A strip's gains: the input, the drive's four, the filter's dry, low-pass and high-pass, left, right, and the reverb and delay sends. The master filter makes its
 // own (4: the input and the three paths) and the reverb and the delay theirs (11) before the strips, so these are the gains a
 // mixer makes before the first voice.
-const STRIP_GAINS = 8;
+const STRIP_GAINS = 12;
 const MASTER_GAINS = 4;
 const RETURN_GAINS = MASTER_GAINS + 11;
 
@@ -246,7 +248,7 @@ describe("triggerPad", () => {
     const strips = () => {
       const gains = audio.ctx.createGain.mock.results.map((result) => result.value);
       return Array.from({ length: PADS }, (_, pad) => {
-        const [, dry, low, high, left, right] = gains.slice(
+        const [, , , , , dry, low, high, left, right] = gains.slice(
           RETURN_GAINS + pad * STRIP_GAINS,
           RETURN_GAINS + (pad + 1) * STRIP_GAINS,
         );
@@ -451,6 +453,37 @@ describe("the shared effects", () => {
 });
 
 describe("pad settings", () => {
+  it("says a Drive change on the display, for the selected pad, as a per cent", () => {
+    const { sampler, message } = setup();
+    sampler.selectPad(2);
+    sampler.setPadSetting("drive", 45);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 DRIVE 45 %");
+    sampler.setPadSetting("drive", 0);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 DRIVE 0 %");
+  });
+
+  it("plays a pad through the drive it was set to, and follows a change made while the strips are there", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const kit = createKit(sounds, { settings: { 1: { drive: 60 } } });
+    const sampler = createSampler({ audio, kit, steps: STEPS });
+    sampler.triggerPad(0);
+    // each strip's drive gains (the dry path, the pre-gain and the post-gain), in the order mixer.js makes them
+    const driveOf = (pad) => {
+      const gains = audio.ctx.createGain.mock.results.map((result) => result.value);
+      const [, dry, pre, post] = gains.slice(RETURN_GAINS + pad * STRIP_GAINS, RETURN_GAINS + (pad + 1) * STRIP_GAINS);
+      return { dry, pre, post };
+    };
+    const at = audio.ctx.currentTime;
+    expect([driveOf(0).dry.gain.value, driveOf(0).post.gain.value]).toEqual([1, 0]); // off
+    expect(driveOf(1).dry.gain.value).toBe(0); // on, set when the strips were made
+    expect(driveOf(1).pre.gain.value).toBeCloseTo(driveSpec(60).preGain, 9);
+    kit.setSetting(0, "drive", 40);
+    sampler.kitChanged("setting", 0); // what the page does when the kit says a setting changed
+    expect(driveOf(0).post.gain.setTargetAtTime).toHaveBeenCalledWith(driveSpec(40).postGain, at, expect.any(Number));
+    expect(driveOf(0).dry.gain.setTargetAtTime).toHaveBeenCalledWith(0, at, expect.any(Number));
+  });
+
   it("says a Filter or Pan change on the display, for the selected pad", () => {
     const { sampler, message } = setup();
     sampler.selectPad(2);
@@ -479,6 +512,7 @@ describe("pad settings", () => {
       gain: -6,
       pitch: 3,
       choke: 0,
+      drive: 0,
       filter: 0,
       pan: 0,
       reverb: 0,
@@ -494,6 +528,7 @@ describe("pad settings", () => {
       gain: 0,
       pitch: 0,
       choke: 0,
+      drive: 0,
       filter: 0,
       pan: 0,
       reverb: 0,
@@ -522,6 +557,7 @@ describe("pad settings", () => {
         gain: 0,
         pitch: -5,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -2973,6 +3009,7 @@ describe("pad colours", () => {
         gain: 0,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -3024,6 +3061,7 @@ describe("choke groups", () => {
         gain: 0,
         pitch: 0,
         choke: 3,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,

@@ -31,7 +31,7 @@ import {
 } from "./export-wav.js";
 import { exportInfo, stemsInfo } from "./export-options.js";
 import { createKit } from "./kit.js";
-import { filterSpec } from "./pad-settings.js";
+import { DRIVE_CURVE_SIZE, driveCurve, driveSpec, filterSpec } from "./pad-settings.js";
 import { DEFAULT_EFFECTS, delaySeconds } from "./effects.js";
 import { TRIM_LEAD_SECONDS } from "./sample-voice.js";
 import { readZip, zipParts } from "./zip.js";
@@ -138,8 +138,23 @@ const masterFilterOf = (offline) => {
 // The nodes of the strip whose input is `input`, which the mixer makes together, in this order.
 const stripNodes = (offline, input) => {
   const at = offline.nodes.indexOf(input);
-  const [dry, lowPass, highPass, lowGain, highGain, left, right] = offline.nodes.slice(at + 1, at + 8);
-  return { input, dry, lowPass, highPass, lowGain, highGain, left, right };
+  // The drive's four gains (its shaper is not a node of the list), then the filter's paths, then the two sides of the pan.
+  const [driveDry, drivePre, drivePost, driveOut, dry, lowPass, highPass, lowGain, highGain, left, right] =
+    offline.nodes.slice(at + 1, at + 12);
+  return { input, driveDry, drivePre, drivePost, driveOut, dry, lowPass, highPass, lowGain, highGain, left, right };
+};
+
+// The shaper a test hands a context to be its clipper: the master is built first and asks for it, and the mixer's drives, which ask
+// after, are given shapers of their own, so what the test says about the clipper's shaper is not about theirs.
+const clipperFirst = (clipper) => {
+  let asked = false;
+  return () => {
+    if (!asked) {
+      asked = true;
+      return clipper;
+    }
+    return { curve: null, oversample: "none", connect: vi.fn(), disconnect: vi.fn() };
+  };
 };
 
 // Whether what `from` is connected to, and what that is connected to, and so on, reaches `target`.
@@ -157,7 +172,7 @@ function fakeOffline({ pausable = false } = {}) {
   const nodes = [];
   const pauses = [];
   const resumes = { count: 0 };
-  const made = { frames: 0, rate: 0, delays: [], convolvers: [] };
+  const made = { frames: 0, rate: 0, delays: [], convolvers: [], shapers: [] };
   const destination = { id: "destination" };
   const ctx = {
     currentTime: 0,
@@ -189,6 +204,12 @@ function fakeOffline({ pausable = false } = {}) {
         disconnect: vi.fn(),
       };
       nodes.push(node);
+      return node;
+    },
+    // The drive's shaper (mixer.js): recorded, and not a node of the list of gains.
+    createWaveShaper: () => {
+      const node = { curve: null, oversample: "none", connect: vi.fn(), disconnect: vi.fn() };
+      made.shapers.push(node);
       return node;
     },
     createChannelSplitter: () => ({ connect: vi.fn(), disconnect: vi.fn() }),
@@ -305,12 +326,10 @@ describe("renderSequence", () => {
     expect(offline.made.frames).toBe(Math.round((LEAD_SECONDS + 2) * 1000) + 2000);
   });
 
-  it("runs the master at the volume on the page, straight to the speakers when the context has no clipper", async () => {
+  it("runs the master at the volume on the page", async () => {
     const { render, offline } = setup(sequence({ 0: [0] }), { volume: 50 });
     await render();
-    const master = offline.nodes[0];
-    expect(master.gain.value).toBe(0.5);
-    expect(master.connect).toHaveBeenCalledWith(offline.destination);
+    expect(offline.nodes[0].gain.value).toBe(0.5);
   });
 
   it("runs the master through the clipper, and the clipper to the speakers, when the context can make one", async () => {
@@ -322,7 +341,7 @@ describe("renderSequence", () => {
       kit,
       stepsPerBar: 16,
       sampleRate: 1000,
-      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: () => shaper }),
+      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: clipperFirst(shaper) }),
     });
     const [master, half] = offline.nodes;
     expect(master.connect).toHaveBeenCalledWith(half);
@@ -368,6 +387,29 @@ describe("renderSequence", () => {
     expect(lowPad.right.gain.value).toBe(1);
     expect([highPad.left.gain.value, highPad.right.gain.value]).toEqual([1, 0]);
     expect([flatPad.left.gain.value, flatPad.right.gain.value]).toEqual([1, 1]);
+  });
+
+  it("sets each strip's drive as the kit has it: the shaped path in for a driven pad, the dry sound alone for the rest", async () => {
+    const kit = createKit([sound("a"), sound("b"), sound("c")], { settings: { 0: { drive: 75 } } });
+    const offline = fakeOffline();
+    await renderSequence({
+      beat: beatOf(sequence({ 0: [0], 1: [0] })),
+      kit,
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+    });
+    const [driven, plain] = stripInputs(offline).map((input) => stripNodes(offline, input));
+    const spec = driveSpec(75);
+    expect([driven.driveDry.gain.value, driven.drivePre.gain.value, driven.drivePost.gain.value]).toEqual([
+      0,
+      spec.preGain,
+      spec.postGain,
+    ]);
+    expect([plain.driveDry.gain.value, plain.drivePost.gain.value]).toEqual([1, 0]);
+    // a soft clip for each strip (the master's clipper has a curve of its own)
+    const isDrive = (shaper) => shaper.curve?.length === DRIVE_CURVE_SIZE && shaper.curve[0] === driveCurve()[0];
+    expect(offline.made.shapers.filter(isDrive)).toHaveLength(3);
   });
 
   it("is a whole number of frames long at a tempo where a bar is not, and the second pass starts where the first ends", async () => {
@@ -1812,7 +1854,12 @@ describe("renderSequence, one pad's stem", () => {
       return { kit: createKit([sound("a")]), offline: o };
     })();
     const base = offline.createContext;
-    const shaper = { curve: null, oversample: "2x", connect: vi.fn() };
+    const shapers = []; // the drives' (a strip each): with no clipper asked for, they are the only ones
+    const makeShaper = () => {
+      const shaper = { curve: null, oversample: "none", connect: vi.fn(), disconnect: vi.fn() };
+      shapers.push(shaper);
+      return shaper;
+    };
     await renderSequence({
       beat: beatOf(sequence({ 0: [0] }), { volume: 50 }),
       kit,
@@ -1820,12 +1867,12 @@ describe("renderSequence, one pad's stem", () => {
       sampleRate: 1000,
       pad: 0,
       clip: false,
-      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: () => shaper }),
+      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: makeShaper }),
     });
     const [master] = offline.nodes;
     expect(master.gain.value).toBe(0.5);
     expect(master.connect).toHaveBeenCalledWith(offline.destination);
-    expect(shaper.connect).not.toHaveBeenCalled();
+    for (const shaper of shapers) expect(shaper.connect).not.toHaveBeenCalledWith(offline.destination); // no clipper in front of the speakers
   });
 
   it("clips as before when it is not asked not to", async () => {
@@ -1837,7 +1884,7 @@ describe("renderSequence, one pad's stem", () => {
       kit: createKit([sound("a")]),
       stepsPerBar: 16,
       sampleRate: 1000,
-      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: () => shaper }),
+      createContext: (frames, rate) => Object.assign(base(frames, rate), { createWaveShaper: clipperFirst(shaper) }),
     });
     expect(shaper.connect).toHaveBeenCalledWith(offline.destination);
   });

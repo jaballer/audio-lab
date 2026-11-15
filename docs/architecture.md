@@ -36,7 +36,7 @@ on every step and a screen reader would announce the same text again.
 
 ```text
 pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pad, choke groups)
-   ──> mixer.js: a strip for each pad (filter, pan) ──┬── dry ──────────────────────────┐
+   ──> mixer.js: a strip for each pad (drive, filter, pan) ──┬── dry ──────────────────────┐
                                                       └── sends ──> reverb, delay ──────┴──> master filter ──> audio.master
                                                                                                   │
                               shared/audio.js: master gain ──> soft clipper ──> speakers + analysers (lights, level meter)
@@ -48,14 +48,15 @@ pad hit / step ──> kit.voice(i).play(time) ──> voices.js (one voice a pa
   `createContext: () => Tone.getContext().rawContext`, because Tone must wrap the context itself (handed a plain
   `AudioContext`, its setup throws in Firefox); the engine still owns the graph and the master on it.
 - **A strip for each pad, between the voices and the master.** `apps/sampler/mixer.js` gives every pad a strip of its own that
-  its voices play into, and that leads to `audio.master`: a dry path, a low-pass and a high-pass crossfaded by the pad's Filter
+  its voices play into, and that leads to `audio.master`: first a drive (a dry path beside a soft clip, `WaveShaperNode`, with the
+  pad's Drive moving the gain in front of it and the dry path alone when it is off), then a dry path, a low-pass and a high-pass crossfaded by the pad's Filter
   setting, then a pan (a balance: a left and a right gain), the pad's Pan, then the dry sound on to the output and the sends to the shared reverb
   and delay (`apps/sampler/returns.js`: a convolver on a seeded, made-up room that is built only while a pad sends to it, and a two-line,
-  tempo-synced delay); a drive is to follow in the same strip ([issue 187](https://github.com/jaballer/audio-lab/issues/187)). The strips and the two returns
+  tempo-synced delay; [issue 187](https://github.com/jaballer/audio-lab/issues/187)). The strips and the two returns
   all lead into one more filter, the master filter (the same three crossfaded paths as a strip's, without the pan), which is over everything
   that is heard and leads to `audio.master`, so the master volume and the soft clipper come after it. A strip is wired once and only its settings change, so a
   change never reroutes a sound that is playing; it is heard at once by the hits already sounding and the ones queued, which
-  play through it. With the settings at their defaults a strip hands the sound on as it is: the filter's dry path is all that is heard, and a filter
+  play through it. With the settings at their defaults a strip hands the sound on as it is: the drive's and the filter's dry paths are all that is heard, and a filter
   is never changed from the type it was made as, because that resets its memory and is heard as a tick. `audio.killSound()` replaces the
   master, so the page's mixer (`createLiveMixer`) builds new strips on the new master, from the settings as they are then, the
   next time a hit asks, and the old ones are left to the old master's fade-out. A queued step is cut off by disconnecting its
@@ -143,8 +144,8 @@ Each app is its own page with its own code; shared code lives in `shared/`.
   - `starters.js` — a few complete beats to start from, one per style (hip hop, techno, house, trap): tempo, patterns written as step grids, swing, and the pad settings that go with them (choke group, colours), built into the beat `beat.js` keeps; the pads' sounds are the same in every starter; no DOM
   - `beat.js` — what is kept between visits (the sequences, tempo, volume, pad settings, effects): the saved format, upgrading older versions, checking it on load, and the debounced saver; no DOM
   - `arrangement.js` — the order a song plays its sequences in (each with a number of repeats; none until a person edits it, which means every sequence once, in order): cleaning what was saved, following a sequence added or removed, the order of the passes, and which pass follows the one that ended (what Song mode walks) and whether a pass is the last of the song; no DOM
-  - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group, filter, pan and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
-  - `mixer.js` — the strip each pad's voices play into on the way to the master: a filter, a pan and the sends to the reverb and the delay for each pad, set from the pad's settings and followed when they change (`update`), the two shared returns and the master filter over the whole mix, followed when the effects or the tempo change (`updateEffects`), and where a drive will go; `createMixer` for a context and `createLiveMixer` for the page's audio engine, which follows `audio.master` when `killSound()` replaces it; the export builds its own; no DOM
+  - `kit.js` — what each pad plays and how: the built-in sound or a sample loaded onto it, and the pad's settings: gain, pitch, envelope, choke group, drive, filter, pan and colour (`voice(i).play` is what the sequencer and live hits call); no DOM
+  - `mixer.js` — the strip each pad's voices play into on the way to the master: a drive, a filter, a pan and the sends to the reverb and the delay for each pad, set from the pad's settings and followed when they change (`update`), the two shared returns and the master filter over the whole mix, followed when the effects or the tempo change (`updateEffects`); `createMixer` for a context and `createLiveMixer` for the page's audio engine, which follows `audio.master` when `killSound()` replaces it; the export builds its own; no DOM
   - `returns.js` — the shared reverb (a convolver on the seeded room, built only while a pad sends to it, replaced by a fade when the size changes, let go of when it has rung out) and the shared delay (two lines with the feedback round or across, so ping-pong is a change of gains); no DOM
   - `effects.js` — the settings of the reverb, the delay and the master filter (size, level, note, feedback, level, ping-pong, filter): ranges, clamping, reading and saving, the delay's time from the tempo, how long they ring (for the export), the seeded impulse of the room and the text; no DOM
   - `audio-nodes.js` — two helpers the mixer and its returns share: gliding a parameter to a value (or setting it when the node is made) and a gain made two channels as speakers are; no DOM

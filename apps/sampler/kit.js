@@ -1,5 +1,5 @@
 // What each pad plays and how: the built-in sound, which can be swapped for another (a loaded sample) and put
-// back, and the pad's settings (gain, pitch, envelope, choke group, filter, pan, colour). No DOM. A sound is { id, name, play(ctx, out, t) }, as in
+// back, and the pad's settings (gain, pitch, envelope, choke group, drive, filter, pan, colour). No DOM. A sound is { id, name, play(ctx, out, t) }, as in
 // shared/sounds.js.
 //
 //   const kit = createKit(SOUNDS, { onChange, settings });
@@ -8,7 +8,7 @@
 //   kit.set(3, sound);                // pad 3 plays `sound` from now on
 //   kit.reset(3);                     // back to the built-in one
 //   kit.isDefault(3);                 // is it the built-in one?
-//   kit.settings(3);                  // { gain, pitch, choke, filter, pan, color, attack, decay, sustain, release } of pad 3 (pad-settings.js)
+//   kit.settings(3);                  // { gain, pitch, choke, drive, filter, pan, color, attack, decay, sustain, release } of pad 3 (pad-settings.js)
 //   kit.setSetting(3, "gain", -6);    // one setting; the value is clamped and rounded
 //   kit.envelope(3);                  // pad 3's envelope in seconds ({ attack, decay, sustain, release }), or null: none set,
 //                                     // or the pad plays a built-in sound

@@ -23,7 +23,7 @@
 //   sampler.triggerPad(3, 0.8)   // velocity 0-1, default 1
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
-//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke, filter, pan or colour, saved with the beat
+//   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke, drive, filter, pan or colour, saved with the beat
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setStepVelocity(5, 90, { activate: true })   // the same, and turns the step on first if it is off: one undo
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
@@ -238,7 +238,7 @@ export function createSampler({
     groupOf: (pad) => kit.settings(pad).choke,
     releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
   });
-  // Every voice leads into its pad's strip of the mixer (its filter, pan and sends to the reverb and the delay), which leads to the master.
+  // Every voice leads into its pad's strip of the mixer (its drive, filter, pan and sends to the reverb and the delay), which leads to the master.
   // `scheduler` is made below: the mixer asks for the tempo only once a hit has made its strips.
   const mixer = createLiveMixer(audio, {
     pads: kit.length,
@@ -455,7 +455,7 @@ export function createSampler({
     onChange();
   }
 
-  // The one place a pad's setting (gain, pitch, envelope, choke group, filter, pan, colour) changes: for the selected pad, saved with the beat. The kit
+  // The one place a pad's setting (gain, pitch, envelope, choke group, drive, filter, pan, colour) changes: for the selected pad, saved with the beat. The kit
   // clamps the value and tells the views.
   function setPadSetting(name, value) {
     kit.setSetting(selected, name, value);
@@ -998,14 +998,14 @@ export function createSampler({
   }
 
   // The kit changed: `what` is "sound" (a sample was loaded, restored or removed) or "setting" (a pad's gain, pitch,
-  // envelope, choke group, filter, pan or colour). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
+  // envelope, choke group, drive, filter, pan or colour). The steps already handed to the audio clock were built with the sounds the kit had, so for a sound
   // the ones that have not started are built again from the new ones. A setting does not rebuild them: the next
   // step built picks it up, at most the lookahead (about 120 ms) later, and rebuilding for every tick of a slider
   // made steps late. It is saved, though, for a setting changed from elsewhere (a sample's pitch cleared).
   function kitChanged(what, pad) {
     if (what === "sound") rescheduleQueuedHits();
     else {
-      // The strip follows a filter or a pan at once, for the hits already sounding and the ones queued: they play through it.
+      // The strip follows a drive, a filter or a pan at once, for the hits already sounding and the ones queued: they play through it.
       if (pad !== undefined) mixer.update(pad);
       onBeatChange();
     }

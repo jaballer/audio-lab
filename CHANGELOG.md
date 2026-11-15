@@ -10,6 +10,11 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: each pad has a Drive, first under Mix in the pad editor, in front of its Filter. It pushes the pad into a soft clip,
+  which thickens it and adds harmonics, and is off at 0 (the sound is then exactly as it was). It works on the built-in sounds as
+  well as a loaded sample, keeps a pad about as loud as it was, is kept with the beat and the project file, and is in an export
+  and its stems ([#192](https://github.com/jaballer/audio-lab/pull/192))
+
 - Sampler: a Master Filter in the Effects panel, over the whole mix: left of the middle darkens everything (a low-pass), right
   of it thins it out (a high-pass), and the middle is off. The reverb and the echoes are filtered with the pads. It is kept with
   the beat and the project file, and is in an export and its stems

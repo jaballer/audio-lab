@@ -1,13 +1,13 @@
 // The mixer between the pads' voices and the output: one strip for each pad, and the reverb and the delay they share. No DOM,
-// and nothing is built until it is asked for. A strip is a filter (a dry path, a low-pass and a high-pass), then a pan (a
-// balance), then the sound goes on to the output and, in some amount, to the reverb and the delay. A pad's Filter, Pan, Reverb
-// and Delay (pad-settings.js) are heard on whatever it plays, and the effects themselves (effects.js) are the same for every pad.
+// and nothing is built until it is asked for. A strip is a drive (a soft clip), then a filter (a dry path, a low-pass and a
+// high-pass), then a pan (a balance), then the sound goes on to the output and, in some amount, to the reverb and the delay. A
+// pad's Drive, Filter, Pan, Reverb and Delay (pad-settings.js) are heard on whatever it plays, and the effects themselves (effects.js) are the same for every pad.
 // The strips and the returns all lead through one more filter, the master filter, which is over the whole mix. With the
 // settings at their defaults a strip hands the sound on as it is, nothing is sent, and the master filter is off.
 //
 //   const mixer = createMixer(ctx, output, {
 //     pads: 16,
-//     settings: (pad) => ({ filter: 0, pan: 0, reverb: 0, delay: 0 }),   // a pad's settings
+//     settings: (pad) => ({ drive: 0, filter: 0, pan: 0, reverb: 0, delay: 0 }),   // a pad's settings
 //     effects: () => DEFAULT_EFFECTS,                                    // the reverb's, the delay's and the master filter's
 //     bpm: () => 120,                                                    // the delay is a note of it
 //     defer,                                                             // see returns.js
@@ -23,10 +23,16 @@
 //
 // The strip is
 //
-//   input ──┬── dry ─────────────────────┐
-//           ├── low-pass ── low gain ────┼── splitter ──> left gain, right gain ──> merger ──┬──> output
-//           └── high-pass ─ high gain ───┘                                                   ├── reverb send ──> the reverb
-//                                                                                            └── delay send ───> the delay
+//   input ──┬── dry ────────────────────┐        ┌── dry ─────────────────────┐
+//           └── pre-gain ─ shaper ─ post ┴─ sum ──┼── low-pass ── low gain ────┼── splitter ──> left gain, right gain ──> merger ──┬──> output
+//                                                 └── high-pass ─ high gain ───┘                                                   ├── reverb send ──> the reverb
+//                                                                                                                                  └── delay send ───> the delay
+//
+// The Drive setting crosses a dry path (which is all of it when the drive is off, so the sound goes on exactly as it is) to a
+// shaped one: the pre-gain pushes the sound into a soft clip, the same curve for every strip and every drive (tanh, see
+// driveCurve in pad-settings.js), and the post-gain brings it down again by the root of what it was pushed up by, so a driven pad is
+// about as loud as it was. It is the pre-gain that moves along the curve. The shaper is not oversampled: that would keep the
+// clip's aliasing out, but delays the pad by milliseconds (see DRIVE_OVERSAMPLE).
 //
 // and the output of every strip and of both returns is the master filter, the same three paths without the pan:
 //
@@ -50,9 +56,62 @@
 // what Kill is for. The export builds its own `createMixer` on the offline context's master.
 
 import { DEFAULT_EFFECTS, sendGain } from "./effects.js";
-import { FILTER_Q_DB, HIGH_PASS_PARKED_HZ, LOW_PASS_PARKED_HZ, filterSpec, panGains } from "./pad-settings.js";
+import {
+  FILTER_Q_DB,
+  HIGH_PASS_PARKED_HZ,
+  LOW_PASS_PARKED_HZ,
+  driveCurve,
+  driveSpec,
+  filterSpec,
+  panGains,
+} from "./pad-settings.js";
 import { createStereoGain, setParam } from "./audio-nodes.js";
 import { createDelayReturn, createReverbReturn } from "./returns.js";
+
+// Not oversampled. A soft clip makes harmonics that fold back as aliasing unless the sound is taken to a higher rate and back, and
+// oversampling would keep them out (measured in Chromium: a 5 kHz sine at full drive has its fold-backs at -14 dB against the tone
+// with none, and below -120 dB at 2x). But the oversampling filters delay the shaper's output (measured: 2.9 ms at 2x and 4.4 ms at
+// 4x), so a driven pad would sound late against the others, and the crossfade from the dry path to the shaped one would pass the
+// sound through a comb of the two (a click, measured: 40 times a clean sine's roughness on turning it on). The dry sound of a
+// drum machine has to be on time more than a distortion has to be clean, as for the master's clipper (shared/audio.js).
+const DRIVE_OVERSAMPLE = "none";
+
+// A pad's Drive: two paths from the input that come together again, the dry sound and a shaped one (a gain that pushes the sound
+// into the curve, the shaper, and a gain that brings it back down). Off is the dry path alone, so the sound goes on exactly as it
+// is; the shaped path is then silent (its gain is 0) and waits with whatever pre-gain it had, since it is set at once when the drive
+// is turned on. The curve is the same for every strip and every drive: it is the pre-gain that moves along it.
+function createDrive(ctx, input, curve) {
+  const dry = ctx.createGain();
+  const pre = ctx.createGain();
+  const shaper = ctx.createWaveShaper();
+  const post = ctx.createGain();
+  const out = ctx.createGain();
+  shaper.curve = curve;
+  shaper.oversample = DRIVE_OVERSAMPLE;
+  input.connect(dry);
+  input.connect(pre);
+  pre.connect(shaper);
+  shaper.connect(post);
+  dry.connect(out);
+  post.connect(out);
+  return { dry, pre, shaper, post, out, on: false };
+}
+
+// Makes the drive match a setting (0 to 100, 0 off): set at once when it is built (`now` undefined) and glided to afterwards. A drive
+// that is turned on has its pre-gain set at once, while the shaped path is still silent, and then fades in: gliding the pre-gain
+// there would sweep the shaper through every amount in between, which is heard.
+function applyDrive(drive, amount, now) {
+  const spec = driveSpec(amount);
+  const jump = now !== undefined && drive.on !== spec.on;
+  if (spec.on) {
+    setParam(drive.pre.gain, spec.preGain, now, { jump });
+    setParam(drive.post.gain, spec.postGain, now);
+  } else {
+    setParam(drive.post.gain, 0, now);
+  }
+  setParam(drive.dry.gain, spec.on ? 0 : 1, now);
+  drive.on = spec.on;
+}
 
 // The three paths a Filter setting chooses between (a dry one, a low-pass and a high-pass, each through a gain), made once and
 // never retyped: the strip of a pad and the master filter are both built from them. `connectTo` leads all three to what comes
@@ -114,10 +173,11 @@ function createMasterFilter(ctx, output) {
   };
 }
 
-function createStrip(ctx, output, sendTo) {
+function createStrip(ctx, output, sendTo, curve) {
   // Made two channels as speakers are; the voices connect to it.
   const input = createStereoGain(ctx);
-  const paths = createFilterPaths(ctx, input);
+  const drive = createDrive(ctx, input, curve);
+  const paths = createFilterPaths(ctx, drive.out);
   const splitter = ctx.createChannelSplitter(2);
   const left = ctx.createGain();
   const right = ctx.createGain();
@@ -134,12 +194,13 @@ function createStrip(ctx, output, sendTo) {
   merger.connect(delaySend);
   reverbSend.connect(sendTo.reverb);
   delaySend.connect(sendTo.delay);
-  return { input, paths, left, right, reverbSend, delaySend, reverb: 0 };
+  return { input, drive, paths, left, right, reverbSend, delaySend, reverb: 0 };
 }
 
 // Makes the strip match the settings: when it is built (`now` undefined) the values are simply set, and afterwards they
 // are glided to.
-function applySettings(strip, { filter = 0, pan = 0, reverb = 0, delay = 0 }, now) {
+function applySettings(strip, { drive = 0, filter = 0, pan = 0, reverb = 0, delay = 0 }, now) {
+  applyDrive(strip.drive, drive, now);
   applyFilter(strip.paths, filter, now);
   const { left, right } = panGains(pan);
   setParam(strip.left.gain, left, now);
@@ -158,8 +219,9 @@ export function createMixer(
   const master = createMasterFilter(ctx, output);
   const reverb = createReverbReturn(ctx, master.input, { defer });
   const delay = createDelayReturn(ctx, master.input);
+  const curve = driveCurve();
   const strips = Array.from({ length: pads }, (_, pad) => {
-    const strip = createStrip(ctx, master.input, { reverb: reverb.input, delay: delay.input });
+    const strip = createStrip(ctx, master.input, { reverb: reverb.input, delay: delay.input }, curve);
     applySettings(strip, settings(pad));
     return strip;
   });
