@@ -10,6 +10,11 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: a Master Filter in the Effects panel, over the whole mix: left of the middle darkens everything (a low-pass), right
+  of it thins it out (a high-pass), and the middle is off. The reverb and the echoes are filtered with the pads. It is kept with
+  the beat and the project file, and is in an export and its stems
+  ([#191](https://github.com/jaballer/audio-lab/pull/191))
+
 - Sampler: every pad can send to one shared reverb and one shared delay. Each pad has a Reverb and a Delay under Mix in the
   pad editor (none to begin with), and a new Effects panel, between the Song panel and the steps, has the reverb's Size and
   Level and the delay's note (it follows the tempo), Feedback, Level and Ping-Pong. They are kept with the beat and the
@@ -27,6 +32,11 @@ Numbers link to the pull request.
 - Sampler: Next stands on its own beside the joined +, Copy and − keys under the display, and the Song panel's Loop starts the row
   under its heading, as Velocity does in the step editor. Velocity has no lamp now: it is pressed in while the bars show, as Loop
   and Next are ([#183](https://github.com/jaballer/audio-lab/pull/183))
+
+### Fixed
+
+- Sampler: a filter's cutoff, such as `LP 1.3 KHZ`, no longer wraps onto a second line beside its slider in the pad editor, which
+  made the row jump in height as the slider crossed the middle ([#191](https://github.com/jaballer/audio-lab/pull/191))
 
 ### Maintenance
 

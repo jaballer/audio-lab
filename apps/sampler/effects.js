@@ -1,6 +1,7 @@
-// The effects every pad shares: a reverb and a delay. A pad sends some of what it plays to each (its Reverb and Delay, in
-// pad-settings.js), and these settings are the effects themselves: how big the room is, how loud it comes back, how far
-// apart the echoes are and how many there are. They belong to the beat, not to a pad or a sequence. No DOM, and plain
+// The effects every pad shares: a reverb and a delay, and a filter over the whole mix. A pad sends some of what it plays to each
+// effect (its Reverb and Delay, in pad-settings.js), and these settings are the effects themselves: how big the room is, how
+// loud it comes back, how far apart the echoes are and how many there are, and how the mix is filtered. They belong to the
+// beat, not to a pad or a sequence. No DOM, and plain
 // numbers, so the same values are what the panel shows, the mixer plays, the beat saves and the export renders.
 //
 //   reverbSize:    0 to 100 on a slider, how long the room rings: from 0.3 to 3 seconds (reverbSeconds)
@@ -9,6 +10,7 @@
 //   delayFeedback: 0 to 90 per cent of each echo that comes round again
 //   delayLevel:    0 to 100, how loud the echoes come back
 //   pingPong:      0 or 1: the echoes alternate between the left and the right
+//   masterFilter:  -100 to +100, a low-pass below 0 and a high-pass above it, 0 off: the same control as a pad's Filter, over the mix
 //
 //   clampEffect("delayFeedback", 120)        // 90
 //   parseEffects(stored)                     // the settings as a full object, or null when they are all the defaults
@@ -16,8 +18,10 @@
 //   effectsTail(effects, 120, { reverb: true, delay: false })   // how long what is sent to the reverb rings on, in seconds
 //   reverbImpulse(40, 44100)                 // [left, right]: the room, the same every time it is made
 //   formatEffect("reverbSize", 40)           // "0.8 S"
+//   formatEffect("masterFilter", -50)        // "LP 1.3 KHZ"
 
 import { exp } from "../../shared/scales.js";
+import { formatSetting } from "./pad-settings.js";
 
 // Which note an echo is apart from the one before, as a share of a beat (a quarter note). The saved beat keeps the position
 // in this list, so a new division goes on the end.
@@ -38,6 +42,8 @@ export const EFFECTS = {
   delayFeedback: { min: 0, max: 90, default: 35, label: "Feedback", lcd: "DELAY FEEDBACK" },
   delayLevel: { min: 0, max: 100, default: 50, label: "Level", lcd: "DELAY LEVEL" },
   pingPong: { min: 0, max: 1, default: 0, label: "Ping-Pong", lcd: "PING-PONG" },
+  // Off in the middle, as a pad's Filter is (see filterSpec in pad-settings.js, which says what the cutoffs are).
+  masterFilter: { min: -100, max: 100, default: 0, label: "Filter", lcd: "MASTER FILTER" },
 };
 
 export const EFFECT_NAMES = Object.keys(EFFECTS);
@@ -168,5 +174,6 @@ export function formatEffect(name, value) {
   if (name === "reverbSize") return `${reverbSeconds(value).toFixed(1)} S`;
   if (name === "delayDivision") return DELAY_DIVISIONS[value].name;
   if (name === "pingPong") return value ? "ON" : "OFF";
+  if (name === "masterFilter") return formatSetting("filter", value);
   return `${value} %`;
 }

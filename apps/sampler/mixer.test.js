@@ -67,9 +67,14 @@ function fakeContext() {
   };
 }
 
-// The nodes of a context, in the order the mixer makes them: the reverb's input and level, the delay's (an input, three gains
-// into the lines, four feedbacks and a level), and then the strips.
+// The nodes of a context, in the order the mixer makes them: the master filter's (an input and the three paths' gains, and the
+// two filters), the reverb's input and level, the delay's (an input, three gains into the lines, four feedbacks and a level),
+// and then the strips.
+const MASTER_GAINS = 4;
+const MASTER_FILTERS = 2;
 const RETURN_GAINS = 2 + 9;
+// The gains made before the first strip's.
+const BEFORE_STRIPS = MASTER_GAINS + RETURN_GAINS;
 
 const GAINS_PER_STRIP = 8;
 const FILTERS_PER_STRIP = 2;
@@ -77,20 +82,33 @@ const FILTERS_PER_STRIP = 2;
 // The nodes of pad `pad`'s strip, in the order the mixer makes them (after those of the delay and the reverb, which come first:
 // the strips' sends lead to them).
 function stripOf(ctx, pad) {
-  const from = RETURN_GAINS + pad * GAINS_PER_STRIP;
+  const from = BEFORE_STRIPS + pad * GAINS_PER_STRIP;
   const [input, dry, lowGain, highGain, left, right, reverbSend, delaySend] = ctx.made.gains.slice(
     from,
     from + GAINS_PER_STRIP,
   );
-  const [lowPass, highPass] = ctx.made.filters.slice(pad * FILTERS_PER_STRIP, (pad + 1) * FILTERS_PER_STRIP);
+  const [lowPass, highPass] = ctx.made.filters.slice(
+    MASTER_FILTERS + pad * FILTERS_PER_STRIP,
+    MASTER_FILTERS + (pad + 1) * FILTERS_PER_STRIP,
+  );
   // The delay made the first splitter and merger.
   const splitter = ctx.made.splitters[1 + pad];
   const merger = ctx.made.mergers[1 + pad];
   return { input, dry, lowGain, highGain, left, right, reverbSend, delaySend, lowPass, highPass, splitter, merger };
 }
 
+// The master filter's nodes, which are the first the mixer makes: everything leads into its input.
+const masterOf = (ctx) => {
+  const [input, dry, lowGain, highGain] = ctx.made.gains.slice(0, MASTER_GAINS);
+  const [lowPass, highPass] = ctx.made.filters.slice(0, MASTER_FILTERS);
+  return { input, dry, lowGain, highGain, lowPass, highPass };
+};
+
 // The reverb's and the delay's inputs, which the strips' sends lead to.
-const returnInputs = (ctx) => ({ reverb: ctx.made.gains[0], delay: ctx.made.gains[2] });
+const returnInputs = (ctx) => ({
+  reverb: ctx.made.gains[MASTER_GAINS],
+  delay: ctx.made.gains[MASTER_GAINS + 2],
+});
 
 // Whether what `from` is connected to, and what that is connected to, and so on, reaches `target`.
 function reaches(from, target, seen = new Set()) {
@@ -112,11 +130,11 @@ describe("createMixer", () => {
     const ctx = fakeContext();
     const output = { id: "output" };
     const mixer = createMixer(ctx, output, { pads: 4 });
-    expect(ctx.made.filters).toHaveLength(4 * FILTERS_PER_STRIP);
-    expect(ctx.made.gains).toHaveLength(RETURN_GAINS + 4 * GAINS_PER_STRIP);
+    expect(ctx.made.filters).toHaveLength(MASTER_FILTERS + 4 * FILTERS_PER_STRIP);
+    expect(ctx.made.gains).toHaveLength(BEFORE_STRIPS + 4 * GAINS_PER_STRIP);
     for (const pad of [0, 1, 2, 3]) {
       expect(reaches(mixer.padInput(pad), output)).toBe(true);
-      expect(stripOf(ctx, pad).merger.connect).toHaveBeenCalledWith(output);
+      expect(stripOf(ctx, pad).merger.connect).toHaveBeenCalledWith(masterOf(ctx).input); // through the master filter
     }
   });
 
@@ -288,6 +306,123 @@ describe("createMixer", () => {
   });
 });
 
+describe("the master filter", () => {
+  function setUp({ masterFilter = 0, pads = 2 } = {}) {
+    const ctx = fakeContext();
+    const output = { id: "output" };
+    const state = { effects: { ...DEFAULT_EFFECTS, masterFilter } };
+    const mixer = createMixer(ctx, output, { pads, effects: () => state.effects, settings: () => ({ reverb: 50 }) });
+    return { ctx, output, mixer, state, master: masterOf(ctx) };
+  }
+  const masterPaths = ({ dry, lowGain, highGain }) => ({
+    dry: dry.gain.value,
+    low: lowGain.gain.value,
+    high: highGain.gain.value,
+  });
+  const glidesTo = (param, value, ctx) =>
+    expect(param.setTargetAtTime).toHaveBeenCalledWith(value, ctx.currentTime, expect.any(Number));
+
+  it("is the last thing before the output: three paths, a dry one, a low-pass and a high-pass, which all lead to it", () => {
+    const { ctx, output, master } = setUp();
+    expect(master.input.connect).toHaveBeenCalledWith(master.dry);
+    expect(master.input.connect).toHaveBeenCalledWith(master.lowPass);
+    expect(master.input.connect).toHaveBeenCalledWith(master.highPass);
+    expect(master.lowPass.connect).toHaveBeenCalledWith(master.lowGain);
+    expect(master.highPass.connect).toHaveBeenCalledWith(master.highGain);
+    for (const path of [master.dry, master.lowGain, master.highGain]) {
+      expect(path.connect).toHaveBeenCalledWith(output);
+    }
+    expect(ctx.made.splitters).toHaveLength(1 + 2); // the delay's and the two strips': the master has no pan
+  });
+
+  it("takes everything: every strip, and the reverb's and the delay's returns, lead into it and not straight to the output", () => {
+    const { ctx, output, master } = setUp({ pads: 3 });
+    for (const pad of [0, 1, 2]) {
+      const { merger } = stripOf(ctx, pad);
+      expect(merger.connect).toHaveBeenCalledWith(master.input);
+      expect(merger.connect).not.toHaveBeenCalledWith(output);
+    }
+    const delayLevel = ctx.made.gains[BEFORE_STRIPS - 1]; // the last gain the delay makes
+    expect(delayLevel.connect).toHaveBeenCalledWith(master.input);
+    expect(delayLevel.connect).not.toHaveBeenCalledWith(output);
+    const reverbLevel = ctx.made.gains[MASTER_GAINS + 1];
+    expect(reverbLevel.connect).toHaveBeenCalledWith(master.input);
+    expect(reverbLevel.connect).not.toHaveBeenCalledWith(output);
+    // Nothing but the master's three paths reaches the output.
+    const toOutput = ctx.made.gains.filter((gain) => gain.connect.mock.calls.some(([node]) => node === output));
+    expect(toOutput).toEqual([master.dry, master.lowGain, master.highGain]);
+  });
+
+  it("makes the two filters what they are for good, waiting at the ends of their ranges, and is the dry path alone at the start", () => {
+    const { master } = setUp();
+    expect(master.lowPass.type).toBe("lowpass");
+    expect(master.highPass.type).toBe("highpass");
+    expect(master.lowPass.typeSets).toBe(1);
+    expect(master.highPass.typeSets).toBe(1);
+    expect(master.lowPass.frequency.value).toBeCloseTo(LOW_PASS_PARKED_HZ, 6);
+    expect(master.highPass.frequency.value).toBeCloseTo(HIGH_PASS_PARKED_HZ, 6);
+    expect(master.lowPass.Q.value).toBeCloseTo(FILTER_Q_DB, 9);
+    expect(masterPaths(master)).toEqual({ dry: 1, low: 0, high: 0 });
+  });
+
+  it("is set from the effects when it is made, at once and not by a glide, for a low-pass and for a high-pass", () => {
+    const low = setUp({ masterFilter: -50 }).master;
+    expect(masterPaths(low)).toEqual({ dry: 0, low: 1, high: 0 });
+    expect(low.lowPass.frequency.value).toBeCloseTo(filterSpec(-50).frequency, 6);
+    expect(low.lowPass.frequency.setTargetAtTime).not.toHaveBeenCalled();
+    const high = setUp({ masterFilter: 40 }).master;
+    expect(masterPaths(high)).toEqual({ dry: 0, low: 0, high: 1 });
+    expect(high.highPass.frequency.value).toBeCloseTo(filterSpec(40).frequency, 6);
+  });
+
+  it("is off when the effects have no setting for it", () => {
+    const ctx = fakeContext();
+    // The effects of a beat saved before the master filter had no entry for it.
+    const without = Object.fromEntries(Object.entries(DEFAULT_EFFECTS).filter(([name]) => name !== "masterFilter"));
+    createMixer(ctx, {}, { pads: 1, effects: () => without });
+    expect(masterPaths(masterOf(ctx))).toEqual({ dry: 1, low: 0, high: 0 });
+  });
+
+  it("follows a change of the effects: a cutoff that moves glides, and one turned on is set at once, from where it waited", () => {
+    const { ctx, mixer, state, master } = setUp({ masterFilter: -20 });
+    state.effects = { ...state.effects, masterFilter: -60 };
+    mixer.updateEffects();
+    glidesTo(master.lowPass.frequency, filterSpec(-60).frequency, ctx);
+    expect(master.lowPass.frequency.setValueAtTime).not.toHaveBeenCalled();
+    state.effects = { ...state.effects, masterFilter: 40 };
+    mixer.updateEffects();
+    expect(master.highPass.frequency.cancelScheduledValues).toHaveBeenCalledWith(ctx.currentTime);
+    expect(master.highPass.frequency.setValueAtTime).toHaveBeenCalledWith(filterSpec(40).frequency, ctx.currentTime);
+    glidesTo(master.lowGain.gain, 0, ctx);
+    glidesTo(master.highGain.gain, 1, ctx);
+    state.effects = { ...state.effects, masterFilter: 0 };
+    mixer.updateEffects();
+    glidesTo(master.dry.gain, 1, ctx);
+    glidesTo(master.highGain.gain, 0, ctx);
+  });
+
+  it("never changes a filter's type or rewires, whatever it is moved to", () => {
+    const { ctx, mixer, state, master } = setUp();
+    const nodes = [...ctx.made.gains.slice(0, MASTER_GAINS), ...ctx.made.filters.slice(0, MASTER_FILTERS)];
+    const before = nodes.map((node) => node.connect.mock.calls.length);
+    for (const masterFilter of [-80, -10, 0, 10, 80, -40, 0]) {
+      state.effects = { ...state.effects, masterFilter };
+      mixer.updateEffects();
+    }
+    expect(master.lowPass.typeSets).toBe(1);
+    expect(master.highPass.typeSets).toBe(1);
+    expect(nodes.map((node) => node.connect.mock.calls.length)).toEqual(before);
+    for (const node of nodes) expect(node.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("is not moved by a change of a pad's settings", () => {
+    const { mixer, master } = setUp({ masterFilter: -30 });
+    mixer.update(0);
+    expect(master.lowPass.frequency.setTargetAtTime).not.toHaveBeenCalled();
+    expect(master.lowGain.gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+});
+
 describe("createLiveMixer", () => {
   function fakeAudio() {
     return { ctx: fakeContext(), master: { id: "master 1" } };
@@ -298,7 +433,7 @@ describe("createLiveMixer", () => {
     const live = createLiveMixer(audio, { pads: 2 });
     expect(audio.ctx.made.filters).toHaveLength(0);
     const input = live.padInput(1);
-    expect(audio.ctx.made.filters).toHaveLength(2 * FILTERS_PER_STRIP);
+    expect(audio.ctx.made.filters).toHaveLength(MASTER_FILTERS + 2 * FILTERS_PER_STRIP);
     expect(reaches(input, audio.master)).toBe(true);
   });
 
@@ -313,7 +448,7 @@ describe("createLiveMixer", () => {
     const audio = fakeAudio();
     const live = createLiveMixer(audio, { pads: 2 });
     expect(live.padInput(0)).toBe(live.padInput(0));
-    expect(audio.ctx.made.filters).toHaveLength(2 * FILTERS_PER_STRIP);
+    expect(audio.ctx.made.filters).toHaveLength(MASTER_FILTERS + 2 * FILTERS_PER_STRIP);
   });
 
   it("builds new strips on the master that replaced the old one (after all sound is cut off), and leaves the old ones alone", () => {
@@ -333,6 +468,22 @@ describe("createLiveMixer", () => {
     expect(live.padInput(0)).toBe(after);
   });
 
+  it("builds the master filter of the new mixer at the setting the effects have then, and leaves the old one as it was", () => {
+    const audio = fakeAudio();
+    const state = { effects: { ...DEFAULT_EFFECTS, masterFilter: 0 } };
+    const live = createLiveMixer(audio, { pads: 1, effects: () => state.effects });
+    live.padInput(0);
+    state.effects = { ...DEFAULT_EFFECTS, masterFilter: 40 }; // moved while the sound was playing, then Kill
+    audio.master = { id: "master 2" };
+    live.padInput(0);
+    const first = 0;
+    const second = BEFORE_STRIPS + GAINS_PER_STRIP; // the gains of the first mixer come before the second's
+    const [, oldDry, , oldHigh] = audio.ctx.made.gains.slice(first, first + MASTER_GAINS);
+    const [, newDry, , newHigh] = audio.ctx.made.gains.slice(second, second + MASTER_GAINS);
+    expect([oldDry.gain.value, oldHigh.gain.value]).toEqual([1, 0]);
+    expect([newDry.gain.value, newHigh.gain.value]).toEqual([0, 1]);
+  });
+
   it("makes new strips with the settings the pads have then, and not the ones they had", () => {
     const audio = fakeAudio();
     const settings = { 0: { filter: 30 } };
@@ -347,7 +498,7 @@ describe("createLiveMixer", () => {
 
   // The strip of the mixer made second (with one pad each): the first mixer's returns and strip, then its own returns.
   function secondMixersStrip(ctx) {
-    const from = 2 * RETURN_GAINS + GAINS_PER_STRIP;
+    const from = 2 * BEFORE_STRIPS + GAINS_PER_STRIP;
     const [, dry, lowGain, highGain] = ctx.made.gains.slice(from, from + GAINS_PER_STRIP);
     return { dry, lowGain, highGain };
   }
@@ -406,8 +557,8 @@ describe("the sends, the reverb and the delay", () => {
     return { ctx, output, mixer, state, timers };
   }
   const delayNodes = (ctx) => {
-    const [, , input, leftToLeft, rightToLeft, rightToRight, leftAround, rightAround, leftAcross, rightAcross, level] =
-      ctx.made.gains;
+    const [input, leftToLeft, rightToLeft, rightToRight, leftAround, rightAround, leftAcross, rightAcross, level] =
+      ctx.made.gains.slice(MASTER_GAINS + 2);
     const [left, right] = ctx.made.delays;
     return {
       input,
@@ -428,12 +579,12 @@ describe("the sends, the reverb and the delay", () => {
 
   describe("a pad's sends", () => {
     it("lead from what is left after the pad's filter and pan, to the reverb and to the delay", () => {
-      const { ctx, output } = setUp({ pads: 1 });
+      const { ctx } = setUp({ pads: 1 });
       const strip = stripOf(ctx, 0);
       const inputs = returnInputs(ctx);
       expect(strip.merger.connect).toHaveBeenCalledWith(strip.reverbSend);
       expect(strip.merger.connect).toHaveBeenCalledWith(strip.delaySend);
-      expect(strip.merger.connect).toHaveBeenCalledWith(output); // the dry sound still goes straight on
+      expect(strip.merger.connect).toHaveBeenCalledWith(masterOf(ctx).input); // the dry sound still goes straight on
       expect(strip.reverbSend.connect).toHaveBeenCalledExactlyOnceWith(inputs.reverb);
       expect(strip.delaySend.connect).toHaveBeenCalledExactlyOnceWith(inputs.delay);
     });
@@ -467,7 +618,7 @@ describe("the sends, the reverb and the delay", () => {
     it("rewire nothing in a strip or the delay, whatever they are set to (the reverb makes its room, which is the only new connection)", () => {
       const { ctx, mixer, state } = setUp();
       // Everything but the reverb's own input and level, which lead to the room once it is made: the nodes as they are now.
-      const nodes = [...ctx.made.gains.slice(2), ...ctx.made.filters, ...ctx.made.delays];
+      const nodes = [...ctx.made.gains.slice(MASTER_GAINS + 2), ...ctx.made.filters, ...ctx.made.delays];
       const before = nodes.map((node) => node.connect.mock.calls.length);
       state.settings[0] = { reverb: 100, delay: 100 };
       mixer.update(0);
@@ -603,7 +754,7 @@ describe("the sends, the reverb and the delay", () => {
         settings: { 0: { reverb: 100 } },
         effects: { ...DEFAULT_EFFECTS, reverbLevel: 70 },
       });
-      const [, level] = ctx.made.gains;
+      const level = ctx.made.gains[MASTER_GAINS + 1];
       expect(level.gain.value).toBeCloseTo(reverbGain(70), 9);
       state.effects = { ...DEFAULT_EFFECTS, reverbLevel: 20 };
       mixer.updateEffects();
@@ -716,7 +867,7 @@ describe("the sends, the reverb and the delay", () => {
     it("is silent from the moment it is connected, so no block of it is heard before the fade begins", () => {
       const { ctx, mixer, state, timers } = setUp({ settings: { 0: { reverb: 50 } }, effects: sized(40) });
       const heardAtConnection = [];
-      const [reverbInput] = ctx.made.gains;
+      const reverbInput = ctx.made.gains[MASTER_GAINS];
       reverbInput.connect.mockImplementation((node) => {
         if (node.buffer !== undefined) heardAtConnection.push(ctx.made.gains.at(-1).gain.value);
       });

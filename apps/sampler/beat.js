@@ -22,7 +22,7 @@ export const BEAT_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A beat newer than
 // this page is ignored, so an old page never misreads a newer beat.
-export const BEAT_VERSION = 13;
+export const BEAT_VERSION = 14;
 
 // { [version]: (beat) => the same beat in the next version's shape }. The version
 // field itself is set by upgradeBeat.
@@ -58,6 +58,9 @@ const MIGRATIONS = {
   // reverb's and the delay's own settings, effects.js). A version 12 entry has none of them, which reads as nothing sent and the effects at their
   // defaults.
   12: (beat) => beat,
+  // Version 14 adds the master filter to `effects` (`masterFilter`). A version 13 beat has none, which reads as off. The version moves so a
+  // page that does not know the filter refuses the beat, instead of opening it and saving it back without the setting.
+  13: (beat) => beat,
 };
 
 const VOLUME_MAX = 100;
@@ -93,7 +96,7 @@ function trimBlankSequences(beat) {
 //
 // `padSettings` is { pad: { gain, pitch, choke, filter, pan, reverb, delay, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
 //
-// `effects` is { reverbSize, reverbLevel, delayDivision, delayFeedback, delayLevel, pingPong }, the reverb and delay the pads send to (effects.js), and is
+// `effects` is { reverbSize, reverbLevel, delayDivision, delayFeedback, delayLevel, pingPong, masterFilter }, the reverb and delay the pads send to and the filter over the mix (effects.js), and is
 // left out while they are all at their defaults, which is how a beat is until a person turns one.
 //
 // `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a beat that has none: a beat

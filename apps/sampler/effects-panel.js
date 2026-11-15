@@ -1,6 +1,6 @@
-// The panel for the reverb and the delay the pads send to, drawn into an element it is handed: sliders for the room's Size and Level,
-// keys for which note the echoes are apart, a Ping-Pong switch, and sliders for the echoes' Feedback and Level. It shows and
-// reports; the sampler decides (setEffect). The ranges and the text come from effects.js.
+// The panel for the reverb and the delay the pads send to, and the filter over the mix, drawn into an element it is handed: sliders
+// for the room's Size and Level, keys for which note the echoes are apart, a Ping-Pong switch, sliders for the echoes' Feedback and
+// Level, and a Filter slider for the whole mix. It shows and reports; the sampler decides (setEffect). The ranges and the text come from effects.js.
 //
 //   const panel = createEffectsPanel(element, { onChange });   // onChange(name, value), for any of the settings in effects.js
 //   panel.refresh({ effects });
@@ -17,6 +17,7 @@ const RESET_KEYS = ["Delete", "Backspace"];
 // The sliders of each group, in the order they are drawn.
 const REVERB_SLIDERS = ["reverbSize", "reverbLevel"];
 const DELAY_SLIDERS = ["delayFeedback", "delayLevel"];
+const MASTER_SLIDERS = ["masterFilter"];
 
 export function createEffectsPanel(element, { onChange }) {
   const sliders = {};
@@ -104,6 +105,10 @@ export function createEffectsPanel(element, { onChange }) {
   keys.append(notes, pingPong);
   delay.section.appendChild(keys);
   for (const name of DELAY_SLIDERS) slider(delay.section, name);
+
+  // Over everything that is heard: the pads, the reverb and the echoes.
+  const master = group("Master");
+  for (const name of MASTER_SLIDERS) slider(master.section, name);
 
   return {
     refresh({ effects }) {

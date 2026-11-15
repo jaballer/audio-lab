@@ -500,7 +500,7 @@ describe("beats saved by version 8", () => {
 
   it("are stamped as the current version", () => {
     expect(upgradeBeat(stored(v8([used, blank]))).version).toBe(BEAT_VERSION);
-    expect(BEAT_VERSION).toBe(13);
+    expect(BEAT_VERSION).toBe(14);
   });
 });
 
@@ -1037,6 +1037,31 @@ describe("beats saved by version 12", () => {
   });
 });
 
+describe("beats saved by version 13", () => {
+  // What a page of version 13 kept: the reverb's and the delay's settings, and no master filter.
+  const effects13 = {
+    reverbSize: 75,
+    reverbLevel: 30,
+    delayDivision: 3,
+    delayFeedback: 35,
+    delayLevel: 50,
+    pingPong: 1,
+  };
+  const v13 = { ...serializeBeat(beat), version: 13, effects: effects13 };
+
+  it("load with the master filter off and the other effects as they were", () => {
+    const loaded = parse(v13);
+    expect(loaded.effects).toEqual({ ...DEFAULT_EFFECTS, ...effects13, masterFilter: 0 });
+  });
+
+  it("are brought up to the current version with the beat otherwise as it was", () => {
+    const upgraded = upgradeBeat(stored(v13));
+    expect(upgraded.version).toBe(BEAT_VERSION);
+    expect(upgraded.effects).toEqual(effects13);
+    expect(upgraded.sequences).toEqual(v13.sequences);
+  });
+});
+
 describe("a beat's effects", () => {
   const room = { ...DEFAULT_EFFECTS, reverbSize: 75, reverbLevel: 30, delayDivision: 3, pingPong: 1 };
 
@@ -1078,8 +1103,24 @@ describe("a beat's effects", () => {
   });
 
   it("do not keep what the page does not know", () => {
-    const loaded = parse({ ...serializeBeat(beat), effects: { ...room, masterFilter: 30, extra: 1 } });
+    const loaded = parse({ ...serializeBeat(beat), effects: { ...room, mysteryKnob: 30, extra: 1 } });
     expect(Object.keys(loaded.effects).sort()).toEqual(Object.keys(DEFAULT_EFFECTS).sort());
+  });
+
+  it("keep the master filter alone, and read a beat saved before it as having it off", () => {
+    const filtered = { ...DEFAULT_EFFECTS, masterFilter: -45 };
+    const saved = serializeBeat({ ...beat, effects: filtered });
+    expect(saved.effects).toEqual(filtered); // the one that is not the default is enough to keep them
+    expect(parse(saved).effects).toEqual(filtered);
+    const before = {
+      reverbSize: 75,
+      reverbLevel: 30,
+      delayDivision: 3,
+      delayFeedback: 35,
+      delayLevel: 50,
+      pingPong: 1,
+    };
+    expect(parse({ ...serializeBeat(beat), effects: before }).effects.masterFilter).toBe(0);
   });
 
   it("keep a pad's sends through saving and loading", () => {
