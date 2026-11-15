@@ -353,15 +353,23 @@ A knob on a controller can move the Master Filter ([#194](https://github.com/jab
 - **Taught, not built in.** A knob's controller number is a fact about the hardware that the page does not know, and a profile
   that said "K1 is the filter" would work only for the controllers the project has a profile for, and could not move when K1
   already means something else. So the person assigns it. Profiles stay the place for hardware facts (pad notes, LED colours); an
-  assignment is the person's setup, so it is not a profile's.
+  assignment is the person's setup, so it is not a profile's. The numbers a person teaches are data (`midi-map.js` keeps them and
+  `main.js` never names one), which is how the rule that controller numbers do not appear in a handler is kept.
 - **A generic `cc` event.** The Akai profile and the generic one pass a Control Change on as `{ type: "cc", channel, controller,
 value }`, and `midi.js` hands it to the page, where `createMidiMapping` either learns it or, when it is assigned, moves the
   setting through `setEffect` (the one setter the slider uses, so the display, the audio and the saved beat follow). The Launchpad
   profile passes none on: all its controllers are buttons (CC 104 to 111), and keeping them out is what stops Learn taking a button.
+  A Launchpad this page has no layout for (a Pro, an X, an MK3) would fall to the generic profile and send its buttons as knobs, so it
+  has a profile of its own, `otherLaunchpad`: the generic notes and no `cc` (any port with "Launchpad" in its name that the first
+  profile does not take).
 - **Kept on its own.** The assignment (`pad-sampler:midi-map`, by `shared/storage.js`) is not part of the beat or a `.audiolab`
   file: it says which knob of which controller, not what the music is, and a project opened on another computer should not bring a
-  stranger's controller numbers with it. The channel is part of it (a knob on channel 1 is not the same knob on channel 2). A stored
-  map is read back through `parseMidiMap`, which drops anything that is not a known target and an assignable controller, and never throws.
+  stranger's controller numbers with it. The channel is part of it (a knob on channel 1 is not the same knob on channel 2), and so is the input it
+  came from, by the name the browser gives its port (the same name a profile matches): two controllers can send the same numbers, and
+  teaching a knob on one must not let the other move the filter, nor satisfy Learn first. The name is what the browser reports, so
+  a port that it names differently another day (Windows puts a number in front of it, ALSA behind it) is a knob to teach again, and
+  two controllers of one model with the same name are not told apart. A stored map is read back through `parseMidiMap`, which drops
+  anything that is not a known target, an assignable controller and an input name, and never throws.
 - **Learn takes the first knob turned that can be one.** Not after a number of moves: what a person does not mean to assign is
   a handful of controllers that are not knobs, and these are left out by number (`isAssignableCc`): 64, the sustain pedal, which
   a footswitch sends on every press; 0 and 32, Bank Select; and 120 to 127, the channel mode messages (all sound off and the like)
@@ -371,7 +379,8 @@ value }`, and `midi.js` hands it to the page, where `createMidiMapping` either l
   waiting would take a knob nobody knew was being waited for: a mod wheel moved after reconnecting would have replaced the
   assignment). One controller is one setting's: assigning it to a second target
   takes it from the first (there is one target so far).
-- **The middle of the knob is the filter off, in a detent.** A knob has 128 positions and no middle one (63.5), so off at only one
+- **The middle of the knob is the filter off, in a detent.** The curve is `detented` in `shared/scales.js`, where a slider-to-value
+  mapping belongs (it is not specific to MIDI). A knob has 128 positions and no middle one (63.5), so off at only one
   position would mean the filter is on, a little, nearly always. Positions within `DETENT` (6 per cent of half the travel, the
   eight positions 60 to 67) all give off, and the rest of the travel is spread over what is left, so the setting is continuous at
   the edge of the detent (the first step past it is 1) and still reaches -100 and +100 at the ends. The width is a judgement by hand,

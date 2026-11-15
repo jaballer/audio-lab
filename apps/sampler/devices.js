@@ -155,5 +155,14 @@ export const generic = {
   },
 };
 
+// A Launchpad that this page has no layout for (a Pro, an X, an MK3, a model that comes later): it plays pads from the same notes as any other
+// controller, but passes on no Control Change. Its round buttons send them, and a button is not a knob, so Learn must not be able to
+// take one. (The original-layout ones are the `launchpad` profile above, which matches first.)
+export const otherLaunchpad = {
+  id: "other-launchpad",
+  match: (name) => /launchpad/i.test(name),
+  translate: (msg) => generic.translate(msg).filter((event) => event.type !== "cc"),
+};
+
 // Most specific first; `generic` matches anything, so it goes last.
-export const PROFILES = [launchpad, mpcSample, generic];
+export const PROFILES = [launchpad, mpcSample, otherLaunchpad, generic];

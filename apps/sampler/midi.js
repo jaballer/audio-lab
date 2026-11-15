@@ -45,9 +45,10 @@ export function createMidi(api) {
     control(event) {
       controls[event.name]();
     },
-    // A knob: what it is for (a setting it was assigned to, or Learn waiting for one) is the app's to say.
-    cc(event) {
-      api.controlChange(event);
+    // A knob: what it is for (a setting it was assigned to, or Learn waiting for one) is the app's to say. It is told which input the
+    // message came from, since two controllers can send the same numbers.
+    cc(event, input) {
+      api.controlChange({ ...event, input: input.name });
     },
   };
 

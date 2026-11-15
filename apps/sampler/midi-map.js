@@ -1,28 +1,31 @@
 // Which MIDI knob controls which setting, as the person assigned it (#194). A controller's knobs send Control Changes (a channel, a
 // controller number and a value from 0 to 127), and which number a knob sends is a fact about the hardware that this page does
-// not know, so the person teaches it: press Learn beside a setting, turn a knob, and that channel and controller number are the
-// setting's from then on. The assignment is the person's controller setup and not part of the music, so it is kept on its own
+// not know, so the person teaches it: press Learn beside a setting, turn a knob, and that channel and controller number, on that
+// controller's input, are the setting's from then on (two controllers that send the same number are not the same knob). The assignment is the person's controller setup and not part of the music, so it is kept on its own
 // (the page saves it with shared/storage.js) and not in the beat or a project file. No DOM, and plain data and functions, so the
 // same code is what the page runs and what the tests run.
 //
 //   const mapping = createMidiMapping({ load, save, setEffect, getEffect, onChange, onMessage });
 //   mapping.toggleLearn("masterFilter");       // the next knob turned is the Master Filter's (again: stop waiting)
-//   mapping.handleCc({ channel: 0, controller: 21, value: 64 });
+//   mapping.handleCc({ channel: 0, controller: 21, value: 64, input: "MPK mini 3" });   // `input`: the port it came from
 //   mapping.getState();                        // { learning: null, assigned: { masterFilter: "CH 1 CC 21" } }
 //   mapping.clear("masterFilter");
 //
 // Only the Master Filter is a target so far. A target is an entry of TARGETS, so another effect later is a line there.
 
+import { detented } from "../../shared/scales.js";
 import { clampEffect } from "./effects.js";
 
 // A Control Change value is 0 to 127.
 export const CC_MAX = 127;
 
 // The knob's middle is the filter off. A knob has 128 positions and no middle one (63.5), so a filter that was off only when a
-// knob sat on exactly one position would be on, a little, nearly always. The middle of the travel is therefore a detent: positions
-// within DETENT per cent of the middle (a per cent of half the travel) all give off, and the rest of the travel is spread over what
-// is left, so the setting is continuous at the edge of the detent and still reaches -100 and +100 at the ends.
+// knob sat on exactly one position would be on, a little, nearly always. The middle of the travel is therefore a detent
+// (`detented` in shared/scales.js): positions within DETENT per cent of the middle (a per cent of half the travel) all give off, and
+// the rest of the travel is spread over what is left, so the setting is continuous at the edge of the detent and still reaches
+// -100 and +100 at the ends.
 export const DETENT = 6;
+const FILTER_KNOB = detented(-100, 100, DETENT);
 
 // The settings a knob can be assigned to: which effect (effects.js) it sets and how a value from 0 to 127 becomes that effect's setting.
 export const TARGETS = Object.freeze({
@@ -30,11 +33,8 @@ export const TARGETS = Object.freeze({
     effect: "masterFilter",
     label: "Master Filter",
     lcd: "MASTER FILTER",
-    toSetting: (value) => {
-      const raw = ((value - CC_MAX / 2) / (CC_MAX / 2)) * 100; // -100 at 0, +100 at 127
-      if (Math.abs(raw) <= DETENT) return 0;
-      return Math.sign(raw) * Math.round(((Math.abs(raw) - DETENT) / (100 - DETENT)) * 100);
-    },
+    // The knob's 0 to 127 as a position along the travel, 0 to 100.
+    toSetting: (value) => Math.round(FILTER_KNOB.toValue((value / CC_MAX) * 100)),
   }),
 });
 
@@ -55,42 +55,51 @@ export const isAssignableCc = (channel, controller) =>
   controller <= CC_MAX &&
   !NOT_KNOBS.has(controller);
 
+// The port a Control Change came from, by the name the browser gives it (the same name a device profile matches): a controller is
+// not another controller that happens to send the same numbers. A name is a non-empty string of a sane length.
+const MAX_INPUT_NAME = 200;
+export const isInputName = (input) => typeof input === "string" && input !== "" && input.length <= MAX_INPUT_NAME;
+
 // What to show for an assignment: channels are counted from 1 as a controller's own display counts them, `channel` here from 0.
 export const formatAssignment = ({ channel, controller }) => `CH ${channel + 1} CC ${controller}`;
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// What was stored, as a map of target name to { channel, controller }: anything that is not a known target or not an assignable
-// controller is left out, and two targets with the same controller are not both kept (the first one is). Never throws.
+// What was stored, as a map of target name to { channel, controller, input }: anything that is not a known target, not an assignable
+// controller or has no input name is left out, and two targets with the same controller on the same input are not both kept (the
+// first one is). Never throws.
 export function parseMidiMap(stored) {
   const map = {};
   if (!isObject(stored)) return map;
   const taken = new Set();
   for (const name of TARGET_NAMES) {
     const entry = stored[name];
-    if (!isObject(entry) || !isAssignableCc(entry.channel, entry.controller)) continue;
-    const key = `${entry.channel}:${entry.controller}`;
+    if (!isObject(entry) || !isAssignableCc(entry.channel, entry.controller) || !isInputName(entry.input)) continue;
+    const key = JSON.stringify([entry.input, entry.channel, entry.controller]);
     if (taken.has(key)) continue;
     taken.add(key);
-    map[name] = { channel: entry.channel, controller: entry.controller };
+    map[name] = { channel: entry.channel, controller: entry.controller, input: entry.input };
   }
   return map;
 }
 
-// The target a Control Change is assigned to, if any.
-export const targetForCc = (map, channel, controller) =>
-  TARGET_NAMES.find((name) => map[name]?.channel === channel && map[name]?.controller === controller) ?? null;
+const sameKnob = (entry, channel, controller, input) =>
+  entry?.channel === channel && entry?.controller === controller && entry?.input === input;
 
-// A new map with the controller assigned to the target. A controller is one target's, so it is taken from any other that had it.
-export function assignCc(map, name, channel, controller) {
+// The target a Control Change, from an input, is assigned to, if any.
+export const targetForCc = (map, channel, controller, input) =>
+  TARGET_NAMES.find((name) => sameKnob(map[name], channel, controller, input)) ?? null;
+
+// A new map with the knob assigned to the target. A knob is one target's, so it is taken from any other that had it.
+export function assignCc(map, name, channel, controller, input) {
   const next = {};
   for (const other of TARGET_NAMES) {
     const entry = map[other];
     if (!entry) continue;
-    if (other !== name && entry.channel === channel && entry.controller === controller) continue;
+    if (other !== name && sameKnob(entry, channel, controller, input)) continue;
     next[other] = entry;
   }
-  next[name] = { channel, controller };
+  next[name] = { channel, controller, input };
   return next;
 }
 
@@ -148,7 +157,8 @@ export function createMidiMapping({ load, save, setEffect, getEffect, onChange =
     },
     // A Control Change from a controller (the `cc` event, midi.js). While Learn waits it is the assignment, when it can be one;
     // otherwise, when it is assigned, it moves the setting.
-    handleCc({ channel, controller, value }) {
+    handleCc({ channel, controller, value, input }) {
+      if (!isInputName(input)) return; // not from a port: nothing to tell one controller from another by
       if (learning !== null) {
         if (!isAssignableCc(channel, controller)) {
           // A pedal or a channel message is not a knob, and Learn goes on waiting: the display says why nothing happened.
@@ -157,11 +167,11 @@ export function createMidiMapping({ load, save, setEffect, getEffect, onChange =
         }
         const name = learning;
         learning = null;
-        const kept = persist(assignCc(map, name, channel, controller));
+        const kept = persist(assignCc(map, name, channel, controller, input));
         onMessage(`${TARGETS[name].lcd} ${formatAssignment({ channel, controller })}${kept ? "" : " (NOT SAVED)"}`);
         return;
       }
-      const name = targetForCc(map, channel, controller);
+      const name = targetForCc(map, channel, controller, input);
       if (name === null) return;
       const { effect, toSetting } = TARGETS[name];
       const setting = clampEffect(effect, toSetting(value));

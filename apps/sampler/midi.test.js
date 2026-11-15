@@ -176,7 +176,38 @@ describe("input from any other controller", () => {
     const { api } = await setup({ inputs: [keys] });
     keys.onmidimessage({ data: [CC | 2, 21, 99] });
     expect(api.controlChange).toHaveBeenCalledTimes(1);
-    expect(api.controlChange).toHaveBeenCalledWith({ type: "cc", channel: 2, controller: 21, value: 99 });
+    expect(api.controlChange).toHaveBeenCalledWith({
+      type: "cc",
+      channel: 2,
+      controller: 21,
+      value: 99,
+      input: "MPK mini",
+    });
+  });
+
+  it("says which input a Control Change came from, so two controllers that send the same numbers can be told apart", async () => {
+    const first = input("MPK mini");
+    const second = input("Oxygen 49");
+    const { api } = await setup({ inputs: [first, second] });
+    first.onmidimessage({ data: [CC, 21, 10] });
+    second.onmidimessage({ data: [CC, 21, 20] });
+    expect(api.controlChange).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ controller: 21, value: 10, input: "MPK mini" }),
+    );
+    expect(api.controlChange).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ controller: 21, value: 20, input: "Oxygen 49" }),
+    );
+  });
+
+  it("does not hand the app the buttons of a Launchpad this page has no layout for as a knob", async () => {
+    const pro = input("Launchpad Pro MK3");
+    const { api } = await setup({ inputs: [pro] });
+    for (const controller of [21, 74, 91, 98]) pro.onmidimessage({ data: [CC, controller, 127] });
+    expect(api.controlChange).not.toHaveBeenCalled();
+    pro.onmidimessage({ data: [NOTE_ON, 36 + 3, 100] }); // its notes still play pads
+    expect(api.triggerPad).toHaveBeenCalledWith(3, 100 / 127);
   });
 
   it("does not hand the app a Launchpad's buttons or anything else of its controllers as a knob", async () => {

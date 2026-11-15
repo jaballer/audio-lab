@@ -11,7 +11,7 @@ Numbers link to the pull request.
 ### Added
 
 - Sampler: a MIDI knob can move the Master Filter. With MIDI on, press MIDI Learn under Master in the Effects panel and turn a
-  knob on your controller (any controller but a Launchpad): that knob is the filter from then on, and Clear takes it back. The middle
+  knob on your controller (any controller but a Launchpad): that knob, on that controller, is the filter from then on, and Clear takes it back. The middle
   of the knob is the filter off, with a little room either side, and a turn moves the slider and the display. The knob is
   remembered in this browser for the controller, not in the beat or a project file
   ([#195](https://github.com/jaballer/audio-lab/pull/195))

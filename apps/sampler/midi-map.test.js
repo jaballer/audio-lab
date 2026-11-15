@@ -8,12 +8,15 @@ import {
   createMidiMapping,
   formatAssignment,
   isAssignableCc,
+  isInputName,
   parseMidiMap,
   targetForCc,
 } from "./midi-map.js";
 import { EFFECTS } from "./effects.js";
 
 const toSetting = TARGETS.masterFilter.toSetting;
+// The port the knobs of these tests are on.
+const IN = "MPK mini";
 
 describe("the Master Filter's knob", () => {
   it("reaches both ends of the filter", () => {
@@ -80,6 +83,14 @@ describe("isAssignableCc", () => {
   });
 });
 
+describe("isInputName", () => {
+  it("takes a port name and nothing else", () => {
+    expect(isInputName("MPK mini 3")).toBe(true);
+    expect(isInputName("x".repeat(200))).toBe(true);
+    for (const input of ["", "x".repeat(201), 3, null, undefined, {}]) expect(isInputName(input)).toBe(false);
+  });
+});
+
 describe("formatAssignment", () => {
   it("counts channels from 1, as a controller does", () => {
     expect(formatAssignment({ channel: 0, controller: 21 })).toBe("CH 1 CC 21");
@@ -89,7 +100,7 @@ describe("formatAssignment", () => {
 
 describe("parseMidiMap", () => {
   it("reads a map as it was saved", () => {
-    const stored = { masterFilter: { channel: 0, controller: 21 } };
+    const stored = { masterFilter: { channel: 0, controller: 21, input: IN } };
     expect(parseMidiMap(stored)).toEqual(stored);
   });
 
@@ -105,35 +116,49 @@ describe("parseMidiMap", () => {
     expect(parseMidiMap({ cutoff: { channel: 0, controller: 21 } })).toEqual({});
   });
 
+  it("leaves out an entry with no input name, or one that is not a usable name", () => {
+    expect(parseMidiMap({ masterFilter: { channel: 0, controller: 21 } })).toEqual({});
+    for (const input of ["", 5, null, undefined, {}, ["MPK mini"], "x".repeat(201)]) {
+      expect(parseMidiMap({ masterFilter: { channel: 0, controller: 21, input } })).toEqual({});
+    }
+  });
+
   it("does not keep what it was not given, nor a copy that shares the stored object", () => {
-    const stored = { masterFilter: { channel: 2, controller: 30, extra: "x" } };
+    const stored = { masterFilter: { channel: 2, controller: 30, input: IN, extra: "x" } };
     const map = parseMidiMap(stored);
-    expect(map).toEqual({ masterFilter: { channel: 2, controller: 30 } });
+    expect(map).toEqual({ masterFilter: { channel: 2, controller: 30, input: IN } });
     expect(map.masterFilter).not.toBe(stored.masterFilter);
   });
 });
 
 describe("assigning and clearing", () => {
-  const map = { masterFilter: { channel: 0, controller: 21 } };
+  const map = { masterFilter: { channel: 0, controller: 21, input: IN } };
 
   it("finds the target a controller on a channel is assigned to", () => {
-    expect(targetForCc(map, 0, 21)).toBe("masterFilter");
+    expect(targetForCc(map, 0, 21, IN)).toBe("masterFilter");
   });
 
   it("does not find it on another channel, or for another controller, or in an empty map", () => {
-    expect(targetForCc(map, 1, 21)).toBeNull();
-    expect(targetForCc(map, 0, 22)).toBeNull();
-    expect(targetForCc({}, 0, 21)).toBeNull();
+    expect(targetForCc(map, 1, 21, IN)).toBeNull();
+    expect(targetForCc(map, 0, 22, IN)).toBeNull();
+    expect(targetForCc({}, 0, 21, IN)).toBeNull();
+  });
+
+  it("does not find it for the same controller on another input: that is not the same knob", () => {
+    expect(targetForCc(map, 0, 21, "Oxygen 49")).toBeNull();
+    expect(targetForCc(map, 0, 21, undefined)).toBeNull();
   });
 
   it("assigns a new map and leaves the old one as it was", () => {
-    const next = assignCc({}, "masterFilter", 3, 74);
-    expect(next).toEqual({ masterFilter: { channel: 3, controller: 74 } });
-    expect(map).toEqual({ masterFilter: { channel: 0, controller: 21 } });
+    const next = assignCc({}, "masterFilter", 3, 74, IN);
+    expect(next).toEqual({ masterFilter: { channel: 3, controller: 74, input: IN } });
+    expect(map).toEqual({ masterFilter: { channel: 0, controller: 21, input: IN } });
   });
 
   it("replaces a target's earlier controller", () => {
-    expect(assignCc(map, "masterFilter", 0, 22)).toEqual({ masterFilter: { channel: 0, controller: 22 } });
+    expect(assignCc(map, "masterFilter", 0, 22, IN)).toEqual({
+      masterFilter: { channel: 0, controller: 22, input: IN },
+    });
   });
 
   it("clears a target into a new map, and clearing one that is not assigned changes nothing", () => {
@@ -165,7 +190,7 @@ function setup({ stored = null, effect = 0, saveResult = true } = {}) {
   return { mapping, ...calls };
 }
 
-const cc = (controller, value, channel = 0) => ({ channel, controller, value });
+const cc = (controller, value, channel = 0, input = IN) => ({ channel, controller, value, input });
 
 describe("a mapping that nothing is assigned in", () => {
   it("has nothing assigned and is not learning", () => {
@@ -194,7 +219,7 @@ describe("learning", () => {
     mapping.startLearn("masterFilter");
     mapping.handleCc(cc(21, 90, 2));
     expect(mapping.getState()).toEqual({ learning: null, assigned: { masterFilter: "CH 3 CC 21" } });
-    expect(save).toHaveBeenCalledWith({ masterFilter: { channel: 2, controller: 21 } });
+    expect(save).toHaveBeenCalledWith({ masterFilter: { channel: 2, controller: 21, input: IN } });
     expect(onMessage).toHaveBeenLastCalledWith("MASTER FILTER CH 3 CC 21");
   });
 
@@ -242,10 +267,10 @@ describe("learning", () => {
   });
 
   it("replaces a knob already assigned to the target", () => {
-    const { mapping, save } = setup({ stored: { masterFilter: { channel: 0, controller: 21 } } });
+    const { mapping, save } = setup({ stored: { masterFilter: { channel: 0, controller: 21, input: IN } } });
     mapping.startLearn("masterFilter");
     mapping.handleCc(cc(22, 0));
-    expect(save).toHaveBeenLastCalledWith({ masterFilter: { channel: 0, controller: 22 } });
+    expect(save).toHaveBeenLastCalledWith({ masterFilter: { channel: 0, controller: 22, input: IN } });
     mapping.handleCc(cc(21, 127));
     expect(mapping.getState().assigned.masterFilter).toBe("CH 1 CC 22");
   });
@@ -272,7 +297,7 @@ describe("the Learn key", () => {
 
 describe("a Learn that has to stop", () => {
   it("is ended by Clear, which also takes the assigned knob", () => {
-    const { mapping, save, setEffect } = setup({ stored: { masterFilter: { channel: 0, controller: 21 } } });
+    const { mapping, save, setEffect } = setup({ stored: { masterFilter: { channel: 0, controller: 21, input: IN } } });
     mapping.toggleLearn("masterFilter");
     mapping.clear("masterFilter");
     expect(mapping.getState()).toEqual({ learning: null, assigned: { masterFilter: null } });
@@ -305,7 +330,7 @@ describe("storage that does not keep the map", () => {
 
   it("says so when a clear could not be saved", () => {
     const { mapping, onMessage } = setup({
-      stored: { masterFilter: { channel: 0, controller: 21 } },
+      stored: { masterFilter: { channel: 0, controller: 21, input: IN } },
       saveResult: false,
     });
     mapping.clear("masterFilter");
@@ -327,8 +352,50 @@ describe("storage that does not keep the map", () => {
   });
 });
 
+describe("two controllers that send the same numbers", () => {
+  const stored = { masterFilter: { channel: 0, controller: 21, input: IN } };
+
+  it("do not move the filter from the controller it was not taught on", () => {
+    const { mapping, setEffect } = setup({ stored });
+    mapping.handleCc(cc(21, 127, 0, "Oxygen 49"));
+    expect(setEffect).not.toHaveBeenCalled();
+    mapping.handleCc(cc(21, 127, 0, IN));
+    expect(setEffect).toHaveBeenCalledWith("masterFilter", 100);
+  });
+
+  it("teach the knob of the controller that was turned, and then only that one moves the filter", () => {
+    const { mapping, save, setEffect } = setup();
+    mapping.toggleLearn("masterFilter");
+    mapping.handleCc(cc(21, 5, 0, "Oxygen 49"));
+    expect(save).toHaveBeenCalledWith({ masterFilter: { channel: 0, controller: 21, input: "Oxygen 49" } });
+    mapping.handleCc(cc(21, 127, 0, IN));
+    expect(setEffect).not.toHaveBeenCalled();
+    mapping.handleCc(cc(21, 127, 0, "Oxygen 49"));
+    expect(setEffect).toHaveBeenCalledWith("masterFilter", 100);
+  });
+
+  it("move to the new controller when it is taught again on another one", () => {
+    const { mapping, save } = setup({ stored });
+    mapping.toggleLearn("masterFilter");
+    mapping.handleCc(cc(21, 5, 0, "Oxygen 49"));
+    expect(save).toHaveBeenLastCalledWith({ masterFilter: { channel: 0, controller: 21, input: "Oxygen 49" } });
+  });
+
+  it("are not told apart when a message comes with no input name, and nothing is learned or moved by it", () => {
+    const { mapping, save, setEffect, onMessage } = setup({ stored });
+    mapping.handleCc({ channel: 0, controller: 21, value: 127 });
+    expect(setEffect).not.toHaveBeenCalled();
+    mapping.toggleLearn("masterFilter");
+    onMessage.mockClear();
+    mapping.handleCc({ channel: 0, controller: 22, value: 50 });
+    expect(save).not.toHaveBeenCalled();
+    expect(mapping.getState().learning).toBe("masterFilter");
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+});
+
 describe("an assigned knob", () => {
-  const stored = { masterFilter: { channel: 0, controller: 21 } };
+  const stored = { masterFilter: { channel: 0, controller: 21, input: IN } };
 
   it("is read from what was stored", () => {
     expect(setup({ stored }).mapping.getState().assigned.masterFilter).toBe("CH 1 CC 21");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { selectProfile } from "../../shared/midi-devices.js";
 import { parseMidi } from "../../shared/midi-messages.js";
-import { CONTROLS, PROFILES, generic, launchpad, mpcSample } from "./devices.js";
+import { CONTROLS, PROFILES, generic, launchpad, mpcSample, otherLaunchpad } from "./devices.js";
 
 const noteOn = (note, velocity = 100, channel = 0) => parseMidi([0x90 | channel, note, velocity]);
 const cc = (controller, value = 127) => parseMidi([0xb0, controller, value]);
@@ -50,7 +50,7 @@ describe("profile selection", () => {
       "Launchpad Mini 9 RGB",
       "Launchpad Open",
     ]) {
-      expect(selectProfile(PROFILES, name)).toBe(generic);
+      expect(selectProfile(PROFILES, name)).toBe(otherLaunchpad);
       expect(launchpad.match(name)).toBe(false);
     }
   });
@@ -187,6 +187,27 @@ describe("launchpad.translate and knobs", () => {
     for (let controller = 0; controller < 128; controller++) {
       for (const event of launchpad.translate(cc(controller))) expect(event.type).not.toBe("cc");
     }
+  });
+});
+
+describe("otherLaunchpad.translate", () => {
+  it("plays pads from notes 36-51 as any other controller does", () => {
+    expect(otherLaunchpad.translate(noteOn(36, 64))).toEqual(generic.translate(noteOn(36, 64)));
+    expect(otherLaunchpad.translate(noteOn(51, 127))).toEqual([{ type: "pad", index: 15, velocity: 127 }]);
+  });
+
+  it("passes no Control Change on, whatever the controller number: its buttons are not knobs", () => {
+    for (let controller = 0; controller < 128; controller++)
+      expect(otherLaunchpad.translate(cc(controller))).toEqual([]);
+  });
+
+  it("leaves a Launchpad that is not a Launchpad to the generic profile", () => {
+    expect(selectProfile(PROFILES, "MPK mini")).toBe(generic);
+    expect(otherLaunchpad.match("MPK mini")).toBe(false);
+  });
+
+  it("has no lights", () => {
+    expect(otherLaunchpad.lights).toBeUndefined();
   });
 });
 
