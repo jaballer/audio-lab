@@ -229,14 +229,22 @@ Each pad has a Drive, first under Mix in the pad editor (#187, phase 5), in fron
   `g` = 10 and 17 dB up at 40), and dividing by `g` all the way would make it much quieter, since a loud hit saturates. Through the real strip, on six of the
   built-in sounds, 1 / sqrt(g) keeps the loudness between -5 and +7 dB of where it was across the whole slider (most within 3 dB;
   the sparse, noisy sounds such as the clap are the loudest and the kick is the quietest at the top). Peaks come down, as they do when a sound is squashed
-  (a kick that peaks at 0.97 peaks at 0.16 at full drive). Whether it sounds right can only be judged by ear.
+  (a kick that peaks at 0.97 peaks at 0.16 at full drive). The make-up is for sounds as loud as the built-in ones: the small-signal gain is
+  sqrt(g), up to +16 dB at full drive, so a very quiet sample, a low velocity or a tail is lifted against the loud hits, which is a compressor's
+  doing as much as a drive's. Whether it sounds right can only be judged by ear.
 - **Off is the dry path alone, and turning it on is a crossfade.** A strip has the dry sound and the shaped path side by side;
   at 0 the dry gain is 1 and the shaped path's post-gain is 0, so the sound goes on exactly as it is (measured: a difference of 0
-  from no mixer at all). Turned on, the shaped path fades in as the dry fades out over a few milliseconds (a time constant of 15 ms),
+  from no mixer at all, for a strip that is built at 0; one turned off while the page is playing gets there by the same 15 ms fades,
+  which leave a residual of about 4e-5 of the shaped path after 150 ms and 1e-7 after a quarter of a second: inaudible, but not exact). Turned on, the shaped path fades in as the dry fades out over a few milliseconds (a time constant of 15 ms),
   with its pre-gain set at once while it is still silent: gliding the pre-gain from where it waited would sweep the shaper through every amount on the
   way. Moving the slider while it is on glides both gains. Measured with a steady tone: every move, including on and off, is within 1.14 times the roughness of the
-  tone at either end (a click would be tens of times); the shaped path at the bottom of the range is within a hair of the dry one,
-  so crossing 0 does not jump in level.
+  tone at either end (a click would be tens of times). The shaped path at the bottom of the range is a gentle bend and not the dry sound: a quiet sound
+  is the same to within a hair, but a full-scale peak comes out 2.3 dB lower at the first step of the slider (0.5 of full scale, 0.5 dB), so crossing 0
+  trims the loudest peaks a little.
+- **Known limit: dragged to 0 and straight back.** Turned off and on again before the shaped path has finished fading out (about a tenth of a second), the pre-gain is set at
+  once while that path is still partly up, which steps what is left of it: at most about 0.02 (-34 dB of full scale) on a loud, sustained sound at full drive, and the later the less. Gliding the
+  pre-gain instead was tried and measured: it sweeps the shaper through every amount in between, and was 3 to 15 times rougher with the corners of a clipped tone than the step, so it was
+  not kept.
 - **Not oversampled, on purpose.** A soft clip folds its harmonics back as aliasing unless the sound is taken to a higher rate
   and back: measured in Chromium, a 5 kHz sine at full drive has its fold-backs at -14 dB against the tone with none, and below
   -120 dB at 2x. But the oversampling filters delay the shaper's output (measured: 2.9 ms at 2x and 4.4 ms at 4x), which puts a driven pad late against the

@@ -31,7 +31,7 @@
 // The Drive setting crosses a dry path (which is all of it when the drive is off, so the sound goes on exactly as it is) to a
 // shaped one: the pre-gain pushes the sound into a soft clip, the same curve for every strip and every drive (tanh, see
 // driveCurve in pad-settings.js), and the post-gain brings it down again by the root of what it was pushed up by, so a driven pad is
-// about as loud as it was. It is the pre-gain that moves along the curve. The shaper is not oversampled: that would keep the
+// about as loud as it was (for sounds as loud as the built-in ones). It is the pre-gain that moves along the curve. The shaper is not oversampled: that would keep the
 // clip's aliasing out, but delays the pad by milliseconds (see DRIVE_OVERSAMPLE).
 //
 // and the output of every strip and of both returns is the master filter, the same three paths without the pan:
