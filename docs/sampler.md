@@ -256,7 +256,7 @@ between the Song panel and the steps: the reverb's **Size** and **Level**, the d
   and the effects are one optional `effects` object on the beat: `{ reverbSize, reverbLevel, delayDivision, delayFeedback,
 delayLevel, pingPong, masterFilter }` (the last came with phase 4, below), whole numbers (`delayDivision` is the place in `DELAY_DIVISIONS`, so a new note goes on the end), left out
   while they are all at their defaults and read back through `parseEffects` like `swing`. Beat version 13 with a no-op migration:
-  a version 12 beat has no sends and no effects, which reads as dry. A starter has no effects of its own: the effects go back to
+  a version 12 beat has no sends and no effects, which reads as dry (phase 4 moved it to 14). A starter has no effects of its own: the effects go back to
   the defaults, and its built-in pads send nothing, so it starts dry; a pad with a loaded sample keeps the sends it was given, as it
   keeps its other settings, and so sends to the default effects. Not part of the step undo history, like the pad settings.
 - **On the LCD** as `PAD 03 REVERB 40 %` and `PAD 03 DELAY 25 %`, and for the panel `REVERB SIZE 0.8 S`, `REVERB LEVEL 50 %`,
@@ -283,8 +283,10 @@ and it is one of the beat's effects: `masterFilter` in the `effects` object, who
   the dry path alone, so the mix goes through unchanged (measured: the difference from no mixer at all is 0). Moving it under a
   steady tone is no rougher than the tone itself (0.9 to 1.15 times the second difference of a clean sine, in every direction across the middle; a click would be far more). Two
   more filters run on the master for as long as the page is playing, which is nothing next to the sixteen strips'.
-- **Saved with the beat.** One more entry in `effects`, with no change of version: `parseEffects` fills a missing entry with the
-  default, so a beat saved before it reads as off, and one that has only a master filter is kept like any other that is not at
+- **Saved with the beat.** One more entry in `effects`. Beat version 14 with a no-op migration, as each phase that added saved data has had one:
+  a page that does not know the filter refuses a version it does not know, instead of opening the beat and saving it back without the setting
+  (a page cached offline keeps its version until it is reloaded). `parseEffects` fills a missing entry with the
+  default, so a version 13 beat reads as off, and one that has only a master filter is kept like any other that is not at
   the defaults. A starter, like for the other effects, puts it back to off. The filter does not lengthen an export's tail (it only takes away from what rings).
 - **In an export**, the mixer is the page's, so the master filter is in the file and in every stem. A filter is linear, so the stems
   still add up to the mix.
