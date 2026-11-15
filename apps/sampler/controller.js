@@ -52,16 +52,17 @@
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setSwing(58)         // 50 (straight) to 75: the second step of each pair sounds later (tempo.js)
+//   sampler.setEffect("reverbSize", 70)   // the shared reverb and delay (effects.js): heard at once, by what is ringing and by the steps queued
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, songMode, loopSong, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings }
+//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, songMode, loopSong, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings, effects }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar). For a moment
 //                                // after a sequence takes over (queued, or the next of the song) what sounds is still the one that gave way: `heard` is
 //                                // { sequence, bars, page, stepsOn, playheadStep, song } of what sounds, for the display (playheadPosition is in its numbering;
 //                                // `song` is where the song is in Song mode, or null: { entry, entries, sequence, rep, repeats, next }, `entry` and `rep` -1 when not known,
 //                                // `next` -1 when the song ends after this pass);
 //                                // the rest, with sequence, bars and page, is the one showing, for the keys and for editing
-//   sampler.getBeat()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings, arrangement?, loopSong? }: what beat.js saves
+//   sampler.getBeat()            // { bpm, swing, volume, current, sequences: [{ bars, pattern, velocities }], padSettings, effects?, arrangement?, loopSong? }: what beat.js saves
 //
 // Nothing here calls `onChange` while the sampler is being built, so the caller
 // can create it before the views that its callbacks refer to.
@@ -85,6 +86,7 @@ import {
 } from "./arrangement.js";
 import { createVoices } from "./voices.js";
 import { createLiveMixer } from "./mixer.js";
+import { DEFAULT_EFFECTS, EFFECTS, clampEffect, formatEffect, isDefaultEffects } from "./effects.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
 import { FULL_VELOCITY, createPattern, firstDifference } from "../../shared/pattern.js";
@@ -143,6 +145,8 @@ export function createSampler({
   // Does the song go round again at its end instead of stopping? Off until a person turns it on, and saved with the beat. It is only about
   // Song mode: a beat that is not in Song mode is a loop of the sequence showing, whatever this says.
   let loopSong = beat?.loopSong === true;
+  // The reverb's and the delay's settings (effects.js), the same for every pad and every sequence: they belong to the beat.
+  let effects = { ...DEFAULT_EFFECTS, ...beat?.effects };
   // The entry of the song that is selected (the strip shows it, and the tools act on it): where Song mode begins when Play is pressed.
   // Kept in range when it is read, since the song can have fewer entries than it had.
   let selectedEntry = 0;
@@ -234,8 +238,14 @@ export function createSampler({
     groupOf: (pad) => kit.settings(pad).choke,
     releaseOf: (pad) => kit.envelope(pad)?.release ?? 0,
   });
-  // Every voice leads into its pad's strip of the mixer (its filter and pan), which leads to the master.
-  const mixer = createLiveMixer(audio, { pads: kit.length, settings: (pad) => kit.settings(pad) });
+  // Every voice leads into its pad's strip of the mixer (its filter, pan and sends to the reverb and the delay), which leads to the master.
+  // `scheduler` is made below: the mixer asks for the tempo only once a hit has made its strips.
+  const mixer = createLiveMixer(audio, {
+    pads: kit.length,
+    settings: (pad) => kit.settings(pad),
+    effects: () => effects,
+    bpm: () => scheduler.bpm,
+  });
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
     clock,
@@ -1065,6 +1075,7 @@ export function createSampler({
   // ---------- Tempo and volume ----------
   function setBpm(value) {
     scheduler.setBpm(value);
+    mixer.updateEffects(); // the delay is a note of the beat
     onChange();
     onBeatChange();
   }
@@ -1072,6 +1083,15 @@ export function createSampler({
   function setSwing(value) {
     const swing = scheduler.setSwing(value);
     onMessage(swing === SWING_DEFAULT ? "SWING OFF" : `SWING ${swing}%`);
+    onChange();
+    onBeatChange();
+  }
+
+  // The reverb's and the delay's own settings. Heard at once, by the sound that is ringing too (the returns glide to it).
+  function setEffect(name, value) {
+    effects = { ...effects, [name]: clampEffect(name, value) };
+    mixer.updateEffects();
+    onMessage(`${EFFECTS[name].lcd} ${formatEffect(name, effects[name])}`);
     onChange();
     onBeatChange();
   }
@@ -1127,6 +1147,7 @@ export function createSampler({
     toggleRec,
     setBpm,
     setSwing,
+    setEffect,
     nudgeTempo: (delta) => setBpm(scheduler.bpm + delta),
     tapTempo,
     setVolume,
@@ -1214,6 +1235,7 @@ export function createSampler({
         // The velocities of the steps shown, 1-127 (a step that is off reads as full).
         stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
         padSettings: kit.settings(selected), // the selected pad's settings (pad-settings.js)
+        effects: { ...effects }, // the reverb's and the delay's settings (effects.js)
       };
     },
 
@@ -1223,6 +1245,8 @@ export function createSampler({
       volume,
       current,
       padSettings: kit.settingsSnapshot(),
+      // A copy, and left out while they are all at the defaults (a beat nobody turned the effects of is saved as it always was).
+      ...(isDefaultEffects(effects) ? {} : { effects: { ...effects } }),
       sequences: slots.map((slot) => ({
         bars: slot.bars,
         pattern: slot.pattern.snapshot(),

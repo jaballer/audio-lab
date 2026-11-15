@@ -18,6 +18,7 @@ import {
   exportReadout,
   exportTitle,
   songFileSeconds,
+  songTailSeconds,
   songTooLong,
   stemsInfo,
 } from "./export-options.js";
@@ -82,7 +83,7 @@ export function exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate,
     readout: exportReadout(info),
     format: exportFormat(sampleRate),
     note,
-    hint: exportHint(options.files, scope),
+    hint: exportHint(options.files, scope, songTailSeconds(beat)),
     blocked: exportBlockedReason({
       supported,
       hasSteps: !nothing,

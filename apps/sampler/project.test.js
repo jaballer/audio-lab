@@ -104,6 +104,24 @@ describe("parseProject", () => {
     expect(parseBeat(plain.beat, LAYOUT)).not.toHaveProperty("loopSong");
   });
 
+  it("keeps the effects, and the pads' sends, which a project with the effects at their defaults does not carry", () => {
+    const effects = {
+      reverbSize: 70,
+      reverbLevel: 20,
+      delayDivision: 3,
+      delayFeedback: 60,
+      delayLevel: 80,
+      pingPong: 1,
+    };
+    const wet = { ...beat, effects, padSettings: { 2: { gain: 0, reverb: 35, delay: 10 } } };
+    const result = parseProject(archive(buildProject({ beat: wet, samples: [] })), LAYOUT);
+    expect(result.ok).toBe(true);
+    expect(parseBeat(result.beat, LAYOUT)).toMatchObject({ effects });
+    expect(parseBeat(result.beat, LAYOUT).padSettings[2]).toMatchObject({ reverb: 35, delay: 10 });
+    const plain = parseProject(archive(buildProject({ beat, samples: [] })), LAYOUT);
+    expect(parseBeat(plain.beat, LAYOUT)).not.toHaveProperty("effects");
+  });
+
   it("reads the Blob projectBlob makes, as bytes", async () => {
     const blob = projectBlob({ beat, samples });
     expect(blob.type).toBe("application/octet-stream");

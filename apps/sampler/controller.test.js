@@ -3,6 +3,7 @@ import { DEFAULT_VOLUME, createSampler } from "./controller.js";
 import { createKit } from "./kit.js";
 import { SCHEDULER_TICK_MS } from "../../shared/scheduler.js";
 import { STARTER_BEAT } from "./starter-beat.js";
+import { DEFAULT_EFFECTS } from "./effects.js";
 
 const STEPS = 16;
 const PADS = 4;
@@ -20,11 +21,15 @@ function fakeAudio() {
   const node = () => ({ connect: vi.fn(), disconnect: vi.fn() });
   const ctx = {
     currentTime: 0,
+    sampleRate: 44100,
     createGain: vi.fn(() => ({ ...node(), gain: param() })),
-    // What a mixer strip is made of (mixer.js)
+    // What a mixer strip and the reverb and delay are made of (mixer.js, returns.js)
     createBiquadFilter: vi.fn(() => ({ ...node(), type: "peaking", frequency: param(), Q: param(), gain: param(0) })),
     createChannelSplitter: vi.fn(node),
     createChannelMerger: vi.fn(node),
+    createDelay: vi.fn(() => ({ ...node(), delayTime: param(0) })),
+    createConvolver: vi.fn(() => ({ ...node(), buffer: null })),
+    createBuffer: vi.fn((channels, length) => ({ getChannelData: () => new Float32Array(length) })),
   };
   return { ctx, master, powered: true, ensure: vi.fn(() => ctx), setVolume: vi.fn(), killSound: vi.fn(() => true) };
 }
@@ -53,7 +58,10 @@ function voiceOf(node) {
   }
 }
 
-const STRIP_GAINS = 6; // a strip's gains (input, dry, low-pass, high-pass, left and right): the gains a mixer makes before the first voice
+// A strip's gains: the input, dry, low-pass, high-pass, left, right, and the reverb and delay sends. The reverb and the delay make
+// theirs (11) before the strips, so these are the gains a mixer makes before the first voice.
+const STRIP_GAINS = 8;
+const RETURN_GAINS = 11;
 
 const SEQUENCES = 4;
 // A saved beat with one sequence of the given pattern and length, the rest empty. It has Loop on unless the test says `loopSong: false`:
@@ -170,7 +178,7 @@ describe("triggerPad", () => {
     const voice = sounds[2].play.mock.calls[0][1]; // the pad's voice, which goes to its strip
     expect(sounds[2].play).toHaveBeenCalledWith(audio.ctx, voice, 1.5);
     expect(reaches(stripOf(voice), audio.master)).toBe(true);
-    expect(audio.ctx.createGain).toHaveBeenCalledTimes(PADS * STRIP_GAINS + 1); // the gains of a strip for each pad, and the voice
+    expect(audio.ctx.createGain).toHaveBeenCalledTimes(RETURN_GAINS + PADS * STRIP_GAINS + 1); // the gains of the returns, of a strip for each pad, and the voice
     expect(padHit).toHaveBeenCalledWith(2);
     expect(sampler.getState().selected).toBe(2);
     expect(change).toHaveBeenCalled();
@@ -236,7 +244,10 @@ describe("triggerPad", () => {
     const strips = () => {
       const gains = audio.ctx.createGain.mock.results.map((result) => result.value);
       return Array.from({ length: PADS }, (_, pad) => {
-        const [, dry, low, high, left, right] = gains.slice(pad * STRIP_GAINS, (pad + 1) * STRIP_GAINS);
+        const [, dry, low, high, left, right] = gains.slice(
+          RETURN_GAINS + pad * STRIP_GAINS,
+          RETURN_GAINS + (pad + 1) * STRIP_GAINS,
+        );
         return { dry, low, high, left, right };
       });
     };
@@ -282,7 +293,133 @@ describe("triggerPad", () => {
   it("never lets a hit go fully silent", () => {
     const { audio, sampler } = setup();
     sampler.triggerPad(0, 0);
-    expect(audio.ctx.createGain.mock.results[PADS * STRIP_GAINS + 1].value.gain.value).toBe(0.05); // the stage, after the strips and the pad's voice
+    expect(audio.ctx.createGain.mock.results[RETURN_GAINS + PADS * STRIP_GAINS + 1].value.gain.value).toBe(0.05); // the stage, after the strips and the pad's voice
+  });
+});
+
+describe("the shared effects", () => {
+  // The delay lines the mixer made (left, right), and the gains of the delay's return, once a hit has built the strips.
+  const delayLines = (audio) => audio.ctx.createDelay.mock.results.map((result) => result.value);
+
+  it("start at the defaults, which a beat is saved without", () => {
+    const { sampler } = setup();
+    expect(sampler.getState().effects).toEqual(DEFAULT_EFFECTS);
+    expect(sampler.getBeat()).not.toHaveProperty("effects");
+  });
+
+  it("start from the effects a saved beat has", () => {
+    const effects = { ...DEFAULT_EFFECTS, reverbSize: 80, pingPong: 1 };
+    const { sampler } = setup({ beat: { ...savedBeat(), effects } });
+    expect(sampler.getState().effects).toEqual(effects);
+    expect(sampler.getBeat().effects).toEqual(effects);
+  });
+
+  it("are set, said on the display, redrawn and saved", () => {
+    const { sampler, message, beatChange, change } = setup();
+    beatChange.mockClear();
+    change.mockClear();
+    sampler.setEffect("reverbSize", 100);
+    expect(message).toHaveBeenLastCalledWith("REVERB SIZE 3.0 S");
+    expect(beatChange).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledTimes(1);
+    sampler.setEffect("reverbLevel", 25);
+    expect(message).toHaveBeenLastCalledWith("REVERB LEVEL 25 %");
+    sampler.setEffect("delayDivision", 2);
+    expect(message).toHaveBeenLastCalledWith("DELAY TIME 1/8.");
+    sampler.setEffect("delayFeedback", 60);
+    expect(message).toHaveBeenLastCalledWith("DELAY FEEDBACK 60 %");
+    sampler.setEffect("delayLevel", 70);
+    expect(message).toHaveBeenLastCalledWith("DELAY LEVEL 70 %");
+    sampler.setEffect("pingPong", 1);
+    expect(message).toHaveBeenLastCalledWith("PING-PONG ON");
+    expect(sampler.getState().effects).toEqual({
+      reverbSize: 100,
+      reverbLevel: 25,
+      delayDivision: 2,
+      delayFeedback: 60,
+      delayLevel: 70,
+      pingPong: 1,
+    });
+    expect(sampler.getBeat().effects).toEqual(sampler.getState().effects);
+  });
+
+  it("are brought into range, and the state is a copy that cannot change them", () => {
+    const { sampler } = setup();
+    sampler.setEffect("delayFeedback", 400);
+    expect(sampler.getState().effects.delayFeedback).toBe(90);
+    sampler.getState().effects.delayFeedback = 5;
+    sampler.getBeat();
+    expect(sampler.getState().effects.delayFeedback).toBe(90);
+  });
+
+  it("cannot be changed through the beat the sampler gives for saving", () => {
+    const { sampler } = setup();
+    sampler.setEffect("reverbSize", 70);
+    sampler.getBeat().effects.reverbSize = 5;
+    expect(sampler.getBeat().effects.reverbSize).toBe(70);
+    expect(sampler.getState().effects.reverbSize).toBe(70);
+  });
+
+  it("leave the beat as it was saved once they are all back at the defaults", () => {
+    const { sampler } = setup();
+    sampler.setEffect("pingPong", 1);
+    sampler.setEffect("pingPong", 0);
+    expect(sampler.getBeat()).not.toHaveProperty("effects");
+  });
+
+  it("are heard by the delay that is playing, at once, and the delay follows the tempo", () => {
+    const { audio, sampler } = setup({ bpm: 120 });
+    sampler.triggerPad(0); // builds the strips and the delay
+    const [left, right] = delayLines(audio);
+    expect(left.delayTime.value).toBeCloseTo(0.25, 9); // an eighth at 120 BPM
+    sampler.setEffect("delayDivision", 3);
+    for (const line of [left, right]) {
+      expect(line.delayTime.setTargetAtTime).toHaveBeenLastCalledWith(0.5, audio.ctx.currentTime, expect.any(Number));
+    }
+    sampler.setBpm(60);
+    expect(left.delayTime.setTargetAtTime).toHaveBeenLastCalledWith(1, audio.ctx.currentTime, expect.any(Number));
+    sampler.nudgeTempo(10);
+    expect(left.delayTime.setTargetAtTime).toHaveBeenLastCalledWith(60 / 70, audio.ctx.currentTime, expect.any(Number));
+  });
+
+  it("are changed before any sound has built the mixer without trouble, and are what the strips are built with", () => {
+    const { audio, sampler } = setup({ bpm: 120 });
+    expect(() => sampler.setEffect("delayDivision", 0)).not.toThrow();
+    expect(() => sampler.setBpm(90)).not.toThrow();
+    sampler.triggerPad(0);
+    expect(delayLines(audio)[0].delayTime.value).toBeCloseTo(0.125 * (120 / 90), 9); // a sixteenth at 90 BPM
+  });
+
+  it("are the ones a mixer built after all sound was cut off has", () => {
+    const { audio, sampler } = setup({ bpm: 120 });
+    sampler.triggerPad(0);
+    sampler.setEffect("delayDivision", 3);
+    audio.master = { id: "master 2" }; // killSound swapped it
+    sampler.triggerPad(0);
+    expect(delayLines(audio)[2].delayTime.value).toBeCloseTo(0.5, 9); // the new mixer's first line: a quarter at 120
+  });
+
+  it("send to the reverb what a pad is set to send, and build the room only when one does", () => {
+    const sounds = Array.from({ length: PADS }, (_, i) => ({ id: `s${i}`, name: `S${i}`, play: vi.fn() }));
+    const audio = fakeAudio();
+    const kit = createKit(sounds);
+    const sampler = createSampler({ audio, kit, steps: STEPS });
+    sampler.triggerPad(0);
+    expect(audio.ctx.createConvolver).not.toHaveBeenCalled(); // nothing sends: no convolver
+    kit.setSetting(1, "reverb", 40);
+    sampler.kitChanged("setting", 1);
+    expect(audio.ctx.createConvolver).toHaveBeenCalledTimes(1);
+    const [convolver] = audio.ctx.createConvolver.mock.results.map((result) => result.value);
+    expect(convolver.buffer.getChannelData(0).length).toBeGreaterThan(0);
+  });
+
+  it("say a pad's reverb or delay send on the display, as a per cent", () => {
+    const { sampler, message } = setup();
+    sampler.selectPad(2);
+    sampler.setPadSetting("reverb", 40);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 REVERB 40 %");
+    sampler.setPadSetting("delay", 0);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 DELAY 0 %");
   });
 });
 
@@ -317,6 +454,8 @@ describe("pad settings", () => {
       choke: 0,
       filter: 0,
       pan: 0,
+      reverb: 0,
+      delay: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -330,6 +469,8 @@ describe("pad settings", () => {
       choke: 0,
       filter: 0,
       pan: 0,
+      reverb: 0,
+      delay: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -350,7 +491,20 @@ describe("pad settings", () => {
     sampler.selectPad(1);
     sampler.setPadSetting("pitch", -5);
     expect(sampler.getBeat().padSettings).toEqual({
-      1: { gain: 0, pitch: -5, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 0,
+        pitch: -5,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -2788,7 +2942,20 @@ describe("pad colours", () => {
     expect(message).toHaveBeenLastCalledWith("PAD 02 COLOR BLUE");
     expect(sampler.getState().padSettings.color).toBe(3);
     expect(sampler.getBeat().padSettings).toEqual({
-      1: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 3, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 0,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 3,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     expect(beatChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();
@@ -2826,7 +2993,20 @@ describe("choke groups", () => {
     expect(message).toHaveBeenLastCalledWith("PAD 03 CHOKE GROUP 3");
     expect(sampler.getState().padSettings.choke).toBe(3);
     expect(sampler.getBeat().padSettings).toEqual({
-      2: { gain: 0, pitch: 0, choke: 3, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: {
+        gain: 0,
+        pitch: 0,
+        choke: 3,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     expect(beatChange).toHaveBeenCalled();
     expect(change).toHaveBeenCalled();

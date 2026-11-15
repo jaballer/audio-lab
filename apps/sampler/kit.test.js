@@ -70,6 +70,8 @@ describe("pad settings", () => {
       choke: 0,
       filter: 0,
       pan: 0,
+      reverb: 0,
+      delay: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -82,6 +84,8 @@ describe("pad settings", () => {
       choke: 0,
       filter: 0,
       pan: 0,
+      reverb: 0,
+      delay: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -115,12 +119,51 @@ describe("pad settings", () => {
     kit.setSetting(2, "pitch", -5);
     kit.setSetting(1, "gain", 3);
     expect(kit.settingsSnapshot()).toEqual({
-      1: { gain: 3, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      2: { gain: 0, pitch: -5, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 3,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
+      2: {
+        gain: 0,
+        pitch: -5,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     kit.setSetting(2, "pitch", 0);
     expect(kit.settingsSnapshot()).toEqual({
-      1: { gain: 3, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 3,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     const copy = createKit(defaults, { settings: kit.settingsSnapshot() });
     expect(copy.settings(1)).toEqual({
@@ -129,6 +172,8 @@ describe("pad settings", () => {
       choke: 0,
       filter: 0,
       pan: 0,
+      reverb: 0,
+      delay: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -226,7 +271,20 @@ describe("a pad's choke group", () => {
     const kit = createKit(defaults);
     kit.setSetting(2, "choke", 1);
     expect(kit.settingsSnapshot()).toEqual({
-      2: { gain: 0, pitch: 0, choke: 1, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: {
+        gain: 0,
+        pitch: 0,
+        choke: 1,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     kit.setSetting(2, "choke", 0);
     expect(kit.settingsSnapshot()).toEqual({});
@@ -250,7 +308,20 @@ describe("a pad's colour", () => {
     const kit = createKit(defaults);
     kit.setSetting(1, "color", 2);
     expect(kit.settingsSnapshot()).toEqual({
-      1: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 2, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 0,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 2,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     kit.setSetting(1, "color", 0);
     expect(kit.settingsSnapshot()).toEqual({});

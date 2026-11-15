@@ -12,6 +12,7 @@
 import { stepSeconds } from "../../shared/tempo.js";
 import { cleanArrangement, passOrder, resolveArrangement } from "./arrangement.js";
 import { formatSize, pad2 } from "./format.js";
+import { beatEffectsTail } from "./effects.js";
 
 // 1 is the sequence as it is; the others repeat it back to back in one file. Powers of two, like the bar lengths.
 export const LOOP_CHOICES = [1, 2, 4, 8];
@@ -25,8 +26,13 @@ export const DEFAULT_EXPORT_OPTIONS = Object.freeze({ loops: 1, channels: "stere
 
 // What an export of the song adds after the last step, for what is still ringing (a crash, a long sample): the file does
 // not come round to be mixed into its own start, as a loop does. A fixed time, so that the dialog can say how long the file is
-// without knowing the sounds; a sample longer than that is cut.
+// without knowing the sounds; a sample longer than that is cut. When some pad sends to the reverb or the delay, the tail is
+// longer by as long as they ring (songTailSeconds).
 export const SONG_TAIL_SECONDS = 4;
+
+// How long the tail after the song's last step is: SONG_TAIL_SECONDS, and on top of it what the reverb and the delay ring on for,
+// if a pad sends to them (effects.js).
+export const songTailSeconds = (beat) => SONG_TAIL_SECONDS + beatEffectsTail(beat);
 
 // The longest file Export makes of a song, tail and all: about as large as the biggest export there was before there was a song
 // to repeat (eight bars at 40 BPM, eight times over, is 388 s, and took about 260 MB over the page's own to make: the render is one
@@ -68,7 +74,7 @@ export const songSteps = (beat, stepsPerBar) =>
 
 // How long the file of the song is, in seconds: its steps at the tempo and the tail.
 export const songFileSeconds = (beat, stepsPerBar) =>
-  songSteps(beat, stepsPerBar) * stepSeconds(beat.bpm) + SONG_TAIL_SECONDS;
+  songSteps(beat, stepsPerBar) * stepSeconds(beat.bpm) + songTailSeconds(beat);
 
 // Is the song longer than Export makes (MAX_SONG_EXPORT_SECONDS)?
 export const songTooLong = (beat, stepsPerBar) => songFileSeconds(beat, stepsPerBar) > MAX_SONG_EXPORT_SECONDS;
@@ -136,12 +142,14 @@ export function exportReadout(info) {
 
 // What the dialog says about the choice of files and of scope, in the place of its hint about loops: nothing for the mix of the
 // sequence showing (the dialog's own words stay), for stems what they are, and for the song what the file is.
-export function exportHint(files, scope = "sequence") {
+export function exportHint(files, scope = "sequence", tail = SONG_TAIL_SECONDS) {
+  // A tail longer than the usual one is the reverb's and the delay's.
+  const ringing = tail > SONG_TAIL_SECONDS ? " and for the reverb and delay" : "";
   return [
     files === "stems" &&
       "One file for each pad that has steps, in one zip. They are not clipped, and they add up to the mix.",
     scope === "song" &&
-      `Each entry of the song, in order, as many times as it repeats, then ${SONG_TAIL_SECONDS} s for what rings on (a longer sound is cut). There is no loop to come round, so loops are not offered.`,
+      `Each entry of the song, in order, as many times as it repeats, then ${Number(tail.toFixed(1))} s for what rings on${ringing} (a longer sound is cut). There is no loop to come round, so loops are not offered.`,
   ]
     .filter(Boolean)
     .join(" ");

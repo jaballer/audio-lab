@@ -11,6 +11,7 @@
 import { FULL_VELOCITY, MIN_VELOCITY } from "../../shared/pattern.js";
 import { cleanArrangement } from "./arrangement.js";
 import { parsePadSettings } from "./pad-settings.js";
+import { isDefaultEffects, parseEffects } from "./effects.js";
 import { SWING_DEFAULT, clampBpm, clampSwing } from "../../shared/tempo.js";
 
 // Still named after the project's old name, and after what a beat was called before "song" meant the chain of
@@ -21,7 +22,7 @@ export const BEAT_KEY = "pad-sampler:song";
 // Bump this when the saved shape changes, and add a migration from the old
 // version (below) so beats saved by an older page still load. A beat newer than
 // this page is ignored, so an old page never misreads a newer beat.
-export const BEAT_VERSION = 12;
+export const BEAT_VERSION = 13;
 
 // { [version]: (beat) => the same beat in the next version's shape }. The version
 // field itself is set by upgradeBeat.
@@ -53,6 +54,10 @@ const MIGRATIONS = {
   10: (beat) => beat,
   // Version 12 adds each pad's `filter` and `pan` to `padSettings`. A version 11 entry has none, which reads as no filter and the centre.
   11: (beat) => beat,
+  // Version 13 adds each pad's `reverb` and `delay` (what it sends to the shared effects) to `padSettings`, and the optional `effects` (the
+  // reverb's and the delay's own settings, effects.js). A version 12 entry has none of them, which reads as nothing sent and the effects at their
+  // defaults.
+  12: (beat) => beat,
 };
 
 const VOLUME_MAX = 100;
@@ -86,7 +91,10 @@ function trimBlankSequences(beat) {
 //
 // `swing` is how much of each pair of steps the first takes, in per cent, 50 (straight) to 75 (tempo.js).
 //
-// `padSettings` is { pad: { gain, pitch, choke, filter, pan, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
+// `padSettings` is { pad: { gain, pitch, choke, filter, pan, reverb, delay, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
+//
+// `effects` is { reverbSize, reverbLevel, delayDivision, delayFeedback, delayLevel, pingPong }, the reverb and delay the pads send to (effects.js), and is
+// left out while they are all at their defaults, which is how a beat is until a person turns one.
 //
 // `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a beat that has none: a beat
 // nobody edited is saved as it always was.
@@ -102,6 +110,7 @@ export const serializeBeat = ({
   padSettings = {},
   arrangement = null,
   loopSong = false,
+  effects = null,
 }) => ({
   version: BEAT_VERSION,
   bpm,
@@ -110,6 +119,7 @@ export const serializeBeat = ({
   current,
   sequences,
   padSettings,
+  ...(effects && !isDefaultEffects(effects) ? { effects } : {}),
   ...(arrangement ? { arrangement } : {}),
   ...(loopSong ? { loopSong: true } : {}),
 });
@@ -203,6 +213,7 @@ export function parseBeat(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
 
   // Against the sequences kept, not the ones saved: an entry for one that was dropped goes with it.
   const arrangement = cleanArrangement(raw.arrangement, count);
+  const effects = parseEffects(raw.effects);
   return {
     bpm: clampBpm(raw.bpm),
     swing: clampSwing(raw.swing),
@@ -210,6 +221,7 @@ export function parseBeat(stored, { rows, steps, maxBars = 1, maxSequences = 1 }
     current: isIndex(raw.current, count) ? raw.current : 0,
     sequences,
     padSettings: parsePadSettings(raw.padSettings, rows),
+    ...(effects ? { effects } : {}),
     ...(arrangement ? { arrangement } : {}),
     // Only a stored true turns Loop on: anything else is what a beat that never had it reads as.
     ...(raw.loopSong === true ? { loopSong: true } : {}),

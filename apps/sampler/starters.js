@@ -200,7 +200,9 @@ function buildSequence({ pads }) {
 // sequences the starter does not have are empty, and anything outside the limits is brought inside them). `volume` is the
 // master volume the person has now: a starter is a beat, and does not move the level. `keep` is { pad: settings } for
 // pads that are not on their built-in sound (a loaded sample): the settings the person gave it (gain, pitch, envelope, filter, pan...)
-// stay, with only what the starter itself sets for that pad (a choke group, a colour) put over them. Null when a
+// stay, with only what the starter itself sets for that pad (a choke group, a colour) put over them. The reverb and the
+// delay are the defaults (a starter has no effects of its own, and its built-in pads send nothing; a loaded sample's pad keeps the
+// sends it was given, as it keeps its other settings, into the default effects). Null when a
 // sequence's grid is not a whole number of bars, or does not fit.
 export function starterBeat(starter, { rows, steps, maxBars, maxSequences, volume, keep = {} }) {
   const sequences = starter.sequences.map(buildSequence);

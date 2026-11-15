@@ -134,7 +134,7 @@ as on a hardware sampler where they are on a screen of their own.
   button. Moving it between its two places keeps focus on the control that had it.
 - **Sections, not tabs, for now.** Sound, Tune, Envelope, Mix and Color. Tabs when there are enough sections to need them.
 - **Where later features go.** Reverse, one-shot or hold and a voice limit each become a section drawn into the drawer by a view
-  of its own; the sends to the reverb and delay will join Filter and Pan under Mix.
+  of its own. Filter, Pan and the sends to the reverb and delay are under Mix.
 
 ## Trim
 
@@ -214,6 +214,58 @@ work on a built-in sound as well as a loaded sample (unlike Pitch and the envelo
 - **On the LCD** as `PAD 03 FILTER LP 1.2 KHZ`, `HP 248 HZ` or `OFF`, and `PAD 03 PAN L 30`, `R 100` or `CENTER`.
 - **Not decided here:** a resonance control, a filter that follows the envelope, and mapping the filter to a MIDI knob (a DJ
   Filter knob in the quick bar is a later phase of the effects work).
+
+## Reverb and delay
+
+Every pad can send to one shared reverb and one shared delay (#187, phase 3). Each pad has a **Reverb** and a **Delay** under Mix
+in the pad editor (0 to 100 %, none to begin with, for any sound), and the effects themselves are in an **Effects** panel
+between the Song panel and the steps: the reverb's **Size** and **Level**, the delay's **note**, **Feedback**, **Level** and
+**Ping-Pong**. They are the same for every pad and every sequence: the mix belongs to the beat.
+
+- **Sends, and returns the pads share.** A strip's sound, after its filter and pan, goes on to the output as before and, in
+  the amount of the pad's send, to the reverb and to the delay (`reverbSend`, `delaySend`); the two returns add their sound to
+  the output. One reverb for the whole kit is what makes a kit sound like one room, and sixteen convolvers would be far too
+  heavy for a phone. A pad whose sends are 0 is exactly as it was: the sends are 0-gain taps, and the output equals the input
+  (measured in a browser: a difference of 0).
+- **The reverb is a convolver on a made-up room, built only when it is wanted.** The impulse (`reverbImpulse` in
+  `effects.js`) is noise from a seeded generator that dies away to 60 dB down over the room's length (0.3 s to 3 s, an equal
+  ratio for an equal step of Size) and darkens as it goes, one noise for each side. Seeded, so the page and an export make the
+  same room. Nothing is built until a pad sends to the reverb: the convolver, its impulse and its connection wait for the first
+  send, and are let go of again once every send is 0 and what was in the room has rung out (its length and a little more, by a
+  timer: letting go of a node is housekeeping, not a sound). A beat with no reverb costs no convolver.
+- **A new size is a new room, faded to.** Setting a convolver's buffer while it plays clicks (measured in Chromium with a steady
+  tone through it: the largest jump was 90 times a smooth tone's; the fade here is about 15 times smaller than that, and what is
+  left is the new room filling up). So a change of Size builds the new room beside the old one once the slider has stopped
+  (150 ms after the last move: a drag would make a room for every step), fades up the new one as the old one fades down, and lets
+  go of the old one when it is silent.
+- **The delay is two lines and the same wiring for every setting.** Each side has a delay line with the feedback going round it,
+  or, for ping-pong, across to the other line: the settings only turn gains up and down (what goes into each line, and how much
+  comes round or across), so Ping-Pong, Feedback and the note glide and nothing is ever rewired under a sound that is echoing.
+  Ping-pong mixes both sides into the left line, so the first echo is on the left, the second on the right, and so on (measured);
+  the plain delay keeps each side where it was (a pad panned right echoes on the right). With no feedback ping-pong is the one echo,
+  on the left (nothing is passed across to the right).
+- **The note follows the tempo.** The time is a share of a beat (1/16, 1/8, a dotted 1/8 or 1/4; `delaySeconds`), so a change of
+  tempo moves it: the line glides to the new time over about 50 ms (a time constant of 50 ms), which bends the echoes' pitch for a
+  moment instead of clicking. The longest, a quarter note at 40 BPM, is 1.5 s.
+- **Levels are measured, not guessed.** A convolver is normalized by its impulse, so a pad sent fully to the reverb at full
+  Level came back 7 dB (the biggest room) to 17 dB (the smallest) under its dry sound, a whisper at the top of a slider; the return is
+  brought up 12 dB (`REVERB_RETURN_GAIN`), which puts full send and Level at -5 to +5 dB against the dry sound (energy, with a snare-like
+  hit). The delay's first echo at full send and Level is as loud as the pad. The send and level sliders are straight lines; the
+  feedback stops at 90 %, so an echo always dies away. Whether it sounds right can only be judged by ear.
+- **Saved with the beat.** The pad's sends are two more entries in `padSettings` (clamped, formatted and saved with the others),
+  and the effects are one optional `effects` object on the beat: `{ reverbSize, reverbLevel, delayDivision, delayFeedback,
+delayLevel, pingPong }`, whole numbers (`delayDivision` is the place in `DELAY_DIVISIONS`, so a new note goes on the end), left out
+  while they are all at their defaults and read back through `parseEffects` like `swing`. Beat version 13 with a no-op migration:
+  a version 12 beat has no sends and no effects, which reads as dry. A starter has no effects of its own: the effects go back to
+  the defaults, and its built-in pads send nothing, so it starts dry; a pad with a loaded sample keeps the sends it was given, as it
+  keeps its other settings, and so sends to the default effects. Not part of the step undo history, like the pad settings.
+- **On the LCD** as `PAD 03 REVERB 40 %` and `PAD 03 DELAY 25 %`, and for the panel `REVERB SIZE 0.8 S`, `REVERB LEVEL 50 %`,
+  `DELAY TIME 1/8.`, `DELAY FEEDBACK 35 %`, `DELAY LEVEL 50 %` and `PING-PONG ON`.
+- **In an export**, the same mixer is built on the offline context with the beat's effects and tempo, so a stem has its pad's
+  sends and the stems still add up to the mix (they are linear: measured, a difference of 2e-7). How far the tails are followed
+  is in `docs/export.md`.
+- **Not decided here:** a master filter (the next phase), a drive per pad, a pre-delay or damping control on the reverb, a delay
+  that is not a note (a time in milliseconds), and sends from a pad to the delay's own reverb.
 
 ## Amplitude envelope
 

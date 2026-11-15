@@ -70,15 +70,67 @@ describe("parsePadSettings", () => {
       9: { gain: -1, pitch: 0 },
     };
     expect(parsePadSettings(stored, 4)).toEqual({
-      0: { gain: -6, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      2: { gain: 0, pitch: 5, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      0: {
+        gain: -6,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
+      2: {
+        gain: 0,
+        pitch: 5,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
   it("brings values into range and fills in what is missing", () => {
     expect(parsePadSettings({ 1: { gain: 100, pitch: -50 }, 2: { gain: -3 } }, 4)).toEqual({
-      1: { gain: 6, pitch: -12, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      2: { gain: -3, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 6,
+        pitch: -12,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
+      2: {
+        gain: -3,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -98,6 +150,8 @@ describe("parsePadSettings", () => {
       choke: 0,
       filter: 0,
       pan: 0,
+      reverb: 0,
+      delay: 0,
       color: 0,
       attack: 0,
       decay: 0,
@@ -123,14 +177,53 @@ describe("the choke setting", () => {
 
   it("makes a pad count as not at the defaults when it is the only thing set", () => {
     expect(parsePadSettings({ 1: { choke: 2 } }, 4)).toEqual({
-      1: { gain: 0, pitch: 0, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: 0,
+        pitch: 0,
+        choke: 2,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
   it("is brought into range, and filled in as no group when it is missing (a beat saved before it existed)", () => {
     expect(parsePadSettings({ 0: { gain: -3, choke: 50 }, 1: { gain: 2, pitch: 1 } }, 4)).toEqual({
-      0: { gain: -3, pitch: 0, choke: 8, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
-      1: { gain: 2, pitch: 1, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      0: {
+        gain: -3,
+        pitch: 0,
+        choke: 8,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
+      1: {
+        gain: 2,
+        pitch: 1,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 });
@@ -150,16 +243,54 @@ describe("the color setting", () => {
   });
 
   it("has no slider: the sliders are the other settings", () => {
-    expect(SLIDER_NAMES).toEqual(["gain", "pitch", "choke", "attack", "decay", "sustain", "release", "filter", "pan"]);
+    expect(SLIDER_NAMES).toEqual([
+      "gain",
+      "pitch",
+      "choke",
+      "attack",
+      "decay",
+      "sustain",
+      "release",
+      "filter",
+      "pan",
+      "reverb",
+      "delay",
+    ]);
     expect(SETTING_NAMES).toContain("color");
   });
 
   it("makes a pad count as not at the defaults when it is the only thing set, and fills in none when missing", () => {
     expect(parsePadSettings({ 2: { color: 4 } }, 4)).toEqual({
-      2: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+      2: {
+        gain: 0,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 4,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
     expect(parsePadSettings({ 1: { gain: -2 } }, 4)).toEqual({
-      1: { gain: -2, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: -2,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 });
@@ -217,7 +348,20 @@ describe("the envelope settings", () => {
 
   it("make a pad count as not at the defaults when only one is set, and fill in the defaults when missing", () => {
     expect(parsePadSettings({ 0: { sustain: 70 } }, 2)).toEqual({
-      0: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 70, release: 0 },
+      0: {
+        gain: 0,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 70,
+        release: 0,
+      },
     });
     expect(parsePadSettings({ 0: { gain: 2 } }, 2)[0]).toMatchObject({ sustain: 100, attack: 0 });
   });
@@ -309,6 +453,36 @@ describe("a pad with only a filter or a pan set", () => {
     expect(parsePadSettings({ 1: { filter: -40 }, 2: { pan: 25 } }, 4)).toEqual({
       1: { ...DEFAULT_SETTINGS, filter: -40 },
       2: { ...DEFAULT_SETTINGS, pan: 25 },
+    });
+  });
+});
+
+describe("the reverb and delay sends", () => {
+  it("are for any sound, a built-in one as well as a sample, and start at none", () => {
+    for (const name of ["reverb", "delay"]) {
+      expect(SETTINGS[name]).toMatchObject({ min: 0, max: 100, default: 0 });
+      expect(SETTINGS[name].samples).toBeUndefined(); // acts on what comes out of the pad, as the filter does
+      expect(SLIDER_NAMES).toContain(name);
+    }
+  });
+
+  it("are a whole number from 0 to 100, and none when it is not a number", () => {
+    expect(clampSetting("reverb", 140)).toBe(100);
+    expect(clampSetting("reverb", -5)).toBe(0);
+    expect(clampSetting("delay", 33.4)).toBe(33);
+    expect(clampSetting("delay", "x")).toBe(0);
+  });
+
+  it("are shown as a per cent, without a plus sign", () => {
+    expect(formatSetting("reverb", 0)).toBe("0 %");
+    expect(formatSetting("reverb", 40)).toBe("40 %");
+    expect(formatSetting("delay", 100)).toBe("100 %");
+  });
+
+  it("are kept by parsePadSettings for a pad with only a send set", () => {
+    expect(parsePadSettings({ 3: { reverb: 60 }, 5: { delay: 25 } }, 8)).toEqual({
+      3: { ...DEFAULT_SETTINGS, reverb: 60 },
+      5: { ...DEFAULT_SETTINGS, delay: 25 },
     });
   });
 });

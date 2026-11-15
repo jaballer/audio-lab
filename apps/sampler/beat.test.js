@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STARTER_BEAT } from "./starter-beat.js";
 import { DEFAULT_SETTINGS } from "./pad-settings.js";
+import { DEFAULT_EFFECTS } from "./effects.js";
 import {
   BEAT_BACKUP_KEY,
   BEAT_KEY,
@@ -21,7 +22,20 @@ const beat = {
   volume: 60,
   current: 1,
   padSettings: {
-    1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+    1: {
+      gain: -6,
+      pitch: 3,
+      choke: 2,
+      filter: 0,
+      pan: 0,
+      reverb: 0,
+      delay: 0,
+      color: 0,
+      attack: 0,
+      decay: 0,
+      sustain: 100,
+      release: 0,
+    },
   },
   sequences: [
     { bars: 2, pattern: { 0: [0, 4, 8, 12], 3: [2] }, velocities: { 0: { 4: 90, 12: 20 } } },
@@ -342,7 +356,20 @@ describe("velocities", () => {
 describe("pad settings", () => {
   it("come back as they were saved", () => {
     expect(parse(serializeBeat(beat)).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 2,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -352,7 +379,20 @@ describe("pad settings", () => {
       padSettings: { 0: { gain: 40, pitch: -40 }, 2: { gain: 0, pitch: 0 }, 99: { gain: 1, pitch: 1 } },
     };
     expect(parse(raw).padSettings).toEqual({
-      0: { gain: 6, pitch: -12, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      0: {
+        gain: 6,
+        pitch: -12,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -460,7 +500,7 @@ describe("beats saved by version 8", () => {
 
   it("are stamped as the current version", () => {
     expect(upgradeBeat(stored(v8([used, blank]))).version).toBe(BEAT_VERSION);
-    expect(BEAT_VERSION).toBe(12);
+    expect(BEAT_VERSION).toBe(13);
   });
 });
 
@@ -504,7 +544,20 @@ describe("beats saved by version 11", () => {
 
   it("load with every pad's filter off and in the centre, keeping the other settings", () => {
     expect(parse(v11).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 2,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 4,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -642,7 +695,20 @@ describe("beats saved by version 6", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v6).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 4, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 2,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 4,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -656,6 +722,8 @@ describe("beats saved by version 6", () => {
           choke: 0,
           filter: 0,
           pan: 0,
+          reverb: 0,
+          delay: 0,
           color: 0,
           attack: 30,
           decay: 20,
@@ -680,7 +748,20 @@ describe("beats saved by version 5", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v5).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 2, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 2,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -688,11 +769,37 @@ describe("beats saved by version 5", () => {
     const saved = serializeBeat({
       ...beat,
       padSettings: {
-        6: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+        6: {
+          gain: 0,
+          pitch: 0,
+          choke: 0,
+          filter: 0,
+          pan: 0,
+          reverb: 0,
+          delay: 0,
+          color: 5,
+          attack: 0,
+          decay: 0,
+          sustain: 100,
+          release: 0,
+        },
       },
     });
     expect(parse(saved).padSettings).toEqual({
-      6: { gain: 0, pitch: 0, choke: 0, filter: 0, pan: 0, color: 5, attack: 0, decay: 0, sustain: 100, release: 0 },
+      6: {
+        gain: 0,
+        pitch: 0,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 5,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 });
@@ -708,7 +815,20 @@ describe("beats saved by version 4", () => {
       sequences: [{ bars: 1, pattern: { 0: [0] }, velocities: {} }],
     };
     expect(parse(v4).padSettings).toEqual({
-      1: { gain: -6, pitch: 3, choke: 0, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 0,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 
@@ -716,12 +836,38 @@ describe("beats saved by version 4", () => {
     const saved = serializeBeat({
       ...beat,
       padSettings: {
-        4: { gain: 0, pitch: 0, choke: 5, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+        4: {
+          gain: 0,
+          pitch: 0,
+          choke: 5,
+          filter: 0,
+          pan: 0,
+          reverb: 0,
+          delay: 0,
+          color: 0,
+          attack: 0,
+          decay: 0,
+          sustain: 100,
+          release: 0,
+        },
       },
     });
     expect(saved.version).toBe(BEAT_VERSION);
     expect(parse(saved).padSettings).toEqual({
-      4: { gain: 0, pitch: 0, choke: 5, filter: 0, pan: 0, color: 0, attack: 0, decay: 0, sustain: 100, release: 0 },
+      4: {
+        gain: 0,
+        pitch: 0,
+        choke: 5,
+        filter: 0,
+        pan: 0,
+        reverb: 0,
+        delay: 0,
+        color: 0,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
     });
   });
 });
@@ -838,5 +984,106 @@ describe("swing", () => {
     expect(parse({ ...serializeBeat(beat), swing: 10 }).swing).toBe(50);
     expect(parse({ ...serializeBeat(beat), swing: "58" }).swing).toBe(50);
     expect(parse({ ...serializeBeat(beat), swing: 58.4 }).swing).toBe(58);
+  });
+});
+
+describe("beats saved by version 12", () => {
+  // What a page of version 12 kept: pad settings with no sends and no effects at all, which read as nothing sent and the defaults.
+  const v12 = {
+    ...serializeBeat(beat),
+    version: 12,
+    padSettings: {
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 2,
+        filter: -20,
+        pan: 10,
+        color: 4,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
+    },
+  };
+
+  it("load with nothing sent to the reverb or the delay, keeping the other settings, and with no effects of their own", () => {
+    const loaded = parse(v12);
+    expect(loaded.padSettings).toEqual({
+      1: {
+        gain: -6,
+        pitch: 3,
+        choke: 2,
+        filter: -20,
+        pan: 10,
+        reverb: 0,
+        delay: 0,
+        color: 4,
+        attack: 0,
+        decay: 0,
+        sustain: 100,
+        release: 0,
+      },
+    });
+    expect(loaded).not.toHaveProperty("effects");
+  });
+
+  it("are brought up to the current version with the beat otherwise as it was", () => {
+    const upgraded = upgradeBeat(stored(v12));
+    expect(upgraded.version).toBe(BEAT_VERSION);
+    expect(upgraded.sequences).toEqual(v12.sequences);
+    expect(upgraded.bpm).toBe(v12.bpm);
+  });
+});
+
+describe("a beat's effects", () => {
+  const room = { ...DEFAULT_EFFECTS, reverbSize: 75, reverbLevel: 30, delayDivision: 3, pingPong: 1 };
+
+  it("are not saved while they are all at their defaults, so a beat nobody touched them in is saved as it was", () => {
+    expect(serializeBeat(beat)).not.toHaveProperty("effects");
+    expect(serializeBeat({ ...beat, effects: { ...DEFAULT_EFFECTS } })).not.toHaveProperty("effects");
+    expect(serializeBeat({ ...beat, effects: null })).not.toHaveProperty("effects");
+  });
+
+  it("are saved, all of them, once one is not the default, and read back as they were", () => {
+    const saved = serializeBeat({ ...beat, effects: room });
+    expect(saved.effects).toEqual(room);
+    expect(parse(saved).effects).toEqual(room);
+  });
+
+  it("round trip through a save and a load as the same beat", () => {
+    const loaded = parse(serializeBeat({ ...beat, effects: room }));
+    expect(serializeBeat(loaded)).toEqual(serializeBeat({ ...beat, effects: room }));
+  });
+
+  it("are brought into range, and the ones missing or not numbers are read as the defaults", () => {
+    const wild = {
+      ...serializeBeat(beat),
+      effects: { reverbSize: 900, delayFeedback: 400, pingPong: "yes", delayLevel: -5 },
+    };
+    expect(parse(wild).effects).toEqual({
+      ...DEFAULT_EFFECTS,
+      reverbSize: 100,
+      delayFeedback: 90,
+      pingPong: DEFAULT_EFFECTS.pingPong,
+      delayLevel: 0,
+    });
+  });
+
+  it("are left out when what was stored is not an object, or has only the defaults", () => {
+    for (const effects of [null, 5, "loud", [1, 2], {}, { ...DEFAULT_EFFECTS }]) {
+      expect(parse({ ...serializeBeat(beat), effects })).not.toHaveProperty("effects");
+    }
+  });
+
+  it("do not keep what the page does not know", () => {
+    const loaded = parse({ ...serializeBeat(beat), effects: { ...room, masterFilter: 30, extra: 1 } });
+    expect(Object.keys(loaded.effects).sort()).toEqual(Object.keys(DEFAULT_EFFECTS).sort());
+  });
+
+  it("keep a pad's sends through saving and loading", () => {
+    const saved = serializeBeat({ ...beat, padSettings: { 3: { ...DEFAULT_SETTINGS, reverb: 40, delay: 15 } } });
+    expect(parse(saved).padSettings).toEqual({ 3: { ...DEFAULT_SETTINGS, reverb: 40, delay: 15 } });
   });
 });

@@ -66,12 +66,14 @@ not cost the same (a dense bar followed by sparse ones). A wrong estimate is wor
 
 ## The render
 
-The sequence is played into an `OfflineAudioContext` with the page's sounds, velocities, pad settings (a pad's filter and pan
-through the same mixer strips the page plays through), retrigger and choke cuts, volume and clipper. `planRender` works out the hits, the passes and where the file sits before any audio exists.
+The sequence is played into an `OfflineAudioContext` with the page's sounds, velocities, pad settings (a pad's filter, pan and sends
+through the same mixer strips, reverb and delay the page plays through, with the beat's effects and tempo), retrigger and choke cuts, volume and clipper. `planRender` works out the hits, the passes and where the file sits before any audio exists.
 
 - **Passes.** The last `loops` passes are the file; the passes before are warm-up, so what rings on from the end of one
   pass (a crash, a long sample, a long Release) is in the start of the next, as it is when the page loops. One warm-up pass
-  is enough unless a pad's Release is longer than the loop: then there are `1 + ceil(release / loop)`, at most 12.
+  is enough unless a pad rings for longer than the loop: then there are `1 + ceil(ring / loop)`, at most 12, where a pad's ring is its
+  Release and, if it sends to the reverb or the delay and they are turned up, what they keep of it (`effectsTail`: the room's
+  length, or the time the echoes take to come 60 dB down, at most 10 s). A stem follows its own pad's ring twice over, as it does its Release.
 - **Windows.** Every node that waits for its start time is looked at by the audio thread in every block, so the cost is about
   the nodes waiting times how long they wait. With the whole sequence scheduled before the render began (about 100,000 nodes
   for a dense 8-bar song) the work grew with the square of the length. The render now pauses (`suspend`) at the end of each
@@ -202,7 +204,12 @@ share).
 - **No warm-up, no loop seam, a tail.** Nothing comes round to ring into the start, so the file begins at its first step (the render's
   lead is the only thing before it), and ends with `SONG_TAIL_SECONDS` (4 s) for what rings on, where the loop's own tail is folded into
   its start. A fixed time, so that the dialog can say how long and how big the file is without the kit's releases; a sample longer than
-  the tail is cut at its end. A pad's hit is cut by its next across the end of a pass, as the page's chain does, and that includes the
+  the tail is cut at its end. When any pad sends to the reverb or the delay (and they are turned up), the tail is longer by what they
+  keep (`songTailSeconds`: the room's length, or the echoes' time to 60 dB down, at most 10 s), worked out from the pads' settings
+  and the effects alone (so the dialog still needs no kit): it counts a pad that sends but plays nothing in the song, which only makes
+  the file longer than it had to be. The dialog's hint says the tail, and that it is for the reverb and the delay. Echoes that would
+  ring on past the 10 s limit (high feedback, a slow note, a slow tempo) are cut at the end of the file with no fade, as a long
+  sample is: at 90 % feedback and a half-second echo the last repeat is still about 18 dB down. Not fixed here. A pad's hit is cut by its next across the end of a pass, as the page's chain does, and that includes the
   next time round the same entry (a sequence that ends on a hit and begins on one cuts itself); the last hit of the whole is not cut.
 - **A sequence the song leaves out is not in the file, and one that repeats is in it each time.** The dialog's heading counts the
   entries ("SONG · 3 ENTRIES · 100 BPM"), and what the song's length is, repeats and all, is the readout's to say. What the song plays

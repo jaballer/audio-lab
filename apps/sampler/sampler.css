@@ -567,6 +567,37 @@
   cursor: default;
 }
 
+/* ---------- Effects: the reverb and the delay every pad sends to (effects-panel.js) ---------- */
+/* The two groups sit side by side while there is room for both, and stack on a narrow screen. The sliders are the pad editor's
+   (.sampler-setting), with a wider label than Gain and Pan need: "Feedback" is the longest. */
+.sampler-effects-groups {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(17rem, 100%), 1fr)
+  ); /* 100%: a panel narrower than a group (a 320px phone) shrinks it */
+  gap: 12px 32px;
+}
+.sampler-effects-group {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+.sampler-effects-group-title {
+  margin: 0 0 4px;
+}
+.sampler-effects-group .sampler-setting {
+  grid-template-columns: 4.6rem 1fr 3.6rem;
+}
+/* The note keys and the Ping-Pong switch share a row under the Delay heading. */
+.sampler-effects-delay-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 4px;
+}
+
 /* Under the pads: load a sample onto the selected pad, or put its built-in sound back. */
 .pad-tools {
   display: flex;
@@ -777,6 +808,8 @@
 .song-strip .btn[aria-pressed="true"]:hover,
 .song-loop[aria-pressed="true"],
 .song-loop[aria-pressed="true"]:hover,
+.sampler-effects-panel .btn[aria-pressed="true"],
+.sampler-effects-panel .btn[aria-pressed="true"]:hover,
 .step-velocity-toggle[aria-pressed="true"],
 .step-velocity-toggle[aria-pressed="true"]:hover,
 .seq-latch[aria-pressed="true"],
@@ -1059,6 +1092,8 @@
   .song-strip .btn[aria-pressed="true"]:hover,
   .song-loop[aria-pressed="true"],
   .song-loop[aria-pressed="true"]:hover,
+  .sampler-effects-panel .btn[aria-pressed="true"],
+  .sampler-effects-panel .btn[aria-pressed="true"]:hover,
   .step-velocity-toggle[aria-pressed="true"],
   .step-velocity-toggle[aria-pressed="true"]:hover,
   .seq-latch[aria-pressed="true"],
@@ -1107,6 +1142,7 @@
 .step-head > [hidden],
 #step-body[hidden],
 #song-body[hidden],
+#effects-body[hidden],
 .pad-drawer-section > [hidden] {
   display: none;
 }

@@ -1,5 +1,6 @@
 // What can be set on a pad besides its sound: how loud it is, (for a loaded sample) how high and how its volume is
-// shaped over time, which choke group it is in, and a filter and a pan for what it plays. No DOM, and plain numbers, so the same values are what the sliders show, the kit plays and the song saves.
+// shaped over time, which choke group it is in, a filter and a pan for what it plays, and how much of it goes to the shared
+// reverb and delay (effects.js). No DOM, and plain numbers, so the same values are what the sliders show, the kit plays and the song saves.
 //
 //   gain:  decibels, -24 to +6 in whole steps (0 leaves the sound as it is)
 //   pitch: semitones, -12 to +12 in whole steps (0 plays the sample at its own pitch)
@@ -9,6 +10,8 @@
 //   filter: -100 to +100: one control for a low-pass (below 0: the cutoff comes down from the top of hearing, so the sound
 //           darkens) and a high-pass (above 0: the cutoff goes up from the bottom, so it thins); 0 is off (filterSpec)
 //   pan: -100 (left) to +100 (right), 0 in the centre: a balance, not a mix of the two sides (panGains)
+//   reverb, delay: 0 to 100 per cent, how much of what the pad plays (after its filter and pan) is sent to the shared reverb and
+//           the shared delay; 0 sends none, which is how every pad starts (sendGain in effects.js)
 //   color: a colour for the pad, 0 (none) or 1 to 6 (pad-colors.js); only for looks, and chosen with swatches, not a slider
 //
 //   clampSetting("gain", 9.4)            // 6
@@ -17,12 +20,12 @@
 //   formatSetting("pitch", 2)            // "+2 st"
 //   formatSetting("choke", 0)            // "OFF"; 3 is "GROUP 3"
 //   formatSetting("color", 3)            // "BLUE"
-//   formatSetting("attack", 50)          // "250 MS": a time, not the slider position; "sustain" is "50 %"
+//   formatSetting("attack", 50)          // "250 MS": a time, not the slider position; "sustain" is "50 %", and so is a send
 //   filterSpec(-50)                      // { type: "lowpass", frequency: 1265 }: what the strip's filter is set to ({ type: "off" } at 0)
 //   panGains(50)                         // { left: 0.5, right: 1 }: what each side is multiplied by
 //   envelopeSeconds("release", 100)      // 5
 //   padEnvelope(settings)                // { attack, decay, sustain, release } in seconds and 0-1, or null when flat
-//   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke, filter, pan, color, attack, decay, sustain, release } } for the pads that differ from the default
+//   parsePadSettings(stored, padCount)   // { pad: { gain, pitch, choke, filter, pan, reverb, delay, color, attack, decay, sustain, release } } for the pads that differ from the default
 
 import { isFlat } from "./pad-envelope.js";
 import { COLOR_COUNT, padColorName } from "./pad-colors.js";
@@ -45,6 +48,9 @@ export const SETTINGS = {
   // one as well as a sample, since they act on what comes out of the pad.
   filter: { min: -100, max: 100, default: 0, unit: "", label: "Filter" },
   pan: { min: -100, max: 100, default: 0, unit: "", label: "Pan" },
+  // How much of the pad goes to the shared reverb and delay: any sound can, so they are never disabled. None until asked for.
+  reverb: { min: 0, max: 100, default: 0, unit: "%", label: "Reverb" },
+  delay: { min: 0, max: 100, default: 0, unit: "%", label: "Delay" },
   // Which swatch: not a quantity, so it has no slider (`swatches`): the pad editor draws it as a row of colours.
   color: { min: 0, max: COLOR_COUNT, default: 0, unit: "", label: "Color", swatches: true },
 };
@@ -100,7 +106,7 @@ export function padEnvelope(settings) {
 // an envelope time is shown as the time and not as the slider's position.
 export function formatSetting(name, value) {
   if (SETTINGS[name].seconds) return formatSeconds(envelopeSeconds(name, value));
-  if (name === "sustain") return `${value} %`;
+  if (name === "sustain" || name === "reverb" || name === "delay") return `${value} %`;
   if (name === "choke") return value === 0 ? "OFF" : `GROUP ${value}`;
   if (name === "color") return padColorName(value).toUpperCase();
   if (name === "filter")
@@ -142,7 +148,7 @@ const formatHz = (hz) => (hz < 1000 ? `${Math.round(hz)} HZ` : `${(hz / 1000).to
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-// What was stored, as { pad: { gain, pitch, envelope, choke, filter, pan, color } } for the pads that exist and have something other than the
+// What was stored, as { pad: { gain, pitch, envelope, choke, filter, pan, reverb, delay, color } } for the pads that exist and have something other than the
 // defaults. Values are brought into range; anything unusable is left out.
 export function parsePadSettings(stored, padCount) {
   const pads = {};
