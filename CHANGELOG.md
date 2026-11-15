@@ -8,6 +8,8 @@ Numbers link to the pull request.
 
 ## [Unreleased]
 
+## 2026-11-14
+
 ### Added
 
 - Sampler: each pad has a Drive, first under Mix in the pad editor, in front of its Filter. It pushes the pad into a soft clip,
@@ -31,12 +33,6 @@ Numbers link to the pull request.
   left to right, with the centre as the sound is now. Both work on the built-in sounds as well as a loaded sample, are
   kept with the beat and the project file, and are in an export and its stems
   ([#189](https://github.com/jaballer/audio-lab/pull/189))
-
-### Changed
-
-- Sampler: Next stands on its own beside the joined +, Copy and − keys under the display, and the Song panel's Loop starts the row
-  under its heading, as Velocity does in the step editor. Velocity has no lamp now: it is pressed in while the bars show, as Loop
-  and Next are ([#183](https://github.com/jaballer/audio-lab/pull/183))
 
 ### Fixed
 
@@ -65,6 +61,9 @@ Numbers link to the pull request.
 
 ### Changed
 
+- Sampler: Next stands on its own beside the joined +, Copy and − keys under the display, and the Song panel's Loop starts the row
+  under its heading, as Velocity does in the step editor. Velocity has no lamp now: it is pressed in while the bars show, as Loop
+  and Next are ([#183](https://github.com/jaballer/audio-lab/pull/183))
 - Sampler: Song mode stops at the end of the song, where it used to go round and round until Stop. The last pass says
   `NEXT END` on the display, and after it the display says `END OF SONG`; the last step is not cut off, and what rings on goes on
   ringing, as after Stop. Turn Loop on for the song to go round again ([#179](https://github.com/jaballer/audio-lab/pull/179))
@@ -472,4 +471,4 @@ First day, before pull requests were required.
 - The sampler and keyboard become separate apps with shared modules (`ffcbeec`); Prettier, ESLint and Vitest are added
   (`de70131`, `8da31fa`, `20421a1`); `CLAUDE.md` conventions are written (`7a60b93`).
 
-[Unreleased]: https://github.com/jaballer/audio-lab/compare/97279e2...main
+[Unreleased]: https://github.com/jaballer/audio-lab/compare/3c592a9...main
