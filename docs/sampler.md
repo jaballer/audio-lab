@@ -215,6 +215,57 @@ work on a built-in sound as well as a loaded sample (unlike Pitch and the envelo
 - **Not decided here:** a resonance control, a filter that follows the envelope, and mapping the filter to a MIDI knob (a DJ
   Filter knob in the quick bar is a later phase of the effects work).
 
+## Drive
+
+Each pad has a Drive, first under Mix in the pad editor (#187, phase 5), in front of its Filter and Pan: it pushes what comes out of the pad into a soft clip, which thickens it and adds harmonics, and with the slider at 0 it is off. It works on a built-in sound as well as a loaded sample.
+
+- **A soft clip, with the pre-gain doing the moving.** The shaper is a `WaveShaperNode` with one fixed curve for every strip (tanh,
+  `driveCurve`: odd, so it makes no DC, and flat at the ends), and the slider sets the gain in front of it, `g` from 1 at the
+  bottom of the range to 40 at the top, an equal ratio for an equal step (`scales.exp`), so the sweep feels even. At 1 the bend is
+  gentle and barely more than the sound itself; at 40 anything louder than a fortieth of full scale is a flat top. The shaper takes
+  an input between -1 and 1, so the pre-gain is `g` divided by the curve's reach (4): a hit of full scale at `g` = 40 is ten times
+  past the end of the table, which is flat there (tanh of 4 is 0.9993).
+- **Make-up is 1 / sqrt(g), measured.** A bare tanh makes a sound much louder (the RMS of the built-in sounds was 14 dB up at
+  `g` = 10 and 17 dB up at 40), and dividing by `g` all the way would make it much quieter, since a loud hit saturates. Through the real strip, on six of the
+  built-in sounds, 1 / sqrt(g) keeps the loudness between -5 and +7 dB of where it was across the whole slider (most within 3 dB;
+  the sparse, noisy sounds such as the clap are the loudest and the kick is the quietest at the top). Peaks come down, as they do when a sound is squashed
+  (a kick that peaks at 0.97 peaks at 0.16 at full drive). The make-up is for sounds as loud as the built-in ones: the small-signal gain is
+  sqrt(g), up to +16 dB at full drive, so a very quiet sample, a low velocity or a tail is lifted against the loud hits, which is a compressor's
+  doing as much as a drive's. Whether it sounds right can only be judged by ear.
+- **Off is the dry path alone, and turning it on is a crossfade.** A strip has the dry sound and the shaped path side by side;
+  at 0 the dry gain is 1 and the shaped path's post-gain is 0, so the sound goes on exactly as it is (measured: a difference of 0
+  from no mixer at all, for a strip that is built at 0; one turned off while the page is playing gets there by the same 15 ms fades,
+  which leave a residual of about 4e-5 of the shaped path after 150 ms and 1e-7 after a quarter of a second: inaudible, but not exact). Turned on, the shaped path fades in as the dry fades out over a few milliseconds (a time constant of 15 ms),
+  with its pre-gain set at once while it is still silent: gliding the pre-gain from where it waited would sweep the shaper through every amount on the
+  way. Moving the slider while it is on glides both gains. Measured with a steady tone: every move, including on and off, is within 1.14 times the roughness of the
+  tone at either end (a click would be tens of times). The shaped path at the bottom of the range is a gentle bend and not the dry sound: a quiet sound
+  is the same to within a hair, but a full-scale peak comes out 2.3 dB lower at the first step of the slider (0.5 of full scale, 0.5 dB), so crossing 0
+  trims the loudest peaks a little.
+- **Known limit: dragged to 0 and straight back.** Turned off and on again before the shaped path has finished fading out (about a tenth of a second), the pre-gain is set at
+  once while that path is still partly up, which steps what is left of it: at most about 0.02 (-34 dB of full scale) on a loud, sustained sound at full drive, and the later the less. Gliding the
+  pre-gain instead was tried and measured: it sweeps the shaper through every amount in between, and was 3 to 15 times rougher with the corners of a clipped tone than the step, so it was
+  not kept.
+- **Not oversampled, on purpose.** A soft clip folds its harmonics back as aliasing unless the sound is taken to a higher rate
+  and back: measured in Chromium, a 5 kHz sine at full drive has its fold-backs at -14 dB against the tone with none, and below
+  -120 dB at 2x. But the oversampling filters delay the shaper's output (measured: 2.9 ms at 2x and 4.4 ms at 4x), which puts a driven pad late against the
+  others, and, in the first version (2x), made turning the drive on click (the crossfade from the dry path to the delayed one: 40 times the roughness of the tone). A drum machine's pads have to be
+  on time more than a distortion has to be clean, as for the master's clipper, which is not oversampled either. The aliasing is
+  worst on bright, loud, sustained sounds (a hat or a ride at full drive).
+- **The cost** is one shaper and four more gains on every strip, running at off as well (an idle shaper is not free). Measured offline in Chromium, 16 strips with a hit every
+  125 ms rendered in the same time at drive 0 and at 100, and the shaper without oversampling added about 10 % to a whole render against none; it was not
+  measured on a phone.
+- **It is after the pad and before everything else, so the stems still add up.** The drive is on each pad's own strip, before the
+  sends and the master filter, so a stem has its pad's drive exactly as it is in the mix, and the stems still add up to the mix: a nonlinear
+  stage per pad, with every pad on a strip of its own, is as good as a linear one for this (measured in Chromium with the real export: the stems of three
+  driven pads, one also filtered and sent to the reverb, summed to the mix to -139 dB against its peak).
+- **Default Sound keeps it; a starter resets it.** Like the other pad settings, it belongs to the pad: Default Sound and loading a
+  sample leave it alone, and a starter puts a pad on a built-in sound back to 0 (a pad with a loaded sample keeps what it was given).
+- **Saved with the pad's other settings**, as a whole number from 0 to 100, in the beat's `padSettings` (beat version 15 with a
+  no-op migration, so a page that does not know it refuses the beat instead of opening it and saving it back without the drive; a version 14 beat reads as 0).
+- **On the LCD** as `PAD 03 DRIVE 45 %`.
+- **Not decided here:** other curves (a hard clip, a fold, a tube-like asymmetric one), a tone control after it, and a drive on the master
+  (the master already has a soft clipper, which is not set by anything on the page).
+
 ## Reverb and delay
 
 Every pad can send to one shared reverb and one shared delay (#187, phase 3). Each pad has a **Reverb** and a **Delay** under Mix

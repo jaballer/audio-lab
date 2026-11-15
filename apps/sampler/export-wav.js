@@ -214,7 +214,8 @@ export function planRender({
   // that began a pass or two later would not add up to the mix). What it does not do is schedule the early passes that
   // its own pad cannot be heard from: those are left empty (`skipped`), which costs next to nothing to render. The mix
   // has the tails of the passes it leaves out (the pad's last hit before them, cut by its first after them), so a stem
-  // leaves out only passes whose tails are 120 dB down by the file, twice the release away, and not the one release that
+  // leaves out only passes whose tails are 120 dB down by the file (a drive lifts a tail by 16 dB at most, which leaves it far below
+  // hearing), twice the release away, and not the one release that
   // the mix needs for itself: with one, a pad with a shorter release than the longest in the song was out by -82 dB.
   const warmUp = warmUpFor(hits);
   const ownWarmUp = warmUpFor(

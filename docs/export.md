@@ -66,7 +66,7 @@ not cost the same (a dense bar followed by sparse ones). A wrong estimate is wor
 
 ## The render
 
-The sequence is played into an `OfflineAudioContext` with the page's sounds, velocities, pad settings (a pad's filter, pan and sends
+The sequence is played into an `OfflineAudioContext` with the page's sounds, velocities, pad settings (a pad's drive, filter, pan and sends
 through the same mixer strips, reverb, delay and master filter the page plays through, with the beat's effects and tempo), retrigger and choke cuts, volume and clipper. `planRender` works out the hits, the passes and where the file sits before any audio exists.
 
 - **Passes.** The last `loops` passes are the file; the passes before are warm-up, so what rings on from the end of one

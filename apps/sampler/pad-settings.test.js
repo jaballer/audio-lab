@@ -11,6 +11,10 @@ import {
   SETTING_NAMES,
   SLIDER_NAMES,
   envelopeSeconds,
+  DRIVE_CURVE_REACH,
+  DRIVE_CURVE_SIZE,
+  driveCurve,
+  driveSpec,
   FILTER_Q_DB,
   HIGH_PASS_PARKED_HZ,
   LOW_PASS_PARKED_HZ,
@@ -74,6 +78,7 @@ describe("parsePadSettings", () => {
         gain: -6,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -88,6 +93,7 @@ describe("parsePadSettings", () => {
         gain: 0,
         pitch: 5,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -107,6 +113,7 @@ describe("parsePadSettings", () => {
         gain: 6,
         pitch: -12,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -121,6 +128,7 @@ describe("parsePadSettings", () => {
         gain: -3,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -148,6 +156,7 @@ describe("parsePadSettings", () => {
       gain: 0,
       pitch: 0,
       choke: 0,
+      drive: 0,
       filter: 0,
       pan: 0,
       reverb: 0,
@@ -181,6 +190,7 @@ describe("the choke setting", () => {
         gain: 0,
         pitch: 0,
         choke: 2,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -200,6 +210,7 @@ describe("the choke setting", () => {
         gain: -3,
         pitch: 0,
         choke: 8,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -214,6 +225,7 @@ describe("the choke setting", () => {
         gain: 2,
         pitch: 1,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -251,6 +263,7 @@ describe("the color setting", () => {
       "decay",
       "sustain",
       "release",
+      "drive",
       "filter",
       "pan",
       "reverb",
@@ -265,6 +278,7 @@ describe("the color setting", () => {
         gain: 0,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -281,6 +295,7 @@ describe("the color setting", () => {
         gain: -2,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -352,6 +367,7 @@ describe("the envelope settings", () => {
         gain: 0,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -484,5 +500,63 @@ describe("the reverb and delay sends", () => {
       3: { ...DEFAULT_SETTINGS, reverb: 60 },
       5: { ...DEFAULT_SETTINGS, delay: 25 },
     });
+  });
+});
+
+describe("the drive setting", () => {
+  it("is a whole number from 0 to 100, off at 0, and off when it is not a number", () => {
+    expect(clampSetting("drive", 140)).toBe(100);
+    expect(clampSetting("drive", -5)).toBe(0);
+    expect(clampSetting("drive", 33.4)).toBe(33);
+    expect(clampSetting("drive", "x")).toBe(0);
+    expect(DEFAULT_SETTINGS.drive).toBe(0);
+  });
+
+  it("is shown as a per cent, without a plus sign", () => {
+    expect(formatSetting("drive", 0)).toBe("0 %");
+    expect(formatSetting("drive", 45)).toBe("45 %");
+  });
+
+  it("is kept by parsePadSettings for a pad with only a drive set", () => {
+    expect(parsePadSettings({ 4: { drive: 70 } }, 8)).toEqual({ 4: { ...DEFAULT_SETTINGS, drive: 70 } });
+  });
+
+  it("is no shaping at all at 0: the strip's dry path alone", () => {
+    expect(driveSpec(0)).toEqual({ on: false });
+  });
+
+  it("starts as a gentle bend that is hardly more than the sound, and ends as the hardest clip, in equal ratios", () => {
+    const first = driveSpec(1);
+    expect(first.on).toBe(true);
+    // The gain into tanh is the pre-gain times the curve's reach: 1 at the bottom of the range, 40 at the top.
+    expect(first.preGain * DRIVE_CURVE_REACH).toBeCloseTo(40 ** 0.01, 6);
+    expect(driveSpec(100).preGain * DRIVE_CURVE_REACH).toBeCloseTo(40, 6);
+    const reach = (value) => driveSpec(value).preGain;
+    expect(reach(50) / reach(25)).toBeCloseTo(reach(75) / reach(50), 6);
+  });
+
+  it("brings the sound back down by the root of what it was pushed up by, so its loudness stays about where it was", () => {
+    for (const value of [1, 20, 50, 80, 100]) {
+      const { preGain, postGain } = driveSpec(value);
+      expect(postGain).toBeCloseTo(1 / Math.sqrt(preGain * DRIVE_CURVE_REACH), 9);
+    }
+    // At the bottom of the range the shaped path is the dry one to within a hair, so crossing 0 does not jump in level.
+    const small = driveSpec(1);
+    const x = 0.1; // a quiet sound; tanh(g x) / sqrt(g) against x
+    expect(Math.tanh(small.preGain * DRIVE_CURVE_REACH * x) * small.postGain).toBeCloseTo(x, 2);
+  });
+
+  it("has a curve that is tanh over the range the shaper takes: odd, through 0, flat at the ends, and the same every time", () => {
+    const curve = driveCurve();
+    expect(curve).toBeInstanceOf(Float32Array);
+    expect(curve).toHaveLength(DRIVE_CURVE_SIZE);
+    const middle = (DRIVE_CURVE_SIZE - 1) / 2;
+    expect(curve[middle]).toBe(0);
+    for (const at of [1, 100, 1000, middle - 1]) expect(curve[middle + at]).toBeCloseTo(-curve[middle - at], 6); // no DC from an odd curve
+    expect(curve[curve.length - 1]).toBeCloseTo(Math.tanh(DRIVE_CURVE_REACH), 6);
+    expect(curve[curve.length - 1]).toBeLessThan(1);
+    expect(curve[curve.length - 1]).toBeGreaterThan(0.999);
+    for (let i = 1; i < curve.length; i++) expect(curve[i]).toBeGreaterThan(curve[i - 1]); // rising all the way: it never folds back
+    expect(Array.from(driveCurve(65))).toEqual(Array.from(driveCurve(65)));
   });
 });

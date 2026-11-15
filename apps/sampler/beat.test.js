@@ -26,6 +26,7 @@ const beat = {
       gain: -6,
       pitch: 3,
       choke: 2,
+      drive: 0,
       filter: 0,
       pan: 0,
       reverb: 0,
@@ -360,6 +361,7 @@ describe("pad settings", () => {
         gain: -6,
         pitch: 3,
         choke: 2,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -383,6 +385,7 @@ describe("pad settings", () => {
         gain: 6,
         pitch: -12,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -500,7 +503,7 @@ describe("beats saved by version 8", () => {
 
   it("are stamped as the current version", () => {
     expect(upgradeBeat(stored(v8([used, blank]))).version).toBe(BEAT_VERSION);
-    expect(BEAT_VERSION).toBe(14);
+    expect(BEAT_VERSION).toBe(15);
   });
 });
 
@@ -548,6 +551,7 @@ describe("beats saved by version 11", () => {
         gain: -6,
         pitch: 3,
         choke: 2,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -699,6 +703,7 @@ describe("beats saved by version 6", () => {
         gain: -6,
         pitch: 3,
         choke: 2,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -720,6 +725,7 @@ describe("beats saved by version 6", () => {
           gain: 0,
           pitch: 0,
           choke: 0,
+          drive: 0,
           filter: 0,
           pan: 0,
           reverb: 0,
@@ -752,6 +758,7 @@ describe("beats saved by version 5", () => {
         gain: -6,
         pitch: 3,
         choke: 2,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -773,6 +780,7 @@ describe("beats saved by version 5", () => {
           gain: 0,
           pitch: 0,
           choke: 0,
+          drive: 0,
           filter: 0,
           pan: 0,
           reverb: 0,
@@ -790,6 +798,7 @@ describe("beats saved by version 5", () => {
         gain: 0,
         pitch: 0,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -819,6 +828,7 @@ describe("beats saved by version 4", () => {
         gain: -6,
         pitch: 3,
         choke: 0,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -840,6 +850,7 @@ describe("beats saved by version 4", () => {
           gain: 0,
           pitch: 0,
           choke: 5,
+          drive: 0,
           filter: 0,
           pan: 0,
           reverb: 0,
@@ -858,6 +869,7 @@ describe("beats saved by version 4", () => {
         gain: 0,
         pitch: 0,
         choke: 5,
+        drive: 0,
         filter: 0,
         pan: 0,
         reverb: 0,
@@ -1015,6 +1027,7 @@ describe("beats saved by version 12", () => {
         gain: -6,
         pitch: 3,
         choke: 2,
+        drive: 0,
         filter: -20,
         pan: 10,
         reverb: 0,
@@ -1059,6 +1072,53 @@ describe("beats saved by version 13", () => {
     expect(upgraded.version).toBe(BEAT_VERSION);
     expect(upgraded.effects).toEqual(effects13);
     expect(upgraded.sequences).toEqual(v13.sequences);
+  });
+});
+
+describe("beats saved by version 14", () => {
+  // What a page of version 14 kept: pad settings with no drive.
+  const v14 = {
+    ...serializeBeat(beat),
+    version: 14,
+    padSettings: { 2: { gain: -3, pitch: 0, choke: 1, filter: 25, pan: -10, reverb: 30, delay: 0, color: 2 } },
+  };
+
+  it("load with every pad's drive off, keeping the other settings", () => {
+    const loaded = parse(v14);
+    expect(loaded.padSettings[2]).toMatchObject({
+      gain: -3,
+      choke: 1,
+      filter: 25,
+      pan: -10,
+      reverb: 30,
+      color: 2,
+      drive: 0,
+    });
+  });
+
+  it("are brought up to the current version with the beat otherwise as it was", () => {
+    const upgraded = upgradeBeat(stored(v14));
+    expect(upgraded.version).toBe(BEAT_VERSION);
+    expect(upgraded.padSettings).toEqual(v14.padSettings);
+    expect(upgraded.sequences).toEqual(v14.sequences);
+  });
+});
+
+describe("a pad's drive", () => {
+  it("is kept through saving and loading, even when it is the only thing set", () => {
+    const saved = serializeBeat({ ...beat, padSettings: { 5: { ...DEFAULT_SETTINGS, drive: 65 } } });
+    expect(saved.padSettings[5].drive).toBe(65);
+    expect(parse(saved).padSettings).toEqual({ 5: { ...DEFAULT_SETTINGS, drive: 65 } });
+  });
+
+  it("is brought into range, and read as off when it is missing or not a number", () => {
+    const loaded = (drive) =>
+      parse({ ...serializeBeat(beat), padSettings: { 1: { drive, pan: 5 } } }).padSettings[1].drive;
+    expect(loaded(900)).toBe(100);
+    expect(loaded(-4)).toBe(0);
+    expect(loaded(41.6)).toBe(42);
+    expect(loaded("loud")).toBe(0);
+    expect(loaded(undefined)).toBe(0);
   });
 });
 

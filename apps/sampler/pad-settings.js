@@ -1,5 +1,5 @@
 // What can be set on a pad besides its sound: how loud it is, (for a loaded sample) how high and how its volume is
-// shaped over time, which choke group it is in, a filter and a pan for what it plays, and how much of it goes to the shared
+// shaped over time, which choke group it is in, a drive, a filter and a pan for what it plays, and how much of it goes to the shared
 // reverb and delay (effects.js). No DOM, and plain numbers, so the same values are what the sliders show, the kit plays and the song saves.
 //
 //   gain:  decibels, -24 to +6 in whole steps (0 leaves the sound as it is)
@@ -7,6 +7,8 @@
 //   attack, decay, release: (for a loaded sample) 0 to 100 on a slider, a time up to 2, 2 and 5 seconds (envelopeSeconds)
 //   sustain: (for a loaded sample) the level the decay falls to, 0 to 100 per cent (100 leaves the sample as it is)
 //   choke: a choke group, 0 (none) or 1 to 8: pads in the same group cut each other off (voices.js)
+//   drive: 0 to 100 per cent, how hard what the pad plays is pushed into a soft clip, before its filter; 0 is off and leaves the sound
+//           exactly as it is (driveSpec)
 //   filter: -100 to +100: one control for a low-pass (below 0: the cutoff comes down from the top of hearing, so the sound
 //           darkens) and a high-pass (above 0: the cutoff goes up from the bottom, so it thins); 0 is off (filterSpec)
 //   pan: -100 (left) to +100 (right), 0 in the centre: a balance, not a mix of the two sides (panGains)
@@ -21,6 +23,8 @@
 //   formatSetting("choke", 0)            // "OFF"; 3 is "GROUP 3"
 //   formatSetting("color", 3)            // "BLUE"
 //   formatSetting("attack", 50)          // "250 MS": a time, not the slider position; "sustain" is "50 %", and so is a send
+//   driveSpec(50)                        // { on: true, preGain: 1.58, postGain: 0.4 }: what the strip's drive is set to ({ on: false } at 0)
+//   driveCurve()                         // the soft clip the strip's shaper is given: tanh, over what the pre-gain brings in
 //   filterSpec(-50)                      // { type: "lowpass", frequency: 1265 }: what the strip's filter is set to ({ type: "off" } at 0)
 //   panGains(50)                         // { left: 0.5, right: 1 }: what each side is multiplied by
 //   envelopeSeconds("release", 100)      // 5
@@ -44,6 +48,8 @@ export const SETTINGS = {
   decay: { min: 0, max: 100, default: 0, unit: "", label: "Decay", samples: true, seconds: 2 },
   sustain: { min: 0, max: 100, default: 100, unit: "%", label: "Sustain", samples: true },
   release: { min: 0, max: 100, default: 0, unit: "", label: "Release", samples: true, seconds: 5 },
+  // How hard the pad is driven: any sound, since it acts on what comes out of the pad. Off until asked for.
+  drive: { min: 0, max: 100, default: 0, unit: "%", label: "Drive" },
   // Whole numbers either side of an off in the middle, like a DJ filter and a balance: they apply to any sound, a built-in
   // one as well as a sample, since they act on what comes out of the pad.
   filter: { min: -100, max: 100, default: 0, unit: "", label: "Filter" },
@@ -106,13 +112,40 @@ export function padEnvelope(settings) {
 // an envelope time is shown as the time and not as the slider's position.
 export function formatSetting(name, value) {
   if (SETTINGS[name].seconds) return formatSeconds(envelopeSeconds(name, value));
-  if (name === "sustain" || name === "reverb" || name === "delay") return `${value} %`;
+  if (name === "sustain" || name === "reverb" || name === "delay" || name === "drive") return `${value} %`;
   if (name === "choke") return value === 0 ? "OFF" : `GROUP ${value}`;
   if (name === "color") return padColorName(value).toUpperCase();
   if (name === "filter")
     return value === 0 ? "OFF" : `${value < 0 ? "LP" : "HP"} ${formatHz(filterSpec(value).frequency)}`;
   if (name === "pan") return value === 0 ? "CENTER" : `${value < 0 ? "L" : "R"} ${Math.abs(value)}`;
   return `${value > 0 ? "+" : ""}${value} ${SETTINGS[name].unit}`;
+}
+
+// The drive as what the strip does with it: the sound is pushed into a soft clip, tanh(g * x), and brought back down. `g` runs from 1,
+// which is a gentle bend that is barely more than the sound itself, to 40, which turns anything louder than a fortieth of full scale
+// into a flat top (an equal ratio for an equal step, `exp`, so the sweep feels even). The make-up is 1 / sqrt(g), which was measured
+// through the strip on six of the built-in sounds to keep their loudness (RMS) between -5 and +7 dB of where it was across the whole
+// range (most within 3 dB, the sparse noisy ones such as the clap the loudest, the kick the quietest at the top): a bare tanh was
+// 14 dB louder at g = 10 and 17 dB louder at g = 40, and dividing by g all the way would have been quieter than the sound by as much.
+// Peaks come down, as they do when a sound is squashed. The shaper takes its input between -1 and 1, and its curve is tanh over that range
+// scaled by DRIVE_CURVE_REACH, so the pre-gain is g divided by it (a hit of full scale at g = 40 is 10 times past the end of the
+// table, which is flat there: tanh of 4 is already 0.9993).
+const DRIVE_GAIN = exp(1, 40);
+export const DRIVE_CURVE_REACH = 4;
+export const DRIVE_CURVE_SIZE = 4097; // an odd number of points, so there is one at 0 and the curve passes through it exactly
+const DRIVE_OFF = Object.freeze({ on: false });
+
+export function driveSpec(value) {
+  if (value === 0) return DRIVE_OFF;
+  const gain = DRIVE_GAIN.toValue(value);
+  return { on: true, preGain: gain / DRIVE_CURVE_REACH, postGain: 1 / Math.sqrt(gain) };
+}
+
+// The soft clip the shaper is given, from -1 to 1 in, odd (so there is no DC from it) and flat at the ends.
+export function driveCurve(size = DRIVE_CURVE_SIZE) {
+  const curve = new Float32Array(size);
+  for (let i = 0; i < size; i++) curve[i] = Math.tanh(DRIVE_CURVE_REACH * ((i / (size - 1)) * 2 - 1));
+  return curve;
 }
 
 // The filter control as what the strip does with it. A low-pass comes down from the top of hearing to 80 Hz and a high-pass
