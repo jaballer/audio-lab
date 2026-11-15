@@ -601,6 +601,18 @@
   margin-bottom: 4px;
 }
 
+/* The Master Filter's MIDI knob: Learn, what it waits for or has, and Clear, in one row under its slider. */
+.sampler-effects-midi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 4px;
+}
+.sampler-effects-midi-status {
+  min-width: 5.5rem;
+}
+
 /* Under the pads: load a sample onto the selected pad, or put its built-in sound back. */
 .pad-tools {
   display: flex;

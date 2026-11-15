@@ -20,6 +20,7 @@ const ACTIONS = [
   "clearAll",
   "tapTempo",
   "nudgeTempo",
+  "controlChange",
 ];
 
 const input = (name) => ({ name, state: "connected", onmidimessage: null });
@@ -46,6 +47,7 @@ function fakeApi(overrides = {}) {
     clearAll: vi.fn(),
     tapTempo: vi.fn(),
     nudgeTempo: vi.fn(),
+    controlChange: vi.fn(),
     onStatus: vi.fn(),
     state,
     getState: () => state,
@@ -169,6 +171,52 @@ describe("input from any other controller", () => {
     expect(api.triggerPad).not.toHaveBeenCalled();
   });
 
+  it("hands a Control Change to the app as it came, for a knob", async () => {
+    const keys = input("MPK mini");
+    const { api } = await setup({ inputs: [keys] });
+    keys.onmidimessage({ data: [CC | 2, 21, 99] });
+    expect(api.controlChange).toHaveBeenCalledTimes(1);
+    expect(api.controlChange).toHaveBeenCalledWith({
+      type: "cc",
+      channel: 2,
+      controller: 21,
+      value: 99,
+      input: "MPK mini",
+    });
+  });
+
+  it("says which input a Control Change came from, so two controllers that send the same numbers can be told apart", async () => {
+    const first = input("MPK mini");
+    const second = input("Oxygen 49");
+    const { api } = await setup({ inputs: [first, second] });
+    first.onmidimessage({ data: [CC, 21, 10] });
+    second.onmidimessage({ data: [CC, 21, 20] });
+    expect(api.controlChange).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ controller: 21, value: 10, input: "MPK mini" }),
+    );
+    expect(api.controlChange).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ controller: 21, value: 20, input: "Oxygen 49" }),
+    );
+  });
+
+  it("does not hand the app the buttons of a Launchpad this page has no layout for as a knob", async () => {
+    const pro = input("Launchpad Pro MK3");
+    const { api } = await setup({ inputs: [pro] });
+    for (const controller of [21, 74, 91, 98]) pro.onmidimessage({ data: [CC, controller, 127] });
+    expect(api.controlChange).not.toHaveBeenCalled();
+    pro.onmidimessage({ data: [NOTE_ON, 36 + 3, 100] }); // its notes still play pads
+    expect(api.triggerPad).toHaveBeenCalledWith(3, 100 / 127);
+  });
+
+  it("does not hand the app a Launchpad's buttons or anything else of its controllers as a knob", async () => {
+    const lp = input("Launchpad");
+    const { api } = await setup({ inputs: [lp] });
+    for (const controller of [21, 74, 104, 111]) lp.onmidimessage({ data: [CC, controller, 127] });
+    expect(api.controlChange).not.toHaveBeenCalled();
+  });
+
   it("uses the profile of the port a message came from", async () => {
     const lp = input("Launchpad");
     const keys = input("MPK mini");
@@ -248,6 +296,19 @@ describe("lighting a controller", () => {
     vi.advanceTimersByTime(1);
     expect(padLed(out, pad3)).toHaveLength(2);
     expect(padLed(out, pad3)[1][2]).toBe(resting);
+  });
+
+  it("tells the app when MIDI is switched off, so a Learn that waits for a knob can stop", async () => {
+    const onDisconnect = vi.fn();
+    const { midi } = await setup({ inputs: [input("MPK mini")], api: fakeApi({ onDisconnect }) });
+    expect(onDisconnect).not.toHaveBeenCalled();
+    midi.disconnect();
+    expect(onDisconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches off without an app that asks to be told", async () => {
+    const { midi } = await setup({ inputs: [input("MPK mini")] });
+    expect(() => midi.disconnect()).not.toThrow();
   });
 
   it("turns the lights off and stops driving them when MIDI is switched off", async () => {

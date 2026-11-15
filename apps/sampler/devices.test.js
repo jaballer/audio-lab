@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { selectProfile } from "../../shared/midi-devices.js";
 import { parseMidi } from "../../shared/midi-messages.js";
-import { CONTROLS, PROFILES, generic, launchpad, mpcSample } from "./devices.js";
+import { CONTROLS, PROFILES, generic, launchpad, mpcSample, otherLaunchpad } from "./devices.js";
 
 const noteOn = (note, velocity = 100, channel = 0) => parseMidi([0x90 | channel, note, velocity]);
 const cc = (controller, value = 127) => parseMidi([0xb0, controller, value]);
@@ -50,7 +50,7 @@ describe("profile selection", () => {
       "Launchpad Mini 9 RGB",
       "Launchpad Open",
     ]) {
-      expect(selectProfile(PROFILES, name)).toBe(generic);
+      expect(selectProfile(PROFILES, name)).toBe(otherLaunchpad);
       expect(launchpad.match(name)).toBe(false);
     }
   });
@@ -109,11 +109,14 @@ describe("mpcSample.translate", () => {
     expect(mpcSample.translate(noteOn(35, 90))).toEqual([{ type: "pad", index: 15, velocity: 90, bank: 7 }]);
   });
 
-  it("ignores releases, aftertouch and controllers", () => {
+  it("ignores releases and aftertouch", () => {
     expect(mpcSample.translate(parseMidi([0x80, 36, 0]))).toEqual([]);
     expect(mpcSample.translate(parseMidi([0x90, 36, 0]))).toEqual([]);
     expect(mpcSample.translate(parseMidi([0xa0, 38, 104]))).toEqual([]); // poly aftertouch
-    expect(mpcSample.translate(cc(7))).toEqual([]);
+  });
+
+  it("passes a Control Change on as it came, for a knob the person can assign", () => {
+    expect(mpcSample.translate(cc(7, 90))).toEqual([{ type: "cc", channel: 0, controller: 7, value: 90 }]);
   });
 
   it("has no lights until the device is known to take them", () => {
@@ -179,6 +182,35 @@ describe("launchpad.translate", () => {
   });
 });
 
+describe("launchpad.translate and knobs", () => {
+  it("passes no Control Change on as a knob: its controllers are buttons, which Learn cannot take", () => {
+    for (let controller = 0; controller < 128; controller++) {
+      for (const event of launchpad.translate(cc(controller))) expect(event.type).not.toBe("cc");
+    }
+  });
+});
+
+describe("otherLaunchpad.translate", () => {
+  it("plays pads from notes 36-51 as any other controller does", () => {
+    expect(otherLaunchpad.translate(noteOn(36, 64))).toEqual(generic.translate(noteOn(36, 64)));
+    expect(otherLaunchpad.translate(noteOn(51, 127))).toEqual([{ type: "pad", index: 15, velocity: 127 }]);
+  });
+
+  it("passes no Control Change on, whatever the controller number: its buttons are not knobs", () => {
+    for (let controller = 0; controller < 128; controller++)
+      expect(otherLaunchpad.translate(cc(controller))).toEqual([]);
+  });
+
+  it("leaves a Launchpad that is not a Launchpad to the generic profile", () => {
+    expect(selectProfile(PROFILES, "MPK mini")).toBe(generic);
+    expect(otherLaunchpad.match("MPK mini")).toBe(false);
+  });
+
+  it("has no lights", () => {
+    expect(otherLaunchpad.lights).toBeUndefined();
+  });
+});
+
 describe("generic.translate", () => {
   it("plays pads 1-16 from notes 36-51, keeping the velocity", () => {
     expect(generic.translate(noteOn(36, 64))).toEqual([{ type: "pad", index: 0, velocity: 64 }]);
@@ -194,11 +226,20 @@ describe("generic.translate", () => {
     expect(generic.translate(noteOn(52))).toEqual([{ type: "pad", index: 16, velocity: 100 }]);
   });
 
-  it("ignores releases, controllers and the Launchpad's step keys and buttons", () => {
+  it("ignores releases and the Launchpad's step keys", () => {
     expect(generic.translate(parseMidi([0x80, 40, 64]))).toEqual([]);
     expect(generic.translate(parseMidi([0x90, 40, 0]))).toEqual([]);
-    expect(generic.translate(cc(106))).toEqual([]);
     expect(generic.translate(noteOn(5))).toEqual([]);
+  });
+
+  it("passes every Control Change on as it came, with its channel, for a knob the person can assign", () => {
+    expect(generic.translate(cc(21, 64))).toEqual([{ type: "cc", channel: 0, controller: 21, value: 64 }]);
+    expect(generic.translate(parseMidi([0xb9, 7, 0]))).toEqual([{ type: "cc", channel: 9, controller: 7, value: 0 }]);
+  });
+
+  it("does not turn a note or a pitch bend into a Control Change", () => {
+    expect(generic.translate(noteOn(20))).toEqual([]); // below the first pad: a note, and nothing else
+    expect(generic.translate(parseMidi([0xe0, 0, 64]))).toEqual([]);
   });
 
   it("has no lights", () => {

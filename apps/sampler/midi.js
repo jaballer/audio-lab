@@ -3,7 +3,7 @@
 // profiles to the app:
 //
 // - input: the profile for the port a message came from turns it into events
-//   (pad, step, control) that are handed to the app.
+//   (pad, step, control, cc) that are handed to the app.
 // - output: when a connected output port belongs to a profile that has lights
 //   (the Launchpad), its LEDs are kept in step with what is on screen.
 
@@ -44,6 +44,11 @@ export function createMidi(api) {
     },
     control(event) {
       controls[event.name]();
+    },
+    // A knob: what it is for (a setting it was assigned to, or Learn waiting for one) is the app's to say. It is told which input the
+    // message came from, since two controllers can send the same numbers.
+    cc(event, input) {
+      api.controlChange({ ...event, input: input.name });
     },
   };
 
@@ -95,6 +100,7 @@ export function createMidi(api) {
       /* ignore */
     }
     stopListening();
+    api.onDisconnect?.();
   }
 
   function padHit(idx) {
