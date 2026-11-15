@@ -99,6 +99,7 @@ export function createMidi(api) {
       /* ignore */
     }
     stopListening();
+    api.onDisconnect?.();
   }
 
   function padHit(idx) {

@@ -365,8 +365,11 @@ value }`, and `midi.js` hands it to the page, where `createMidiMapping` either l
 - **Learn takes the first knob turned that can be one.** Not after a number of moves: what a person does not mean to assign is
   a handful of controllers that are not knobs, and these are left out by number (`isAssignableCc`): 64, the sustain pedal, which
   a footswitch sends on every press; 0 and 32, Bank Select; and 120 to 127, the channel mode messages (all sound off and the like)
-  that controllers send by themselves. Learn goes on waiting past them. This is a limit: a knob that is one of those controllers
-  cannot be assigned. Pressing Learn again cancels it. One controller is one setting's: assigning it to a second target
+  that controllers send by themselves. Learn goes on waiting past them and the display says which controller it passed
+  (`CC 64 IS NOT A KNOB`). This is a limit: a knob that is one of those controllers cannot be assigned. Learn stops when the
+  Learn key is pressed again, when Clear is, when MIDI is switched off and when the Effects panel is hidden (a Learn left
+  waiting would take a knob nobody knew was being waited for: a mod wheel moved after reconnecting would have replaced the
+  assignment). One controller is one setting's: assigning it to a second target
   takes it from the first (there is one target so far).
 - **The middle of the knob is the filter off, in a detent.** A knob has 128 positions and no middle one (63.5), so off at only one
   position would mean the filter is on, a little, nearly always. Positions within `DETENT` (6 per cent of half the travel, the
@@ -380,10 +383,13 @@ value }`, and `midi.js` hands it to the page, where `createMidiMapping` either l
 FILTER LP 1.3 KHZ`), is heard by what is ringing, and is saved with the beat. Learn and Clear say what they did on the display
   (`MOVE A KNOB FOR MASTER FILTER`, `MASTER FILTER CH 1 CC 21`, `MASTER FILTER KNOB CLEARED`), and the panel's status line is a
   `role="status"`, so a screen reader hears them.
+- **A map that could not be saved is said so.** Storage can be blocked or full (`saveJson` returns false): the knob works until the page
+  is closed, and the display ends the message with `(NOT SAVED)`, for a taught knob and for Clear.
 - **Not decided here:** other targets (reverb and delay level, tempo: a target is an entry of `TARGETS`, with how a value of 0
   to 127 becomes its setting), per-pad targets (a knob would have to follow the selected pad), a controller's lit rings or motorised
-  knobs, a note that MIDI is off while Learn waits (the page says "Turn a knob" and the MIDI switch is in the header), and a fixed
-  profile mapping for a known controller.
+  knobs, a note that MIDI is off when Learn is pressed (the page says "Turn a knob", and the MIDI switch is in the header), a fixed
+  profile mapping for a known controller, and following a change made in another tab (two tabs each keep their own copy, and the
+  last to save wins; the beat has `tab-sync.js` for this, the map is small and per controller, and it was not worth the same).
 
 ## Amplitude envelope
 

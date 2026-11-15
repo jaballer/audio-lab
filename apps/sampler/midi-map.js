@@ -6,7 +6,7 @@
 // same code is what the page runs and what the tests run.
 //
 //   const mapping = createMidiMapping({ load, save, setEffect, getEffect, onChange, onMessage });
-//   mapping.startLearn("masterFilter");        // the next knob turned is the Master Filter's
+//   mapping.toggleLearn("masterFilter");       // the next knob turned is the Master Filter's (again: stop waiting)
 //   mapping.handleCc({ channel: 0, controller: 21, value: 64 });
 //   mapping.getState();                        // { learning: null, assigned: { masterFilter: "CH 1 CC 21" } }
 //   mapping.clear("masterFilter");
@@ -33,8 +33,7 @@ export const TARGETS = Object.freeze({
     toSetting: (value) => {
       const raw = ((value - CC_MAX / 2) / (CC_MAX / 2)) * 100; // -100 at 0, +100 at 127
       if (Math.abs(raw) <= DETENT) return 0;
-      // `|| 0`: a negative side that rounds to nothing would be -0, which is not worth keeping or saving.
-      return Math.sign(raw) * Math.round(((Math.abs(raw) - DETENT) / (100 - DETENT)) * 100) || 0;
+      return Math.sign(raw) * Math.round(((Math.abs(raw) - DETENT) / (100 - DETENT)) * 100);
     },
   }),
 });
@@ -109,39 +108,57 @@ export function createMidiMapping({ load, save, setEffect, getEffect, onChange =
   let map = parseMidiMap(load());
   let learning = null; // the target the next knob is for, or null
 
+  // Keeps the map, and says whether it was kept: storage can be blocked or full, and then the assignment lasts until the page is
+  // closed, which the person is told (`save` returns false).
   function persist(next) {
     map = next;
-    save(map);
+    const kept = save(map) !== false;
+    onChange();
+    return kept;
+  }
+
+  function startLearn(name) {
+    if (!TARGETS[name]) return;
+    learning = name;
+    onMessage(`MOVE A KNOB FOR ${TARGETS[name].lcd}`);
+    onChange();
+  }
+
+  function cancelLearn() {
+    if (learning === null) return;
+    learning = null;
+    onMessage("LEARN CANCELLED");
     onChange();
   }
 
   return {
-    startLearn(name) {
-      if (!TARGETS[name]) return;
-      learning = name;
-      onMessage(`MOVE A KNOB FOR ${TARGETS[name].lcd}`);
-      onChange();
-    },
-    cancelLearn() {
-      if (learning === null) return;
-      learning = null;
-      onMessage("LEARN CANCELLED");
-      onChange();
+    startLearn,
+    cancelLearn,
+    // The Learn key: it waits for a knob, and pressed again it stops waiting. The view does not need to know which it is.
+    toggleLearn(name) {
+      if (learning === name) cancelLearn();
+      else startLearn(name);
     },
     clear(name) {
       if (!map[name]) return;
-      persist(clearCc(map, name));
-      onMessage(`${TARGETS[name].lcd} KNOB CLEARED`);
+      // Clear ends a Learn that was waiting too: pressing it is the person saying this knob is not wanted.
+      learning = null;
+      const kept = persist(clearCc(map, name));
+      onMessage(`${TARGETS[name].lcd} KNOB CLEARED${kept ? "" : " (NOT SAVED)"}`);
     },
     // A Control Change from a controller (the `cc` event, midi.js). While Learn waits it is the assignment, when it can be one;
     // otherwise, when it is assigned, it moves the setting.
     handleCc({ channel, controller, value }) {
       if (learning !== null) {
-        if (!isAssignableCc(channel, controller)) return;
+        if (!isAssignableCc(channel, controller)) {
+          // A pedal or a channel message is not a knob, and Learn goes on waiting: the display says why nothing happened.
+          onMessage(`CC ${controller} IS NOT A KNOB`);
+          return;
+        }
         const name = learning;
         learning = null;
-        persist(assignCc(map, name, channel, controller));
-        onMessage(`${TARGETS[name].lcd} ${formatAssignment({ channel, controller })}`);
+        const kept = persist(assignCc(map, name, channel, controller));
+        onMessage(`${TARGETS[name].lcd} ${formatAssignment({ channel, controller })}${kept ? "" : " (NOT SAVED)"}`);
         return;
       }
       const name = targetForCc(map, channel, controller);

@@ -267,6 +267,19 @@ describe("lighting a controller", () => {
     expect(padLed(out, pad3)[1][2]).toBe(resting);
   });
 
+  it("tells the app when MIDI is switched off, so a Learn that waits for a knob can stop", async () => {
+    const onDisconnect = vi.fn();
+    const { midi } = await setup({ inputs: [input("MPK mini")], api: fakeApi({ onDisconnect }) });
+    expect(onDisconnect).not.toHaveBeenCalled();
+    midi.disconnect();
+    expect(onDisconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches off without an app that asks to be told", async () => {
+    const { midi } = await setup({ inputs: [input("MPK mini")] });
+    expect(() => midi.disconnect()).not.toThrow();
+  });
+
   it("turns the lights off and stops driving them when MIDI is switched off", async () => {
     const out = output("Launchpad");
     const { midi } = await setup({ inputs: [input("Launchpad")], outputs: [out] });

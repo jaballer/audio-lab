@@ -41,7 +41,7 @@ describe("the Master Filter's knob", () => {
     for (let value = 1; value <= CC_MAX; value++) expect(toSetting(value)).toBeGreaterThanOrEqual(toSetting(value - 1));
   });
 
-  it("is symmetrical about the middle", () => {
+  it("is symmetrical about the middle, and never a negative zero", () => {
     for (let value = 0; value <= 63; value++) expect(toSetting(value) + toSetting(CC_MAX - value)).toBe(0);
     for (let value = 0; value <= CC_MAX; value++) expect(Object.is(toSetting(value), -0)).toBe(false);
   });
@@ -144,10 +144,10 @@ describe("assigning and clearing", () => {
 });
 
 // The page's view of a mapping, with what it needs from the page faked.
-function setup({ stored = null, effect = 0 } = {}) {
+function setup({ stored = null, effect = 0, saveResult = true } = {}) {
   let current = effect;
   const calls = {
-    save: vi.fn(),
+    save: vi.fn(() => saveResult),
     setEffect: vi.fn((name, value) => {
       current = value;
     }),
@@ -205,13 +205,14 @@ describe("learning", () => {
     expect(setEffect).not.toHaveBeenCalled();
   });
 
-  it("goes on waiting past a pedal or a channel message, which are not knobs", () => {
-    const { mapping, save } = setup();
+  it("goes on waiting past a pedal or a channel message, which are not knobs, and says so", () => {
+    const { mapping, save, onMessage } = setup();
     mapping.startLearn("masterFilter");
     mapping.handleCc(cc(64, 127));
     mapping.handleCc(cc(123, 0));
     expect(mapping.getState().learning).toBe("masterFilter");
     expect(save).not.toHaveBeenCalled();
+    expect(onMessage).toHaveBeenLastCalledWith("CC 123 IS NOT A KNOB");
     mapping.handleCc(cc(74, 10));
     expect(mapping.getState().assigned.masterFilter).toBe("CH 1 CC 74");
   });
@@ -247,6 +248,82 @@ describe("learning", () => {
     expect(save).toHaveBeenLastCalledWith({ masterFilter: { channel: 0, controller: 22 } });
     mapping.handleCc(cc(21, 127));
     expect(mapping.getState().assigned.masterFilter).toBe("CH 1 CC 22");
+  });
+});
+
+describe("the Learn key", () => {
+  it("waits for a knob when pressed, and stops waiting when pressed again", () => {
+    const { mapping, onMessage } = setup();
+    mapping.toggleLearn("masterFilter");
+    expect(mapping.getState().learning).toBe("masterFilter");
+    mapping.toggleLearn("masterFilter");
+    expect(mapping.getState().learning).toBeNull();
+    expect(onMessage).toHaveBeenLastCalledWith("LEARN CANCELLED");
+  });
+
+  it("is pressed again after a knob was taken: it waits for another", () => {
+    const { mapping } = setup();
+    mapping.toggleLearn("masterFilter");
+    mapping.handleCc(cc(21, 1));
+    mapping.toggleLearn("masterFilter");
+    expect(mapping.getState().learning).toBe("masterFilter");
+  });
+});
+
+describe("a Learn that has to stop", () => {
+  it("is ended by Clear, which also takes the assigned knob", () => {
+    const { mapping, save, setEffect } = setup({ stored: { masterFilter: { channel: 0, controller: 21 } } });
+    mapping.toggleLearn("masterFilter");
+    mapping.clear("masterFilter");
+    expect(mapping.getState()).toEqual({ learning: null, assigned: { masterFilter: null } });
+    expect(save).toHaveBeenLastCalledWith({});
+    // A knob turned now is not taken by a Learn that was left running.
+    mapping.handleCc(cc(30, 50));
+    expect(mapping.getState().assigned.masterFilter).toBeNull();
+    expect(setEffect).not.toHaveBeenCalled();
+  });
+
+  it("is ended by cancelLearn, which the page calls when MIDI is switched off or the panel is hidden", () => {
+    const { mapping, save } = setup();
+    mapping.toggleLearn("masterFilter");
+    mapping.cancelLearn();
+    mapping.handleCc(cc(21, 90));
+    expect(save).not.toHaveBeenCalled();
+    expect(mapping.getState().assigned.masterFilter).toBeNull();
+  });
+});
+
+describe("storage that does not keep the map", () => {
+  it("says so on the display when a taught knob could not be saved, and the knob works for now", () => {
+    const { mapping, onMessage, setEffect } = setup({ saveResult: false });
+    mapping.toggleLearn("masterFilter");
+    mapping.handleCc(cc(21, 100));
+    expect(onMessage).toHaveBeenLastCalledWith("MASTER FILTER CH 1 CC 21 (NOT SAVED)");
+    mapping.handleCc(cc(21, 127));
+    expect(setEffect).toHaveBeenCalledWith("masterFilter", 100);
+  });
+
+  it("says so when a clear could not be saved", () => {
+    const { mapping, onMessage } = setup({
+      stored: { masterFilter: { channel: 0, controller: 21 } },
+      saveResult: false,
+    });
+    mapping.clear("masterFilter");
+    expect(onMessage).toHaveBeenLastCalledWith("MASTER FILTER KNOB CLEARED (NOT SAVED)");
+  });
+
+  it("does not mention it when the map was kept", () => {
+    const { mapping, onMessage } = setup();
+    mapping.toggleLearn("masterFilter");
+    mapping.handleCc(cc(21, 100));
+    expect(onMessage).toHaveBeenLastCalledWith("MASTER FILTER CH 1 CC 21");
+  });
+
+  it("takes a save that returns nothing as kept", () => {
+    const { mapping, onMessage } = setup({ saveResult: undefined });
+    mapping.toggleLearn("masterFilter");
+    mapping.handleCc(cc(21, 100));
+    expect(onMessage).toHaveBeenLastCalledWith("MASTER FILTER CH 1 CC 21");
   });
 });
 

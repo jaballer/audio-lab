@@ -665,8 +665,7 @@ const mixSliders = createSettingsSliders($("pad-mix"), {
 // The reverb and the delay the pads send to: part of the beat, the same for every pad.
 const effectsPanel = createEffectsPanel($("effects-body"), {
   onChange: (name, value) => sampler.setEffect(name, value),
-  onLearn: (target) => midiMapping.startLearn(target),
-  onCancelLearn: () => midiMapping.cancelLearn(),
+  onLearn: (target) => midiMapping.toggleLearn(target),
   onClearAssignment: (target) => midiMapping.clear(target),
 });
 // The waveform and the Start and End of the selected pad's sample, in the pad editor.
@@ -1043,6 +1042,8 @@ const midi = createMidi({
     sampler.triggerPad(idx, velocity);
   },
   controlChange: (event) => midiMapping.handleCc(event),
+  // Learn waits for a knob, which cannot come once MIDI is off.
+  onDisconnect: () => midiMapping.cancelLearn(),
   padCount: PAD_COUNT,
   steps: STEPS,
   onStatus: site.setMidiStatus,
@@ -1077,7 +1078,11 @@ createDisclosure({
   toggle: $("effects-toggle"),
   regions: [$("effects-body")],
   open: loadJson(EFFECTS_PANEL_KEY, !window.matchMedia("(max-width: 800px)").matches) !== false,
-  onToggle: (open) => saveJson(EFFECTS_PANEL_KEY, open),
+  onToggle: (open) => {
+    saveJson(EFFECTS_PANEL_KEY, open);
+    // A Learn that waits behind a hidden panel would take a knob the person does not know is being waited for.
+    if (!open) midiMapping.cancelLearn();
+  },
 });
 
 // The velocity bars are off until the Velocity switch asks for them; the choice is remembered.
