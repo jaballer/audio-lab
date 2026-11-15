@@ -382,6 +382,27 @@ describe("exportDialogModel", () => {
       );
     });
 
+    it("says nothing of silenced pads for a song too long to export: it has only its blocking reason", () => {
+      const long = beat3([{ 0: [0] }, { 1: [0] }], [4, 4], {
+        bpm: 40,
+        arrangement: [
+          { sequence: 0, repeats: 16 },
+          { sequence: 1, repeats: 2 },
+        ],
+      });
+      const m = exportDialogModel({
+        beat: long,
+        kit,
+        options: all,
+        stepsPerBar: 16,
+        sampleRate: EXPORT_SAMPLE_RATE,
+        supported: true,
+        heard: Array.from({ length: 16 }, (_, pad) => pad !== 1),
+      });
+      expect(m.blocked).not.toBe("");
+      expect(m.note).toBe("");
+    });
+
     it("blocks it when the sequences the song plays have no steps, though another sequence has", () => {
       const patterns = [{}, { 1: [0] }, {}];
       const m = model(

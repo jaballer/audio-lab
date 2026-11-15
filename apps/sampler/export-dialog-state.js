@@ -91,7 +91,8 @@ export function exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate,
     title: exportTitle(beat, scope),
     readout: exportReadout(info),
     format: exportFormat(sampleRate),
-    note: [note, stemsChosen ? "" : silencedNote(silenced)].filter(Boolean).join(" "),
+    // Nothing to say about a file that cannot be made, and a stem is not a mix (so nothing is left out of it).
+    note: [note, nothing || tooLong || stemsChosen ? "" : silencedNote(silenced)].filter(Boolean).join(" "),
     hint: exportHint(options.files, scope, songTailSeconds(beat)),
     blocked: exportBlockedReason({
       supported,

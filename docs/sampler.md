@@ -415,7 +415,7 @@ part of it: the steps, the pad's settings and its sample are untouched.
   still lights the pad and still cuts the pads of its choke group, as the choke is a part of the beat. The gate is at the front, so a
   silenced pad sends nothing new to the reverb and the delay either, and what those two already hold rings out.
 - **For the visit, not saved.** Not in the beat, a project file or an undo, so a beat can never open silent because a pad was left
-  soloed. Saving mutes could be added later without breaking anything (a `BEAT_VERSION` bump).
+  soloed. Opening a project or a starter reloads the page (`main.js`), which clears them too. Saving mutes could be added later without breaking anything (a `BEAT_VERSION` bump).
 - **A mix export is made as it is heard**: the Export dialog says how many pads are left out ("2 pads are muted or silenced by a solo,
   so left out of this file"). A stem is one pad's own sound, so stems are unaffected, as are the choke cuts a stem already includes.
 - **Not decided here:** a MIDI button or a key for each pad's mute and solo, a way to clear every mute and solo at once, and a mute
