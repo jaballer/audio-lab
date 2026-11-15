@@ -43,6 +43,8 @@ Press the **MIDI** switch (in the machine's header, beside the power switch, on 
 
 **Any other controller**, including newer or unrecognized Launchpads: MIDI notes 36–51 play pads 1–16, with velocity. Their layout may not correspond to these notes, and Launchpad LEDs are not controlled.
 
+**Knobs** (sampler) — on any controller but a Launchpad, a knob can move the Master Filter: press **MIDI Learn** under Master in the Effects panel and turn the knob. The assignment is kept in the browser, and the middle of the knob is the filter off.
+
 ## Run it
 
 Needs Node 22.13 or newer, but not 23 or 25 (`nvm use` reads `.nvmrc`).

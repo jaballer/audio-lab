@@ -20,6 +20,7 @@ const ACTIONS = [
   "clearAll",
   "tapTempo",
   "nudgeTempo",
+  "controlChange",
 ];
 
 const input = (name) => ({ name, state: "connected", onmidimessage: null });
@@ -46,6 +47,7 @@ function fakeApi(overrides = {}) {
     clearAll: vi.fn(),
     tapTempo: vi.fn(),
     nudgeTempo: vi.fn(),
+    controlChange: vi.fn(),
     onStatus: vi.fn(),
     state,
     getState: () => state,
@@ -167,6 +169,21 @@ describe("input from any other controller", () => {
     keys.onmidimessage({ data: [NOTE_ON, 36 + PADS, 100] });
     keys.onmidimessage({ data: [NOTE_ON, 20, 100] });
     expect(api.triggerPad).not.toHaveBeenCalled();
+  });
+
+  it("hands a Control Change to the app as it came, for a knob", async () => {
+    const keys = input("MPK mini");
+    const { api } = await setup({ inputs: [keys] });
+    keys.onmidimessage({ data: [CC | 2, 21, 99] });
+    expect(api.controlChange).toHaveBeenCalledTimes(1);
+    expect(api.controlChange).toHaveBeenCalledWith({ type: "cc", channel: 2, controller: 21, value: 99 });
+  });
+
+  it("does not hand the app a Launchpad's buttons or anything else of its controllers as a knob", async () => {
+    const lp = input("Launchpad");
+    const { api } = await setup({ inputs: [lp] });
+    for (const controller of [21, 74, 104, 111]) lp.onmidimessage({ data: [CC, controller, 127] });
+    expect(api.controlChange).not.toHaveBeenCalled();
   });
 
   it("uses the profile of the port a message came from", async () => {

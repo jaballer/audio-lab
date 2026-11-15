@@ -2,14 +2,15 @@
 // for the room's Size and Level, keys for which note the echoes are apart, a Ping-Pong switch, sliders for the echoes' Feedback and
 // Level, and a Filter slider for the whole mix. It shows and reports; the sampler decides (setEffect). The ranges and the text come from effects.js.
 //
-//   const panel = createEffectsPanel(element, { onChange });   // onChange(name, value), for any of the settings in effects.js
-//   panel.refresh({ effects });
+//   const panel = createEffectsPanel(element, { onChange, onLearn, onCancelLearn, onClearAssignment });
+//                                       // onChange(name, value), for any of the settings in effects.js; the others for the knob
+//   panel.refresh({ effects, midi });   // midi: { learning, assigned } from midi-map.js
 //
 // A slider is a native range input, so it works from the keyboard (arrows, Home, End); Delete or Backspace, or a double-click, puts it
 // back to its default, as the pad editor's sliders do. The note and Ping-Pong keys say which is chosen and whether it is on
 // (`aria-pressed`).
 
-import { setAttr, setText } from "../../shared/dom-updates.js";
+import { setAttr, setHidden, setText } from "../../shared/dom-updates.js";
 import { DELAY_DIVISIONS, EFFECTS, formatEffect } from "./effects.js";
 
 const RESET_KEYS = ["Delete", "Backspace"];
@@ -19,7 +20,7 @@ const REVERB_SLIDERS = ["reverbSize", "reverbLevel"];
 const DELAY_SLIDERS = ["delayFeedback", "delayLevel"];
 const MASTER_SLIDERS = ["masterFilter"];
 
-export function createEffectsPanel(element, { onChange }) {
+export function createEffectsPanel(element, { onChange, onLearn, onCancelLearn, onClearAssignment }) {
   const sliders = {};
   const idBase = `effects-${element.id || "panel"}`;
   element.classList.add("sampler-effects-groups");
@@ -110,8 +111,41 @@ export function createEffectsPanel(element, { onChange }) {
   const master = group("Master");
   for (const name of MASTER_SLIDERS) slider(master.section, name);
 
+  // The Master Filter's knob (midi-map.js): Learn, then turn a knob on a controller. The key is pressed while it waits, a
+  // status line says what it waits for or which knob is assigned (also to a screen reader, as it changes), and Clear is there
+  // only while a knob is assigned.
+  const midiRow = document.createElement("div");
+  midiRow.className = "sampler-effects-midi";
+  const learn = document.createElement("button");
+  learn.type = "button";
+  learn.className = "btn btn-small";
+  learn.textContent = "MIDI Learn";
+  learn.setAttribute("aria-pressed", "false");
+  learn.setAttribute("aria-label", "MIDI learn for the master filter");
+  learn.addEventListener("click", () => (learning ? onCancelLearn() : onLearn("masterFilter")));
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "btn btn-small";
+  clear.textContent = "Clear";
+  clear.setAttribute("aria-label", "Clear the MIDI knob of the master filter");
+  clear.hidden = true;
+  clear.addEventListener("click", () => onClearAssignment("masterFilter"));
+  const status = document.createElement("span");
+  status.className = "small-label sampler-effects-midi-status";
+  status.setAttribute("role", "status");
+  midiRow.append(learn, status, clear);
+  master.section.appendChild(midiRow);
+  let learning = false;
+
   return {
-    refresh({ effects }) {
+    refresh({ effects, midi }) {
+      if (midi) {
+        const { learning: waiting, assigned } = midi;
+        learning = waiting === "masterFilter";
+        setAttr(learn, "aria-pressed", String(learning));
+        setText(status, learning ? "Turn a knob" : (assigned.masterFilter ?? "No knob"));
+        setHidden(clear, !assigned.masterFilter, learn);
+      }
       for (const [name, { input, output }] of Object.entries(sliders)) {
         const value = effects[name];
         if (input.value !== String(value)) input.value = String(value);

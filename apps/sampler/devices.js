@@ -6,6 +6,9 @@
 //                                          (a profile may add `bank`; the app does not use it yet)
 //   { type: "step",    index }             index 0 is step 1
 //   { type: "control", name }              one of CONTROLS
+//   { type: "cc", channel, controller, value }
+//                                          a Control Change as it came (a knob), channel 0-15 and value 0-127; what a
+//                                          knob is for is the person's to say (midi-map.js), so no profile names one
 //
 // A profile does not know how many pads or steps the app has, so `index` can be
 // past the last one; the app ignores those.
@@ -35,6 +38,9 @@ const AMBER = color(3, 3);
 
 const NOTE_ON = 0x90;
 const CC = 0xb0;
+
+// A Control Change passed on as it is, for the knobs of a controller the person can assign (midi-map.js).
+const knob = (msg) => ({ type: "cc", channel: msg.channel, controller: msg.controller, value: msg.value });
 
 // Round buttons along the top edge (controllers 104-111, left to right).
 const TOP_BUTTONS = [
@@ -87,7 +93,8 @@ export const launchpad = {
       if (row < STEP_ROWS && col < GRID_SIZE) return [{ type: "step", index: row * GRID_SIZE + col }];
       return [];
     }
-    // The button's release sends value 0; only the press counts.
+    // The button's release sends value 0; only the press counts. Its controllers are all buttons, and it has no knobs, so none
+    // is passed on as a `cc`: a button cannot be taken by Learn.
     if (msg.type === "cc" && msg.value > 0) {
       const button = TOP_BUTTONS.find((b) => b.cc === msg.controller);
       return button ? [{ type: "control", name: button.control }] : [];
@@ -129,6 +136,7 @@ export const mpcSample = {
   id: "mpc-sample",
   match: isMpcSample,
   translate(msg) {
+    if (msg.type === "cc") return [knob(msg)];
     if (msg.type !== "noteOn") return [];
     const { index, bank } = padFromNote(msg.note);
     return [{ type: "pad", index, velocity: msg.velocity, bank }];
@@ -142,6 +150,7 @@ export const generic = {
     if (msg.type === "noteOn" && msg.note >= FIRST_PAD_NOTE) {
       return [{ type: "pad", index: msg.note - FIRST_PAD_NOTE, velocity: msg.velocity }];
     }
+    if (msg.type === "cc") return [knob(msg)];
     return [];
   },
 };

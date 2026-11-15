@@ -37,6 +37,7 @@ import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
+import { createMidiMapping } from "./midi-map.js";
 import { createColorSwatches } from "./color-swatches.js";
 import { createPadGrid, padForKeyEvent, padPressAction } from "./pads.js";
 import {
@@ -308,6 +309,18 @@ const kit = createKit(SOUNDS, {
     // they have would keep an estimate made from the built-in sounds.
     if (exportDialog?.isOpen) refreshExportDialog();
   },
+});
+
+// Which MIDI knob moves the Master Filter, as the person taught it (midi-map.js). It is the person's controller setup, so it is kept on
+// its own and not in the beat or a project file. `sampler` is built below; the mapping asks for it only when a knob is turned.
+const MIDI_MAP_KEY = "pad-sampler:midi-map";
+const midiMapping = createMidiMapping({
+  load: () => loadJson(MIDI_MAP_KEY),
+  save: (map) => saveJson(MIDI_MAP_KEY, map),
+  setEffect: (name, value) => sampler.setEffect(name, value),
+  getEffect: (name) => sampler.getState().effects[name],
+  onChange: () => render(),
+  onMessage: (text) => say(text),
 });
 
 const sampler = createSampler({
@@ -652,6 +665,9 @@ const mixSliders = createSettingsSliders($("pad-mix"), {
 // The reverb and the delay the pads send to: part of the beat, the same for every pad.
 const effectsPanel = createEffectsPanel($("effects-body"), {
   onChange: (name, value) => sampler.setEffect(name, value),
+  onLearn: (target) => midiMapping.startLearn(target),
+  onCancelLearn: () => midiMapping.cancelLearn(),
+  onClearAssignment: (target) => midiMapping.clear(target),
 });
 // The waveform and the Start and End of the selected pad's sample, in the pad editor.
 const trimView = createTrimView($("pad-trim"), {
@@ -797,7 +813,7 @@ function render() {
   settingsSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   envelopeSliders.refresh({ settings: state.padSettings, sampleEnabled: !kit.isDefault(state.selected) });
   mixSliders.refresh({ settings: state.padSettings, sampleEnabled: true });
-  effectsPanel.refresh({ effects: state.effects });
+  effectsPanel.refresh({ effects: state.effects, midi: midiMapping.getState() });
   colorSwatches.refresh({ color: state.padSettings.color });
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
@@ -1026,6 +1042,7 @@ const midi = createMidi({
     if (!audio.running) audioNotice.nudge();
     sampler.triggerPad(idx, velocity);
   },
+  controlChange: (event) => midiMapping.handleCc(event),
   padCount: PAD_COUNT,
   steps: STEPS,
   onStatus: site.setMidiStatus,

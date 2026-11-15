@@ -70,5 +70,11 @@ Press **MIDI** and allow the permission prompt (Chrome, Edge or Firefox; not Saf
 Launchpad (Launchpad, S, or Mini mk1/mk2) plays the pads from its bottom-left block and lights up to mirror the pads and
 steps, and an Akai MPC Sample plays the pads in any bank. On any other controller, including newer Launchpads, notes
 36-51 play pads 1-16 and nothing is lit.
+
+A knob can move the **Master Filter**. With MIDI on, open the **Effects** panel, press **MIDI Learn** under Master and turn a
+knob on your controller: that knob is the filter from then on (the panel says which, and **Clear** takes it back). The middle
+of the knob is the filter off, with a little room either side of it, and a turn of the knob moves the slider. The knob is
+remembered in this browser for this controller, not in the beat or a project file. A sustain pedal and a Launchpad's buttons
+are not knobs, so Learn leaves them alone.
 The [MIDI monitor](https://jaballer.github.io/audio-lab/monitor.html) shows what a controller really sends, and the
 [README](../README.md#midi) has the details.
