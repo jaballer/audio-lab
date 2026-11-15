@@ -132,7 +132,7 @@ as on a hardware sampler where they are on a screen of their own.
   button that says whether it is open. Opening it with the button moves focus to its heading (so a keyboard user
   is in it however far it sits from the button); Escape, with focus inside it, closes it and returns to the
   button. Moving it between its two places keeps focus on the control that had it.
-- **Sections, not tabs, for now.** Sound, Tune, Envelope, Mix and Color. Tabs when there are enough sections to need them.
+- **Sections, not tabs, for now.** Sound, Tune, Envelope, Mix, Listen (Mute and Solo) and Color. Tabs when there are enough sections to need them.
 - **Where later features go.** Reverse, one-shot or hold and a voice limit each become a section drawn into the drawer by a view
   of its own. Filter, Pan and the sends to the reverb and delay are under Mix.
 
@@ -399,6 +399,27 @@ FILTER LP 1.3 KHZ`), is heard by what is ringing, and is saved with the beat. Le
   knobs, a note that MIDI is off when Learn is pressed (the page says "Turn a knob", and the MIDI switch is in the header), a fixed
   profile mapping for a known controller, and following a change made in another tab (two tabs each keep their own copy, and the
   last to save wins; the beat has `tab-sync.js` for this, the map is small and per controller, and it was not worth the same).
+
+## Mute and solo
+
+A pad can be muted, or soloed so that only it (and any other soloed pads) is heard (#196). It is how a beat is listened to and not
+part of it: the steps, the pad's settings and its sample are untouched.
+
+- **In the pad editor's Listen section**, two toggle buttons (`aria-pressed`) for the selected pad. On the pad grid a muted pad has a
+  MUTE badge, a soloed one a SOLO badge, and a pad that a solo of another silences has its name dimmed, so the state shows with the
+  editor closed. The words are in the pad's label too, so it is not carried by sight alone. The LCD says `PAD 03 MUTE ON` and so on.
+- **A solo is not a mute of the others.** `mute-solo.js` keeps two sets of pads and a pad is heard if it is not muted and, when any pad
+  is soloed, is soloed. Clearing the last solo brings the pads back as they were. A pad both muted and soloed is silent: the mute wins.
+- **Silenced at the strip's gate, not at the voice.** Each strip (`mixer.js`) starts with a gain, the gate, of 1 or 0, which glides
+  as the settings do (so a mute in the middle of a sound is not a click). The voices still play into it, so a hit on a muted pad
+  still lights the pad and still cuts the pads of its choke group, as the choke is a part of the beat. The gate is at the front, so a
+  silenced pad sends nothing new to the reverb and the delay either, and what those two already hold rings out.
+- **For the visit, not saved.** Not in the beat, a project file or an undo, so a beat can never open silent because a pad was left
+  soloed. Saving mutes could be added later without breaking anything (a `BEAT_VERSION` bump).
+- **A mix export is made as it is heard**: the Export dialog says how many pads are left out ("2 pads are muted or silenced by a solo,
+  so left out of this file"). A stem is one pad's own sound, so stems are unaffected, as are the choke cuts a stem already includes.
+- **Not decided here:** a MIDI button or a key for each pad's mute and solo, a way to clear every mute and solo at once, and a mute
+  as a part of a sequence (automation). A live keyboard shortcut for the selected pad is the likeliest first one.
 
 ## Amplitude envelope
 

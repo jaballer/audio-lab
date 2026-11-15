@@ -24,6 +24,7 @@
 //   sampler.selectPad(3)
 //   sampler.toggleStep(5)        // a step of the bar being shown (see setPage)
 //   sampler.setPadSetting("gain", -6)       // the selected pad's gain (dB), pitch (semitones), envelope, choke, drive, filter, pan or colour, saved with the beat
+//   sampler.toggleMute(3); sampler.toggleSolo(3)   // a pad's mute or solo (a pad that is not heard still plays through its strip, silent): for the visit, not saved
 //   sampler.setStepVelocity(5, 90)   // 1-127, for a step that is on; the sequence plays it at that level
 //   sampler.setStepVelocity(5, 90, { activate: true })   // the same, and turns the step on first if it is off: one undo
 //   sampler.setSequence(1)       // 0-based; each sequence has its own steps and bars
@@ -55,7 +56,7 @@
 //   sampler.setEffect("reverbSize", 70)   // the shared reverb, delay and master filter (effects.js): heard at once, by what is ringing and by the steps queued
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
-//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, songMode, loopSong, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings, effects }
+//   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, songMode, loopSong, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings, effects, muted, soloed }
 //                                // stepsOn and playheadStep are of the bar being shown (playheadStep is -1 when the playhead is in another bar). For a moment
 //                                // after a sequence takes over (queued, or the next of the song) what sounds is still the one that gave way: `heard` is
 //                                // { sequence, bars, page, stepsOn, playheadStep, song } of what sounds, for the display (playheadPosition is in its numbering;
@@ -89,6 +90,7 @@ import { createLiveMixer } from "./mixer.js";
 import { DEFAULT_EFFECTS, EFFECTS, clampEffect, formatEffect, isDefaultEffects } from "./effects.js";
 import { createHistory } from "../../shared/history.js";
 import { SETTINGS, formatSetting } from "./pad-settings.js";
+import { createMuteSolo } from "./mute-solo.js";
 import { FULL_VELOCITY, createPattern, firstDifference } from "../../shared/pattern.js";
 import { createScheduler } from "../../shared/scheduler.js";
 import { SWING_DEFAULT, createTapTempo, nearestStep } from "../../shared/tempo.js";
@@ -240,11 +242,15 @@ export function createSampler({
   });
   // Every voice leads into its pad's strip of the mixer (its drive, filter, pan and sends to the reverb and the delay), which leads to the master.
   // `scheduler` is made below: the mixer asks for the tempo only once a hit has made its strips.
+  // Which pads are muted or soloed: for the visit, not saved with the beat. The strips follow it (`audible`), so a hit on a pad that is not heard
+  // still goes through its voice (it cuts its choke group, and the pad lights) and only the strip's gate is shut.
+  const muteSolo = createMuteSolo(kit.length, { onChange: (pad) => mixer.update(pad) });
   const mixer = createLiveMixer(audio, {
     pads: kit.length,
     settings: (pad) => kit.settings(pad),
     effects: () => effects,
     bpm: () => scheduler.bpm,
+    audible: (pad) => muteSolo.isAudible(pad),
   });
   const clock = { prepare: () => audio.ensure(), now: () => audio.ctx.currentTime };
   const scheduler = createScheduler({
@@ -463,6 +469,15 @@ export function createSampler({
       `PAD ${pad2(selected + 1)} ${SETTINGS[name].label.toUpperCase()} ${formatSetting(name, kit.settings(selected)[name])}`,
     );
     onBeatChange();
+    onChange();
+  }
+
+  // A pad's mute or solo (the selected pad by default). Not part of the beat, so it is not saved or undone: it is how the beat is listened to.
+  function toggleMuteSolo(kind, pad) {
+    if (kind === "mute") muteSolo.toggleMute(pad);
+    else muteSolo.toggleSolo(pad);
+    const on = kind === "mute" ? muteSolo.isMuted(pad) : muteSolo.isSoloed(pad);
+    onMessage(`PAD ${pad2(pad + 1)} ${kind === "mute" ? "MUTE" : "SOLO"} ${on ? "ON" : "OFF"}`);
     onChange();
   }
 
@@ -1120,6 +1135,9 @@ export function createSampler({
     toggleStep,
     setStepVelocity,
     setPadSetting,
+    toggleMute: (pad = selected) => toggleMuteSolo("mute", pad),
+    toggleSolo: (pad = selected) => toggleMuteSolo("solo", pad),
+    isAudible: (pad) => muteSolo.isAudible(pad),
     setPage,
     setBars,
     setSequence,
@@ -1236,6 +1254,8 @@ export function createSampler({
         stepVelocities: Array.from({ length: steps }, (_, i) => pattern.velocity(selected, page * steps + i)),
         padSettings: kit.settings(selected), // the selected pad's settings (pad-settings.js)
         effects: { ...effects }, // the reverb's and the delay's settings (effects.js)
+        muted: Array.from({ length: kit.length }, (_, pad) => muteSolo.isMuted(pad)),
+        soloed: Array.from({ length: kit.length }, (_, pad) => muteSolo.isSoloed(pad)),
       };
     },
 

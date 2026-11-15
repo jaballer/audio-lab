@@ -1017,6 +1017,50 @@
   }
 }
 
+/* ---------- Listen: mute and solo ---------- */
+/* The pad editor's Mute and Solo buttons sit side by side; a pressed one is filled, since colour is not all that says it
+   (aria-pressed says it to a screen reader, and the label on the pad says it to the eye). */
+.pad-listen {
+  display: flex;
+  gap: 8px;
+}
+.pad-listen .btn[aria-pressed="true"] {
+  background: #ffd04a;
+  color: #0b0b0c;
+}
+/* On the pad: a short word at the top for a pad that was set, and a dimmed name for a pad a solo of another one silences, so the
+   state shows on the grid without the editor open. */
+.sampler-pad .listen {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  font: 800 0.56rem var(--mono);
+  letter-spacing: 0.1em;
+  text-align: center;
+  pointer-events: none;
+}
+.sampler-pad .listen:empty {
+  display: none;
+}
+.sampler-pad[data-listen="solo"] .listen {
+  color: #ffd04a;
+}
+.sampler-pad[data-listen="muted"] .listen {
+  color: #ff9a8a;
+}
+.sampler-pad[data-listen="muted"] .name,
+.sampler-pad[data-listen="silenced"] .name {
+  opacity: 0.45;
+}
+@media (forced-colors: active) {
+  .pad-listen .btn[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
 /* ---------- Pad colours ---------- */
 /* A coloured pad shows it as its rim (the ring just inside its edge, set as --pad-color by pads.js); its face stays
    dark, so its number, key and name keep their contrast, and the selection ring and the hit light sit inside it. */

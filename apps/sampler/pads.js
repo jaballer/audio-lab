@@ -6,11 +6,12 @@
 //   grid.setPower("booting");   // "off" | "booting" | "on" | "shutdown" (power-sequence.js): the CSS sweeps light across the pads
 //   grid.select(0);   // mark the selected pad (aria-current)
 //   grid.setColor(0, 5);   // the pad's colour: 0 for none, or a swatch (pad-colors.js); shown as its rim, and named in its label
+//   grid.setListen(0, "muted");   // "" (heard), "muted", "solo" or "silenced" (not soloed while another pad is): a badge or a dimmed name, and a word in its label
 //   grid.setName(0, "Kick 808", true);   // a pad plays another sound now (true: a loaded sample, not the built-in one)
 //   padForKey("q")    // which pad a key plays (8), or -1
 //   padForKeyEvent(event)   // the same from a keydown event, which also reads the number row with Shift held
 
-import { setAttr } from "../../shared/dom-updates.js";
+import { setAttr, setText } from "../../shared/dom-updates.js";
 import { createFlasher } from "../../shared/flash.js";
 import { sweepStep } from "../../shared/power-sequence.js";
 import { PAD_COLUMNS, PAD_ROWS, padIndex } from "./layout.js";
@@ -46,9 +47,22 @@ export function padForKeyEvent({ key = "", code = "" }) {
 // is their way to the editor.)
 export const padPressAction = ({ shift = false } = {}) => (shift ? "edit" : "play");
 
-// A pad's label for a screen reader: which pad, what it plays, its key, and its colour when it has one.
-export function padLabel({ index, name, key, color = 0 }) {
-  return `Pad ${index + 1}, ${name}, key ${key.toUpperCase()}${color ? `, ${padColorName(color).toLowerCase()}` : ""}`;
+// How a pad is heard, from its mute and solo and whether any pad is soloed: "" when it is, and otherwise the word the badge and the
+// label use. A mute wins over a solo of the same pad (mute-solo.js).
+export function listenState({ muted = false, soloed = false, anySolo = false }) {
+  if (muted) return "muted";
+  if (soloed) return "solo";
+  return anySolo ? "silenced" : "";
+}
+
+const LISTEN_WORDS = { muted: "muted", solo: "solo", silenced: "silent while another pad is soloed" };
+// What the badge says: the short word for a pad that was set, nothing for one a solo of another silenced (it is only dimmed).
+const LISTEN_BADGES = { muted: "MUTE", solo: "SOLO", silenced: "" };
+
+// A pad's label for a screen reader: which pad, what it plays, its key, its colour when it has one, and whether it is not heard.
+export function padLabel({ index, name, key, color = 0, listen = "" }) {
+  const colour = color ? `, ${padColorName(color).toLowerCase()}` : "";
+  return `Pad ${index + 1}, ${name}, key ${key.toUpperCase()}${colour}${listen ? `, ${LISTEN_WORDS[listen]}` : ""}`;
 }
 
 // `sounds` is a list of { name }; `onTrigger(index, { shift })` is called for a pointer press, with whether Shift was
@@ -58,7 +72,9 @@ export function createPadGrid(element, { sounds, onTrigger }) {
   const keys = []; // each pad's computer key, for its label
   const names = []; // what each pad plays now
   const colors = []; // each pad's colour (0 for none)
-  const labelOf = (idx) => padLabel({ index: idx, name: names[idx], key: keys[idx], color: colors[idx] });
+  const listens = []; // how each pad is heard: "", "muted", "solo" or "silenced"
+  const labelOf = (idx) =>
+    padLabel({ index: idx, name: names[idx], key: keys[idx], color: colors[idx], listen: listens[idx] });
   const flash = createFlasher("hit", FLASH_MS);
   const light = createFlasher("lit", FLASH_MS);
   // Powered off, and while shutting down (the audio is already muted then), a hit makes no sound, so it must not light.
@@ -79,9 +95,13 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       keys[idx] = key;
       names[idx] = sounds[idx].name;
       colors[idx] = 0;
+      listens[idx] = "";
       btn.setAttribute("aria-label", labelOf(idx));
       btn.innerHTML =
-        `<span class="num">${idx + 1}</span>` + `<span class="key">${key}</span>` + `<span class="name"></span>`;
+        `<span class="num">${idx + 1}</span>` +
+        `<span class="key">${key}</span>` +
+        `<span class="listen" aria-hidden="true"></span>` +
+        `<span class="name"></span>`;
       btn.querySelector(".name").textContent = sounds[idx].name; // text, not markup: a file's name goes here
       btn.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return; // a right or middle press is not a hit (a right press opens the context menu)
@@ -126,6 +146,16 @@ export function createPadGrid(element, { sounds, onTrigger }) {
       el.querySelector(".name").textContent = name;
       el.classList.toggle("custom", custom);
       names[idx] = name;
+      el.setAttribute("aria-label", labelOf(idx));
+    },
+
+    // Called on every redraw, which is every step while playing: only what changed is written.
+    setListen(idx, listen) {
+      if (listens[idx] === listen) return;
+      listens[idx] = listen;
+      const el = padEls[idx];
+      setAttr(el, "data-listen", listen);
+      setText(el.querySelector(".listen"), LISTEN_BADGES[listen] ?? "");
       el.setAttribute("aria-label", labelOf(idx));
     },
 

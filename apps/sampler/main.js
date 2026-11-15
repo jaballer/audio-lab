@@ -34,6 +34,7 @@ import { createChainStrip } from "./chain-strip.js";
 import { createEffectsPanel } from "./effects-panel.js";
 import { createSequenceRow, latchFromStored } from "./sequence-row.js";
 import { createPadDrawer, moveKeepingFocus } from "./pad-drawer.js";
+import { listenState } from "./pads.js";
 import { formatPadTitle, formatSampleInfo, formatStepsHeading, pad2 } from "./format.js";
 import { BAR_CHOICES, MAX_BARS, MAX_SEQUENCES, PAD_COUNT, STEPS, STEP_GROUP } from "./layout.js";
 import { createMidi } from "./midi.js";
@@ -643,6 +644,10 @@ const padDrawer = createPadDrawer({
   onToggle: (open) => saveJson(DRAWER_KEY, open),
 });
 
+// Mute and solo for the selected pad: for the visit, not saved with the beat.
+$("pad-mute").addEventListener("click", () => sampler.toggleMute());
+$("pad-solo").addEventListener("click", () => sampler.toggleSolo());
+
 const colorSwatches = createColorSwatches($("pad-colors"), {
   onChange: (index) => sampler.setPadSetting("color", index),
 });
@@ -814,6 +819,12 @@ function render() {
   mixSliders.refresh({ settings: state.padSettings, sampleEnabled: true });
   effectsPanel.refresh({ effects: state.effects, midi: midiMapping.getState() });
   colorSwatches.refresh({ color: state.padSettings.color });
+  setAttr($("pad-mute"), "aria-pressed", String(state.muted[state.selected]));
+  setAttr($("pad-solo"), "aria-pressed", String(state.soloed[state.selected]));
+  const anySolo = state.soloed.some(Boolean);
+  state.muted.forEach((muted, pad) =>
+    padGrid.setListen(pad, listenState({ muted, soloed: state.soloed[pad], anySolo })),
+  );
   // A sample that is kept but could not be restored this visit can still be removed.
   sampleLoader.setResetEnabled(!kit.isDefault(state.selected) || samples.isKept(state.selected));
   setText($("steps-toggle"), formatStepsHeading(soundName));
@@ -948,6 +959,7 @@ function refreshExportDialog() {
       stepsPerBar: STEPS,
       sampleRate: exportRate(),
       supported: canRenderOffline(),
+      heard: sampler.getState().muted.map((_, pad) => sampler.isAudible(pad)),
     }),
   );
 }
@@ -971,11 +983,19 @@ exportDialog = createExportDialog($("export-dialog"), {
 exportDialog.setOptions(exportOptions);
 
 const pressExport = createExportAction({
-  snapshot: () => ({ beat: sampler.getBeat(), options: exportOptions, sampleRate: exportRate() }),
+  // `heard`: which pads are heard now, kept for the whole render (a mix is made as it is heard; a stem is one pad's own sound).
+  snapshot: () => ({
+    beat: sampler.getBeat(),
+    options: exportOptions,
+    sampleRate: exportRate(),
+    heard: sampler.getState().muted.map((_, pad) => sampler.isAudible(pad)),
+  }),
   ready: () => restoring,
   run: ({ signal, onProgress, snapshot }) => {
-    const make = snapshot.options.files === "stems" ? exportStems : exportSequence;
+    const stems = snapshot.options.files === "stems";
+    const make = stems ? exportStems : exportSequence;
     return make({
+      ...(stems ? {} : { audible: (pad) => snapshot.heard[pad] }),
       beat: snapshot.beat,
       // Taken here, once the saved samples are back (`ready` has been waited for): a kit snapshot at the press could hold
       // the built-in sound of a pad whose sample is still being restored. Stems are many renders of this one kit and beat,

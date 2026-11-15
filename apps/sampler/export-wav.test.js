@@ -138,10 +138,25 @@ const masterFilterOf = (offline) => {
 // The nodes of the strip whose input is `input`, which the mixer makes together, in this order.
 const stripNodes = (offline, input) => {
   const at = offline.nodes.indexOf(input);
-  // The drive's four gains (its shaper is not a node of the list), then the filter's paths, then the two sides of the pan.
-  const [driveDry, drivePre, drivePost, driveOut, dry, lowPass, highPass, lowGain, highGain, left, right] =
-    offline.nodes.slice(at + 1, at + 12);
-  return { input, driveDry, drivePre, drivePost, driveOut, dry, lowPass, highPass, lowGain, highGain, left, right };
+  // The gate (the pad's mute), the drive's four gains (its shaper is not a node of the list), then the filter's paths, then the two
+  // sides of the pan.
+  const [gate, driveDry, drivePre, drivePost, driveOut, dry, lowPass, highPass, lowGain, highGain, left, right] =
+    offline.nodes.slice(at + 1, at + 13);
+  return {
+    input,
+    gate,
+    driveDry,
+    drivePre,
+    drivePost,
+    driveOut,
+    dry,
+    lowPass,
+    highPass,
+    lowGain,
+    highGain,
+    left,
+    right,
+  };
 };
 
 // The shaper a test hands a context to be its clipper: the master is built first and asks for it, and the mixer's drives, which ask
@@ -387,6 +402,32 @@ describe("renderSequence", () => {
     expect(lowPad.right.gain.value).toBe(1);
     expect([highPad.left.gain.value, highPad.right.gain.value]).toEqual([1, 0]);
     expect([flatPad.left.gain.value, flatPad.right.gain.value]).toEqual([1, 1]);
+  });
+
+  it("shuts the gate of a pad that is not heard, and leaves the rest open: the mix is made as it is heard", async () => {
+    const offline = fakeOffline();
+    await renderSequence({
+      beat: beatOf(sequence({ 0: [0], 1: [0] })),
+      kit: createKit([sound("a"), sound("b"), sound("c")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+      audible: (pad) => pad !== 1,
+    });
+    const gates = stripInputs(offline).map((input) => stripNodes(offline, input).gate.gain.value);
+    expect(gates).toEqual([1, 0, 1]);
+  });
+
+  it("leaves every gate open when it is not told which pads are heard", async () => {
+    const offline = fakeOffline();
+    await renderSequence({
+      beat: beatOf(sequence({ 0: [0] })),
+      kit: createKit([sound("a"), sound("b")]),
+      stepsPerBar: 16,
+      sampleRate: 1000,
+      createContext: offline.createContext,
+    });
+    expect(stripInputs(offline).map((input) => stripNodes(offline, input).gate.gain.value)).toEqual([1, 1]);
   });
 
   it("sets each strip's drive as the kit has it: the shaped path in for a driven pad, the dry sound alone for the rest", async () => {
@@ -867,6 +908,14 @@ describe("exportSequence", () => {
     expect(await done).toBe(true);
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ loops: 4, channels: "mono" }));
     expect(save.mock.calls[0][1]).toBe("pad16-seq-01-120bpm-x4-mono.wav");
+  });
+
+  it("hands the render which pads are heard, so a muted pad is left out of the mix", async () => {
+    render.mockClear();
+    const audible = (pad) => pad !== 1;
+    const { done } = run(beatOf(sequence({ 0: [0] })), { audible });
+    await done;
+    expect(render).toHaveBeenCalledWith(expect.objectContaining({ audible }));
   });
 
   it("renders at the rate it is given, and the file says so in its header", async () => {
