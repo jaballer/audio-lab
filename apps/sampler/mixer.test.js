@@ -98,17 +98,30 @@ const RETURN_GAINS = 2 + 9;
 // The gains made before the first strip's.
 const BEFORE_STRIPS = MASTER_GAINS + RETURN_GAINS;
 
-// A strip's gains: the input, the drive's four (the dry path, the pre-gain, the post-gain and where they meet), then the filter's three
+// A strip's gains: the input, the gate (the pad's mute), the drive's four (the dry path, the pre-gain, the post-gain and where they meet), then the filter's three
 // paths, the two sides of the pan and the two sends.
-const GAINS_PER_STRIP = 12;
+const GAINS_PER_STRIP = 13;
 const FILTERS_PER_STRIP = 2;
 
 // The nodes of pad `pad`'s strip, in the order the mixer makes them (after those of the delay and the reverb, which come first:
 // the strips' sends lead to them).
 function stripOf(ctx, pad) {
   const from = BEFORE_STRIPS + pad * GAINS_PER_STRIP;
-  const [input, driveDry, drivePre, drivePost, driveOut, dry, lowGain, highGain, left, right, reverbSend, delaySend] =
-    ctx.made.gains.slice(from, from + GAINS_PER_STRIP);
+  const [
+    input,
+    gate,
+    driveDry,
+    drivePre,
+    drivePost,
+    driveOut,
+    dry,
+    lowGain,
+    highGain,
+    left,
+    right,
+    reverbSend,
+    delaySend,
+  ] = ctx.made.gains.slice(from, from + GAINS_PER_STRIP);
   const [lowPass, highPass] = ctx.made.filters.slice(
     MASTER_FILTERS + pad * FILTERS_PER_STRIP,
     MASTER_FILTERS + (pad + 1) * FILTERS_PER_STRIP,
@@ -119,6 +132,7 @@ function stripOf(ctx, pad) {
   const shaper = ctx.made.shapers[pad];
   return {
     input,
+    gate,
     driveDry,
     drivePre,
     drivePost,
@@ -348,6 +362,64 @@ describe("createMixer", () => {
   });
 });
 
+describe("a strip's gate (mute and solo)", () => {
+  const glidesTo = (param, value, ctx) =>
+    expect(param.setTargetAtTime).toHaveBeenCalledWith(value, ctx.currentTime, expect.any(Number));
+  function setUp(heard = {}) {
+    const ctx = fakeContext();
+    const mixer = createMixer(ctx, {}, { pads: 3, audible: (pad) => heard[pad] ?? true });
+    return { ctx, mixer, heard };
+  }
+
+  it("leads the strip's input through the gate, so what the voices play into is silenced", () => {
+    const { ctx } = setUp();
+    const strip = stripOf(ctx, 0);
+    expect(strip.input.connect).toHaveBeenCalledWith(strip.gate);
+    expect(strip.gate.connect).toHaveBeenCalledWith(strip.driveDry);
+  });
+
+  it("is open for every pad by default", () => {
+    const ctx = fakeContext();
+    createMixer(ctx, {}, { pads: 2 });
+    expect([0, 1].map((pad) => stripOf(ctx, pad).gate.gain.value)).toEqual([1, 1]);
+  });
+
+  it("is closed from the start for a pad that is not heard when the strips are made", () => {
+    const { ctx } = setUp({ 1: false });
+    expect([0, 1, 2].map((pad) => stripOf(ctx, pad).gate.gain.value)).toEqual([1, 0, 1]);
+  });
+
+  it("glides shut when the pad is muted, and open again, and changes nothing else", () => {
+    const { ctx, mixer, heard } = setUp();
+    const strip = stripOf(ctx, 0);
+    heard[0] = false;
+    mixer.update(0);
+    glidesTo(strip.gate.gain, 0, ctx);
+    expect(strip.gate.gain.setValueAtTime).not.toHaveBeenCalled(); // a glide, not a step: no click
+    heard[0] = true;
+    mixer.update(0);
+    glidesTo(strip.gate.gain, 1, ctx);
+    expect(stripOf(ctx, 1).gate.gain.setTargetAtTime).not.toHaveBeenCalledWith(0, expect.anything(), expect.anything());
+  });
+
+  it("is carried to a mixer the live one builds again after the master is replaced", () => {
+    const heard = { 0: false };
+    const audio = {
+      ctx: fakeContext(),
+      master: {},
+      ensure() {
+        return this.ctx;
+      },
+    };
+    const live = createLiveMixer(audio, { pads: 1, audible: (pad) => heard[pad] ?? true, defer: () => () => {} });
+    live.padInput(0);
+    audio.master = {}; // killSound() made another
+    live.padInput(0);
+    const second = 2 * BEFORE_STRIPS + GAINS_PER_STRIP; // the second mixer's strip: its gate follows the input
+    expect(audio.ctx.made.gains[second + 1].gain.value).toBe(0);
+  });
+});
+
 describe("a strip's drive", () => {
   const driveGains = ({ driveDry, drivePre, drivePost }) => ({
     dry: driveDry.gain.value,
@@ -365,8 +437,8 @@ describe("a strip's drive", () => {
 
   it("is a dry path beside a shaped one (a gain in, the shaper, a gain out), which meet again before the filter", () => {
     const { strip } = setUp();
-    expect(strip.input.connect).toHaveBeenCalledWith(strip.driveDry);
-    expect(strip.input.connect).toHaveBeenCalledWith(strip.drivePre);
+    expect(strip.gate.connect).toHaveBeenCalledWith(strip.driveDry);
+    expect(strip.gate.connect).toHaveBeenCalledWith(strip.drivePre);
     expect(strip.drivePre.connect).toHaveBeenCalledWith(strip.shaper);
     expect(strip.shaper.connect).toHaveBeenCalledWith(strip.drivePost);
     expect(strip.driveDry.connect).toHaveBeenCalledWith(strip.driveOut);
@@ -656,7 +728,7 @@ describe("createLiveMixer", () => {
   // The strip of the mixer made second (with one pad each): the first mixer's returns and strip, then its own returns.
   function secondMixersStrip(ctx) {
     const from = 2 * BEFORE_STRIPS + GAINS_PER_STRIP;
-    const [, , , , , dry, lowGain, highGain] = ctx.made.gains.slice(from, from + GAINS_PER_STRIP);
+    const [, , , , , , dry, lowGain, highGain] = ctx.made.gains.slice(from, from + GAINS_PER_STRIP);
     return { dry, lowGain, highGain };
   }
 

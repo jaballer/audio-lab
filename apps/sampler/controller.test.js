@@ -60,10 +60,10 @@ function voiceOf(node) {
   }
 }
 
-// A strip's gains: the input, the drive's four, the filter's dry, low-pass and high-pass, left, right, and the reverb and delay sends. The master filter makes its
+// A strip's gains: the input, the gate (the pad's mute), the drive's four, the filter's dry, low-pass and high-pass, left, right, and the reverb and delay sends. The master filter makes its
 // own (4: the input and the three paths) and the reverb and the delay theirs (11) before the strips, so these are the gains a
 // mixer makes before the first voice.
-const STRIP_GAINS = 12;
+const STRIP_GAINS = 13;
 const MASTER_GAINS = 4;
 const RETURN_GAINS = MASTER_GAINS + 11;
 
@@ -248,7 +248,7 @@ describe("triggerPad", () => {
     const strips = () => {
       const gains = audio.ctx.createGain.mock.results.map((result) => result.value);
       return Array.from({ length: PADS }, (_, pad) => {
-        const [, , , , , dry, low, high, left, right] = gains.slice(
+        const [, , , , , , dry, low, high, left, right] = gains.slice(
           RETURN_GAINS + pad * STRIP_GAINS,
           RETURN_GAINS + (pad + 1) * STRIP_GAINS,
         );
@@ -471,7 +471,10 @@ describe("pad settings", () => {
     // each strip's drive gains (the dry path, the pre-gain and the post-gain), in the order mixer.js makes them
     const driveOf = (pad) => {
       const gains = audio.ctx.createGain.mock.results.map((result) => result.value);
-      const [, dry, pre, post] = gains.slice(RETURN_GAINS + pad * STRIP_GAINS, RETURN_GAINS + (pad + 1) * STRIP_GAINS);
+      const [, , dry, pre, post] = gains.slice(
+        RETURN_GAINS + pad * STRIP_GAINS,
+        RETURN_GAINS + (pad + 1) * STRIP_GAINS,
+      );
       return { dry, pre, post };
     };
     const at = audio.ctx.currentTime;
@@ -3131,6 +3134,93 @@ describe("choke groups", () => {
     sampler.triggerPad(0);
     sampler.triggerPad(1);
     expect(playedInto(sounds[0], 0).gain.setTargetAtTime).not.toHaveBeenCalled();
+  });
+});
+
+describe("mute and solo", () => {
+  // The gate of pad `pad`'s strip: the gain after its input (see STRIP_GAINS), once a hit has built the strips.
+  const gateOf = (audio, pad) => audio.ctx.createGain.mock.results[RETURN_GAINS + pad * STRIP_GAINS + 1].value.gain;
+  const playedInto = (sound, call) => sound.play.mock.calls[call][1];
+
+  it("mutes the selected pad by default: says so, tells the views, and does not save it", () => {
+    const { sampler, message, change, beatChange } = setup();
+    sampler.selectPad(2);
+    const before = sampler.getBeat();
+    beatChange.mockClear();
+    change.mockClear();
+    sampler.toggleMute();
+    expect(sampler.getState().muted[2]).toBe(true);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 MUTE ON");
+    expect(change).toHaveBeenCalled();
+    expect(beatChange).not.toHaveBeenCalled(); // for the visit: not part of the beat
+    expect(sampler.getBeat()).toEqual(before);
+    sampler.toggleMute(2);
+    expect(message).toHaveBeenLastCalledWith("PAD 03 MUTE OFF");
+  });
+
+  it("shuts the pad's gate when it is muted and opens it again, for a hit already built and one after", () => {
+    const { audio, sampler } = setup();
+    sampler.triggerPad(0); // builds the strips
+    expect(gateOf(audio, 1).value).toBe(1);
+    audio.ctx.currentTime = 2;
+    sampler.toggleMute(1);
+    expect(gateOf(audio, 1).setTargetAtTime).toHaveBeenCalledWith(0, 2, expect.any(Number));
+    expect(gateOf(audio, 0).setTargetAtTime).not.toHaveBeenCalled(); // another pad's
+    sampler.toggleMute(1);
+    expect(gateOf(audio, 1).setTargetAtTime).toHaveBeenLastCalledWith(1, 2, expect.any(Number));
+  });
+
+  it("builds the strips with a pad that was muted before any sound already shut", () => {
+    const { audio, sampler } = setup();
+    sampler.toggleMute(3);
+    sampler.triggerPad(0);
+    expect(gateOf(audio, 3).value).toBe(0);
+    expect(gateOf(audio, 0).value).toBe(1);
+  });
+
+  it("silences the pads that are not soloed, and brings them back when the solo goes", () => {
+    const { audio, sampler } = setup();
+    sampler.triggerPad(0);
+    audio.ctx.currentTime = 2;
+    sampler.toggleSolo(3);
+    expect(sampler.getState().soloed[3]).toBe(true);
+    expect(sampler.getState().soloed.filter(Boolean)).toHaveLength(1);
+    expect(sampler.isAudible(0)).toBe(false);
+    expect(gateOf(audio, 3).setTargetAtTime).toHaveBeenCalledWith(1, 2, expect.any(Number));
+    expect(gateOf(audio, 0).setTargetAtTime).toHaveBeenCalledWith(0, 2, expect.any(Number));
+    sampler.toggleSolo(3);
+    expect(gateOf(audio, 0).setTargetAtTime).toHaveBeenLastCalledWith(1, 2, expect.any(Number));
+    expect(sampler.isAudible(0)).toBe(true);
+  });
+
+  it("still plays a hit on a pad that is not heard, and flashes it: only its strip is silent", () => {
+    const { sounds, sampler, padHit } = setup();
+    sampler.toggleMute(0);
+    sampler.triggerPad(0);
+    expect(sounds[0].play).toHaveBeenCalledTimes(1);
+    expect(padHit).toHaveBeenCalledWith(0);
+  });
+
+  it("still plays the steps of a muted pad through its voice, so the sequence is as it was", () => {
+    const { sounds, sampler, advance } = setup({ beat: savedBeat({ bpm: 120, pattern: { 0: [0] } }) });
+    sampler.toggleMute(0);
+    sampler.start();
+    for (let i = 0; i < 4; i++) advance(0.05);
+    expect(sounds[0].play).toHaveBeenCalled();
+  });
+
+  it("lets a muted pad go on cutting the pads of its choke group", () => {
+    const { audio, sounds, sampler } = setup();
+    for (const pad of [0, 1]) {
+      sampler.selectPad(pad);
+      sampler.setPadSetting("choke", 1);
+    }
+    sampler.toggleMute(1);
+    audio.ctx.currentTime = 1;
+    sampler.triggerPad(0);
+    audio.ctx.currentTime = 1.5;
+    sampler.triggerPad(1); // muted, and still cuts pad 0
+    expect(playedInto(sounds[0], 0).gain.setTargetAtTime).toHaveBeenCalledWith(0, 1.5, expect.any(Number));
   });
 });
 

@@ -10,10 +10,11 @@
 //     settings: (pad) => ({ drive: 0, filter: 0, pan: 0, reverb: 0, delay: 0 }),   // a pad's settings
 //     effects: () => DEFAULT_EFFECTS,                                    // the reverb's, the delay's and the master filter's
 //     bpm: () => 120,                                                    // the delay is a note of it
+//     audible: (pad) => true,                                            // whether a pad is heard (not muted, and soloed if any is: mute-solo.js)
 //     defer,                                                             // see returns.js
 //   });
 //   mixer.padInput(3);                  // the node pad 3's voice connects to; the strip leads on to `output`
-//   mixer.update(3);                    // pad 3's settings have changed: the strip follows, without a click
+//   mixer.update(3);                    // pad 3's settings or its mute have changed: the strip follows, without a click
 //   mixer.updateEffects();              // the effects or the tempo have changed: the returns follow
 //
 //   const live = createLiveMixer(audio, { pads: 16, settings, effects, bpm });
@@ -23,10 +24,15 @@
 //
 // The strip is
 //
-//   input ──┬── dry ────────────────────┐        ┌── dry ─────────────────────┐
-//           └── pre-gain ─ shaper ─ post ┴─ sum ──┼── low-pass ── low gain ────┼── splitter ──> left gain, right gain ──> merger ──┬──> output
+//   input ── gate ──┬── dry ────────────────────┐        ┌── dry ─────────────────────┐
+//                   └── pre-gain ─ shaper ─ post ┴─ sum ──┼── low-pass ── low gain ────┼── splitter ──> left gain, right gain ──> merger ──┬──> output
 //                                                 └── high-pass ─ high gain ───┘                                                   ├── reverb send ──> the reverb
 //                                                                                                                                  └── delay send ───> the delay
+//
+// The gate is the pad's mute (or the silence a solo of another pad makes): a gain of 1, or 0 when the pad is not heard. It is at
+// the front, so a silenced pad sends nothing to the reverb and the delay either; what those two were already holding rings out.
+// Its voices still play into it, so they go on cutting each other by choke group, and the pad still flashes. It glides, as the
+// settings do, so a mute in the middle of a sound is not a click.
 //
 // The Drive setting crosses a dry path (which is all of it when the drive is off, so the sound goes on exactly as it is) to a
 // shaped one: the pre-gain pushes the sound into a soft clip, the same curve for every strip and every drive (tanh, see
@@ -176,7 +182,9 @@ function createMasterFilter(ctx, output) {
 function createStrip(ctx, output, sendTo, curve) {
   // Made two channels as speakers are; the voices connect to it.
   const input = createStereoGain(ctx);
-  const drive = createDrive(ctx, input, curve);
+  const gate = ctx.createGain();
+  input.connect(gate);
+  const drive = createDrive(ctx, gate, curve);
   const paths = createFilterPaths(ctx, drive.out);
   const splitter = ctx.createChannelSplitter(2);
   const left = ctx.createGain();
@@ -194,12 +202,13 @@ function createStrip(ctx, output, sendTo, curve) {
   merger.connect(delaySend);
   reverbSend.connect(sendTo.reverb);
   delaySend.connect(sendTo.delay);
-  return { input, drive, paths, left, right, reverbSend, delaySend, reverb: 0 };
+  return { input, gate, drive, paths, left, right, reverbSend, delaySend, reverb: 0 };
 }
 
 // Makes the strip match the settings: when it is built (`now` undefined) the values are simply set, and afterwards they
 // are glided to.
-function applySettings(strip, { drive = 0, filter = 0, pan = 0, reverb = 0, delay = 0 }, now) {
+function applySettings(strip, { drive = 0, filter = 0, pan = 0, reverb = 0, delay = 0 }, audible, now) {
+  setParam(strip.gate.gain, audible ? 1 : 0, now);
   applyDrive(strip.drive, drive, now);
   applyFilter(strip.paths, filter, now);
   const { left, right } = panGains(pan);
@@ -213,7 +222,7 @@ function applySettings(strip, { drive = 0, filter = 0, pan = 0, reverb = 0, dela
 export function createMixer(
   ctx,
   output,
-  { pads, settings = () => ({}), effects = () => DEFAULT_EFFECTS, bpm = () => 120, defer = null },
+  { pads, settings = () => ({}), effects = () => DEFAULT_EFFECTS, bpm = () => 120, audible = () => true, defer = null },
 ) {
   // Everything, the strips and the returns alike, leads through the master filter on its way to the output.
   const master = createMasterFilter(ctx, output);
@@ -222,7 +231,7 @@ export function createMixer(
   const curve = driveCurve();
   const strips = Array.from({ length: pads }, (_, pad) => {
     const strip = createStrip(ctx, master.input, { reverb: reverb.input, delay: delay.input }, curve);
-    applySettings(strip, settings(pad));
+    applySettings(strip, settings(pad), audible(pad));
     return strip;
   });
   master.update(effects());
@@ -235,7 +244,7 @@ export function createMixer(
     padInput: (pad) => strips[pad].input,
     update(pad) {
       if (!strips[pad]) return;
-      applySettings(strips[pad], settings(pad), ctx.currentTime);
+      applySettings(strips[pad], settings(pad), audible(pad), ctx.currentTime);
       syncReverb();
     },
     updateEffects() {
@@ -257,7 +266,7 @@ const timeout = (fn, ms) => {
   return () => clearTimeout(id);
 };
 
-export function createLiveMixer(audio, { pads, settings, effects, bpm, defer = timeout }) {
+export function createLiveMixer(audio, { pads, settings, effects, bpm, audible, defer = timeout }) {
   let mixer = null;
   let builtOn = null; // the master the mixer leads into
   return {
@@ -268,7 +277,7 @@ export function createLiveMixer(audio, { pads, settings, effects, bpm, defer = t
       if (builtOn !== master) {
         // The old mixer is left as it is: its master is already fading out, and cutting its strips here instead would
         // end the fade with a step, which is a click.
-        mixer = createMixer(ctx, master, { pads, settings, effects, bpm, defer });
+        mixer = createMixer(ctx, master, { pads, settings, effects, bpm, audible, defer });
         builtOn = master;
       }
       return mixer.padInput(pad);

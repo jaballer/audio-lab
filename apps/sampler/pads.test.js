@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEY_ROWS, padForKey, padForKeyEvent, padLabel, padPressAction } from "./pads.js";
+import { KEY_ROWS, listenState, padForKey, padForKeyEvent, padLabel, padPressAction } from "./pads.js";
 
 describe("padForKey", () => {
   it("maps the bottom key row to pads 1-4 (indexes 0-3)", () => {
@@ -70,5 +70,35 @@ describe("padForKeyEvent", () => {
     expect(padForKeyEvent({ key: "Shift", code: "ShiftLeft" })).toBe(-1);
     expect(padForKeyEvent({ key: "q" })).toBe(8); // a caller with no code
     expect(padForKeyEvent({ code: "KeyQ" })).toBe(-1); // an event with no key (some autofill events) does not throw
+  });
+});
+
+describe("listenState", () => {
+  it("is empty for a pad that is heard", () => {
+    expect(listenState({})).toBe("");
+  });
+
+  it("says muted, whatever else is going on", () => {
+    expect(listenState({ muted: true })).toBe("muted");
+    expect(listenState({ muted: true, soloed: true, anySolo: true })).toBe("muted");
+  });
+
+  it("says solo for a soloed pad, and silenced for the others while any is soloed", () => {
+    expect(listenState({ soloed: true, anySolo: true })).toBe("solo");
+    expect(listenState({ anySolo: true })).toBe("silenced");
+  });
+});
+
+describe("padLabel and how a pad is heard", () => {
+  it("says nothing for a pad that is heard", () => {
+    expect(padLabel({ index: 0, name: "Kick", key: "z", listen: "" })).toBe("Pad 1, Kick, key Z");
+  });
+
+  it("names a mute, a solo and the silence a solo makes, in words and not by a colour", () => {
+    expect(padLabel({ index: 0, name: "Kick", key: "z", listen: "muted" })).toBe("Pad 1, Kick, key Z, muted");
+    expect(padLabel({ index: 0, name: "Kick", key: "z", listen: "solo" })).toBe("Pad 1, Kick, key Z, solo");
+    expect(padLabel({ index: 0, name: "Kick", key: "z", color: 3, listen: "silenced" })).toBe(
+      "Pad 1, Kick, key Z, blue, silent while another pad is soloed",
+    );
   });
 });

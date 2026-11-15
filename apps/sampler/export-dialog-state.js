@@ -59,12 +59,21 @@ export function dialogState({ busy, cancelling, blocked, hasNote, files = "mix",
 // WAV is off. `supported` is whether the browser can render audio to a file. A sequence with nothing in it, or a song longer than
 // Export makes, is blocked with its own reason and has no note: that is said once, and a memory warning for a file that is not made
 // would only be noise (nor is the plan of it worked out).
-export function exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate, supported }) {
+// What the dialog says when pads that play in the file are not heard: the mix is made as it is heard, and a stem is not (it is one pad's own sound).
+export function silencedNote(silenced) {
+  if (!silenced) return "";
+  const pads = silenced === 1 ? "1 pad is" : `${silenced} pads are`;
+  return `${pads} muted or silenced by a solo, so left out of this file.`;
+}
+
+export function exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate, supported, heard = [] }) {
   const scope = options.scope === "song" ? "song" : "sequence";
   const nothing = !hasSteps(beat, stepsPerBar, scope);
   const tooLong = scope === "song" && songTooLong(beat, stepsPerBar);
   const stemsChosen = options.files === "stems";
   const stems = stemsChosen ? stemPads(beat, stepsPerBar, scope).length : 0;
+  // Only a pad with steps in what is exported has anything to leave out: `heard` is each pad's audibility, and a pad it does not list is heard.
+  const silenced = stemPads(beat, stepsPerBar, scope).filter((pad) => heard[pad] === false).length;
   const memory = { ...(stems ? { stems, channels: options.channels } : {}), scope }; // (what the note advises depends on the scope)
   const note =
     nothing || tooLong
@@ -82,7 +91,8 @@ export function exportDialogModel({ beat, kit, options, stepsPerBar, sampleRate,
     title: exportTitle(beat, scope),
     readout: exportReadout(info),
     format: exportFormat(sampleRate),
-    note,
+    // Nothing to say about a file that cannot be made, and a stem is not a mix (so nothing is left out of it).
+    note: [note, nothing || tooLong || stemsChosen ? "" : silencedNote(silenced)].filter(Boolean).join(" "),
     hint: exportHint(options.files, scope, songTailSeconds(beat)),
     blocked: exportBlockedReason({
       supported,

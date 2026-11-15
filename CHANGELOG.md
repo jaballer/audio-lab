@@ -10,6 +10,12 @@ Numbers link to the pull request.
 
 ### Added
 
+- Sampler: each pad can be muted or soloed, in a new Listen section of the pad editor. Mute silences the pad; Solo silences every
+  pad that is not soloed too (more than one can be soloed), and clearing the solo brings the pads back as they were. A muted pad
+  shows MUTE on the grid, a soloed one SOLO, and the pads a solo silences are dimmed. Its steps and settings are untouched, a hit on
+  it still lights the pad and still cuts its choke group, and an export is made as it is heard (the Export dialog says how many pads
+  are left out; stems are not affected). It lasts for the visit and is not saved with the beat
+  ([#197](https://github.com/jaballer/audio-lab/pull/197))
 - Sampler: a MIDI knob can move the Master Filter. With MIDI on, press MIDI Learn under Master in the Effects panel and turn a
   knob on your controller (any controller but a Launchpad): that knob, on that controller, is the filter from then on, and Clear takes it back. The middle
   of the knob is the filter off, with a little room either side, and a turn moves the slider and the display. The knob is

@@ -372,6 +372,7 @@ export async function renderSequence({
   signal,
   pad,
   clip = true,
+  audible = () => true,
 }) {
   const plan = planRender({ beat, kit, stepsPerBar, sampleRate, loops, pad, scope });
   const ctx = createContext(plan.total, sampleRate);
@@ -385,6 +386,9 @@ export async function renderSequence({
     settings: (pad) => kit.settings(pad),
     effects: () => effects,
     bpm: () => beat.bpm,
+    // A mix is rendered as it is heard: a pad that is muted, or not soloed while another is, is left out. A stem is one pad's own
+    // sound whatever the others are doing, so renderStems does not pass it.
+    audible,
   });
   const sink = pad === undefined ? null : ctx.createGain(); // where the voices of a stem's silent hits go: nowhere
   const voices = createVoices(kit.length, {
@@ -612,6 +616,7 @@ export async function exportSequence({
   signal,
   render = renderSequence,
   supported = canRenderOffline(),
+  audible,
 }) {
   if (!supported) {
     onMessage("EXPORT NOT SUPPORTED");
@@ -628,7 +633,18 @@ export async function exportSequence({
   }
   onMessage("EXPORTING...");
   try {
-    const audio = await render({ beat, kit, stepsPerBar, sampleRate, loops, channels, scope, onProgress, signal });
+    const audio = await render({
+      beat,
+      kit,
+      stepsPerBar,
+      sampleRate,
+      loops,
+      channels,
+      scope,
+      onProgress,
+      signal,
+      audible,
+    });
     const name = exportName(beat, { loops, channels, scope });
     const wav = encodeWav(audio.channels, audio.sampleRate);
     // Encoding is one long task (seconds, for a long file), in which a press on Cancel cannot be handled; it waits its

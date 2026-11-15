@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXPORT_SAMPLE_RATE } from "./export-wav.js";
-import { SETTLE_MS, dialogState, exportDialogModel, isEarlyPress } from "./export-dialog-state.js";
+import { SETTLE_MS, dialogState, exportDialogModel, isEarlyPress, silencedNote } from "./export-dialog-state.js";
 import { createKit } from "./kit.js";
 
 const idle = { busy: false, cancelling: false, blocked: "", hasNote: false };
@@ -232,6 +232,50 @@ describe("exportDialogModel", () => {
     expect(megabytes(withSample)).toBeGreaterThan(megabytes(kit));
   });
 
+  describe("when pads that play in the file are not heard (muted, or silenced by a solo)", () => {
+    const pattern = { 0: [0, 4], 1: [8] };
+    const withHeard = (heard, options = { loops: 1, channels: "stereo" }, value = beat(1, pattern)) =>
+      exportDialogModel({
+        beat: value,
+        kit,
+        options,
+        stepsPerBar: 16,
+        sampleRate: EXPORT_SAMPLE_RATE,
+        supported: true,
+        heard,
+      });
+    const heardExcept = (...pads) => Array.from({ length: 16 }, (_, pad) => !pads.includes(pad));
+
+    it("says the mix leaves them out", () => {
+      expect(withHeard(heardExcept(1)).note).toBe("1 pad is muted or silenced by a solo, so left out of this file.");
+      expect(withHeard(heardExcept(0, 1)).note).toBe(
+        "2 pads are muted or silenced by a solo, so left out of this file.",
+      );
+    });
+
+    it("counts only the pads that have steps: a silenced pad with none has nothing to leave out", () => {
+      expect(withHeard(heardExcept(5, 6, 7)).note).toBe("");
+      expect(withHeard(heardExcept(1, 5, 6)).note).toBe(
+        "1 pad is muted or silenced by a solo, so left out of this file.",
+      );
+    });
+
+    it("says nothing when every pad is heard, or when it is not told", () => {
+      expect(withHeard(heardExcept()).note).toBe("");
+      expect(withHeard(undefined).note).toBe("");
+    });
+
+    it("says nothing for stems, which are each pad's own sound", () => {
+      expect(withHeard(heardExcept(1), { loops: 1, channels: "stereo", files: "stems" }).note).toBe("");
+    });
+
+    it("follows what else the note says, after it", () => {
+      const m = withHeard(heardExcept(0), { loops: 8, channels: "stereo" }, beat(8, { 0: [0] }, 40));
+      expect(m.note.endsWith(silencedNote(1))).toBe(true);
+      expect(m.note.indexOf("Bars 2")).toBe(0);
+    });
+  });
+
   it("gives both, the bars first, when both apply", () => {
     const m = model(beat(8, { 0: [0] }, 40), { loops: 8, channels: "stereo" });
     expect(m.note.indexOf("Bars 2")).toBe(0);
@@ -336,6 +380,27 @@ describe("exportDialogModel", () => {
       expect(model(beat3(patterns, [1, 1, 1], plays), all).note).toBe(
         "Sequence 2 has no steps: nothing plays in it but what is still ringing.", // once, though it goes round three times
       );
+    });
+
+    it("says nothing of silenced pads for a song too long to export: it has only its blocking reason", () => {
+      const long = beat3([{ 0: [0] }, { 1: [0] }], [4, 4], {
+        bpm: 40,
+        arrangement: [
+          { sequence: 0, repeats: 16 },
+          { sequence: 1, repeats: 2 },
+        ],
+      });
+      const m = exportDialogModel({
+        beat: long,
+        kit,
+        options: all,
+        stepsPerBar: 16,
+        sampleRate: EXPORT_SAMPLE_RATE,
+        supported: true,
+        heard: Array.from({ length: 16 }, (_, pad) => pad !== 1),
+      });
+      expect(m.blocked).not.toBe("");
+      expect(m.note).toBe("");
     });
 
     it("blocks it when the sequences the song plays have no steps, though another sequence has", () => {
