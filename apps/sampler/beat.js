@@ -93,7 +93,7 @@ function trimBlankSequences(beat) {
 //
 // `padSettings` is { pad: { gain, pitch, choke, filter, pan, reverb, delay, color, attack, decay, sustain, release } } for the pads that are not at the defaults (pad-settings.js).
 //
-// `effects` is { reverbSize, reverbLevel, delayDivision, delayFeedback, delayLevel, pingPong }, the reverb and delay the pads send to (effects.js), and is
+// `effects` is { reverbSize, reverbLevel, delayDivision, delayFeedback, delayLevel, pingPong, masterFilter }, the reverb and delay the pads send to and the filter over the mix (effects.js), and is
 // left out while they are all at their defaults, which is how a beat is until a person turns one.
 //
 // `arrangement` is the order the sequences play in, with repeats (arrangement.js), and is left out of a beat that has none: a beat

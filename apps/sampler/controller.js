@@ -52,7 +52,7 @@
 //   sampler.undo(); sampler.redo()           // changes to the steps of the sequence showing
 //   sampler.setBpm(120); sampler.nudgeTempo(-1); sampler.tapTempo()
 //   sampler.setSwing(58)         // 50 (straight) to 75: the second step of each pair sounds later (tempo.js)
-//   sampler.setEffect("reverbSize", 70)   // the shared reverb and delay (effects.js): heard at once, by what is ringing and by the steps queued
+//   sampler.setEffect("reverbSize", 70)   // the shared reverb, delay and master filter (effects.js): heard at once, by what is ringing and by the steps queued
 //   sampler.setVolume(80)        // 0-100, the slider's scale
 //   sampler.poll()               // call every animation frame; true when the playhead moved (it also lights the pads on that step)
 //   sampler.getState()           // { selected, recording, playing, bpm, swing, volume, sequence, sequenceCount, canAddSequence, canRemoveSequence, queuedSequence, songMode, loopSong, heard, bars, page, playheadStep, stepsOn, stepVelocities, canUndo, canRedo, padSettings, effects }
@@ -145,7 +145,7 @@ export function createSampler({
   // Does the song go round again at its end instead of stopping? Off until a person turns it on, and saved with the beat. It is only about
   // Song mode: a beat that is not in Song mode is a loop of the sequence showing, whatever this says.
   let loopSong = beat?.loopSong === true;
-  // The reverb's and the delay's settings (effects.js), the same for every pad and every sequence: they belong to the beat.
+  // The reverb's, the delay's and the master filter's settings (effects.js), the same for every pad and every sequence: they belong to the beat.
   let effects = { ...DEFAULT_EFFECTS, ...beat?.effects };
   // The entry of the song that is selected (the strip shows it, and the tools act on it): where Song mode begins when Play is pressed.
   // Kept in range when it is read, since the song can have fewer entries than it had.

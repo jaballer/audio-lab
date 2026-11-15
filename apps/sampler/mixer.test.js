@@ -468,6 +468,22 @@ describe("createLiveMixer", () => {
     expect(live.padInput(0)).toBe(after);
   });
 
+  it("builds the master filter of the new mixer at the setting the effects have then, and leaves the old one as it was", () => {
+    const audio = fakeAudio();
+    const state = { effects: { ...DEFAULT_EFFECTS, masterFilter: 0 } };
+    const live = createLiveMixer(audio, { pads: 1, effects: () => state.effects });
+    live.padInput(0);
+    state.effects = { ...DEFAULT_EFFECTS, masterFilter: 40 }; // moved while the sound was playing, then Kill
+    audio.master = { id: "master 2" };
+    live.padInput(0);
+    const first = 0;
+    const second = BEFORE_STRIPS + GAINS_PER_STRIP; // the gains of the first mixer come before the second's
+    const [, oldDry, , oldHigh] = audio.ctx.made.gains.slice(first, first + MASTER_GAINS);
+    const [, newDry, , newHigh] = audio.ctx.made.gains.slice(second, second + MASTER_GAINS);
+    expect([oldDry.gain.value, oldHigh.gain.value]).toEqual([1, 0]);
+    expect([newDry.gain.value, newHigh.gain.value]).toEqual([0, 1]);
+  });
+
   it("makes new strips with the settings the pads have then, and not the ones they had", () => {
     const audio = fakeAudio();
     const settings = { 0: { filter: 30 } };

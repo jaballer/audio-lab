@@ -536,9 +536,9 @@
 }
 .sampler-setting {
   display: grid;
-  /* The last column fits the longest value, a filter's cutoff ("HP 8.0 KHZ"), on one line: it wrapped at 3.6rem, which made the row twice as
-     tall at the cutoffs and a jump when the slider crossed the middle. */
-  grid-template-columns: 3.2rem 1fr 4rem;
+  /* The last column fits the longest value, a filter's cutoff ("LP 18.9 KHZ", 11 characters), on one line: it wrapped at 3.6rem, which
+     made the row twice as tall at the cutoffs and a jump when the slider crossed the middle. */
+  grid-template-columns: 3.2rem 1fr 4.5rem;
   align-items: center;
   gap: 8px;
 }
@@ -590,7 +590,7 @@
   margin: 0 0 4px;
 }
 .sampler-effects-group .sampler-setting {
-  grid-template-columns: 4.6rem 1fr 4rem;
+  grid-template-columns: 4.6rem 1fr 4.5rem;
 }
 /* The note keys and the Ping-Pong switch share a row under the Delay heading. */
 .sampler-effects-delay-keys {
